@@ -24,4 +24,10 @@ if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   )
 endif()
 
+#定义Root_dir路径为cmake指定的代码路径
+set(ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+#定义生成文件路径
+set(CMAKE_INSTALL_PREFIX "{ROOT_DIR}/bin")
+set(BINARY_ROOT_DIR "{CMAKE_INSTALL_PREFIX}/")
+
 add_subdirectory(engine)
