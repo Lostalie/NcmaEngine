@@ -11,3 +11,4 @@ Ncma Engine是一个自嗨用引擎。
 目标 学习使用cmake构建引擎项目 使用cmkae将eigen数学库加入引擎
 
 1.1cmake没弄懂 放弃了 用vs2022构建项目了
+1.2使用winmain作为入口，需要切换项目链接器

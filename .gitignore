@@ -31,9 +31,12 @@
 *.out
 *.app
 
-# 忽略CMake生成文件
-CMakeCache.txt
-build/
-CMakeFiles/
-*.sln
-*.vcxproj
+*.zip
+
+#visual studio
+bin/
+intermediate/
+.vs/
+
+#rider
+.idea/
