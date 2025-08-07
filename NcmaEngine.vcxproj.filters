@@ -27,6 +27,12 @@
     <ClCompile Include="engine\source\runtime\engine\Engine.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="engine\source\runtime\gui\GuiLayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\source\runtime\core\log\Log.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine\source\runtime\core\CoreGlobal.h">
@@ -36,6 +42,18 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="engine\source\runtime\engine\Engine.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\source\runtime\gui\GuiLayer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\source\runtime\core\generic\Generic.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\source\runtime\core\CoreTypes.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\source\runtime\core\log\Log.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

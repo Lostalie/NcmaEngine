@@ -1,4 +1,4 @@
-# NcmaEngine
+﻿# NcmaEngine
 从零开始撸引擎
 
 # 写在开始之前
@@ -12,3 +12,8 @@ Ncma Engine是一个自嗨用引擎。
 
 1.1cmake没弄懂 放弃了 用vs2022构建项目了
 1.2使用winmain作为入口，需要切换项目链接器
+
+1.3接入imgui，需要设置项目属性->c/c++ ->附加包含目录中添加对应的目录.
+
+1.4使用https://github.com/gabime/spdlog 日志库实现引擎日志功能 编译时报错缺少/utf-8解决方法 需要在项目属性->c/c++ ->命令行中添加/utf-8
+

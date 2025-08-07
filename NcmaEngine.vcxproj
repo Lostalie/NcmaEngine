@@ -58,10 +58,14 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);PLATFORM_WINDOWS;</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <CharacterSet>Unicode</CharacterSet>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalIncludeDirectories>$(SolutionDir)engine\sdk\imgui;$(SolutionDir)engine\sdk\imgui\backends;$(SolutionDir)engine\sdk\spdlog\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d12.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -73,12 +77,15 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);PLATFORM_WINDOWS;</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)engine\sdk\imgui;$(SolutionDir)engine\sdk\imgui\backends;$(SolutionDir)engine\sdk\spdlog\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d12.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -86,11 +93,17 @@
     <ClCompile Include="engine\source\runtime\core\CoreGlobal.cpp" />
     <ClCompile Include="engine\source\runtime\engine\Engine.cpp" />
     <ClCompile Include="engine\source\runtime\launch\Launch.cpp" />
+    <ClCompile Include="engine\source\runtime\gui\GuiLayer.cpp" />
+    <ClCompile Include="engine\source\runtime\core\log\Log.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="engine\source\runtime\core\CoreTypes.h" />
     <ClInclude Include="engine\source\runtime\core\Core.h" />
     <ClInclude Include="engine\source\runtime\core\CoreGlobal.h" />
     <ClInclude Include="engine\source\runtime\engine\Engine.h" />
+    <ClInclude Include="engine\source\runtime\gui\GuiLayer.h" />
+    <ClInclude Include="engine\source\runtime\core\generic\Generic.h" />
+    <ClInclude Include="engine\source\runtime\core\log\Log.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
