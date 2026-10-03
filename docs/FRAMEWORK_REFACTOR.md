@@ -1,7 +1,7 @@
 # 框架迁移：C# 主运行时 + 独立 Python 模块 + C++ 性能插件
 
-状态：方向与迁移契约已更新；本次没有把 C++ SceneWorld/编辑器自动转换为 C#。
-现有构建、.ncscene v5 和兼容 ABI 保持工作。主架构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+状态：C++ SceneWorld 与原生 World ABI 已移除；现有编辑器和 Play 已使用 C# Runtime.World。
+保留 C++/ImGui 外壳和过渡命令栈；场景文件读写由 C# 负责，旧 .ncscene 兼容 codec 已删除；未完成 C# 主入口/编辑器业务迁移。主架构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
 ## 1. 新职责
 
@@ -31,7 +31,7 @@ C++ 仅用于渲染、物理和有性能证据的动画/导入/计算插件。
 
 扁平对象列表、单对象删除、UUID、组合式行为保持；无场景 Node、空间父子关系或变换继承。
 骨骼、动画图、UI 文档内部层级独立，不恢复 Godot/Actor 场景模型。
-目标支持不带 Transform 的逻辑对象；现有 C++ 对象必带 Transform，该能力尚未实现。
+已支持无 Transform 的逻辑对象；编辑器新建对象显式附加 Transform，.ncmascene JSON v1 可保存/恢复空容器与全部注册组件。
 
 类型池/批量查询优先，不因为采用 C# 就要求完整 archetype ECS。
 持久数据使用 UUID 与稳定 schema，GPU/物理句柄、Python 引用、托管脚本实例和运行时代次不序列化。
@@ -43,10 +43,10 @@ World 与组件权威数据只保存在 C#，插件仅保留必要的子系统�
 1. **建立 C# Runtime 与无图形测试入口**：新增托管 World、GameObject、组件/TypeRegistry、
    代次引用、命令队列、快照和固定步 WorldRunner，不依赖 NcmaNative 世界存储或 Python。
    已实现 Ncma.Runtime headless 空容器/可选值组件、UUID/失效引用、managed JSON v1 快照和顺序固定步，测试不依赖原生 DLL/Python。
-   Behaviour 生命周期、类型池、通用查询、结构命令、旧场景导入未实现。
-2. **场景/编辑器命令与 Play 数据迁移**：C# EditSession 已实现独立场景事务、快照 Undo/Redo 和 8 个能力，尚无 live 编辑器或 MCP 连接。
+   已有 Behaviour 生命周期和旧场景导入已接入同一 C# World；类型池、通用查询和结构命令队列未实现。
+2. **场景/编辑器命令与 Play 数据迁移**：C# Editor.Core 已接管活动 ImGui 场景事务、完整快照 Undo/Redo 和 8 个 v2 能力；live MCP 传输尚未实现。
    托管 SceneAsset/serializer/Undo 需进一步共享完整资产 schema；
-   先导入旧 .ncscene，再把编辑器业务迁到 C# 服务。验证保存、撤销、隔离 Play 与 UUID 一致。
+   新 .ncmascene 文档已接入 C# World，完整保存/撤销/隔离 Play/UUID 已回归，旧格式不兼容；下一步将编辑器业务及旧命令栈迁到 C# 服务。
    当前 Python/未知语言记录拒绝加载，原文件保留；新托管格式另行设计迁移，不静默丢弃。
 3. **主入口反转与最小 Renderer plugin**：C# 应用 owns main loop，按版本化 C ABI 加载 C++ RHI；
    保留 DX11 原生渲染，不改算法同时大幅换底层库。必须验证窗口/输入/线程/resize/资源销毁、
@@ -58,7 +58,7 @@ World 与组件权威数据只保存在 C#，插件仅保留必要的子系统�
    跑通 observation → worker → result → C# 校验 → tick 命令；测试超时、取消、异常、
    worker 重启/退出、乱序、过期/重复结果与队列溢出。pythonnet/ZeroMQ 后按具体需求增加。
 6. **替换旧宿主与插件发布**：Python gameplay host/SDK 已删除；迁移完成后退出
-   C++ hostfxr 主入口和 C++ 通用 SceneWorld，先证明消费者/资产无依赖再清理。
+   C++ hostfxr 主入口；C++ 通用 SceneWorld 已删除，消费者改为托管令牌，严格新格式与旧格式拒绝回归已覆盖。
    验证 C# Editor/Player 打包、原生 DLL 缺失/版本不匹配、释放/卸载与 Python 可选安装。
 
 不同时完成全部层改写；每个切片在 Build.bat 保持基线回归，并增加对应托管测试。
@@ -67,13 +67,13 @@ World 与组件权威数据只保存在 C#，插件仅保留必要的子系统�
 ## 4. 原生插件契约
 
 模块私有 API 头文件，版本与能力协商，固定 POD/资源句柄，批量调用与显式内存归属。
-资源 handle 只代表插件资源，不成为 SceneWorld/GameObject 的权威身份。
+资源 handle 只代表插件资源，不成为 World/GameObject 的权威身份。
 shutdown 前停止作业、释放 GPU/物理对象、清理回调，再卸载 DLL；
 未验证安全卸载前不提供热卸载。回调禁止抛异常或携带未固定的托管地址。
 依赖 Eigen/GLFW/ImGui/spdlog/Box2D/Jolt/ufbx 时，不把其类型泄露到托管 World。
 
 旧 NcmaNative 是兼容聚合桥，不是独立 Renderer/Physics plugins 已完成的证据。
-旧 World Access ABI 的批量与引用校验仍回归；当前仅 C# Tick，不是独立 Python AI 模块调度。
+批量/引用/信号语义现在在 C# 内测试，原生 World ABI 不再存在；编辑器 Begin -> C# Tick -> Commit/Abort 仍回归，不是独立 Python AI 调度。
 
 ## 5. Python 与网络边界
 
@@ -90,9 +90,9 @@ Agent 修改继续走编辑器同一 Undo/事务，不开放任意 Python 执行
 
 ## 6. 旧资产与 API 兼容
 
-现有 .ncscene v5 线格式保留，C# v1-v4 仍可读取和扁平化。
-GameObject 语义 API 升为 v4；公开 C# API 不再有语言枚举/选择器，旧原生语言创建符号只接受 0。
-所有非零对象/绑定语言标签明确拒绝，包括空对象与禁用绑定；失败不会改目标 World 或源文件。
+唯一场景文件为 `.ncmascene` SceneDocument JSON v1；保存全部注册组件与脚本配置，同目录临时写入后原子替换。旧 `.ncscene` v1-v6 编解码/导入/导出/迁移/备份入口已删除，不再兼容。
+原生 ABI v2 删除 World/GameObject 导出；Gameplay host v3 和 Scene host v4 使用不透明托管令牌；旧消费者必须重新编译。
+新格式不含对象/绑定语言标签。未知字段、组件版本和不支持的格式明确拒绝；失败不改目标 World 或源文件。
 Python 游戏宿主、SDK、示例、重载与编辑器语言入口均已删除，不存在停用绑定加载路径。
 旧 Python 逻辑需由作者改写为 C# 或独立模块；显式转换前备份，不自动转译或覆盖。
 
@@ -105,3 +105,7 @@ GC/帧预算须用目标动作场景实测，不承诺仅凭语言选择就保�
 
 参考：ProwlEngine/Unity 用于 C# 组合与工作流，UE5 用于动作动画，Figma 用于 UI 编辑；
 Infernux 仅作为 Python 模块工具分层参考。这些不是运行依赖或资产兼容承诺。
+
+## M1.1 implemented document boundary
+
+Complete Ncma.Scene document snapshots v1 now cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell uses opaque snapshots for Undo and Play; C# .ncmascene JSON v1 files persist all registered components with atomic saves. Old .ncscene compatibility is removed. Shared managed commands, asset references/pipeline, fixed-step editor scheduling and live MCP remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).

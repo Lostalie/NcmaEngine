@@ -144,7 +144,7 @@ namespace NcmaEngine::Editor
             m_ProjectRoot = std::filesystem::path(modulePath.data()).parent_path().parent_path().parent_path();
         else
             m_ProjectRoot = std::filesystem::current_path();
-        m_ScenePath = m_ProjectRoot / "assets" / "scenes" / "EditorScene.ncscene";
+        m_ScenePath = m_ProjectRoot / "assets" / "scenes" / "EditorScene.ncmascene";
         m_PreviewMaterial.BaseColor[0] = 0.32F;
         m_PreviewMaterial.BaseColor[1] = 0.16F;
         m_PreviewMaterial.BaseColor[2] = 0.82F;
@@ -176,6 +176,7 @@ namespace NcmaEngine::Editor
                 break;
             if (m_Minimized && !m_SmokeTest)
             {
+                CancelInspectorEdit();
                 glfwWaitEventsTimeout(0.016);
                 continue;
             }
@@ -198,9 +199,13 @@ namespace NcmaEngine::Editor
             TogglePlay();
             if (!m_Scene.GetLocalTransform(m_SelectedObject).Rotation.isApprox(Quaternion::Identity())) return 5;
             UndoSceneEdit();
-            if (!m_Scene.GetBehaviours(m_SelectedObject).empty()) return 6;
+            if (m_Scene.GetObjectName(m_SelectedObject) != "Character" || m_Scene.GetBehaviours(m_SelectedObject).size() != 1) return 6;
             RedoSceneEdit();
-            if (m_Scene.GetBehaviours(m_SelectedObject).size() != 1) return 7;
+            if (m_Scene.GetObjectName(m_SelectedObject) != "Character command" || m_Scene.GetBehaviours(m_SelectedObject).size() != 1) return 7;
+            UndoSceneEdit(); UndoSceneEdit();
+            if (!m_Scene.GetBehaviours(m_SelectedObject).empty()) return 11;
+            RedoSceneEdit(); RedoSceneEdit();
+            if (m_Scene.GetObjectName(m_SelectedObject) != "Character command" || m_Scene.GetBehaviours(m_SelectedObject).size() != 1) return 12;
         }
         if (m_FbxSmokeTest)
         {
@@ -219,8 +224,6 @@ namespace NcmaEngine::Editor
         if (!CreateEditorWindow() || !InitializeRenderer() || !InitializeImGui())
             return false;
         CreateSampleScene();
-        m_SceneHistory.Clear();
-        m_SceneHistory.MarkSaved();
         if (m_FbxSmokeTest)
         {
             LoadFbxCharacter(m_ProjectRoot / "tests" / "assets" / "fbx" / "blender_279_sausage_7400_binary.fbx");
@@ -239,14 +242,47 @@ namespace NcmaEngine::Editor
             else
                 AppendLog("C# gameplay unavailable: " + gameplayError);
         }
+        if (m_GameplaySmokeTest && (!m_GameplayRuntime->IsStarted() || m_GameplayRuntime->GetTypes().empty())) return false;
+        m_Scene.EnableEditing();
+        m_Scene.SelectEditorObject(m_Scene.GetPersistentId(m_SelectedObject));
+        if (m_SmokeTest)
+        {
+            const auto before = m_Scene.CaptureDocument(); const auto revision = m_Scene.GetDocumentRevision();
+            BeginInspectorEdit("Smoke transform drag");
+            for (int i = 0; i < 10; ++i)
+            {
+                m_InspectorDraft->LocalTransform.Position.x() = static_cast<float>(i);
+                m_Scene.PreviewTransform(m_InspectorDraft->Token, m_InspectorDraft->Object, m_InspectorDraft->LocalTransform);
+            }
+            if (m_Scene.CaptureDocument() != before || m_Scene.GetDocumentRevision() != revision) return false;
+            CommitInspectorEdit("Smoke transform drag");
+            if (m_Scene.GetEditorState().UndoCount != 1) return false;
+            UndoSceneEdit();
+            if (m_Scene.CaptureDocument() != before) return false;
+            const auto objects = m_Scene.GetObjects();
+            const auto otherId = m_Scene.GetPersistentId(objects.back());
+            BeginInspectorEdit("Smoke selection commit");
+            m_Scene.PreviewName(m_InspectorDraft->Token, m_InspectorDraft->Object, "Selection preview");
+            SelectObject(objects.back());
+            if (!m_Scene.Contains(m_SelectedObject) || m_Scene.GetEditorState().Selection != otherId) return false;
+            UndoSceneEdit();
+            if (m_Scene.CaptureDocument() != before || !m_Scene.Contains(m_SelectedObject)) return false;
+        }
         if (m_GameplaySmokeTest)
         {
-            if (!m_GameplayRuntime->IsStarted() || m_GameplayRuntime->GetTypes().empty()) return false;
-            ExecuteSceneMutation("Attach Behaviour", [this] {
-                m_Scene.AddBehaviour(m_SelectedObject, m_GameplayRuntime->GetTypes().front().CreateBinding());
+            ExecuteSceneMutation("Attach Behaviour", [&] {
+                m_Scene.SetEditorBindings(m_Scene.GetPersistentId(m_SelectedObject), {m_GameplayRuntime->GetTypes().front().CreateBinding()}, "Attach Behaviour");
             });
+            m_Scene.RenameEditorObject(m_Scene.GetPersistentId(m_SelectedObject), "Character command");
+            RefreshEditorSelection();
             TogglePlay();
             if (!m_ScenePlaying) return false;
+        }
+        if (m_SmokeTest && !m_GameplaySmokeTest)
+        {
+            BeginInspectorEdit("Escape smoke");
+            m_InspectorDraft->Name = "Escape discarded";
+            m_Scene.PreviewName(m_InspectorDraft->Token, m_InspectorDraft->Object, m_InspectorDraft->Name);
         }
         AppendLog(std::format("NcmaEditor initialized with {}", m_Renderer->GetName()));
         AppendLog("C# gameplay; Python is reserved for independent modules and tools");
@@ -1097,6 +1133,8 @@ float4 PSMain(PixelInput input) : SV_TARGET
     {
         if (m_GameplayRuntime) m_GameplayRuntime->Stop();
         m_PlayScene.reset();
+        try { CancelInspectorEdit(); if (m_ScenePlaying) m_Scene.FreezeEditing(false); } catch (...) { }
+        m_ScenePlaying = false;
         if (m_ImGuiInitialized)
         {
             ImGui_ImplDX11_Shutdown();
@@ -1172,8 +1210,11 @@ float4 PSMain(PixelInput input) : SV_TARGET
         const GameObjectId character = m_Scene.CreateObject("Character");
         (void)m_Scene.CreateObject("HUD");
 
-        m_Scene.GetLocalTransform(light).Rotation = Quaternion(0.90F, -0.25F, 0.35F, 0.0F).normalized();
-        m_Scene.GetLocalTransform(camera).Position = {0.0F, 2.4F, -6.0F};
+        Transform lightTransform, cameraTransform;
+        lightTransform.Rotation = Quaternion(0.90F, -0.25F, 0.35F, 0.0F).normalized();
+        cameraTransform.Position = {0.0F, 2.4F, -6.0F};
+        m_Scene.SetLocalTransform(light, lightTransform);
+        m_Scene.SetLocalTransform(camera, cameraTransform);
         m_SelectedObject = character;
     }
 
@@ -1184,7 +1225,22 @@ float4 PSMain(PixelInput input) : SV_TARGET
             AppendLog(error);
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+        const bool escapeSmoke = m_SmokeTest && !m_GameplaySmokeTest && m_RenderedFrames == 0;
+        const auto escapeRevision = escapeSmoke ? m_Scene.GetDocumentRevision() : 0;
+        const auto escapeUndoCount = escapeSmoke ? m_Scene.GetEditorState().UndoCount : 0;
+        if (escapeSmoke) { ImGui::GetIO().AddFocusEvent(true); ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape, true); }
+        else if (m_SmokeTest) ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape, false);
         ImGui::NewFrame();
+        m_CancelledInspectorThisFrame = false;
+        if (m_InspectorDraft && (ImGui::IsKeyPressed(ImGuiKey_Escape, false) ||
+            (!m_SmokeTest && glfwGetWindowAttrib(m_Window, GLFW_FOCUSED) == GLFW_FALSE)))
+        {
+            CancelInspectorEdit();
+            m_CancelledInspectorThisFrame = true;
+        }
+        if (escapeSmoke && (m_InspectorDraft || m_Scene.GetDocumentRevision() != escapeRevision ||
+            m_Scene.GetEditorState().UndoCount != escapeUndoCount || m_Scene.GetObjectName(m_SelectedObject) == "Escape discarded"))
+            throw std::runtime_error("Escape must cancel the Inspector draft without changing the document or history");
         m_AnimationPreview.Tick(std::clamp(static_cast<double>(ImGui::GetIO().DeltaTime), 0.0, 0.1));
         if (m_FbxPreview.Player && !m_FbxPreview.Paused)
         {
@@ -1264,12 +1320,12 @@ float4 PSMain(PixelInput input) : SV_TARGET
             (Eigen::AngleAxisf(m_PreviewRotation, Vector3::UnitY()) *
              Eigen::AngleAxisf(-0.35F, Vector3::UnitX())).toRotationMatrix();
         // The reference mesh represents the selected scripted gameObject until mesh components land.
-        if (m_Scene.Contains(m_SelectedObject) && !m_Scene.GetBehaviours(m_SelectedObject).empty())
+        if (m_Scene.Contains(m_SelectedObject) && m_Scene.HasTransform(m_SelectedObject))
         {
-            const SceneWorld& previewScene = m_PlayScene ? *m_PlayScene : m_Scene;
+            const ManagedSceneClient& previewScene = m_PlayScene ? *m_PlayScene : m_Scene;
             const GameObjectId previewObject = previewScene.FindObject(m_Scene.GetPersistentId(m_SelectedObject));
             if (previewScene.Contains(previewObject))
-                m_PreviewCubeModel = previewScene.GetWorldTransform(previewObject).ToMatrix();
+                m_PreviewCubeModel = (m_InspectorDraft && m_InspectorDraft->HasTransform ? m_InspectorDraft->LocalTransform : previewScene.GetWorldTransform(previewObject)).ToMatrix();
         }
         m_PreviewGroundModel = Matrix4::Identity();
         Matrix4 view = Matrix4::Identity();
@@ -1443,6 +1499,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
     void EditorApplication::RenderMenuBar()
     {
         const ImGuiIO& io = ImGui::GetIO();
+        const auto history = m_Scene.GetEditorState();
         const bool newShortcut = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_N, false);
         const bool openShortcut = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O, false);
         const bool saveShortcut = io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false);
@@ -1475,13 +1532,13 @@ float4 PSMain(PixelInput input) : SV_TARGET
         if (ImGui::BeginMenu("Edit"))
         {
             ImGui::BeginDisabled(m_ScenePlaying);
-            const std::string undoLabel = m_SceneHistory.CanUndo()
-                ? "Undo " + m_SceneHistory.UndoLabel() : "Undo";
-            const std::string redoLabel = m_SceneHistory.CanRedo()
-                ? "Redo " + m_SceneHistory.RedoLabel() : "Redo";
-            if (ImGui::MenuItem(undoLabel.c_str(), "Ctrl+Z", false, m_SceneHistory.CanUndo()))
+            const std::string undoLabel = history.UndoCount > 0
+                ? "Undo " + history.UndoLabel : "Undo";
+            const std::string redoLabel = history.RedoCount > 0
+                ? "Redo " + history.RedoLabel : "Redo";
+            if (ImGui::MenuItem(undoLabel.c_str(), "Ctrl+Z", false, history.UndoCount > 0))
                 requestUndo = true;
-            if (ImGui::MenuItem(redoLabel.c_str(), "Ctrl+Y", false, m_SceneHistory.CanRedo()))
+            if (ImGui::MenuItem(redoLabel.c_str(), "Ctrl+Y", false, history.RedoCount > 0))
                 requestRedo = true;
             ImGui::EndDisabled();
             ImGui::EndMenu();
@@ -1539,7 +1596,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         ImGui::TextDisabled("SCENE");
         ImGui::SameLine();
-        ImGui::Text("%s%s", m_Scene.GetName().c_str(), m_SceneHistory.IsDirty() ? " *" : "");
+        ImGui::Text("%s%s", m_Scene.GetName().c_str(), m_Scene.GetEditorState().Dirty ? " *" : "");
         ImGui::SameLine(ImGui::GetWindowWidth() * 0.43F);
         if (ImGui::Button(m_ScenePlaying ? "Stop" : "Play", {84.0F, 27.0F}))
         {
@@ -1569,18 +1626,24 @@ float4 PSMain(PixelInput input) : SV_TARGET
         ImGui::BeginDisabled(m_ScenePlaying);
         if (ImGui::Button("+ GameObject")) CreateSceneObject();
         ImGui::SameLine();
+        ImGui::BeginDisabled(m_ScenePlaying);
         if (ImGui::Button("Delete"))
             DeleteSelectedObject();
         ImGui::EndDisabled();
+        ImGui::EndDisabled();
         ImGui::Separator();
-        for (const GameObjectId gameObject : m_Scene.GetObjects())
-            RenderSceneObject(gameObject);
+        const auto objects = m_Scene.CaptureView();
+        for (const auto& object : objects.Objects)
+            RenderSceneObject(object.PersistentId);
         ImGui::End();
     }
 
-    void EditorApplication::RenderSceneObject(GameObjectId gameObject)
+    void EditorApplication::RenderSceneObject(SceneUuid object)
     {
-        ImGui::PushID(reinterpret_cast<void*>(static_cast<std::uintptr_t>(gameObject)));
+        // An earlier row can commit a draft and invalidate all runtime handles. Resolve each row by UUID.
+        const auto gameObject = m_Scene.FindObject(object);
+        if (!m_Scene.Contains(gameObject)) return;
+        ImGui::PushID(object.ToString().c_str());
         const auto label = m_Scene.GetObjectName(gameObject) + " [C#]";
         if (ImGui::Selectable(label.c_str(), gameObject == m_SelectedObject))
             SelectObject(gameObject);
@@ -1622,7 +1685,8 @@ float4 PSMain(PixelInput input) : SV_TARGET
         draw->AddLine({center.x, center.y}, {center.x + 115.0F, center.y}, IM_COL32(236, 86, 95, 255), 3.0F);
         draw->AddLine({center.x, center.y}, {center.x, center.y - 115.0F}, IM_COL32(91, 212, 125, 255), 3.0F);
         draw->AddLine({center.x, center.y}, {center.x - 62.0F, center.y + 72.0F}, IM_COL32(83, 142, 245, 255), 3.0F);
-        const char* text = m_SelectedObject == InvalidGameObjectId ? "No selection" : m_Scene.GetObjectName(m_SelectedObject).c_str();
+        const std::string label = m_SelectedObject == InvalidGameObjectId ? "No selection" : m_Scene.GetObjectName(m_SelectedObject);
+        const char* text = label.c_str();
         draw->AddText({topLeft.x + 12.0F, topLeft.y + 10.0F}, IM_COL32(214, 219, 232, 255), text);
         ImGui::Dummy(size);
         ImGui::End();
@@ -1643,25 +1707,32 @@ float4 PSMain(PixelInput input) : SV_TARGET
             return;
         }
 
-        std::array<char, 128> nameBuffer{};
-        std::snprintf(nameBuffer.data(), nameBuffer.size(), "%s", m_Scene.GetObjectName(m_SelectedObject).c_str());
+        std::array<char, 1025> nameBuffer{};
+        std::snprintf(nameBuffer.data(), nameBuffer.size(), "%s", (m_InspectorDraft ? m_InspectorDraft->Name : m_Scene.GetObjectName(m_SelectedObject)).c_str());
         ImGui::TextDisabled("GAME OBJECT");
         ImGui::TextDisabled("Gameplay: C#");
-        ImGui::BeginDisabled(m_ScenePlaying);
+        ImGui::BeginDisabled(m_ScenePlaying || m_CancelledInspectorThisFrame);
         const bool nameChanged = ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size());
         if (ImGui::IsItemActivated())
-            BeginInspectorEdit();
+            BeginInspectorEdit("Rename GameObject");
         if (nameChanged)
-            m_Scene.SetObjectName(m_SelectedObject, nameBuffer.data());
+        {
+            if (!m_InspectorDraft) BeginInspectorEdit("Rename GameObject");
+            m_InspectorDraft->Name = nameBuffer.data();
+            try { m_Scene.PreviewName(m_InspectorDraft->Token, m_InspectorDraft->Object, m_InspectorDraft->Name); m_InspectorDraft->Valid = true; }
+            catch (const std::exception& error) { m_InspectorDraft->Valid = false; AppendLog(std::string("Rename preview rejected: ") + error.what()); }
+        }
         if (ImGui::IsItemDeactivated())
             CommitInspectorEdit("Rename GameObject");
 
         ImGui::SeparatorText("Transform");
-        Transform& transform = m_Scene.GetLocalTransform(m_SelectedObject);
+        const bool hasTransform = m_Scene.HasTransform(m_SelectedObject);
+        ImGui::BeginDisabled(!hasTransform);
+        Transform transform = m_InspectorDraft ? m_InspectorDraft->LocalTransform : (hasTransform ? m_Scene.GetLocalTransform(m_SelectedObject) : Transform{});
         if (m_ScenePlaying && m_PlayScene)
         {
             const auto playObject = m_PlayScene->FindObject(m_Scene.GetPersistentId(m_SelectedObject));
-            if (m_PlayScene->Contains(playObject))
+            if (m_PlayScene->Contains(playObject) && m_PlayScene->HasTransform(playObject))
             {
                 const auto& live = m_PlayScene->GetLocalTransform(playObject);
                 ImGui::TextDisabled("Live rotation: %.3f %.3f %.3f %.3f",
@@ -1673,25 +1744,53 @@ float4 PSMain(PixelInput input) : SV_TARGET
         float scale[]{transform.Scale.x(), transform.Scale.y(), transform.Scale.z()};
         const bool positionChanged = ImGui::DragFloat3("Position", position, 0.05F);
         if (ImGui::IsItemActivated())
-            BeginInspectorEdit();
+            BeginInspectorEdit("Move GameObject");
         if (positionChanged)
+        {
             transform.Position = {position[0], position[1], position[2]};
+            if (!m_InspectorDraft) BeginInspectorEdit("Edit Transform");
+            m_InspectorDraft->LocalTransform = transform;
+            try { m_Scene.PreviewTransform(m_InspectorDraft->Token, m_InspectorDraft->Object, transform); m_InspectorDraft->Valid = true; }
+            catch (const std::exception& error) { m_InspectorDraft->Valid = false; AppendLog(error.what()); }
+        }
         if (ImGui::IsItemDeactivated())
             CommitInspectorEdit("Move GameObject");
         const bool rotationChanged = ImGui::DragFloat4("Rotation", rotation, 0.01F);
         if (ImGui::IsItemActivated())
-            BeginInspectorEdit();
+            BeginInspectorEdit("Rotate GameObject");
         if (rotationChanged)
-            transform.Rotation = Quaternion(rotation[3], rotation[0], rotation[1], rotation[2]).normalized();
+        {
+            const Quaternion proposed(rotation[3], rotation[0], rotation[1], rotation[2]);
+            if (proposed.squaredNorm() > 0.000001F)
+            {
+                transform.Rotation = proposed.normalized();
+                if (!m_InspectorDraft) BeginInspectorEdit("Edit Transform");
+            m_InspectorDraft->LocalTransform = transform;
+            try { m_Scene.PreviewTransform(m_InspectorDraft->Token, m_InspectorDraft->Object, transform); m_InspectorDraft->Valid = true; }
+            catch (const std::exception& error) { m_InspectorDraft->Valid = false; AppendLog(error.what()); }
+            }
+            else if (m_InspectorDraft) m_InspectorDraft->Valid = false;
+        }
         if (ImGui::IsItemDeactivated())
             CommitInspectorEdit("Rotate GameObject");
         const bool scaleChanged = ImGui::DragFloat3("Scale", scale, 0.02F, 0.001F, 100.0F);
         if (ImGui::IsItemActivated())
-            BeginInspectorEdit();
+            BeginInspectorEdit("Scale GameObject");
         if (scaleChanged)
+        {
             transform.Scale = {scale[0], scale[1], scale[2]};
+            if (!m_InspectorDraft) BeginInspectorEdit("Edit Transform");
+            m_InspectorDraft->LocalTransform = transform;
+            try { m_Scene.PreviewTransform(m_InspectorDraft->Token, m_InspectorDraft->Object, transform); m_InspectorDraft->Valid = true; }
+            catch (const std::exception& error) { m_InspectorDraft->Valid = false; AppendLog(error.what()); }
+        }
         if (ImGui::IsItemDeactivated())
             CommitInspectorEdit("Scale GameObject");
+        ImGui::EndDisabled();
+        if (hasTransform && ImGui::SmallButton("Remove Transform"))
+            ExecuteSceneMutation("Remove Transform", [&] { m_Scene.RemoveEditorComponent(m_Scene.GetPersistentId(m_SelectedObject), "ncma.transform"); });
+        if (!hasTransform && ImGui::SmallButton("Add Transform"))
+            ExecuteSceneMutation("Add Transform", [&] { m_Scene.SetEditorTransform(m_Scene.GetPersistentId(m_SelectedObject), Transform{}); });
         ImGui::EndDisabled();
         RenderBehaviourInspector();
 
@@ -1745,7 +1844,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
     void EditorApplication::RenderBehaviourInspector()
     {
         ImGui::SeparatorText("C# Behaviours");
-        ImGui::BeginDisabled(m_ScenePlaying);
+        ImGui::BeginDisabled(m_ScenePlaying || m_CancelledInspectorThisFrame);
         std::vector<const Scripting::BehaviourDescriptor*> types;
         if (m_GameplayRuntime && m_GameplayRuntime->IsStarted())
             for (const auto& type : m_GameplayRuntime->GetTypes())
@@ -1758,13 +1857,15 @@ float4 PSMain(PixelInput input) : SV_TARGET
             for (const auto* type : types)
                 if (ImGui::MenuItem((type->TypeName + " [C#]").c_str()))
                     ExecuteSceneMutation("Attach Behaviour", [&] {
-                        m_Scene.AddBehaviour(m_SelectedObject, type->CreateBinding());
+                        auto values = m_Scene.GetBehaviours(m_SelectedObject);
+                        values.push_back(type->CreateBinding());
+                        m_Scene.SetEditorBindings(m_Scene.GetPersistentId(m_SelectedObject), values, "Attach Behaviour");
                     });
             ImGui::EndPopup();
         }
         ImGui::EndDisabled();
         if (!ready) ImGui::TextDisabled("Load C# types from the Gameplay menu.");
-        auto bindings = m_Scene.GetBehaviours(m_SelectedObject);
+        auto bindings = m_InspectorDraft ? m_InspectorDraft->Bindings : m_Scene.GetBehaviours(m_SelectedObject);
         for (std::size_t index = 0; index < bindings.size(); ++index)
         {
             auto& binding = bindings[index];
@@ -1776,13 +1877,15 @@ float4 PSMain(PixelInput input) : SV_TARGET
             if (ImGui::Checkbox("Enabled", &enabled))
                 ExecuteSceneMutation("Enable Behaviour", [&] {
                     binding.Enabled = enabled;
-                    m_Scene.UpdateBehaviour(m_SelectedObject, binding);
+                    m_Scene.SetEditorBindings(m_Scene.GetPersistentId(m_SelectedObject), bindings, "Edit C# Behaviour");
                 });
             ImGui::SameLine();
             if (ImGui::SmallButton("Remove"))
             {
                 ExecuteSceneMutation("Remove Behaviour", [&] {
-                    (void)m_Scene.RemoveBehaviour(m_SelectedObject, binding.Id);
+                    const auto removed = binding.Id;
+                    std::erase_if(bindings, [&](const auto& value) { return value.Id == removed; });
+                    m_Scene.SetEditorBindings(m_Scene.GetPersistentId(m_SelectedObject), bindings, "Remove Behaviour");
                 });
                 ImGui::PopID();
                 break;
@@ -1790,7 +1893,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
             const Scripting::BehaviourDescriptor* descriptor = nullptr;
             if (ready)
                 for (const auto* type : types)
-                    if (type->TypeName == binding.TypeName && type->Language == binding.Language) descriptor = type;
+                    if (type->TypeName == binding.TypeName) descriptor = type;
             if (!descriptor) ImGui::TextDisabled("Missing script (saved settings retained)");
             if (descriptor)
             {
@@ -1811,7 +1914,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
                             refreshed.push_back(old == binding.Properties.end() ? metadata.Default : *old);
                         }
                         binding.Properties = std::move(refreshed);
-                        m_Scene.UpdateBehaviour(m_SelectedObject, binding);
+                        m_Scene.SetEditorBindings(m_Scene.GetPersistentId(m_SelectedObject), bindings, "Edit C# Behaviour");
                     });
             }
             for (auto& property : binding.Properties)
@@ -1838,11 +1941,18 @@ float4 PSMain(PixelInput input) : SV_TARGET
                 }
                 else
                     changed = ImGui::DragScalar(label.c_str(), ImGuiDataType_Double, &value, 0.1F);
-                if (ImGui::IsItemActivated()) BeginInspectorEdit();
-                if (changed && ValidExportValue({property.Name, property.Kind, value}))
+                if (ImGui::IsItemActivated()) BeginInspectorEdit("Edit Export Property");
+                if (changed)
                 {
-                    property.Value = value;
-                    m_Scene.UpdateBehaviour(m_SelectedObject, binding);
+                    if (!m_InspectorDraft) BeginInspectorEdit("Edit Export Property");
+                    m_InspectorDraft->Valid = ValidExportValue({property.Name, property.Kind, value});
+                    if (m_InspectorDraft->Valid)
+                    {
+                        property.Value = value;
+                        m_InspectorDraft->Bindings = bindings;
+                        try { m_Scene.PreviewBindings(m_InspectorDraft->Token, m_InspectorDraft->Object, bindings); }
+                        catch (const std::exception& error) { m_InspectorDraft->Valid = false; AppendLog(error.what()); }
+                    }
                 }
                 if (ImGui::IsItemDeactivated() || (changed && property.Kind == ExportKind::Boolean))
                     CommitInspectorEdit("Edit Export Property");
@@ -1905,7 +2015,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
         constexpr float height = 27.0F;
         SetFixedWindow("##StatusBar", 0.0F, static_cast<float>(workArea.bottom) - height,
             static_cast<float>(workArea.right), height);
-        ImGui::TextColored(Color(105, 210, 149), m_SceneHistory.IsDirty() ? "Modified" : "Saved");
+        ImGui::TextColored(Color(105, 210, 149), m_Scene.GetEditorState().Dirty ? "Modified" : "Saved");
         ImGui::SameLine();
         ImGui::TextDisabled("| Objects: %zu | Backend: %s | Agent capabilities: schema-ready",
             m_Scene.Size(), Rhi::RenderBackendRegistry::ToString(m_BackendType).data());
@@ -1914,110 +2024,62 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::SelectObject(GameObjectId gameObject)
     {
+        const auto selected = m_Scene.Contains(gameObject) ? std::optional<SceneUuid>(m_Scene.GetPersistentId(gameObject)) : std::nullopt;
         CommitInspectorEdit("Edit GameObject");
-        m_SelectedObject = gameObject;
+        m_Scene.SelectEditorObject(selected);
+        RefreshEditorSelection();
     }
 
     void EditorApplication::CreateSceneObject()
     {
-        ExecuteSceneMutation("Create GameObject", [this] {
-            m_SelectedObject = m_Scene.CreateObject("New GameObject");
-        });
-        AppendLog("Created C# GameObject");
+        CommitInspectorEdit("Edit GameObject");
+        try { m_SelectedObject = m_Scene.CreateEditorObject("New GameObject"); AppendLog("Created C# GameObject"); }
+        catch (const std::exception& error) { AppendLog(error.what()); }
     }
-
     void EditorApplication::DeleteSelectedObject()
     {
-        if (m_SelectedObject == InvalidGameObjectId)
-            return;
-        const std::string name = m_Scene.GetObjectName(m_SelectedObject);
-        ExecuteSceneMutation("Delete GameObject", [this] {
-            (void)m_Scene.DestroyObject(m_SelectedObject);
-            m_SelectedObject = InvalidGameObjectId;
-        });
-        AppendLog(std::format("Deleted gameObject '{}'", name));
+        CommitInspectorEdit("Edit GameObject");
+        if (!m_Scene.Contains(m_SelectedObject)) return;
+        try { m_Scene.DeleteEditorObject(m_Scene.GetPersistentId(m_SelectedObject)); RefreshEditorSelection(); }
+        catch (const std::exception& error) { AppendLog(error.what()); }
     }
-
     void EditorApplication::NewScene()
     {
-        ExecuteSceneMutation("New Scene", [this] {
-            SceneSnapshot empty;
-            empty.Name = "Untitled";
-            std::string error;
-            (void)m_Scene.RestoreSnapshot(empty, error);
-            m_SelectedObject = InvalidGameObjectId;
-        });
-        AppendLog("Created a new scene");
+        CommitInspectorEdit("Edit GameObject");
+        try { m_Scene.NewEditorDocument(); RefreshEditorSelection(); AppendLog("New scene"); }
+        catch (const std::exception& error) { AppendLog(error.what()); }
     }
-
     void EditorApplication::OpenScene()
     {
         CommitInspectorEdit("Edit GameObject");
-        SceneSnapshot snapshot;
-        std::string error;
-        if (!SceneSerializer::Load(m_ScenePath, snapshot, error))
-        {
-            AppendLog(error);
-            return;
-        }
-        const SceneCommandStack::State before = CaptureEditorState();
-        if (!m_Scene.RestoreSnapshot(snapshot, error))
-        {
-            AppendLog(error);
-            return;
-        }
-        const auto objects = m_Scene.GetObjects();
-        m_SelectedObject = objects.empty() ? InvalidGameObjectId : objects.front();
-        m_SceneHistory.Push("Open Scene", before, CaptureEditorState());
-        m_SceneHistory.MarkSaved();
-        AppendLog(std::format("Opened scene '{}'", m_ScenePath.string()));
+        try { m_Scene.OpenEditorDocument(m_ScenePath); RefreshEditorSelection(); AppendLog("Opened scene"); }
+        catch (const std::exception& error) { AppendLog(error.what()); }
     }
-
     void EditorApplication::SaveScene()
     {
         CommitInspectorEdit("Edit GameObject");
-        std::string error;
-        if (!SceneSerializer::Save(m_ScenePath, m_Scene.CaptureSnapshot(), error))
+        try
         {
-            AppendLog(error);
-            return;
+            const auto path = m_Scene.GetEditorState().FilePath;
+            if (path.empty()) m_Scene.SaveEditorDocument(m_ScenePath);
+            else m_Scene.SaveEditorDocument();
+            AppendLog("Saved scene");
         }
-        m_SceneHistory.MarkSaved();
-        AppendLog(std::format("Saved scene '{}'", m_ScenePath.string()));
+        catch (const std::exception& error) { AppendLog(error.what()); }
     }
-
     void EditorApplication::UndoSceneEdit()
     {
         CommitInspectorEdit("Edit GameObject");
-        if (!m_SceneHistory.CanUndo())
-            return;
-        const std::string label = m_SceneHistory.UndoLabel();
-        std::optional<SceneUuid> selection;
         std::string error;
-        if (!m_SceneHistory.Undo(m_Scene, selection, error))
-        {
-            AppendLog(error);
-            return;
-        }
-        RestoreSelection(selection);
-        AppendLog("Undid " + label);
+        if (!m_Scene.UndoEditor(false, error)) { if (!error.empty()) AppendLog(error); return; }
+        RefreshEditorSelection(); AppendLog("Undid scene command");
     }
-
     void EditorApplication::RedoSceneEdit()
     {
         CommitInspectorEdit("Edit GameObject");
-        if (!m_SceneHistory.CanRedo())
-            return;
-        const std::string label = m_SceneHistory.RedoLabel();
-        std::optional<SceneUuid> selection;
         std::string error;
-        if (!m_SceneHistory.Redo(m_Scene, selection, error))
-        {
-            AppendLog(error);
-            return;
-        }
-        RestoreSelection(selection);
-        AppendLog("Redid " + label);
+        if (!m_Scene.UndoEditor(true, error)) { if (!error.empty()) AppendLog(error); return; }
+        RefreshEditorSelection(); AppendLog("Redid scene command");
     }
 
     void EditorApplication::TogglePlay()
@@ -2030,21 +2092,20 @@ float4 PSMain(PixelInput input) : SV_TARGET
             return;
         }
         std::string error;
-        auto playScene = std::make_unique<SceneWorld>();
-        const auto snapshot = m_Scene.CaptureSnapshot();
+        auto playScene = std::make_unique<ManagedSceneClient>();
+        const auto snapshot = m_Scene.CaptureDocument();
+        const auto view = m_Scene.CaptureView();
         bool hasCSharp = false;
-        for (const auto& gameObject : snapshot.Objects)
-            for (const auto& binding : gameObject.Behaviours)
-            {
-                hasCSharp = hasCSharp || binding.Language == BehaviourLanguage::CSharp;
-            }
-        if (!playScene->RestoreSnapshot(snapshot, error) ||
+        for (const auto& gameObject : view.Objects)
+            hasCSharp = hasCSharp || !gameObject.Behaviours.empty();
+        if (!playScene->RestoreDocument(snapshot, error) ||
             (hasCSharp && !m_GameplayRuntime->BindScene(*playScene, error)))
         {
             if (m_GameplayRuntime) m_GameplayRuntime->EndScene();
                 AppendLog("Could not enter play mode: " + error);
             return;
         }
+        m_Scene.FreezeEditing(true);
         m_PlayScene = std::move(playScene);
         m_ScenePlaying = true;
         m_ScenePaused = false;
@@ -2055,6 +2116,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
     {
         if (m_GameplayRuntime) m_GameplayRuntime->EndScene();
         m_PlayScene.reset();
+        if (m_ScenePlaying) m_Scene.FreezeEditing(false);
         m_ScenePlaying = false;
         m_ScenePaused = false;
     }
@@ -2082,43 +2144,47 @@ float4 PSMain(PixelInput input) : SV_TARGET
         }
     }
 
-    void EditorApplication::ExecuteSceneMutation(
-        const std::string& label, const std::function<void()>& mutation)
+    void EditorApplication::ExecuteSceneMutation(const std::string& label, const std::function<void()>& mutation)
     {
         CommitInspectorEdit("Edit GameObject");
-        SceneCommandStack::State before = CaptureEditorState();
-        mutation();
-        m_SceneHistory.Push(label, std::move(before), CaptureEditorState());
+        try { mutation(); RefreshEditorSelection(); AppendLog(label); }
+        catch (const std::exception& error) { AppendLog(error.what()); }
     }
-
-    SceneCommandStack::State EditorApplication::CaptureEditorState() const
-    {
-        SceneCommandStack::State state;
-        state.Scene = m_Scene.CaptureSnapshot();
-        if (m_Scene.Contains(m_SelectedObject))
-            state.Selection = m_Scene.GetPersistentId(m_SelectedObject);
-        return state;
-    }
-
     void EditorApplication::RestoreSelection(const std::optional<SceneUuid>& selection)
     {
-        m_SelectedObject = selection.has_value() ? m_Scene.FindObject(*selection) : InvalidGameObjectId;
+        m_SelectedObject = selection ? m_Scene.FindObject(*selection) : InvalidGameObjectId;
     }
-
-    void EditorApplication::BeginInspectorEdit()
+    void EditorApplication::RefreshEditorSelection() { RestoreSelection(m_Scene.GetEditorState().Selection); }
+    void EditorApplication::BeginInspectorEdit(std::string label)
     {
         CommitInspectorEdit("Edit GameObject");
-        if (!m_InspectorEditBefore.has_value())
-            m_InspectorEditBefore = CaptureEditorState();
+        if (!m_Scene.Contains(m_SelectedObject)) return;
+        InspectorDraft draft;
+        draft.Object = m_Scene.GetPersistentId(m_SelectedObject);
+        draft.Token = m_Scene.BeginInteraction(draft.Object, std::move(label));
+        draft.Name = m_Scene.GetObjectName(m_SelectedObject);
+        draft.Bindings = m_Scene.GetBehaviours(m_SelectedObject);
+        draft.HasTransform = m_Scene.HasTransform(m_SelectedObject);
+        if (draft.HasTransform) draft.LocalTransform = m_Scene.GetLocalTransform(m_SelectedObject);
+        m_InspectorDraft = std::move(draft);
     }
-
-    void EditorApplication::CommitInspectorEdit(const std::string& label)
+    void EditorApplication::CommitInspectorEdit(const std::string&)
     {
-        if (!m_InspectorEditBefore.has_value())
-            return;
-        if (SceneSerializer::Serialize(m_InspectorEditBefore->Scene) != SceneSerializer::Serialize(m_Scene.CaptureSnapshot()))
-            m_SceneHistory.Push(label, std::move(*m_InspectorEditBefore), CaptureEditorState());
-        m_InspectorEditBefore.reset();
+        if (!m_InspectorDraft) return;
+        const auto draft = std::move(*m_InspectorDraft); m_InspectorDraft.reset();
+        try
+        {
+            if (draft.Valid) m_Scene.CommitInteraction(draft.Token);
+            else m_Scene.CancelInteraction(draft.Token);
+            RefreshEditorSelection();
+        }
+        catch (const std::exception& error) { AppendLog(error.what()); }
+    }
+    void EditorApplication::CancelInspectorEdit()
+    {
+        if (!m_InspectorDraft) return;
+        const auto token = m_InspectorDraft->Token; m_InspectorDraft.reset();
+        try { m_Scene.CancelInteraction(token); } catch (const std::exception& error) { AppendLog(error.what()); }
     }
 
     void EditorApplication::AppendLog(std::string message)

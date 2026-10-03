@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <string_view>
+#include <exception>
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int)
 {
@@ -17,9 +18,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int)
         backend = NcmaEngine::Rhi::BackendType::Null;
 
     int result = 0;
+    try
     {
         NcmaEngine::Editor::EditorApplication application(instance, backend, smokeTest, gameplaySmokeTest, fbxSmokeTest);
         result = application.Run();
+    }
+    catch (const std::exception& error)
+    {
+        if (!smokeTest) MessageBoxA(nullptr, error.what(), "NcmaEngine managed host error", MB_OK | MB_ICONERROR);
+        result = 1;
     }
     if (smokeTest)
         ExitProcess(static_cast<UINT>(result));

@@ -3,10 +3,13 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Ncma.Managed/Ncma.Managed.csproj" />
+    <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />
+    <ProjectReference Include="../Ncma.Editor.Core/Ncma.Editor.Core.csproj" />
   </ItemGroup>
 </Project>

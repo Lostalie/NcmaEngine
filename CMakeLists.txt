@@ -68,10 +68,7 @@ add_library(NcmaCore STATIC
     engine/source/runtime/renderer/rhi/RhiResources.cpp
     engine/source/runtime/renderer/rendergraph/RenderGraph.cpp
     engine/source/runtime/renderer/rhi/vulkan/VulkanRuntimeProbe.cpp
-    engine/source/runtime/scene/SceneCommandStack.cpp
-    engine/source/runtime/scene/SceneSerializer.cpp
     engine/source/runtime/scene/SceneUuid.cpp
-    engine/source/runtime/scene/SceneWorld.cpp
     engine/source/runtime/script/runtime/ScriptRuntimeRegistry.cpp
     engine/source/runtime/core/log/Log.cpp
     engine/source/runtime/physics/runtime/PhysicsWorld2D.cpp
@@ -81,6 +78,8 @@ add_library(NcmaCore STATIC
 if(WIN32)
     target_sources(NcmaCore PRIVATE
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
+        engine/source/runtime/script/runtime/ManagedHost.cpp
+        engine/source/runtime/scene/ManagedSceneClient.cpp
         engine/source/runtime/script/runtime/DotNetGameplayRuntime.cpp
     )
     target_link_libraries(NcmaCore PUBLIC d3d11 dxgi d3dcompiler advapi32)
@@ -115,6 +114,9 @@ if(NCMA_BUILD_MANAGED)
     if(DOTNET_EXECUTABLE)
         add_custom_target(NcmaManaged
             COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Tests/Ncma.Scene.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/Ncma.Runtime.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
@@ -131,7 +133,10 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            COMMENT "Building the C# runtime foundation, gameplay API, host, and sample"
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Core.Tests/Ncma.Editor.Core.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMENT "Building the C# runtime, complete document editor, gameplay API, host, and sample"
             VERBATIM
         )
     endif()
@@ -139,7 +144,7 @@ endif()
 
 if(NCMA_BUILD_TESTS)
     enable_testing()
-    add_executable(NcmaArchitectureTests tests/ArchitectureTests.cpp tests/SceneFlatTests.cpp tests/WorldAccessTests.cpp)
+    add_executable(NcmaArchitectureTests tests/ArchitectureTests.cpp)
     target_link_libraries(NcmaArchitectureTests PRIVATE NcmaCore NcmaNative)
     # Tests contain assertions with operations: keep these active in Release too.
     if(MSVC)
@@ -153,6 +158,12 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaManagedHeadlessTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Runtime.Tests.dll")
         set_tests_properties(NcmaManagedHeadlessTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaSceneDocumentTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Scene.Tests.dll")
+        set_tests_properties(NcmaSceneDocumentTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaEditorCoreTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Core.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Core.Tests.dll")
+        set_tests_properties(NcmaEditorCoreTests PROPERTIES TIMEOUT 30)
     endif()
     add_executable(NcmaAnimationTests tests/AnimationTests.cpp)
     target_link_libraries(NcmaAnimationTests PRIVATE NcmaCore NcmaNative)
@@ -168,8 +179,11 @@ if(NCMA_BUILD_TESTS)
     add_test(NAME NcmaFbxImportTests COMMAND NcmaFbxImportTests
         "${CMAKE_SOURCE_DIR}/tests/assets/fbx" "${CMAKE_SOURCE_DIR}/out/tests/fbx")
     if(WIN32)
-        add_executable(NcmaManagedHostTests tests/ManagedHostTests.cpp)
+        add_executable(NcmaManagedHostTests tests/ManagedHostTests.cpp tests/SceneFlatTests.cpp tests/ManagedSceneBridgeTests.cpp)
         target_link_libraries(NcmaManagedHostTests PRIVATE NcmaCore)
+        if(MSVC)
+            target_compile_options(NcmaManagedHostTests PRIVATE /UNDEBUG /W4 /permissive- /utf-8)
+        endif()
     endif()
 endif()
 

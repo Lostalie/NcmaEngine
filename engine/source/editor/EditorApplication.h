@@ -5,9 +5,7 @@
 #include "renderer/pipeline/PbrPipelineSettings.h"
 #include "renderer/rendergraph/RenderGraph.h"
 #include "renderer/rhi/RenderBackendRegistry.h"
-#include "scene/SceneCommandStack.h"
-#include "scene/SceneSerializer.h"
-#include "scene/SceneWorld.h"
+#include "scene/ManagedSceneClient.h"
 #include "script/runtime/DotNetGameplayRuntime.h"
 
 #define GLFW_INCLUDE_NONE
@@ -67,7 +65,7 @@ namespace NcmaEngine::Editor
         void ExecuteFbxEdit(const std::function<void(FbxPreviewState&)>& edit);
         void UndoFbxEdit(bool redo = false);
         void RenderStatusBar(const RECT& workArea);
-        void RenderSceneObject(GameObjectId gameObject);
+        void RenderSceneObject(SceneUuid object);
 
         void SelectObject(GameObjectId gameObject);
         void CreateSceneObject();
@@ -82,9 +80,10 @@ namespace NcmaEngine::Editor
         void TogglePlay();
         void RenderBehaviourInspector();
         void ExecuteSceneMutation(const std::string& label, const std::function<void()>& mutation);
-        [[nodiscard]] SceneCommandStack::State CaptureEditorState() const;
         void RestoreSelection(const std::optional<SceneUuid>& selection);
-        void BeginInspectorEdit();
+        void BeginInspectorEdit(std::string label = "Edit GameObject");
+        void CancelInspectorEdit();
+        void RefreshEditorSelection();
         void CommitInspectorEdit(const std::string& label);
         void AppendLog(std::string message);
 
@@ -153,13 +152,21 @@ namespace NcmaEngine::Editor
         float m_PreviewLightIntensity = 4.0F;
         float m_PreviewExposure = 1.0F;
         float m_PreviewAmbient = 0.035F;
-        SceneWorld m_Scene{"EditorScene"};
+        ManagedSceneClient m_Scene{"EditorScene"};
         GameObjectId m_SelectedObject = InvalidGameObjectId;
-        SceneCommandStack m_SceneHistory;
-        std::optional<SceneCommandStack::State> m_InspectorEditBefore;
+        struct InspectorDraft final
+        {
+            SceneUuid Token, Object;
+            std::string Name;
+            Transform LocalTransform{};
+            std::vector<BehaviourBinding> Bindings;
+            bool HasTransform = false, Valid = true;
+        };
+        std::optional<InspectorDraft> m_InspectorDraft;
+        bool m_CancelledInspectorThisFrame = false;
         std::filesystem::path m_ScenePath;
         std::filesystem::path m_ProjectRoot;
-        std::unique_ptr<SceneWorld> m_PlayScene;
+        std::unique_ptr<ManagedSceneClient> m_PlayScene;
         bool m_ScenePaused = false;
         std::unique_ptr<Scripting::DotNetGameplayRuntime> m_GameplayRuntime;
         std::vector<std::string> m_Logs;

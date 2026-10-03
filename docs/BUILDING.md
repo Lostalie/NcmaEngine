@@ -1,8 +1,8 @@
 # Building NcmaEngine
 
 Target direction is now C# runtime/gameplay, independent Python modules and native performance
-plugins. The commands below still build the legacy C++ editor/SceneWorld and hostfxr C#
-gameplay path, plus the independent managed headless foundation. They do NOT produce a managed
+plugins. The commands below build the C++/ImGui shell and its authoritative C# World/hostfxr
+gameplay path. C++ SceneWorld and native world exports are removed. They do NOT yet produce a fully managed
 editor/Player or install pythonnet/gRPC/ZeroMQ.
 See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for the staged migration.
 
@@ -44,7 +44,7 @@ The executable is generated at `out/bin/NcmaEngine.exe`. `LaunchEditor.cmd` invo
 Native outputs are placed directly in the selected CMake build directory:
 
 - Debug/Release editor: `out/bin/NcmaEngine.exe` (the latest configuration replaces the previous one)
-- Debug C# native bridge: `out/build/windows-ninja-debug/NcmaNative.dll`
+- Debug native algorithm plugin: `out/build/windows-ninja-debug/NcmaNative.dll`
 - Embedded .NET host and reloadable gameplay assemblies: `out/managed/`
 - Editor debug symbols: `out/symbols/NcmaEngine.pdb`
 
@@ -67,7 +67,7 @@ see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader
 1. Select or create an object via + GameObject, then Inspector > C# Behaviours > + Add Behaviour.
 2. Choose `Ncma.Gameplay.Sample.RotatorBehaviour`. Speed, Clockwise and Multiplier are reflected
    from its public `[Export]` properties/field. Attach, remove, enable and property edits support Undo/Redo.
-3. Save with Ctrl+S to `assets/scenes/EditorScene.ncscene`. Ctrl+O reloads this scene.
+3. Save with Ctrl+S to `assets/scenes/EditorScene.ncmascene`. Ctrl+O reloads this scene.
 4. Play runs scripts on a scene copy. The reference cube previews the selected scripted object's
    world Transform; Pause/Resume controls ticking and Stop discards runtime changes.
 5. After editing the sample C# source, run `Build.bat -GameplayOnly -Configuration Debug`, then
@@ -77,11 +77,12 @@ see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader
 
 The full build updates native/host binaries, so close the editor before running a full build.
 GameplayOnly updates only the reloadable sample assembly in `out/managed`; it does not rebuild
-the engine/API or run the full verification suite. The full build runs eight CTest cases including
+the engine/API or run the full verification suite. The full build runs nine CTest cases including
 animation runtime/ABI, FBX import/reference skinning, C# host and hidden editor tests,
-including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases),
-plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v5 checks. Python gameplay
-removal is covered by rejecting language-tagged old scenes/ABI requests without modifying source
+including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases)
+and NcmaSceneDocumentTests (complete components/Behaviour snapshots and failure guards),
+plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v7 checks. Python gameplay
+removal is covered by rejecting language-tagged old scenes without modifying source
 files or destination Worlds. Passing this suite does not imply independent module transports exist.
 
 ## Action animation and AI controls
@@ -100,19 +101,28 @@ See [FBX_IMPORT.md](FBX_IMPORT.md) for import constraints and the read-only Pyth
 
 ## Project inspection manifest
 
-`python -m ncma_tools.cli inspect .` emits project-manifest schema v5.
-Target and implemented ownership remain separate: the EXE/SceneWorld are still native, but gameplay
+`python -m ncma_tools.cli inspect .` emits project-manifest schema v8.
+Target and implemented ownership remain separate: the EXE/ImGui shell remains native, while World/components and gameplay
 is actually C# only (`gameplay.csharp_only_runtime_enforced=true`). Python gameplay backend and
 object language selection are removed; `python_modules` preserves specialized-module/plugin options,
-with pythonnet/gRPC/ZeroMQ explicitly NOT implemented. The scene wire format remains v5;
-nonzero language tags (including disabled bindings/empty objects) are rejected rather than dropped
-or rewritten. GameObject semantic API is v4; base ABI and World Access ABI remain v1.
+with pythonnet/gRPC/ZeroMQ explicitly NOT implemented. Scene assets use only .ncmascene SceneDocument JSON v1,
+including all registered components and script configuration. Old .ncscene v1-v6 compatibility and migration are removed;
+unsupported input is rejected without rewriting it or mutating the live document. Native plugin ABI is v2; World/GameObject exports are removed. Scene host v4 and Gameplay host v3 use opaque managed tokens. Rebuild old consumers.
 The MCP protocol version and animation-state JSON schema are unchanged.
 
-## Independent C# runtime foundation
+## Authoritative C# World and headless foundation
 
 Ncma.Runtime and Ncma.Runtime.Tests are included in NcmaEngine.sln and the canonical Build.bat path.
-The new library owns an independent headless World and shares no live state with the legacy editor.
-No NcmaNative, graphics or Python dependency is referenced. TreatWarningsAsErrors is enabled.
-Managed snapshot JSON v1 is NOT .ncscene v5; legacy import and managed Behaviour lifecycle are not implemented.
-Headless EditSession is a C# API, not yet an MCP/IPC server. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
+The library now owns active editor and Play Worlds; no native object/component authority is retained.
+Ncma.Runtime itself references no NcmaNative, graphics or Python dependency. TreatWarningsAsErrors is enabled.
+C# SceneDocument JSON v1 (.ncmascene) is the only supported scene asset format, with complete component/binding persistence and atomic saves. The old .ncscene v1-v6 codec and migration paths have been removed. Behaviour lifecycle now uses this World; editor OnFixedUpdate is not scheduled.
+Ncma.Editor.Core owns the active ImGui scene commands and complete-document history. The native scene command stack was removed. Draft previews do not write World, and Play freezes the edit document. The shared v2 capability API does not yet expose a live MCP/IPC server. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
+
+The editor now requires the deployed managed host, Ncma.Managed.dll, Ncma.Runtime.dll, Ncma.Scene.dll and Ncma.Editor.Core.dll in out/managed.
+Do not use -SkipManaged for a fresh editor build: it only skips deployment and runs the native-only test subset.
+The full Build.bat builds NcmaCore/NcmaNative/NcmaArchitectureTests first, deploys the C# host,
+then runs all managed-dependent editor tests. Missing hosts fail with an actionable startup error.
+
+## M1.1 implemented document boundary
+
+Complete Ncma.Scene document snapshots v1 cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell submits UUID commands to Editor.Core and uses opaque snapshots for Play; C# .ncmascene JSON v1 files persist complete documents with atomic saves. Old .ncscene compatibility is removed. M1.2 shared managed commands/history are implemented; asset references/pipeline, fixed-step editor scheduling and live MCP remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).

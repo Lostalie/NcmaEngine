@@ -17,12 +17,28 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Runtime", "managed\Ncm
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Runtime.Tests", "managed\Ncma.Runtime.Tests\Ncma.Runtime.Tests.csproj", "{0B6BEF12-D78C-469F-82C2-09D10FD23BCD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Scene", "managed\Ncma.Scene\Ncma.Scene.csproj", "{132B6953-DB9E-4E2B-8B88-BF13B9C03E11}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Scene.Tests", "managed\Ncma.Scene.Tests\Ncma.Scene.Tests.csproj", "{1F0C0D89-232B-4BD8-945C-3D78612BA312}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Editor.Core", "managed\Ncma.Editor.Core\Ncma.Editor.Core.csproj", "{A9DC3B28-8560-4D39-9345-6729C0746813}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Editor.Core.Tests", "managed\Ncma.Editor.Core.Tests\Ncma.Editor.Core.Tests.csproj", "{4622E6E6-B8CE-4DDA-9665-E141A7A40114}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{132B6953-DB9E-4E2B-8B88-BF13B9C03E11}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{132B6953-DB9E-4E2B-8B88-BF13B9C03E11}.Release|x64.ActiveCfg = Release|Any CPU
+		{1F0C0D89-232B-4BD8-945C-3D78612BA312}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1F0C0D89-232B-4BD8-945C-3D78612BA312}.Release|x64.ActiveCfg = Release|Any CPU
+		{A9DC3B28-8560-4D39-9345-6729C0746813}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A9DC3B28-8560-4D39-9345-6729C0746813}.Release|x64.ActiveCfg = Release|Any CPU
+		{4622E6E6-B8CE-4DDA-9665-E141A7A40114}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4622E6E6-B8CE-4DDA-9665-E141A7A40114}.Release|x64.ActiveCfg = Release|Any CPU
 		{F181C23C-A27E-45EC-8DA5-EC9D65D2022E}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{F181C23C-A27E-45EC-8DA5-EC9D65D2022E}.Release|x64.ActiveCfg = Release|Any CPU
 		{0B6BEF12-D78C-469F-82C2-09D10FD23BCD}.Debug|x64.ActiveCfg = Debug|Any CPU

@@ -3,7 +3,7 @@
 #include <cstdint>
 
 // Managed NativeEntry mirrors this POD layout. All functions use cdecl and caller-owned buffers.
-inline constexpr std::uint32_t NcmaGameplayBridgeVersion = 2;
+inline constexpr std::uint32_t NcmaGameplayBridgeVersion = 3;
 struct NcmaExportPropertyV2
 {
     std::uint32_t Kind = 0;

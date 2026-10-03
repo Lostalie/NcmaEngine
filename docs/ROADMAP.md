@@ -1,165 +1,212 @@
-# Development roadmap
+# NcmaEngine 开发路线图
 
-## Current direction — C# runtime, independent Python modules, C++ plugins
+更新日期：2026-10-03。依据当前代码与已确认的架构决策整理；不以预览、接口声明或模型骨架代替完整功能。
 
-C# owns gameplay, World/components, scheduling, scene/asset metadata and editor business logic.
-Python is an independent AI/specialized module, not a GameObject language. C++ remains only in
-performance-critical native plugins. This is a migration target, not a completed port.
-See [ARCHITECTURE.md](ARCHITECTURE.md), [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md)
-and [PYTHON_MODULES.md](PYTHON_MODULES.md).
+状态说明：“已实现基础”表示有代码与对应测试；“部分实现”表示尚未形成可用于游戏制作的完整流程；“未实现”表示仍是计划。下列阶段是推荐开发顺序，不是工期承诺。
 
-## Migration milestones — headless foundation landed, integration NOT implemented
+## 1. 固定架构边界
 
-1. Managed headless World/GameObject/component schemas, snapshots, safe references and fixed-step
-   WorldRunner, with no native World or Python dependency. Initial Ncma.Runtime prototype implemented;
-   type pools/query APIs and Behaviour lifecycle remain unimplemented.
-2. Managed SceneAsset/serialization/editor commands and Undo/Play isolation; preserve old v1-v5
-   C# records; reject legacy Python bindings without modifying their source, with explicit author conversion.
-   Headless managed JSON v1, atomic EditSession and bounded Undo/Redo implemented; .ncscene import/live editor migration not implemented.
-3. C# application main loop loading a native Renderer plugin; reuse DX11 code, prove resource
-   lifetime/window/input handling. Vulkan rendering and validation remain future work.
-4. Physics plugin plus C# action/animation/character policies; batch pose/math kernels only when
-   justified. Complete FBX scene character, GPU skinning and collision-aware root motion.
-5. One independent Python request/result adapter (proposed gRPC worker), validated asynchronous
-   results at tick boundaries, timeouts/cancellation/restart/backpressure. pythonnet/ZeroMQ optional.
-6. Managed Editor/Player distribution and plugin lifecycle; retire old C++ hostfxr entry/SceneWorld
-   after asset/consumer migration and explicit cleanup authorization. Python gameplay host/SDK are already removed.
+- **C#：主引擎与唯一游戏逻辑语言。** 承担 World、GameObject、组件、调度、场景/资产文档、编辑器业务、动画行为、UI 逻辑和独立服务。
+- **C++：性能关键原生插件。** 承担渲染、物理及经测量确有必要的动画采样、蒙皮、导入和数学内核；不再新增通用原生 World 或游戏框架。
+- **Python：可选 AI、工具与特殊模块。** 不挂载游戏脚本，不拥有场景，不进入每帧同步等待路径。pythonnet、gRPC、ZeroMQ 均未实现，后续按需求选择，不同时铺开。
+- **场景：扁平 GameObject 列表，空容器 + 组件。** Transform 可选；不恢复 Godot Node、父子对象树或 Transform 继承。骨骼、动画图、UI 文档内部层级不等于场景层级。
+- **网络：独立可选服务。** 不向 GameObject、Behaviour 或组件植入 RPC、自动复制和网络所有权。
+- **编辑器与 AI：共用 C# 命令路径。** 修改必须可撤销；AI 默认只读，事务需权限、会话和版本检查。不得另建一套绕过编辑器的修改接口。
+- **跨语言：版本化 C ABI。** 明确线程、缓冲区、资源所有权与释放；不跨边界暴露 STL、C++ 异常或托管对象引用。资产保存 UUID，不保存运行时句柄。
+- **编辑器 UI：保留 Dear ImGui。** “imgui”就是同一库；C# 绑定尚待选型与验证，ImGui.NET 只是候选。游戏运行时 UI 使用独立文档、布局和渲染系统。
+- **已有 SDK 继续复用：** Eigen、GLFW、Dear ImGui、spdlog、Box2D、Jolt Physics、ufbx 位于 `engine/sdk/`。C# 高层模型不得依赖其平台/GPU 头文件。
 
-Keep flat objects, composition and independent networking; network application/session services
-are C# by default, not component RPC/replication. Existing Build.bat/EXE and compatibility tests
-remain active until replacements actually pass.
+详细边界见 [引擎架构](ARCHITECTURE.md)、[框架迁移](FRAMEWORK_REFACTOR.md)、[AI 开发接口](AI_DEVELOPMENT.md)。
 
-## Product focus — animation-driven action games
+## 2. 当前功能基线
 
-Prioritize imported skeletal characters, GPU skinning, animation components, collision-aware
-root motion and C# action gameplay, then visual graph/Montage authoring. Python AI returns
-proposals, not movement authority. See [ANIMATION.md](ANIMATION.md), [FBX_IMPORT.md](FBX_IMPORT.md)
-and [ANIMATION_MCP.md](ANIMATION_MCP.md).
+| 模块 | 当前状态 | 尚未完成的关键部分 |
+| --- | --- | --- |
+| 构建与验证 | 已实现基础：`Build.bat`、CMake/C++20、.NET、CTest、托管/原生 smoke、Python 工具测试；主程序输出 `out/bin/NcmaEngine.exe` | 完整 C# Editor/Player 发布、安装与持续集成矩阵 |
+| World / GameObject / 组件 | 已实现基础：`Ncma.Runtime.World` 是唯一场景权威；扁平对象、可选值组件、UUID、引用校验、快照；C++ SceneWorld 与原生 World 导出已移除 | 通用查询/类型池、完整组件编辑与资产引用；性能优化尚未完成 |
+| C# 游戏脚本 | 部分实现：Behaviour 生命周期、标量 Export、挂载/启停、隔离 Play、手动程序集重载 | 编辑器接入固定步与 OnFixedUpdate、更多属性类型、结构修改队列；私有状态迁移未实现 |
+| 场景文档与 Undo | M1.1/M1.2 已实现：完整 SceneDocument、Editor.Core 唯一历史、交互草稿、内容指纹、文件关联撤销、Play 隔离/冻结；唯一 .ncmascene JSON v1 | 资产引用与完整资产流水线尚未实现 |
+| 编辑器与命令服务 | M1.2 已实现场景命令：C++/ImGui 提交 UUID 意图，Editor.Core 持有完整文档事务/历史；8 项 v2 能力、权限/版本/幂等与草稿 | C# 主入口与剩余面板业务、live MCP 传输未实现 |
+| 资产系统 | 未实现完整系统：已有场景文件与导入数据 | 持久化资产数据库、导入元数据/缓存、依赖追踪、重新导入、Prefab、打包 |
+| D3D11 / PBR / 软阴影 | 部分实现：参考预览支持 GGX 金属粗糙度、HDR/色调映射、深度、方向光四级联、PCF/PCSS/接触阴影 | 完整场景渲染、资产材质/纹理、IBL、FBX GPU 蒙皮、离屏可组合视口、生产级验证 |
+| Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
+| 物理 | 已实现基础：Box2D/Jolt 独立测试世界与原生求解 | 独立插件边界、C# 场景同步/碰撞事件、角色控制器、Root Motion 与碰撞协同 |
+| FBX 角色 | 部分实现：ASCII/二进制导入、轴/单位转换、骨骼/权重/动画、CPU 线框预览、Undo、参考蒙皮测试 | 持久化资产身份、异步导入、纹理/材质转换、场景绑定、GPU 蒙皮、真实角色覆盖 |
+| 动画 | 部分实现：采样、混合/骨骼遮罩、姿态矩阵、根运动、Notify；独立动作实验室、动画 ABI 与 C# 调用；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
+| UI | 仅模型骨架：当前 C++ UiDocument 有节点、样式、布局字段和 Token | C# 文档、持久化、布局求解、Figma 式画布、运行时 UI 渲染/输入、组件实例/变体均未实现 |
+| AI / MCP / Python | 部分实现：项目只读 CLI；独立程序化动画预览有 8 项 stdio MCP 工具；C# 有独立无界面能力模型 | 活动场景/资产/动画/UI 的统一 MCP 未实现；Python AI 通信与推理模块未实现 |
+| 网络与引擎扩展 | 独立网络系统未实现；组件 Schema 注册已有基础 | 网络传输/会话/同步服务、完整托管插件生命周期、编辑器扩展、发布与沙箱边界未实现 |
 
-## Current legacy/compatibility baseline — retained, not the new target
+补充说明：
 
-Implemented native SceneWorld v5, flat objects, C#-only bindings, C# hostfxr gameplay,
-isolated Play, scalar Exports, manual reload, UUID migration/backup/Undo,
-World Access ABI v1 batches/references/signals and CLI/MCP remain available for regression.
-Python gameplay hosts/SDK/examples and object language selection have been removed.
-Python remains optional for tools, specialized modules and plugins; those transports and managed editor integration are NOT implemented. An independent managed headless World now exists.
-The following feature milestones record existing native baseline and remaining product work;
-their implementation ownership must follow the new direction above.
+- 当前原生插件聚合 ABI 为 2，动画/角色子接口仍各自为 1；Gameplay Host Bridge 为 3，Scene Host Bridge 为 4。版本独立，不表示所有原生插件边界已经完成。
+- `Ncma.Managed.SceneWorld` 是兼容玩法 API 的纯托管外观，不是被删除的 C++ SceneWorld。原生 ManagedSceneClient 只保留令牌与复制的 DTO。
+- 当前编辑器经 hostfxr 使用 C# World，但外壳仍在 C++，场景编解码、命令、保存状态和撤销栈已在 C#。不能将“场景已托管”描述为“整个编辑器已托管”。
+- 完整快照恢复会使运行时引用失效；后续命令、选择和调试接口必须按 UUID 重新解析。外部直接修改也不能与 EditSession 历史混用。
 
-## Foundation — current slice
+## 3. 分阶段开发计划
 
-Framework target: managed World + GameObject + Component + independent Systems. The legacy active implementation
-uses SceneWorld/GameObject. Scene Node source APIs have been removed and Transform is now a native
-component. Independent managed registered-component schemas and fixed-step Systems are implemented;
-full World/asset separation, generic queries, Behaviour migration and editor integration remain planned.
-See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for sequence and compatibility gates.
+| 阶段 | 目标 | 依赖与交付 |
+| --- | --- | --- |
+| M1 — 下一步 | 统一 C# 场景文档、编辑命令、固定步与场景 AI 接口 | 基于现有 World；先消除双命令栈/脚本元数据分离，形成可靠编辑底座 |
+| M2 | C# Editor/Player 主入口及原生插件边界 | 依赖 M1；保留已通过测试的原生窗口/GPU 内核 |
+| M3 | 资产系统 + FBX 场景角色 + DX11 GPU 蒙皮 | 依赖 M1/M2；从导入预览走到持久化、可渲染场景角色 |
+| M4 | 动画驱动的可玩动作游戏纵向切片 | 依赖 M3；角色控制、物理、根运动与 C# 玩法闭环 |
+| M5 | 仿 UE 的可视化动画编辑系统 | 依赖 M3/M4；编辑资产与游戏运行使用同一图语义 |
+| M6 | 类 Figma UI 编辑器与运行时 HUD | 依赖 M1/M2；为动作样例提供可编辑 UI |
+| M7 | Vulkan + D3D11 双 API 完整渲染 | 依赖稳定渲染契约与 M3 的共同参考资产；可并行推进，不阻塞首个 DX11 动作样例 |
+| M8 | 可选 Python AI 模块、托管扩展与深度开发工具 | 依赖共享命令/资产契约；编辑器 AI 能力在 M1/M3/M5/M6 逐步交付，不等到 M8 |
+| M9 | 导出、性能、稳定性与可发布版本 | 汇总各阶段成果；完整引擎发布包含双 API 验收 |
+| N — 可选支线 | 独立网络系统 | 不作为单机 MVP 前置；先确定玩法与协议/安全需求 |
 
-- CMake/C++20 `NcmaCore` and `NcmaNative` targets.
-- Independent C# Ncma.Runtime: optional value components, schema registry, UUIDs, snapshots and fixed-step Systems.
-- Shared headless Editor/Agent EditSession: 8 capabilities, revision/permission guards, atomic transactions and Undo/Redo.
-  No live editor connection or managed MCP transport yet; see [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
-- SceneWorld flat object/component store with independent world transforms and single-object deletion.
-- Stable C ABI plus a compiling C# gameplay API and managed/native smoke test.
-- Python tooling package and machine-readable project manifest.
-- RHI backend registry/capability contract and headless null backend.
-- Typed animation graph, PBR/soft-shadow settings, UI document/design-token models.
-- Agent capability registry with JSON schemas and mutation risk.
+### M1：统一 C# 编辑与运行时基础
 
-## Milestone 1 — executable editor shell
+**状态：M1.1 完整文档/快照/新格式原子文件读写已接入 C++/ImGui；M1.2 共享完整文档命令已接入；固定步与 live MCP 尚未实现。**
 
-Completion: editor launches, creates/saves/reloads a scene, edits flat objects/transforms through undo/redo,
-and runs C# gameplay with isolated play mode and hot reload. Python gameplay removal is guarded by rejection tests; the managed editor integration, full gameplay services and game export remain future work.
+1. 建立完整的托管 SceneDocument/快照，包含对象、组件、Behaviour 绑定及 Export 值；使用唯一 `.ncmascene` JSON v1 格式及原子保存；旧 .ncscene 不兼容，不增加迁移/备用读写入口。
+2. 将创建、删除、重命名、Transform、组件、脚本挂载/启停/属性编辑接入同一 C# 命令服务；编辑器和 Agent 共用 revision、Undo/Redo 与事务历史。
+3. 按 UUID 恢复选择与引用；明确外部修改的历史失效规则、编辑/Play 隔离和运行态可编辑范围。
+4. 接入 WorldRunner 和 Behaviour.OnFixedUpdate；明确输入采集、固定步、渲染插值及异常恢复，补充延迟结构修改队列。不得把组件写入回滚误称为私有脚本状态/外部 IO 回滚。
+5. 提供面向活动编辑器的本地 MCP：场景检查、组件描述、事务、校验和历史操作。复用已有能力名称/Schema；默认只读，写入按会话、版本、范围授权，删除需精确对象批准。
 
-- Completed: native Win32 `NcmaEngine.exe`, real D3D11 device/swapchain, ImGui editor workspace, flat object selection, object creation/deletion, transform inspector, viewport shell, project/console panels, play-state toolbar, resize support, and launch smoke test.
-- Completed: D3D11 registered as a real RHI backend with capability reporting.
-- Completed: stable object UUIDs, versioned `.ncscene` serialization, editor New/Open/Save,
-  and undo/redo for object list plus inspector transform/name edits.
-- Add Prefab instances/overrides, serializable component metadata, and lifecycle.
-- Completed foundation: runtime-discovered `hostfxr` embedding, collectible gameplay
-  `AssemblyLoadContext`, lifecycle dispatch, editor play-mode ticking, and assembly reload.
-- Completed: UUID-backed per-object C# Behaviour attachment, enable/remove commands, numeric/bool
-  Export reflection and Inspector editing, `.ncscene` v5 persistence (C# v1-v4 readable; Python language tags rejected atomically), and undo/redo.
-- Completed: isolated play scenes, real GameObject Transform updates over the native ABI, pause/resume,
-  and reload/rebind with saved Export values. `Build.bat -GameplayOnly` rebuilds gameplay while the editor runs.
-- Add private runtime-state migration, additional Export types, fixed-update scheduling, and file-watcher rebuild.
-- Completed foundation: snapshot-backed command stack with selection restored by UUID.
-- Extend reflection/property metadata beyond scalar C# Exports; add project settings and asset database.
+M1.1 已将脚本配置收敛到 Ncma.Scene，完整快照、新文件读写/原子保存与原生 Undo/Play 接入已实现，见 [M1.1 交付说明](M1_1_SCENE_DOCUMENT.md)。M1.2 已迁入独立 Ncma.Editor.Core，覆盖完整文档并删除原生命令栈，见 [M1.2 交付记录](M1_2_IMPLEMENTATION_PLAN.md)。
 
-## Milestone 2 — D3D11/Vulkan PBR parity
+验收：人工和 Agent 修改走同一路径；Undo/Redo 不丢脚本或属性；失败事务不改现场；陈旧会话/引用、重复请求、越权和异线程调用有确定结果；Stop 不污染编辑场景；固定步生命周期有测试。
 
-Completion: the same reference scene renders within tolerance on both APIs and passes RenderDoc captures without validation errors.
+下一个可执行任务：**M1.3：接入 WorldRunner / Behaviour.OnFixedUpdate 与运行态安全边界**；随后 M1.4 接入活动编辑器 live MCP 传输。M1.2-A/B 先通过完整验收，再完成 C/D/E；不同时重写主入口。
 
-- Completed foundation: explicit backend selection, Vulkan loader probing, API-neutral buffer/texture/sampler contracts, D3D11 resource/view implementations, and real-device smoke coverage for HDR targets and sampled cascade shadow maps.
-- Completed first draw path: API-neutral graphics pipeline and draw contracts, D3D11 HLSL compilation/input layouts/fixed-function state, and a persistent viewport preview draw.
-- Completed 3D preview foundation: indexed draws, dynamic constant-buffer updates, resize-aware swap-chain depth, Eigen MVP transforms, and a rotating depth-tested cube.
-- Implement resource/command/pipeline/swapchain interfaces for D3D11 first, then Vulkan.
-- Add DXC shader compilation/reflection and cross-backend binding validation.
-- Extend render graph, imported FBX mesh rendering, metallic-roughness PBR, IBL, HDR, tone mapping, and post-processing.
-- Completed soft-shadow slice: four stabilized directional cascades, 10% cascade blending,
-  and runtime-selectable 3x3/5x5 PCF quality levels.
-- Completed PCSS slice: blocker search, receiver/blocker penumbra estimation, bounded
-  variable-radius filtering, and editor control for the directional-light angular radius.
-- Completed contact-shadow slice: sampled viewport depth, bounded view-space ray marching,
-  thickness/distance fading, and editor controls for steps, reach, thickness, and strength.
-- Maintain golden-image tests for both backends.
+### M2：C# 主入口与插件化边界
 
-## Milestone 3 — animation authoring
+**状态：未实现完整迁移；复用现有 native 内核。**
 
-Completion: import a skeletal character, build a locomotion state machine visually, preview it, save it, and run it identically in game.
+- 建立 C# Editor/Player 应用入口、项目配置、主循环、输入/时间服务、错误报告与日志入口。
+- 先验证 C# Dear ImGui 绑定与现有 native 版本兼容，再迁移面板、Inspector、菜单、工具和编辑器业务；补齐 DPI、字体与布局管理。
+- 抽出 Renderer/Physics 插件契约，明确能力查询、资源生命周期、初始化失败、线程和关闭顺序。高层不得直接调用 D3D/Vulkan。
+- 复用 D3D11、GLFW、Box2D/Jolt 实现；只保留必要原生引导与后台模块。不要把现有 NcmaNative 聚合 DLL 误称为完整插件体系。
+- 新入口通过启动/关闭、场景编辑、Play、重载和异常测试后，再逐项退出旧 C++ 外壳/业务实现。
+- 维持最终程序名 `NcmaEngine.exe` 和 `out/bin/` 输出约定。
 
-- Completed runtime slice: validated immutable skeleton/clip data with UUIDs, keyframe sampling,
-  quaternion and per-bone masked pose blending, model/skin matrices, interruptible cached-pose
-  transitions, loop-safe translational/rotational root motion, and interval-based notifies.
-- Completed action laboratory: procedural 12-bone Idle/Run/Attack/Dodge preview, action completion,
-  combo/hit/invulnerability windows, bone visualization, deterministic stepping and undo/redo.
-- Completed preview bindings: animation C ABI v1 and C# ActionAnimationSession. These do not yet
-  bind imported skinned meshes or scene components. No UE asset compatibility is claimed.
-- Completed FBX import slice: ASCII/binary, unit/axis conversion, skeletal hierarchy, triangulated
-  mesh/UV/material slots, linear skin weights/bind matrices, sampled animation stacks and stable
-  subasset UUIDs with an explicit asset identity. CPU-skinned wireframe editor preview uses
-  undoable import/playback commands; native reference comparisons cover bind and animated poses.
-  GPU skinning, texture loading, asset persistence, scene binding and live-editor MCP remain pending.
+验收：C# 应用可独立管理编辑与运行会话；native 资源无悬挂/重复释放；旧编辑/脚本流程无回归；程序集与 ABI 不匹配能够明确失败。
 
-- Real-character compatibility tests, asset persistence, GPU skinning, compression and retargeting.
-- Node graph editor with typed pins, search, subgraphs, state machines, blend spaces, layered blending, IK, debugging, and live preview.
-- Compile authoring graphs into allocation-free runtime programs.
+### M3：资产系统与 FBX 角色落地
 
-## Milestone 4 — Figma-style UI authoring
+**状态：导入与 CPU 预览已有基础，资产/场景/GPU 闭环未实现。**
 
-Completion: build a reusable responsive HUD with frames, auto-layout, components/instances, variants, constraints, tokens, preview, and undo/redo.
+- 建立 C# 资产数据库、UUID 元数据、导入配置、依赖记录与缓存；明确源文件和派生资产，缓存进入忽略目录。
+- 持久化模型及子资产身份，重新导入时保持可匹配的引用；拓扑变化、丢失资源或不支持内容必须诊断，不能静默覆盖。
+- 添加场景资产引用、相机、灯光、静态/蒙皮网格、材质及最小 Prefab 实例/覆盖方案，仍使用扁平对象与组件。
+- 完成 FBX 异步导入、取消/进度、原子提交；支持可验证的材质/纹理转换与限制报告。
+- 将 FBX 角色绑定到场景，在 DX11 中实现 GPU 蒙皮和材质渲染；离屏视口可与编辑器/调试绘制组合。
+- 提供资产检查、导入预检和授权导入事务能力；文件写入有项目相对范围及备份/失败保护。
+- 使用用户真实 FBX 做覆盖测试，不以两个测试模型推断所有 FBX 均兼容。
 
-- Retained runtime UI renderer, text shaping/font atlas, input/focus/accessibility basics.
-- Infinite canvas, selection/gizmos, snapping, rulers, zoom, layers, inspector, auto-layout, constraints.
-- Components/instances, variants, shared styles/design tokens, nine-slice images, animation, and localization preview.
+验收：导入 → 保存 → 重启 → 场景实例 → 动画播放完整打通；重新导入身份稳定；CPU/GPU 蒙皮误差有证据；材质缺失有诊断；失败/取消不破坏原资产和场景。
 
-## Milestone 5 — independent Python AI and Agent integration
+### M4：动作游戏纵向切片
 
-Completion: an Agent can inspect a project, propose a reversible change, apply it through an undoable transaction, run validation, and report structured evidence.
+**状态：未实现可玩游戏；实验室预览可复用。**
 
-- Completed first MCP slice: local stdio initialize/tools/list/tools/call, eight animation tools,
-  input/output schemas, risk metadata, default read-only permission, revision guards and structured results.
-  Python calls the native ABI and the same animation command path as the editor laboratory.
-  Scope is an isolated procedural preview, NOT the active editor; live project transactions remain future work.
+- 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。
+- 以 Jolt 角色碰撞为 3D 动作主线，接入 C# 物理同步与碰撞事件；Box2D 保持独立 2D 路径。
+- Animator 输出根运动增量，由 C# 角色运动策略经物理约束应用到对象；不让动画、物理和脚本同时写入最终位置。
+- 将 Idle / Run / Attack / Dodge、动作中断、连击、命中/无敌窗口从演示标记变为实际玩法；Notify 事件有稳定时间语义。
+- 增加参数、姿态、根运动、碰撞、事件时序的调试视图与只读 AI 检查能力。
 
-- Project/query/edit/build/test/play/inspect capability families.
-- Permission scopes, dry-run plans, transactions, audit log, cancellation, budgets, and deterministic tool results.
-- Independent Python adapters for local/remote inference behind a C# module contract; no provider SDK in native plugins.
-- Scene/asset semantic index and optional runtime AI inference service.
+验收：真实 FBX 角色在测试场景完成移动、转向、攻击、闪避和障碍碰撞；不同渲染帧率下固定步结果可验证；Play/Stop、重载和事件边界稳定。单机样例不依赖 Python 或网络启动。
 
-## Independent networking — planned, NOT implemented
+### M5：可视化动画系统
 
-Networking is a standalone optional C# service, with native transport kernels only when justified.
-It must not be built into Actor/GameObject/component/
-Behaviour semantics, automatic scene replication, RPC annotations or base-class network ownership.
-See [NETWORKING.md](NETWORKING.md). This direction does not change the current character/animation priority.
+**状态：采样/混合内核与图模型已有基础，完整编辑器和图执行未实现。**
 
-- Separate transport/session/protocol library with no scene, renderer or scripting-host dependency.
-- Explicit message schemas, bounded queues, validation, connection lifecycle and version negotiation.
-- Application-owned adapters and session-scoped identities; apply inputs only at simulation tick boundaries.
-- Explicit C# service/message interfaces, not Behaviour RPC. Python module IPC remains a separate contract;
-  a versioned native ABI is needed only for optional native transport kernels.
-- Choose transport/security/authentication requirements before implementing a backend; no protocol is selected yet.
-- Later action-game policies: input sequencing, authority, snapshot interpolation, prediction/reconciliation
-  and lag compensation in separate gameplay synchronization services, not scene/component base classes.
-- Verify headless loopback, optional/offline operation, malformed-input rejection, disconnect/reconnect,
-  stale identity handling and deterministic synchronization under simulated loss/latency.
+- C# 管理图资产、状态/转换/参数/事件与调试；C++ 保留经测量需要的姿态、蒙皮和批量采样内核。
+- 实现节点/引脚/连线、类型验证、搜索、参数编辑、保存与 Undo；先完成状态机、Clip、Blend 和过渡的最小图。
+- 编译为受控运行程序，编辑预览与游戏共享语义；验证单步、过渡中断、循环和 Notify 边界。
+- 逐步加入 BlendSpace、分层/遮罩、缓存姿态、Montage 式 Slot/Section 与事件轨道。
+- 为图查询、节点/连线修改、参数/动作预览提供命令与 MCP；接入真实资产和活动编辑器，不局限于独立程序化实验室。
+- IK、重定向、动画压缩、并行求值与 LOD 后续按角色需求和测量推进。参考 UE 的使用方式，不宣称 UE 资产兼容或性能领先。
+
+验收：用户可视化编辑真实角色的移动/攻击图，保存后重启可用；预览与游戏行为一致；Agent 修改同样支持验证和 Undo，非法图无法进入运行时。
+
+### M6：类 Figma UI 编辑器与运行时 UI
+
+**状态：仅有旧 C++ 数据骨架，完整功能未实现。**
+
+- 在 C# 建立带 UUID 的 UiDocument、样式/Token、版本化存储和命令模型；UI 内部树不改变扁平场景设计。
+- 实现画布缩放/平移、多选、拖拽、对齐/吸附、图层、Inspector 与撤销。
+- 实现 Frame、文本、图像、裁剪、约束和横/纵自动布局；随后加入组件/实例、覆盖和变体。
+- 建立独立运行时布局、绘制、字体/文本、输入/焦点、分辨率适配基础；Dear ImGui 承担编辑工具，不直接充当所有游戏 UI。
+- 设计文档编译/加载为运行时 UI 数据，C++ 只处理必要 GPU 绘制或性能内核。
+- 提供文档检查、布局验证、样式/组件事务和预览能力，让 Agent 操作语义文档而非模拟鼠标。
+- 为动作样例制作生命值/动作提示 HUD，后续完善本地化和无障碍支持。
+
+验收：可编辑、保存和复用 HUD，在至少两种窗口比例下正确布局；输入命中/焦点稳定；组件修改和 Agent 操作可撤销。
+
+### M7：双 API 渲染与画质完成度
+
+**状态：DX11 参考预览部分实现；Vulkan 渲染未实现。**
+
+- 实现 Vulkan Device/Queue/Swapchain、同步、资源、描述符、管线和绘制；显式报告不支持能力，不静默回退。
+- 建立可复用 Shader 编译/反射、绑定验证与资源更新契约；完成跨后端的网格、GPU 蒙皮、材质、HDR 和 UI 合成。
+- 完善共同 PBR 参考场景、纹理工作流、IBL、后处理和现有软阴影的质量/性能档位。
+- 添加参考图像与误差容限、Resize/资源重建/故障测试，采集帧捕获和 GPU 性能证据。
+- 在支持设备上运行 D3D11 Debug Layer 与 Vulkan Validation Layers；帧捕获不代替 API 验证。
+
+验收：两 API 渲染同一静态/动画/PBR/阴影/UI 参考场景，差异在定义容限内，无相关 API 验证错误；资源生命周期与性能预算有记录。通过前只能称“探测/预览/部分实现”。
+
+### M8：可选 AI 模块与深度引擎扩展
+
+**状态：协议/安全模型部分有基础，实际 Python 通信与完整扩展系统未实现。**
+
+- Python 独立模块优先建立 C# 请求/快照/结果契约，再选择一个传输实现；gRPC worker 为候选，ZeroMQ 按实测需求考虑，pythonnet 限可信插件。
+- 所有 AI 结果通过有界队列异步返回，在 C# 边界校验会话、World/revision/tick、范围和权限；支持超时、取消、过期拒绝、重启与背压。
+- 游戏帧不等待推理/IPC；Python 不持有可直接写入的 World，也不作为 Behaviour 执行。
+- 托管扩展逐步支持 System、组件 Schema、编辑器面板、导入器和工具能力注册；增加版本/依赖、线程约束与卸载策略。
+- 深度开发能力涵盖资产、场景、动画、UI、验证、构建和扩展，但文件/代码修改必须限定项目范围、审批风险并记录审计。
+- 不提供默认任意 eval/程序集加载/任意 shell；新增可执行扩展与纯数据事务采用不同权限边界。
+- 持续统一能力名称、描述、输入/输出 JSON Schema、风险分类、确定结果、预算和取消语义。
+
+验收：Agent 能从检查到获批事务、验证与证据报告完成闭环；越权、陈旧/重复结果与模块崩溃不破坏场景；禁用 Python 后引擎仍可编辑和运行 C# 游戏。
+
+### M9：导出、性能与可发布版本
+
+**状态：未实现完整 Player 导出与发布。**
+
+- 建立独立 Player 引导、资产打包/依赖裁剪、项目设置、版本兼容与错误报告；游戏包不强制携带编辑器或 Python。
+- 完善文件格式迁移/失败保护、日志诊断、自动化 CI、Debug/Release 与编辑器/Player 回归。
+- 以真实动作场景测量 C# 分配/GC、查询/批处理、native 调用次数、CPU/GPU 和动画成本；再决定类型池、缓存、调度与原生内核优化。
+- 为目标硬件制定帧时间、内存和加载预算；不把当前字典/装箱原型标记为优化 ECS。
+- 建立运行时泄漏、长时间 Play、资产重载、异常退出与损坏输入测试；新代码警告按缺陷处理。
+
+验收：新机器可构建/运行，发布包脱离开发环境可启动动作样例；关键迁移有恢复路径；目标硬件性能预算达标；完整发行版通过双 API 验收。
+
+### N：独立网络系统（可选支线）
+
+**状态：未实现；不阻塞单机开发。**
+
+- 先确定传输、协议、安全/认证和部署要求，再选择后端；当前未指定协议。
+- 独立 C# 库管理连接、会话、消息 Schema、版本协商和有界队列，不能依赖场景/渲染/脚本宿主。
+- 游戏通过显式适配器在固定步消费输入/结果；网络身份限定会话，不复用序列化运行时句柄。
+- 需要多人动作时，再实现输入序号、权威、插值、预测/校正与延迟补偿服务；不进入组件/Behaviour 基类。
+- Python AI IPC 与游戏网络契约保持独立。
+
+验收：无界面回环、离线模式、断线/重连、畸形消息、旧身份和模拟丢包/延迟测试通过。详见 [独立网络设计](NETWORKING.md)。
+
+## 4. 首个可用版本与延后项
+
+首个 DX11 动作制作 MVP：
+
+> 导入真实 FBX → 保存为资产 → 实例化场景角色 → GPU 蒙皮 → 碰撞与根运动 → C# 移动/攻击/闪避 → 最小动画图 → 可编辑 HUD → Agent 事务/Undo → 独立 Player。
+
+这是 M1–M6 与 M9 最小子集的交付目标，不要求等待所有高级功能。Vulkan 是完整引擎的必需目标，但不阻塞第一个 DX11 可玩样例。AI 的场景/资产/动画/UI 编辑能力随对应阶段交付；Python 运行时 AI、网络和通用扩展不作为单机启动依赖。
+
+暂不提前铺开：完整 UE 功能对等、Motion Matching、复杂 IK/重定向、多人大规模同步、无证据的全面 ECS 重写、所有 Python 通信方案同时实现。现有 FBX 限制与旧数据兼容不能被扩大宣传。
+
+## 5. 每阶段的完成规则
+
+- 涉及代码改动时使用 `Build.bat`，先构建 NcmaCore、NcmaNative、NcmaArchitectureTests，再处理旧目标。
+- 运行 CTest、托管构建、managed/native smoke 和 `python -m ncma_tools.cli inspect .`；同时补充该阶段的失败路径与真实交互测试。
+- 保存 UUID、可撤销命令、权限检查、版本迁移、线程/资源释放属于验收项，不是最后再补的功能。
+- 只有模型/声明、仅通过编译、单个预览或加载器探测，不足以标记完整模块完成。
+- M1.1 代码验证通过后记录交付证据；后续阶段仍需运行完整构建，见 [构建说明](BUILDING.md)。
+
+专题文档：[动画](ANIMATION.md)、[FBX 导入](FBX_IMPORT.md)、[动画 MCP](ANIMATION_MCP.md)、[World 访问](WORLD_ACCESS.md)、[Python 模块](PYTHON_MODULES.md)。

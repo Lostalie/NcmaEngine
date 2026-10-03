@@ -8,7 +8,7 @@ public sealed record ComponentSnapshot(string TypeId, int Version, JsonElement D
 public sealed record ObjectSnapshot(Guid PersistentId, string Name, ComponentSnapshot[] Components);
 public sealed record WorldSnapshot(int Version, string Name, ObjectSnapshot[] Objects);
 
-// Independent managed authority. Never mirrors a live legacy native SceneWorld.
+// Sole scene authority; native hosts receive copied render/inspection data only.
 public sealed class World
 {
     public const int MaxObjects = 4096;
@@ -21,7 +21,7 @@ public sealed class World
     private readonly Dictionary<(ulong, Type), object> _pending = new();
     private Guid _identity = Guid.NewGuid();
     private ulong _nextId = 1, _revision, _tick;
-    private bool _updating;
+    private bool _updating, _preparing;
     private string _name;
 
     public World(string name = "Untitled", ComponentRegistry? components = null)
@@ -33,9 +33,11 @@ public sealed class World
     }
 
     public ComponentRegistry Components { get; }
+    public string Name { get { VerifyAccess(); return _name; } }
     public Guid Identity { get { VerifyAccess(); return _identity; } }
     public ulong Revision { get { VerifyAccess(); return _revision; } }
     public ulong Tick { get { VerifyAccess(); return _tick; } }
+    internal bool IsUpdating { get { VerifyAccess(); return _updating; } }
     public int Count { get { VerifyAccess(); return _objects.Count; } }
 
     public GameObject CreateObject(string name, Guid? persistentId = null)
@@ -79,9 +81,7 @@ public sealed class World
 
     public string SerializeSnapshot()
     {
-        string json = JsonSerializer.Serialize(CaptureSnapshot(), SceneJson.Options);
-        if (Encoding.UTF8.GetByteCount(json) > MaxSnapshotBytes) throw new ArgumentException("Snapshot size limit exceeded.");
-        return json;
+        return Encoding.UTF8.GetString(SceneJson.EncodeBounded(CaptureSnapshot(), MaxSnapshotBytes));
     }
 
     public void LoadSnapshot(string json)
@@ -96,41 +96,65 @@ public sealed class World
     // Full restore invalidates ALL old handles. Persistent UUIDs must be resolved again.
     public void RestoreSnapshot(WorldSnapshot snapshot)
     {
+        PrepareRestore(snapshot)();
+    }
+
+    // Internal prepared commit: all validation/allocation precedes installation. No extension callbacks at commit.
+    internal Action PrepareRestore(WorldSnapshot snapshot, Action<WorldSnapshot>? validateCandidate = null)
+    {
         VerifyStructuralAccess();
-        ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.Version != 1 || snapshot.Objects is null || snapshot.Objects.Length > MaxObjects)
-            throw new ArgumentException("Unsupported or oversized managed snapshot.");
-        ValidateName(snapshot.Name);
-        if (JsonSerializer.SerializeToUtf8Bytes(snapshot, SceneJson.Options).Length > MaxSnapshotBytes)
-            throw new ArgumentException("Snapshot size limit exceeded.");
-        ulong revision = checked(_revision + 1);
-        ulong nextId = _nextId;
-        var objects = new Dictionary<ulong, Entry>();
-        var uuids = new Dictionary<Guid, ulong>();
-        foreach (var item in snapshot.Objects)
+        _preparing = true;
+        try
         {
-            if (item is null || item.PersistentId == Guid.Empty || uuids.ContainsKey(item.PersistentId) ||
-                item.Components is null || item.Components.Length > MaxComponentsPerObject || nextId == ulong.MaxValue)
-                throw new ArgumentException("Invalid object record, duplicate UUID or capacity exceeded.");
-            ValidateName(item.Name);
-            var values = new Dictionary<Type, object>();
-            foreach (var component in item.Components)
+            ArgumentNullException.ThrowIfNull(snapshot);
+            if (snapshot.Version != 1 || snapshot.Objects is null || snapshot.Objects.Length > MaxObjects)
+                throw new ArgumentException("Unsupported or oversized managed snapshot.");
+            ValidateName(snapshot.Name);
+            _ = SceneJson.EncodeBounded(snapshot, MaxSnapshotBytes);
+            ulong revision = checked(_revision + 1);
+            ulong nextId = _nextId;
+            var objects = new Dictionary<ulong, Entry>();
+            var uuids = new Dictionary<Guid, ulong>();
+            foreach (var item in snapshot.Objects)
             {
-                if (component is null) throw new ArgumentException("Missing component record.");
-                object value = Components.Decode(component);
-                if (!values.TryAdd(value.GetType(), value)) throw new ArgumentException("Duplicate component type.");
+                if (item is null || item.PersistentId == Guid.Empty || uuids.ContainsKey(item.PersistentId) ||
+                    item.Components is null || item.Components.Length > MaxComponentsPerObject || nextId == ulong.MaxValue)
+                    throw new ArgumentException("Invalid object record, duplicate UUID or capacity exceeded.");
+                ValidateName(item.Name);
+                var values = new Dictionary<Type, object>();
+                foreach (var component in item.Components)
+                {
+                    if (component is null) throw new ArgumentException("Missing component record.");
+                    object value = Components.Decode(component);
+                    if (!values.TryAdd(value.GetType(), value)) throw new ArgumentException("Duplicate component type.");
+                }
+                objects.Add(nextId, new Entry(item.PersistentId, item.Name, values));
+                uuids.Add(item.PersistentId, nextId++);
             }
-            objects.Add(nextId, new Entry(item.PersistentId, item.Name, values));
-            uuids.Add(item.PersistentId, nextId++);
+            var normalized = new WorldSnapshot(1, snapshot.Name, objects.Select(pair => new ObjectSnapshot(
+                pair.Value.PersistentId, pair.Value.Name, pair.Value.Components.Values
+                    .OrderBy(value => Components.Describe(value.GetType()).TypeId, StringComparer.Ordinal)
+                    .Select(value => new ComponentSnapshot(Components.Describe(value.GetType()).TypeId,
+                        Components.Describe(value.GetType()).Version, Components.EncodeObject(value))).ToArray())).ToArray());
+            _ = SceneJson.EncodeBounded(normalized, MaxSnapshotBytes);
+            validateCandidate?.Invoke(normalized);
+            if (_revision != revision - 1)
+                throw new InvalidOperationException("A trusted validator mutated the World during snapshot validation.");
+            string name = snapshot.Name;
+            Guid identity = Guid.NewGuid();
+            return () =>
+            {
+                VerifyStructuralAccess();
+                if (_revision != revision - 1) throw new InvalidOperationException("World changed after preparing restore.");
+                _objects = objects;
+                _uuidIndex = uuids;
+                _nextId = nextId;
+                _name = name;
+                _identity = identity;
+                _revision = revision;
+            };
         }
-        if (_revision != revision - 1)
-            throw new InvalidOperationException("A trusted validator mutated the World during snapshot validation.");
-        _objects = objects;
-        _uuidIndex = uuids;
-        _nextId = nextId;
-        _name = snapshot.Name;
-        _identity = Guid.NewGuid();
-        _revision = revision;
+        finally { _preparing = false; }
     }
 
     internal void VerifyAccess()
@@ -140,7 +164,7 @@ public sealed class World
     private void VerifyStructuralAccess()
     {
         VerifyAccess();
-        if (_updating) throw new InvalidOperationException("Structural/editor mutation is not allowed inside a fixed step.");
+        if (_updating || _preparing) throw new InvalidOperationException("Structural/editor mutation is not allowed inside an update/restore preparation.");
     }
     private Entry Require(ObjectReference reference)
     {
@@ -174,6 +198,7 @@ public sealed class World
         Require(reference).Components.TryGetValue(typeof(T), out var value) ? (T)value : throw new ArgumentException("Component is not attached.");
     internal void Set(ObjectReference reference, object value)
     {
+        if (_preparing) throw new InvalidOperationException("Mutation during restore preparation.");
         Entry entry = Require(reference);
         object validated = Components.Validate(value);
         Type type = validated.GetType();
@@ -201,19 +226,39 @@ public sealed class World
         _revision = revision;
         return true;
     }
+    internal void BeginStep()
+    {
+        VerifyStructuralAccess();
+        _ = checked(_revision + 1);
+        _ = checked(_tick + 1);
+        _updating = true;
+    }
+    internal void CommitStep()
+    {
+        VerifyAccess();
+        if (!_updating) throw new InvalidOperationException("No active gameplay step.");
+        foreach (var write in _pending) _objects[write.Key.Item1].Components[write.Key.Item2] = write.Value;
+        _revision++;
+        _tick++;
+        AbortStep();
+    }
+    internal void AbortStep()
+    {
+        VerifyAccess();
+        _pending.Clear();
+        _updating = false;
+    }
+    internal GameObject Resolve(ObjectReference reference) { _ = Require(reference); return new(this, reference); }
     internal void FixedStep(Action update)
     {
         VerifyStructuralAccess();
-        ulong revision = checked(_revision + 1), tick = checked(_tick + 1);
-        _updating = true;
+        BeginStep();
         try
         {
             update();
-            foreach (var write in _pending) _objects[write.Key.Item1].Components[write.Key.Item2] = write.Value;
-            _revision = revision;
-            _tick = tick;
+            CommitStep();
         }
-        finally { _pending.Clear(); _updating = false; }
+        finally { AbortStep(); }
     }
     internal static void ValidateName(string name)
     {

@@ -5,4 +5,9 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ncma.Managed" />
+    <InternalsVisibleTo Include="Ncma.Scene" />
+    <InternalsVisibleTo Include="Ncma.Editor.Core" />
+  </ItemGroup>
 </Project>

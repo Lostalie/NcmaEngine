@@ -6,9 +6,6 @@
 #include "renderer/rhi/vulkan/VulkanRuntimeProbe.h"
 #include "physics/runtime/PhysicsWorld2D.h"
 #include "physics/runtime/PhysicsWorld3D.h"
-#include "scene/SceneCommandStack.h"
-#include "scene/SceneSerializer.h"
-#include "scene/SceneWorld.h"
 #include "script/runtime/ScriptRuntimeRegistry.h"
 #include "ui/UiDocument.h"
 
@@ -21,14 +18,10 @@
 
 namespace
 {
-    struct Health final { float Value = 100.0F; };
 
     bool Near(float lhs, float rhs) { return std::abs(lhs - rhs) < 0.0001F; }
 }
 
-void TestFlatSceneMigration();
-void TestGameObjectLogicLanguages();
-void TestWorldAccess();
 
 int main()
 {
@@ -37,101 +30,6 @@ int main()
     _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
     using namespace NcmaEngine;
-
-    SceneWorld world("ArchitectureTest");
-    const GameObjectId root = world.CreateObject("Root");
-    const GameObjectId child = world.CreateObject("Child");
-    const GameObjectId grandchild = world.CreateObject("Grandchild");
-    const SceneUuid rootUuid = world.GetPersistentId(root);
-    assert(rootUuid.IsValid());
-    assert(SceneUuid::Parse(rootUuid.ToString()) == rootUuid);
-    assert(world.GetPersistentId(child) != rootUuid);
-    assert(world.Size() == 3);
-    assert((world.GetObjects() == std::vector<GameObjectId>{root, child, grandchild}));
-
-    assert(world.GetComponent<Transform>(child) == &world.GetLocalTransform(child));
-    const SceneWorld& constWorld = world;
-    assert(constWorld.GetComponent<Transform>(child) == &constWorld.GetLocalTransform(child));
-    bool protectedTransform = false;
-    try { (void)world.RemoveComponent<Transform>(child); }
-    catch (const std::logic_error&) { protectedTransform = true; }
-    assert(protectedTransform && world.GetComponent<Transform>(child) != nullptr);
-
-    world.GetLocalTransform(root).Position = {10.0F, 0.0F, 0.0F};
-    world.GetLocalTransform(child).Position = {0.0F, 2.0F, 0.0F};
-    const Transform childWorld = world.GetWorldTransform(child);
-    assert(Near(childWorld.Position.x(), 0.0F));
-    assert(Near(childWorld.Position.y(), 2.0F));
-
-    auto& health = world.AddComponent<Health>(child);
-    health.Value = 42.0F;
-    assert(world.GetComponent<Health>(child)->Value == 42.0F);
-    assert(world.RemoveComponent<Health>(child));
-
-    const SceneSnapshot originalSnapshot = world.CaptureSnapshot();
-    const std::string serializedScene = SceneSerializer::Serialize(originalSnapshot);
-    assert(serializedScene.starts_with("NCMA_SCENE 5\n"));
-    SceneSnapshot loadedSnapshot;
-    std::string sceneError;
-    assert(SceneSerializer::Deserialize(serializedScene, loadedSnapshot, sceneError));
-    SceneWorld restoredWorld;
-    assert(restoredWorld.RestoreSnapshot(loadedSnapshot, sceneError));
-    assert(restoredWorld.Size() == world.Size());
-    assert(restoredWorld.FindObject(rootUuid) != InvalidGameObjectId);
-    const GameObjectId restoredChild = restoredWorld.FindObject(world.GetPersistentId(child));
-    assert(restoredChild != InvalidGameObjectId);
-    assert(restoredWorld.GetComponent<Transform>(restoredChild) == &restoredWorld.GetLocalTransform(restoredChild));
-    assert(restoredWorld.GetComponent<Transform>(restoredChild) != world.GetComponent<Transform>(child));
-    assert(restoredWorld.GetObjectName(restoredChild) == "Child");
-    assert(Near(restoredWorld.GetWorldTransform(restoredChild).Position.x(), 0.0F));
-
-    SceneCommandStack history;
-    SceneCommandStack::State beforeCreate{restoredWorld.CaptureSnapshot(), rootUuid};
-    const GameObjectId commandObject = restoredWorld.CreateObject("Command Object");
-    const SceneUuid commandObjectUuid = restoredWorld.GetPersistentId(commandObject);
-    SceneCommandStack::State afterCreate{restoredWorld.CaptureSnapshot(), commandObjectUuid};
-    history.Push("Create Object", std::move(beforeCreate), std::move(afterCreate));
-    assert(history.CanUndo());
-    assert(history.IsDirty());
-    std::optional<SceneUuid> restoredSelection;
-    assert(history.Undo(restoredWorld, restoredSelection, sceneError));
-    assert(restoredWorld.FindObject(commandObjectUuid) == InvalidGameObjectId);
-    assert(restoredSelection == rootUuid);
-    assert(history.Redo(restoredWorld, restoredSelection, sceneError));
-    assert(restoredWorld.FindObject(commandObjectUuid) != InvalidGameObjectId);
-    assert(restoredSelection == commandObjectUuid);
-    history.MarkSaved();
-    assert(!history.IsDirty());
-
-    SceneCommandStack::State beforeAttach{restoredWorld.CaptureSnapshot(), commandObjectUuid};
-    BehaviourBinding binding{SceneUuid::New(), "Ncma.Gameplay.Sample.RotatorBehaviour", false,
-        {{"DegreesPerSecond", ExportKind::Float, 90}, {"Clockwise", ExportKind::Boolean, 1},
-         {"Multiplier", ExportKind::Integer, 2}}};
-    restoredWorld.AddBehaviour(restoredWorld.FindObject(commandObjectUuid), binding);
-    history.Push("Attach Behaviour", beforeAttach, {restoredWorld.CaptureSnapshot(), commandObjectUuid});
-    assert(history.Undo(restoredWorld, restoredSelection, sceneError));
-    assert(restoredWorld.GetBehaviours(restoredWorld.FindObject(commandObjectUuid)).empty());
-    assert(history.Redo(restoredWorld, restoredSelection, sceneError));
-    const std::string withBinding = SceneSerializer::Serialize(restoredWorld.CaptureSnapshot());
-    assert(SceneSerializer::Deserialize(withBinding, loadedSnapshot, sceneError));
-    SceneWorld scriptRestored;
-    assert(scriptRestored.RestoreSnapshot(loadedSnapshot, sceneError));
-    assert(scriptRestored.GetBehaviours(scriptRestored.FindObject(commandObjectUuid)).front() == binding);
-    TestFlatSceneMigration();
-    TestGameObjectLogicLanguages();
-    TestWorldAccess();
-    auto malformed = loadedSnapshot;
-    malformed.Objects.back().Behaviours.push_back(binding);
-    assert(!scriptRestored.RestoreSnapshot(malformed, sceneError));
-    assert(scriptRestored.GetBehaviours(scriptRestored.FindObject(commandObjectUuid)).front() == binding);
-    auto invalidLanguage = loadedSnapshot;
-    invalidLanguage.Objects.back().Behaviours.front().Language = static_cast<BehaviourLanguage>(99);
-    assert(!scriptRestored.RestoreSnapshot(invalidLanguage, sceneError));
-    auto legacy = std::string("NCMA_SCENE 1\nname \"Legacy\"\nnodes 1\nnode \"") +
-        rootUuid.ToString() + "\" \"\" \"Root\" 0 0 0 0 0 0 1 1 1 1\n";
-    assert(SceneSerializer::Deserialize(legacy, loadedSnapshot, sceneError));
-    assert(loadedSnapshot.Version == SceneSnapshotVersion);
-    assert(loadedSnapshot.Objects.front().Behaviours.empty());
 
     Rhi::RenderBackendRegistry renderBackends;
     assert(renderBackends.IsRegistered(Rhi::BackendType::Null));
@@ -319,11 +217,6 @@ int main()
         physics3D.Step(1.0F / 60.0F);
     assert(physics3D.GetPosition(body3D).y() < initial3DY);
 
-    assert(world.DestroyObject(child));
-    assert(world.Size() == 2);
-    assert(world.Contains(root) && world.Contains(grandchild));
-    assert(!world.DestroyObject(child));
-    assert((world.GetObjects() == std::vector<GameObjectId>{root, grandchild}));
     std::cout << "Ncma architecture tests passed\n";
     return 0;
 }

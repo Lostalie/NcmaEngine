@@ -68,15 +68,16 @@
     <ClCompile Include="engine\source\runtime\renderer\rhi\RenderBackendRegistry.cpp" />
     <ClCompile Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.cpp" />
     <ClCompile Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.cpp" />
-    <ClCompile Include="engine\source\runtime\scene\SceneCommandStack.cpp" />
-    <ClCompile Include="engine\source\runtime\scene\SceneSerializer.cpp" />
     <ClCompile Include="engine\source\runtime\scene\SceneUuid.cpp" />
-    <ClCompile Include="engine\source\runtime\scene\SceneWorld.cpp" />
+    <ClCompile Include="engine\source\runtime\scene\ManagedSceneClient.cpp" />
     <ClCompile Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.cpp" />
     <ClCompile Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.cpp" />
     <ClCompile Include="tests\ArchitectureTests.cpp" />
     <ClCompile Include="tests\AnimationTests.cpp" />
     <ClCompile Include="tests\FbxImportTests.cpp" />
+    <ClCompile Include="engine\source\runtime\script\runtime\ManagedHost.cpp" />
+    <ClCompile Include="tests\SceneFlatTests.cpp" />
+    <ClCompile Include="tests\ManagedSceneBridgeTests.cpp" />
     <ClCompile Include="tests\ManagedHostTests.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -103,10 +104,10 @@
     <ClInclude Include="engine\source\runtime\renderer\rhi\RenderBackendRegistry.h" />
     <ClInclude Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.h" />
     <ClInclude Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.h" />
-    <ClInclude Include="engine\source\runtime\scene\SceneCommandStack.h" />
-    <ClInclude Include="engine\source\runtime\scene\SceneSerializer.h" />
+    <ClInclude Include="engine\source\runtime\scene\SceneView.h" />
+    <ClInclude Include="engine\source\runtime\script\runtime\ManagedHost.h" />
     <ClInclude Include="engine\source\runtime\scene\SceneUuid.h" />
-    <ClInclude Include="engine\source\runtime\scene\SceneWorld.h" />
+    <ClInclude Include="engine\source\runtime\scene\ManagedSceneClient.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\GameplayTypes.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntime.h" />

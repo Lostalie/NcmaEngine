@@ -9,7 +9,7 @@ using Ncma;
 namespace Ncma.ManagedHost;
 
 // Versioned C ABI. Exceptions are translated to caller-owned UTF-8 buffers.
-public static unsafe class NativeEntry
+public static unsafe partial class NativeEntry
 {
     [StructLayout(LayoutKind.Sequential)]
     public struct PropertyInfoV2
@@ -55,24 +55,14 @@ public static unsafe class NativeEntry
     private static readonly List<Instance> s_instances = [];
     private static SceneWorld? s_world;
     private static long s_tickCount;
-    private static bool s_resolverRegistered;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static uint GetBridgeVersion() => 2;
+    public static uint GetBridgeVersion() => 3;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int LoadGameplay(byte* assemblyPath, byte* error, int capacity) => Guard(() =>
     {
         UnloadCore();
-        if (!s_resolverRegistered)
-        {
-            NativeLibrary.SetDllImportResolver(typeof(Behaviour).Assembly, (name, _, _) =>
-                name == "NcmaNative" ? NativeLibrary.Load(Path.Combine(
-                    Path.GetDirectoryName(typeof(NativeEntry).Assembly.Location)!, "NcmaNative.dll")) : 0);
-            s_resolverRegistered = true;
-        }
-        if (Native.GetAbiVersion() != 1 || Native.GetGameObjectApiVersion() != 4 || Native.GetWorldAccessApiVersion() != 1)
-            throw new InvalidOperationException("Native scene/GameObject API mismatch.");
         string path = Path.GetFullPath(ReadUtf8(assemblyPath));
         var context = new GameplayLoadContext(path);
         s_loadContext = context;
@@ -143,10 +133,12 @@ public static unsafe class NativeEntry
     }, error, capacity);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int BeginScene(nint world, byte* error, int capacity) => Guard(() =>
+    public static int BeginScene(ulong world, byte* error, int capacity) => Guard(() =>
     {
         ClearInstances();
-        s_world = new SceneWorld(world);
+        var scene = Scene(world);
+        if (scene.Editor is not null) throw new InvalidOperationException("Clone the committed edit document into an isolated Play scene.");
+        s_world = scene.World;
         s_tickCount = 0;
         return 0;
     }, error, capacity);
@@ -155,10 +147,9 @@ public static unsafe class NativeEntry
     public static int CreateBehaviour(int type, ulong gameObject, int enabled, byte* error, int capacity) => Guard(() =>
     {
         if (s_world is null) throw new InvalidOperationException("No play scene is bound.");
-        var target = new GameObject(s_world, gameObject);
+        var target = s_world.FindId(gameObject);
         var behaviour = (Behaviour)Activator.CreateInstance(s_types[type].Type)!;
         behaviour.GameObject = target;
-        _ = behaviour.GameObject.LocalTransform;
         s_instances.Add(new Instance(behaviour, type, enabled != 0));
         return s_instances.Count - 1;
     }, error, capacity);
@@ -217,7 +208,6 @@ public static unsafe class NativeEntry
             catch (Exception exception) { errors.Add(exception); }
         }
         s_instances.Clear();
-        s_world?.Dispose();
         s_world = null;
         if (errors.Count != 0) throw new AggregateException(errors);
     }

@@ -12,11 +12,6 @@ static void Reject(Action action)
     Check(failed, "Invalid operation was accepted");
 }
 static JsonElement Json(string text) { using var document = JsonDocument.Parse(text); return document.RootElement.Clone(); }
-static JsonElement Element(object value) => JsonSerializer.SerializeToElement(value);
-static CapabilityRequest Request(EditSession session, string capability, JsonElement input) => new(1, Guid.NewGuid(), session.SessionId, session.Revision, capability, input);
-static CapabilityPermissions EditPermissions() => new(["ncma.scene.transaction", "ncma.history.undo", "ncma.history.redo"]);
-static JsonElement Create(Guid id, string name = "Hero") => Element(new { operations = new[] { new { op = "create", objectId = id, name } } });
-static JsonElement Rename(Guid id, string name) => Element(new { operations = new[] { new { op = "rename", objectId = id, name } } });
 static ComponentRegistry Extensions()
 {
     var registry = ComponentRegistry.CreateDefault();
@@ -65,12 +60,7 @@ var cases = new (string Name, Action Run)[]
         a.Set(new Health(100)); Check(a.Get<Health>().Points == 100);
         Reject(() => a.Set(new Health(-1))); Check(a.Get<Health>().Points == 100);
         Reject(() => registry.Register<Health>("new.health", 1, "{}", v => v));
-        var session = new EditSession(world); var result = session.Invoke(Request(session, "ncma.engine.component_types", Json("{}")));
-        Check(result.Status == "ok" && result.Data.GetProperty("components").GetArrayLength() == 2);
-        Guid id = a.PersistentId;
-        var input = Element(new { operations = new[] { new { op = "set_component", objectId = id, typeId = "game.health", version = 1, data = Json("{\"points\":42}") } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), EditPermissions()).Status == "ok");
-        Check(world.FindObject(id).Get<Health>().Points == 42);
+
     }),
     ("Mutable reference component rejected", () => {
         var registry = ComponentRegistry.CreateDefault();
@@ -112,112 +102,6 @@ var cases = new (string Name, Action Run)[]
         Check(runner.IsFaulted && world.Tick == 0 && world.Revision == revision && a.Get<TransformData>() == TransformData.Identity && a.Name == "A");
         Reject(() => runner.Advance(0)); runner.ResetFault(); Check(!runner.IsFaulted);
     }),
-    ("Capability schemas and read-only default", () => {
-        var world = new World(); var session = new EditSession(world); Check(session.Describe().Count == 8);
-        foreach (var descriptor in session.Describe()) { Check(descriptor.InputSchema.ValueKind == JsonValueKind.Object); Check(descriptor.OutputSchema.GetProperty("required").GetArrayLength() == 8); }
-        var inspect = session.Invoke(Request(session, "ncma.scene.inspect", Json("{}")));
-        Check(inspect.Status == "ok" && !inspect.Changed && inspect.Data.GetProperty("scene").GetProperty("objects").GetArrayLength() == 0);
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Create(Guid.NewGuid()))).Status == "denied" && world.Count == 0);
-        Check(session.Invoke(Request(session, "ncma.scene.validate", Json("{}"))).Data.GetProperty("valid").GetBoolean());
-    }),
-    ("Atomic create/set/rename and one revision", () => {
-        var world = new World(); var session = new EditSession(world); Guid id = Guid.NewGuid();
-        var input = Element(new { operations = new object[] { new { op = "create", objectId = id, name = "A" },
-            new { op = "set_component", objectId = id, typeId = "ncma.transform", version = 1, data = world.Components.Encode(TransformData.Identity) },
-            new { op = "rename", objectId = id, name = "Hero" } } });
-        var result = session.Invoke(Request(session, "ncma.scene.transaction", input), EditPermissions());
-        Check(result.Status == "ok" && result.Changed && result.Revision == 1 && world.FindObject(id).Name == "Hero");
-    }),
-    ("Late transaction failure is atomic", () => {
-        var world = new World(); var session = new EditSession(world); Guid id = Guid.NewGuid();
-        var input = Element(new { operations = new object[] { new { op = "create", objectId = id, name = "A" }, new { op = "rename", objectId = Guid.NewGuid(), name = "Missing" } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), EditPermissions()).Status == "error");
-        Check(world.Count == 0 && session.Revision == 0);
-        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), EditPermissions()).Code == "history_empty");
-    }),
-    ("Request identity/revision guards and idempotency", () => {
-        var world = new World(); var session = new EditSession(world); Guid id = Guid.NewGuid();
-        var request = Request(session, "ncma.scene.transaction", Create(id));
-        Check(session.Invoke(request with { SessionId = Guid.NewGuid() }, EditPermissions()).Code == "invalid_envelope");
-        Check(session.Invoke(request with { ExpectedRevision = null }, EditPermissions()).Code == "revision_conflict");
-        var first = session.Invoke(request, EditPermissions()); var second = session.Invoke(request, EditPermissions());
-        Check(first == second && world.Count == 1 && world.Revision == 1);
-        Check(session.Invoke(request with { Input = Create(Guid.NewGuid()) }, EditPermissions()).Code == "request_id_reused");
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Rename(id, "B")) with { ExpectedRevision = 0 }, EditPermissions()).Code == "revision_conflict");
-        Check(session.Invoke(request).Status == "denied");
-    }),
-    ("Undo/redo and redo branch invalidation", () => {
-        var world = new World(); var session = new EditSession(world); Guid id = Guid.NewGuid(); var permissions = EditPermissions();
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Create(id)), permissions).Status == "ok");
-        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), permissions).Status == "ok" && world.Count == 0);
-        Check(session.Invoke(Request(session, "ncma.history.redo", Json("{}")), permissions).Status == "ok" && world.Count == 1);
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Rename(id, "Old")), permissions).Status == "ok");
-        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), permissions).Status == "ok");
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Rename(id, "New")), permissions).Status == "ok");
-        Check(session.Invoke(Request(session, "ncma.history.redo", Json("{}")), permissions).Code == "history_empty" && world.FindObject(id).Name == "New");
-    }),
-    ("Destructive UUID authorization and redo permission", () => {
-        var world = new World(); Guid id = world.CreateObject("A").PersistentId; var session = new EditSession(world);
-        var limited = new CapabilityPermissions(["ncma.scene.delete_object", "ncma.history.undo", "ncma.history.redo"]);
-        var approved = new CapabilityPermissions(["ncma.scene.delete_object", "ncma.history.undo", "ncma.history.redo"], [id]);
-        var request = Request(session, "ncma.scene.delete_object", Element(new { objectId = id }));
-        Check(session.Invoke(request, limited).Code == "target_not_authorized" && world.Count == 1);
-        Check(session.Invoke(request, approved).Status == "ok" && world.Count == 0);
-        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), approved).Status == "ok" && world.Count == 1);
-        Check(session.Invoke(Request(session, "ncma.history.redo", Json("{}")), limited).Status == "denied" && world.Count == 1);
-    }),
-    ("No deletion/eval bypass inside transaction", () => {
-        var world = new World(); Guid id = world.CreateObject("A").PersistentId; var session = new EditSession(world); ulong revision = world.Revision;
-        var input = Element(new { operations = new[] { new { op = "delete", objectId = id } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), EditPermissions()).Status == "error");
-        Check(session.Invoke(Request(session, "ncma.python.exec", Json("{}")), EditPermissions()).Code == "unknown_capability");
-        Check(world.Count == 1 && world.Revision == revision);
-    }),
-    ("Closed inputs/schema/size rejection", () => {
-        var world = new World(); Guid id = world.CreateObject("A").PersistentId; var session = new EditSession(world); var permissions = EditPermissions();
-        Check(session.Invoke(Request(session, "ncma.scene.inspect", Json("{\"permission\":true}"))).Status == "error");
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Json("{\"operations\":[],\"operations\":[]}")), permissions).Status == "error");
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Element(new { padding = new string('x', EditSession.MaxInputBytes) })), permissions).Status == "error");
-        var bad = Element(new { operations = new[] { new { op = "set_component", objectId = id, typeId = "ncma.transform", version = 1, data = Json("{\"position\":{},\"rotation\":{},\"scale\":{}}") } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", bad), permissions).Status == "error" && !world.FindObject(id).Has<TransformData>());
-    }),
-    ("History cannot overwrite outside edits", () => {
-        var world = new World(); var session = new EditSession(world); var permissions = EditPermissions();
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", Create(Guid.NewGuid())), permissions).Status == "ok");
-        world.CreateObject("Outside");
-        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), permissions).Code == "revision_conflict" && world.Count == 2);
-    }),
-    ("Bounded history", () => {
-        var world = new World(); var session = new EditSession(world); var permissions = EditPermissions();
-        for (int i = 0; i < 70; ++i) Check(session.Invoke(Request(session, "ncma.scene.transaction", Create(Guid.NewGuid())), permissions).Status == "ok");
-        for (int i = 0; i < EditSession.MaxHistoryEntries; ++i) Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), permissions).Status == "ok");
-        Check(world.Count == 6 && session.Invoke(Request(session, "ncma.history.undo", Json("{}")), permissions).Code == "history_empty");
-    }),
-    ("Malformed numeric/deep input produces structured errors", () => {
-        var world = new World(); var session = new EditSession(world); var permissions = EditPermissions();
-        var input = Element(new { operations = new[] { new { op = "set_component", objectId = Guid.NewGuid(), typeId = "ncma.transform", version = 1e30, data = Json("{}") } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), permissions).Status == "error");
-        string deep = string.Concat(Enumerable.Repeat("{\"nested\":", 40)) + "{}" + new string('}', 40);
-        Check(session.Invoke(Request(session, "ncma.scene.inspect", Json(deep))).Code == "invalid_input");
-        Check(world.Count == 0 && world.Revision == 0);
-    }),
-    ("Cyclic trusted schema fails safely", () => {
-        var registry = new ComponentRegistry();
-        registry.Register<Health>("cyclic", 1, """{"$ref":"#/$defs/loop","$defs":{"loop":{"$ref":"#/$defs/loop"}}}""", v => v);
-        var world = new World(components: registry); var session = new EditSession(world); var permissions = EditPermissions();
-        Guid id = Guid.NewGuid();
-        var input = Element(new { operations = new object[] { new { op = "create", objectId = id, name = "A" },
-            new { op = "set_component", objectId = id, typeId = "cyclic", version = 1, data = Json("{}") } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), permissions).Code == "invalid_input" && world.Count == 0);
-    }),
-    ("Extension validator failure does not partially commit", () => {
-        var registry = new ComponentRegistry();
-        registry.Register<Health>("fault", 1, """{"type":"object","required":["points"],"properties":{"points":{"type":"integer"}}}""", _ => throw new ApplicationException("Validator failed"));
-        var world = new World(components: registry); var session = new EditSession(world); Guid id = Guid.NewGuid();
-        var input = Element(new { operations = new object[] { new { op = "create", objectId = id, name = "A" },
-            new { op = "set_component", objectId = id, typeId = "fault", version = 1, data = Json("{\"points\":1}") } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), EditPermissions()).Code == "operation_failed" && world.Count == 0);
-    }),
     ("Fixed-step budget/reentrancy/structure cannot bypass guards", () => {
         var world = new World(); var runner = new WorldRunner(world, 0.1, 2); Guid id = world.CreateObject("A").PersistentId;
         world.FindObject(id).Set(TransformData.Identity);
@@ -241,12 +125,8 @@ var cases = new (string Name, Action Run)[]
         live = new World(components: registry); var a = live.CreateObject("A"); a.Set(new Health(1));
         var snapshot = live.CaptureSnapshot(); mutate = true;
         Reject(() => live.RestoreSnapshot(snapshot));
-        Check(live.Count == 2 && a.Get<Health>().Points == 1);
-        var session = new EditSession(live); Guid id = Guid.NewGuid(); mutate = true;
-        var input = Element(new { operations = new object[] { new { op = "create", objectId = id, name = "Candidate" },
-            new { op = "set_component", objectId = id, typeId = "health", version = 1, data = Json("{\"points\":2}") } } });
-        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), EditPermissions()).Code == "revision_conflict");
-        Check(live.Count == 3); Reject(() => live.FindObject(id));
+        Check(live.Count == 1 && a.Get<Health>().Points == 1); // Preparation now blocks the mutation before it happens.
+
     }),
 };
 

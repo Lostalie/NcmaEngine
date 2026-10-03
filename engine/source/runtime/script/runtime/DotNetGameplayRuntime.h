@@ -1,7 +1,7 @@
 #pragma once
 
 #include "script/runtime/ScriptRuntime.h"
-#include "scene/SceneWorld.h"
+#include "scene/ManagedSceneClient.h"
 #include "script/runtime/GameplayTypes.h"
 
 #include <filesystem>
@@ -27,8 +27,8 @@ namespace NcmaEngine::Scripting
         void Tick(double deltaSeconds) override;
 
         [[nodiscard]] bool Reload(std::string& error);
-        // The world must outlive EndScene/Stop. Only bind a disposable play-session copy.
-        [[nodiscard]] bool BindScene(SceneWorld& world, std::string& error);
+        // Bind an opaque C# session handle; no native world pointer crosses the ABI.
+        [[nodiscard]] bool BindScene(ManagedSceneClient& world, std::string& error);
         void EndScene() noexcept;
         [[nodiscard]] const std::vector<BehaviourDescriptor>& GetTypes() const noexcept;
         [[nodiscard]] bool IsStarted() const noexcept;

@@ -1,111 +1,70 @@
-using Microsoft.Win32.SafeHandles;
-
+using System.Globalization;
+using Ncma.Runtime;
 namespace Ncma;
 
+// Compatibility gameplay facade. Storage, validation and handles belong to C# Runtime.World.
 public sealed partial class SceneWorld : IDisposable
 {
-    private readonly WorldHandle _handle;
-    private readonly int _ownerThread = Environment.CurrentManagedThreadId;
-
-    public SceneWorld(string name = "Untitled")
-    {
-        if (Native.GetAbiVersion() != 1 || Native.GetGameObjectApiVersion() != 4 || Native.GetWorldAccessApiVersion() != 1)
-            throw new InvalidOperationException("Native GameObject API mismatch; rebuild NcmaEngine.");
-        _handle = new WorldHandle(Native.WorldCreate(name));
-        if (_handle.IsInvalid)
-            throw new InvalidOperationException(Native.GetLastError());
-    }
-
-    internal SceneWorld(nint borrowedHandle)
-    {
-        if (borrowedHandle == 0) throw new ArgumentException("World handle is null.");
-        _handle = new WorldHandle(borrowedHandle, ownsHandle: false);
-    }
-
+    internal World Runtime { get; }
+    private bool _disposed;
+    public SceneWorld(string name = "Untitled") => Runtime = new World(name);
+    internal SceneWorld(World runtime) => Runtime = runtime;
+    internal void Verify() { Runtime.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this); }
     public GameObject CreateObject(string name)
     {
-        ulong id = Native.WorldCreateObject(Handle, name, 0);
-        if (id == 0)
-            throw new InvalidOperationException(Native.GetLastError());
-        return new GameObject(this, id);
+        Verify();
+        return new(this, Runtime.CreateObject(name)); // Empty container: Transform is optional.
     }
-
-    public void Dispose()
+    internal Ncma.Runtime.GameObject Resolve(ObjectReference reference)
     {
-        VerifyThread();
-        _handle.Dispose();
+        Verify();
+        return Runtime.Resolve(new(ToGuid(reference.WorldHigh, reference.WorldLow), reference.Id));
     }
-
-    private void VerifyThread()
+    internal GameObject FindId(ulong id)
     {
-        if (Environment.CurrentManagedThreadId != _ownerThread)
-            throw new InvalidOperationException("World operations must run on the play-session thread.");
+        Verify();
+        return new(this, Runtime.Resolve(new(Runtime.Identity, id)));
     }
-
-    internal nint Handle
+    public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetObjects().Select(o => new GameObject(this, o)).ToArray(); }
+    public void Dispose() { Runtime.VerifyAccess(); if (_disposed) return; if (_phase) AbortPhase(); _disposed = true; }
+    internal bool IsInPhase => _phase;
+    internal static Guid ToGuid(ulong high, ulong low) => Guid.ParseExact(high.ToString("x16") + low.ToString("x16"), "N");
+    internal static ObjectUuid ToUuid(Guid value)
     {
-        get
-        {
-            VerifyThread();
-            ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
-            return _handle.DangerousGetHandle();
-        }
+        string hex = value.ToString("N");
+        return new(ulong.Parse(hex[..16], NumberStyles.HexNumber), ulong.Parse(hex[16..], NumberStyles.HexNumber));
     }
-
-    private sealed class WorldHandle : SafeHandleZeroOrMinusOneIsInvalid
+    internal static TransformData ToData(Transform value) => new(
+        new(value.Position.X, value.Position.Y, value.Position.Z),
+        new(value.RotationX, value.RotationY, value.RotationZ, value.RotationW),
+        new(value.Scale.X, value.Scale.Y, value.Scale.Z));
+    internal static Transform FromData(TransformData value) => new()
     {
-        internal WorldHandle(nint value, bool ownsHandle = true) : base(ownsHandle) => SetHandle(value);
-
-        protected override bool ReleaseHandle()
-        {
-            Native.WorldDestroy(handle);
-            return true;
-        }
-    }
+        Position = new(value.Position.X, value.Position.Y, value.Position.Z),
+        RotationX = value.Rotation.X, RotationY = value.Rotation.Y, RotationZ = value.Rotation.Z, RotationW = value.Rotation.W,
+        Scale = new(value.Scale.X, value.Scale.Y, value.Scale.Z)
+    };
 }
 
 public sealed class GameObject
 {
-    private readonly SceneWorld _world;
-
-    internal GameObject(SceneWorld world, ulong id)
+    private readonly Ncma.Runtime.GameObject _object;
+    internal GameObject(SceneWorld world, Ncma.Runtime.GameObject value)
     {
-        _world = world;
-        Id = id;
-        if (Native.WorldGetObjectReference(world.Handle, id, out ObjectReference reference) == 0)
-            throw new InvalidOperationException(Native.GetLastError());
-        Reference = reference;
+        World = world; _object = value;
+        ObjectUuid uuid = SceneWorld.ToUuid(value.Reference.WorldId);
+        Reference = new(uuid.High, uuid.Low, value.Reference.Id);
     }
-
-    public ulong Id { get; }
+    public ulong Id => Reference.Id;
     public ObjectReference Reference { get; }
-
-    public ObjectUuid PersistentId
-    {
-        get
-        {
-            if (Native.WorldGetObjectUuid(_world.Handle, Reference, out ulong high, out ulong low) == 0)
-                throw new InvalidOperationException(Native.GetLastError());
-            return new ObjectUuid(high, low);
-        }
-    }
-
-    public SceneWorld World => _world;
-
+    public ObjectUuid PersistentId { get { World.Verify(); return SceneWorld.ToUuid(_object.PersistentId); } }
+    public SceneWorld World { get; }
+    public string Name { get { World.Verify(); return _object.Name; } set { World.Verify(); _object.Name = value; } }
+    public bool HasTransform { get { World.Verify(); return _object.Has<TransformData>(); } }
     public Transform LocalTransform
     {
-        get
-        {
-            if (Native.WorldGetLocalTransform(_world.Handle, Id, out Transform value) == 0)
-                throw new InvalidOperationException(Native.GetLastError());
-            return value;
-        }
-        set
-        {
-            if (Native.WorldSetLocalTransform(_world.Handle, Id, in value) == 0)
-                throw new InvalidOperationException(Native.GetLastError());
-        }
+        get { World.Verify(); return SceneWorld.FromData(_object.Get<TransformData>()); }
+        set { World.Verify(); _object.Set(SceneWorld.ToData(value)); }
     }
-
-    public bool Destroy() => Native.WorldDestroyObject(_world.Handle, Id, 0) != 0;
+    public bool Destroy() { World.Verify(); _object.Destroy(); World.Forget(Id); return true; }
 }

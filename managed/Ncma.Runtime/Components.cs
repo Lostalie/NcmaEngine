@@ -89,7 +89,11 @@ public sealed class ComponentRegistry
             throw new ArgumentException("Unknown component type/version: " + component.TypeId);
         CheckPayload(component.Data);
         CheckShape(component.Data, registration.Descriptor.Schema, registration.Descriptor.Schema);
-        return registration.Decode(component.Data);
+        object decoded = registration.Decode(component.Data);
+        JsonElement normalized = EncodeObject(decoded);
+        CheckPayload(normalized);
+        CheckShape(normalized, registration.Descriptor.Schema, registration.Descriptor.Schema);
+        return decoded;
     }
 
     // This slice supports closed object schemas, numeric/string/boolean fields and local $defs.
@@ -150,6 +154,22 @@ public sealed class ComponentRegistry
 
 internal static class SceneJson
 {
+    internal static byte[] EncodeBounded<T>(T value, int maximum)
+    {
+        using var output = new BoundedBuffer(maximum);
+        JsonSerializer.Serialize(output, value, Options);
+        return output.ToArray();
+    }
+    private sealed class BoundedBuffer(int maximum) : MemoryStream
+    {
+        private void CheckSize(int count)
+        {
+            if (count > maximum - Position) throw new ArgumentException("Snapshot size limit exceeded.");
+        }
+        public override void Write(byte[] buffer, int offset, int count) { CheckSize(count); base.Write(buffer, offset, count); }
+        public override void Write(ReadOnlySpan<byte> buffer) { CheckSize(buffer.Length); base.Write(buffer); }
+        public override void WriteByte(byte value) { CheckSize(1); base.WriteByte(value); }
+    }
     internal static void RejectDuplicateFields(JsonElement element)
     {
         if (element.ValueKind == JsonValueKind.Object)

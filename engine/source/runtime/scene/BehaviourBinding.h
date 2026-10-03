@@ -9,7 +9,6 @@
 namespace NcmaEngine
 {
     enum class ExportKind : std::uint32_t { Float = 1, Double = 2, Integer = 3, Boolean = 4 };
-    enum class BehaviourLanguage : std::uint32_t { CSharp = 0 };
 
     struct ExportValue final
     {
@@ -25,7 +24,6 @@ namespace NcmaEngine
         std::string TypeName;
         bool Enabled = true;
         std::vector<ExportValue> Properties;
-        BehaviourLanguage Language = BehaviourLanguage::CSharp;
         friend bool operator==(const BehaviourBinding&, const BehaviourBinding&) = default;
     };
 

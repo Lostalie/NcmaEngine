@@ -31,12 +31,13 @@
     <ClCompile Include="engine\source\runtime\renderer\rhi\RenderBackendRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.cpp"><Filter>Runtime</Filter></ClCompile>
-    <ClCompile Include="engine\source\runtime\scene\SceneCommandStack.cpp"><Filter>Runtime</Filter></ClCompile>
-    <ClCompile Include="engine\source\runtime\scene\SceneSerializer.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\scene\SceneUuid.cpp"><Filter>Runtime</Filter></ClCompile>
-    <ClCompile Include="engine\source\runtime\scene\SceneWorld.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\scene\ManagedSceneClient.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\script\runtime\ManagedHost.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="tests\SceneFlatTests.cpp"><Filter>Tests</Filter></ClCompile>
+    <ClCompile Include="tests\ManagedSceneBridgeTests.cpp"><Filter>Tests</Filter></ClCompile>
     <ClCompile Include="tests\ManagedHostTests.cpp"><Filter>Tests</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -63,10 +64,10 @@
     <ClInclude Include="engine\source\runtime\renderer\rhi\RenderBackendRegistry.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.h"><Filter>Runtime</Filter></ClInclude>
-    <ClInclude Include="engine\source\runtime\scene\SceneCommandStack.h"><Filter>Runtime</Filter></ClInclude>
-    <ClInclude Include="engine\source\runtime\scene\SceneSerializer.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\SceneView.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\script\runtime\ManagedHost.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\scene\SceneUuid.h"><Filter>Runtime</Filter></ClInclude>
-    <ClInclude Include="engine\source\runtime\scene\SceneWorld.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\ManagedSceneClient.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\GameplayTypes.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntime.h"><Filter>Runtime</Filter></ClInclude>

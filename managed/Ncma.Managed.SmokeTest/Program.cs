@@ -9,6 +9,10 @@ GameObject root = world.CreateObject("Root");
 GameObject camera = world.CreateObject("Camera");
 if (typeof(GameObject).GetProperty("LogicLanguage") != null || typeof(GameObject).Assembly.GetType("Ncma.GameplayLanguage") != null)
     throw new InvalidOperationException("Python gameplay language selection must not be exposed.");
+if (root.HasTransform || camera.HasTransform) throw new InvalidOperationException("GameObjects must be empty containers.");
+root.LocalTransform = Transform.Identity;
+camera.LocalTransform = Transform.Identity;
+if (Native.GetAbiVersion() != 2) throw new InvalidOperationException("Expected native plugin ABI 2 without World exports.");
 Transform transform = camera.LocalTransform;
 transform.Position = new Vector3(1.0f, 2.0f, 3.0f);
 camera.LocalTransform = transform;
@@ -26,14 +30,14 @@ Transform[] values = new Transform[2];
 world.ReadTransforms(references, values);
 Transform changed = values[1]; changed.Position.X = 42;
 TransformWrite[] writes = [new TransformWrite(camera, changed)];
-if (SmokeWorldHost.Begin(world) == 0) throw new InvalidOperationException("Phase begin failed.");
+world.BeginPhase();
 world.WriteTransforms(writes);
 world.ReadTransforms(references, values);
 if (values[1].Position.X == 42) throw new InvalidOperationException("Uncommitted batch became visible.");
 world.SendSignal(root, camera, 17, 12.5);
 GameplaySignal[] signals = new GameplaySignal[2];
 if (world.ReceiveSignals(camera, signals) != 0) throw new InvalidOperationException("Uncommitted signal delivered.");
-if (SmokeWorldHost.Commit(world) == 0) throw new InvalidOperationException("Phase commit failed.");
+world.CommitPhase();
 world.ReadTransforms(references, values);
 if (values[1].Position.X != 42 || world.ReceiveSignals(camera, signals) != 1 ||
     signals[0].Source.Id != root.Id || signals[0].Code != 17 || signals[0].Value != 12.5 || signals[0].Sequence != 1)
@@ -42,7 +46,7 @@ using (SceneWorld foreign = new("Foreign"))
 {
     ObjectReference[] wrong = [foreign.CreateObject("Foreign").Reference];
     try { world.ReadTransforms(wrong, values.AsSpan(0, 1)); throw new Exception("Foreign reference accepted."); }
-    catch (InvalidOperationException) { }
+    catch (ArgumentException) { }
 }
 bool threadRejected = Task.Run(() =>
 {
@@ -58,9 +62,10 @@ if (typeof(GameObject).GetMethod("SetParent") != null ||
 if (!root.Destroy() || camera.LocalTransform.Position.Y != 2.0f)
     throw new InvalidOperationException("Deleting one flat object must not delete another.");
 try { world.ReadTransforms(references, values); throw new Exception("Deleted reference accepted."); }
-catch (InvalidOperationException) { }
+catch (ArgumentException) { }
 
-Console.WriteLine($"Ncma managed/native smoke test passed (ABI GameObject {camera.Id}).");
+ManagedWorldAccessTests.Run();
+Console.WriteLine($"Ncma managed scene smoke test passed (GameObject {camera.Id}; no native World API).");
 
 using ActionAnimationSession animation = new();
 animation.TriggerAction("Attack");
@@ -80,17 +85,3 @@ using (var state = System.Text.Json.JsonDocument.Parse(animation.InspectJson()))
 animation.Redo();
 animation.Reset();
 Console.WriteLine("Ncma managed/native animation smoke test passed (animation ABI 1).");
-
-// Phase control belongs to the host, intentionally absent from the gameplay facade.
-internal static class SmokeWorldHost
-{
-    [DllImport("NcmaNative", EntryPoint = "ncma_world_begin_gameplay_phase")]
-    private static extern byte BeginNative(nint world);
-    [DllImport("NcmaNative", EntryPoint = "ncma_world_commit_gameplay_phase")]
-    private static extern byte CommitNative(nint world);
-    private static nint Handle(SceneWorld world) => (nint)typeof(SceneWorld)
-        .GetProperty("Handle", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-        .GetValue(world)!;
-    internal static byte Begin(SceneWorld world) => BeginNative(Handle(world));
-    internal static byte Commit(SceneWorld world) => CommitNative(Handle(world));
-}

@@ -1,5 +1,4 @@
 #include "script/runtime/DotNetGameplayRuntime.h"
-#include "scene/SceneSerializer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +6,9 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+
+void TestManagedSceneBridge();
+void TestSceneDocumentFiles();
 
 namespace
 {
@@ -29,7 +31,7 @@ int main(int argumentCount, char** arguments)
     try
     {
         using namespace NcmaEngine;
-        SceneWorld world("GameplayTest");
+        ManagedSceneClient world("GameplayTest");
         const auto fast = world.CreateObject("Fast");
         const auto slow = world.CreateObject("Slow");
         const auto disabled = world.CreateObject("Disabled");
@@ -67,11 +69,10 @@ int main(int argumentCount, char** arguments)
         Check(world.GetLocalTransform(unattached).Rotation.isApprox(Quaternion::Identity()), "Unattached gameObject changed");
         Check(runtime.GetTickCount() == 1, "Tick count mismatch");
         runtime.EndScene();
-        Check(world.Contains(fast), "Borrowed SceneWorld was destroyed by managed code");
+        Check(world.Contains(fast), "Borrowed ManagedSceneClient was destroyed by managed code");
 
-        SceneSnapshot loaded;
-        Check(SceneSerializer::Deserialize(SceneSerializer::Serialize(world.CaptureSnapshot()), loaded, error), error);
-        Check(world.RestoreSnapshot(loaded, error), error);
+        const auto loaded = world.CaptureView();
+        Check(world.RestoreDocument(world.CaptureDocument(), error), error);
         const auto unattachedReloaded = world.FindObject(loaded.Objects.back().PersistentId);
         Check(runtime.Reload(error), error);
         Check(runtime.GetBehaviourCount() == 0, "Reload must wait for explicit scene binding");
@@ -105,6 +106,16 @@ int main(int argumentCount, char** arguments)
         Check(!world.GetLocalTransform(fastReloaded).Rotation.isApprox(beforePhase), "C# phase did not commit");
         Check(world.GetLocalTransform(unattachedReloaded).Rotation.isApprox(Quaternion::Identity()), "Unattached object changed");
         runtime.Stop();
+        // An empty logic object can carry a Behaviour without a mandatory Transform.
+        const auto logicObject = world.CreateObject("Non-spatial disabled behaviour", false);
+        auto logicBinding = disabledBinding; logicBinding.Id = SceneUuid::New();
+        world.AddBehaviour(logicObject, logicBinding);
+        Check(runtime.Start(error), error);
+        Check(runtime.BindScene(world, error), "Non-spatial Behaviour binding failed: " + error);
+        Check(!world.HasTransform(logicObject), "Logic binding added a Transform");
+        runtime.Stop();
+        TestManagedSceneBridge();
+        TestSceneDocumentFiles();
         std::cout << "Ncma gameplay: reflection, attachment, Exports, scene round-trip, reload, failure recovery passed\n";
         return 0;
     }
