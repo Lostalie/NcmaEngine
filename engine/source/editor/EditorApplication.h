@@ -9,7 +9,6 @@
 #include "scene/SceneSerializer.h"
 #include "scene/SceneWorld.h"
 #include "script/runtime/DotNetGameplayRuntime.h"
-#include "script/runtime/PythonGameplayRuntime.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -31,8 +30,7 @@ namespace NcmaEngine::Editor
     public:
         explicit EditorApplication(
             HINSTANCE instance, Rhi::BackendType backendType = Rhi::BackendType::Direct3D11,
-            bool smokeTest = false, bool gameplaySmokeTest = false, bool fbxSmokeTest = false,
-            bool pythonSmokeTest = false);
+            bool smokeTest = false, bool gameplaySmokeTest = false, bool fbxSmokeTest = false);
         ~EditorApplication();
 
         int Run();
@@ -59,7 +57,7 @@ namespace NcmaEngine::Editor
 
         void RenderMenuBar();
         void RenderToolbar(const RECT& workArea);
-        void RenderHierarchy(const RECT& workArea);
+        void RenderSceneObjects(const RECT& workArea);
         void RenderViewport(const RECT& workArea);
         void RenderInspector(const RECT& workArea);
         void RenderBottomPanel(const RECT& workArea);
@@ -69,18 +67,17 @@ namespace NcmaEngine::Editor
         void ExecuteFbxEdit(const std::function<void(FbxPreviewState&)>& edit);
         void UndoFbxEdit(bool redo = false);
         void RenderStatusBar(const RECT& workArea);
-        void RenderHierarchyNode(NodeId node);
+        void RenderSceneObject(GameObjectId gameObject);
 
-        void SelectNode(NodeId node);
-        void CreateChildNode();
-        void DeleteSelectedNode();
+        void SelectObject(GameObjectId gameObject);
+        void CreateSceneObject();
+        void DeleteSelectedObject();
         void NewScene();
         void OpenScene();
         void SaveScene();
         void UndoSceneEdit();
         void RedoSceneEdit();
         void ReloadGameplay();
-        void ReloadPythonGameplay();
         void StopGameplay();
         void TogglePlay();
         void RenderBehaviourInspector();
@@ -116,7 +113,6 @@ namespace NcmaEngine::Editor
         std::string m_FbxError;
         bool m_SmokeTest = false;
         bool m_GameplaySmokeTest = false;
-        bool m_PythonSmokeTest = false;
         std::uint32_t m_RenderedFrames = 0;
 
         Rhi::BackendType m_BackendType = Rhi::BackendType::Direct3D11;
@@ -158,7 +154,7 @@ namespace NcmaEngine::Editor
         float m_PreviewExposure = 1.0F;
         float m_PreviewAmbient = 0.035F;
         SceneWorld m_Scene{"EditorScene"};
-        NodeId m_SelectedNode = InvalidNodeId;
+        GameObjectId m_SelectedObject = InvalidGameObjectId;
         SceneCommandStack m_SceneHistory;
         std::optional<SceneCommandStack::State> m_InspectorEditBefore;
         std::filesystem::path m_ScenePath;
@@ -166,7 +162,6 @@ namespace NcmaEngine::Editor
         std::unique_ptr<SceneWorld> m_PlayScene;
         bool m_ScenePaused = false;
         std::unique_ptr<Scripting::DotNetGameplayRuntime> m_GameplayRuntime;
-        std::unique_ptr<Scripting::PythonGameplayRuntime> m_PythonRuntime;
         std::vector<std::string> m_Logs;
     };
 }

@@ -1,10 +1,12 @@
 #include "scene/SceneSerializer.h"
 
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <limits>
 #include <locale>
 #include <sstream>
+#include <unordered_map>
 
 namespace NcmaEngine
 {
@@ -39,25 +41,24 @@ namespace NcmaEngine
         output.imbue(std::locale::classic());
         output << "NCMA_SCENE " << SceneSnapshotVersion << '\n';
         output << "name " << std::quoted(snapshot.Name) << '\n';
-        output << "nodes " << snapshot.Nodes.size() << '\n';
+        output << "objects " << snapshot.Objects.size() << '\n';
         output << std::setprecision(std::numeric_limits<float>::max_digits10);
-        for (const SceneNodeSnapshot& node : snapshot.Nodes)
+        for (const SceneObjectSnapshot& gameObject : snapshot.Objects)
         {
-            output << "node " << std::quoted(node.PersistentId.ToString()) << ' '
-                << std::quoted(node.ParentId.has_value() ? node.ParentId->ToString() : std::string{}) << ' '
-                << std::quoted(node.Name) << ' '
-                << node.LocalTransform.Position.x() << ' '
-                << node.LocalTransform.Position.y() << ' '
-                << node.LocalTransform.Position.z() << ' '
-                << node.LocalTransform.Rotation.x() << ' '
-                << node.LocalTransform.Rotation.y() << ' '
-                << node.LocalTransform.Rotation.z() << ' '
-                << node.LocalTransform.Rotation.w() << ' '
-                << node.LocalTransform.Scale.x() << ' '
-                << node.LocalTransform.Scale.y() << ' '
-                << node.LocalTransform.Scale.z() << '\n';
-            output << "behaviours " << node.Behaviours.size() << '\n';
-            for (const auto& binding : node.Behaviours)
+            output << "object " << std::quoted(gameObject.PersistentId.ToString()) << ' '
+                << std::quoted(gameObject.Name) << ' ' << static_cast<std::uint32_t>(gameObject.LogicLanguage) << ' '
+                << gameObject.LocalTransform.Position.x() << ' '
+                << gameObject.LocalTransform.Position.y() << ' '
+                << gameObject.LocalTransform.Position.z() << ' '
+                << gameObject.LocalTransform.Rotation.x() << ' '
+                << gameObject.LocalTransform.Rotation.y() << ' '
+                << gameObject.LocalTransform.Rotation.z() << ' '
+                << gameObject.LocalTransform.Rotation.w() << ' '
+                << gameObject.LocalTransform.Scale.x() << ' '
+                << gameObject.LocalTransform.Scale.y() << ' '
+                << gameObject.LocalTransform.Scale.z() << '\n';
+            output << "behaviours " << gameObject.Behaviours.size() << '\n';
+            for (const auto& binding : gameObject.Behaviours)
             {
                 output << "behaviour " << std::quoted(binding.Id.ToString()) << ' '
                     << std::quoted(binding.TypeName) << ' ' << static_cast<std::uint32_t>(binding.Language)
@@ -117,27 +118,29 @@ namespace NcmaEngine
             }
         }
 
-        std::size_t nodeCount = 0;
+        std::size_t objectCount = 0;
         if (!ReadLine(input, text, lineNumber))
         {
-            error = "Missing scene node count";
+            error = "Missing scene object count";
             return false;
         }
         {
             std::istringstream line(text);
             std::string keyword;
-            if (!(line >> keyword >> nodeCount) || keyword != "nodes" || nodeCount > 100000 || HasTrailingValue(line))
+            if (!(line >> keyword >> objectCount) || keyword != (parsed.Version < 4 ? "nodes" : "objects") || objectCount > 100000 || HasTrailingValue(line))
             {
-                error = "Invalid scene node count on line " + std::to_string(lineNumber);
+                error = "Invalid scene object count on line " + std::to_string(lineNumber);
                 return false;
             }
         }
-        parsed.Nodes.reserve(nodeCount);
-        for (std::size_t index = 0; index < nodeCount; ++index)
+        parsed.Objects.reserve(objectCount);
+        std::vector<std::string> legacyParents;
+        legacyParents.reserve(objectCount);
+        for (std::size_t index = 0; index < objectCount; ++index)
         {
             if (!ReadLine(input, text, lineNumber))
             {
-                error = "Scene ended before all nodes were read";
+                error = "Scene ended before all objects were read";
                 return false;
             }
             std::istringstream line(text);
@@ -145,43 +148,54 @@ namespace NcmaEngine
             std::string keyword;
             std::string uuidText;
             std::string parentText;
-            SceneNodeSnapshot node;
+            SceneObjectSnapshot gameObject;
+            std::uint32_t objectLanguage = 0;
             float rotationX = 0.0F;
             float rotationY = 0.0F;
             float rotationZ = 0.0F;
             float rotationW = 1.0F;
-            if (!(line >> keyword >> std::quoted(uuidText) >> std::quoted(parentText) >> std::quoted(node.Name)
-                >> node.LocalTransform.Position.x() >> node.LocalTransform.Position.y()
-                >> node.LocalTransform.Position.z() >> rotationX >> rotationY >> rotationZ >> rotationW
-                >> node.LocalTransform.Scale.x() >> node.LocalTransform.Scale.y()
-                >> node.LocalTransform.Scale.z()) || keyword != "node" || HasTrailingValue(line))
+            if (!(line >> keyword >> std::quoted(uuidText)) ||
+                (parsed.Version < 4 && !(line >> std::quoted(parentText))) ||
+                !(line >> std::quoted(gameObject.Name)) ||
+                (parsed.Version >= 5 && !(line >> objectLanguage)) ||
+                !(line >> gameObject.LocalTransform.Position.x() >> gameObject.LocalTransform.Position.y()
+                >> gameObject.LocalTransform.Position.z() >> rotationX >> rotationY >> rotationZ >> rotationW
+                >> gameObject.LocalTransform.Scale.x() >> gameObject.LocalTransform.Scale.y()
+                >> gameObject.LocalTransform.Scale.z()) || keyword != (parsed.Version < 4 ? "node" : "object") || HasTrailingValue(line))
             {
-                error = "Invalid scene node on line " + std::to_string(lineNumber);
+                error = "Invalid scene object on line " + std::to_string(lineNumber);
                 return false;
             }
             const auto uuid = SceneUuid::Parse(uuidText);
             if (!uuid.has_value())
             {
-                error = "Invalid node UUID on line " + std::to_string(lineNumber);
+                error = "Invalid object UUID on line " + std::to_string(lineNumber);
                 return false;
             }
-            node.PersistentId = *uuid;
-            if (!parentText.empty())
+            gameObject.PersistentId = *uuid;
+            if (objectLanguage != 0)
             {
-                node.ParentId = SceneUuid::Parse(parentText);
-                if (!node.ParentId.has_value())
-                {
-                    error = "Invalid parent UUID on line " + std::to_string(lineNumber);
-                    return false;
-                }
+                error = "Unsupported GameObject language; Python gameplay has been removed on line " + std::to_string(lineNumber);
+                return false;
             }
-            node.LocalTransform.Rotation = Quaternion(rotationW, rotationX, rotationY, rotationZ);
-            if (!IsFinite(node.LocalTransform) || node.LocalTransform.Rotation.squaredNorm() < 0.000001F)
+            gameObject.LogicLanguage = BehaviourLanguage::CSharp;
+            if (!parentText.empty() && !SceneUuid::Parse(parentText).has_value())
+            {
+                error = "Invalid parent UUID on line " + std::to_string(lineNumber);
+                return false;
+            }
+            if (!parentText.empty())
+                parentText = SceneUuid::Parse(parentText)->ToString();
+            legacyParents.push_back(std::move(parentText));
+            gameObject.LocalTransform.Rotation = Quaternion(rotationW, rotationX, rotationY, rotationZ);
+            if (!IsFinite(gameObject.LocalTransform) ||
+                !std::isfinite(gameObject.LocalTransform.Rotation.squaredNorm()) ||
+                gameObject.LocalTransform.Rotation.squaredNorm() < 0.000001F)
             {
                 error = "Invalid transform on line " + std::to_string(lineNumber);
                 return false;
             }
-            node.LocalTransform.Rotation.normalize();
+            gameObject.LocalTransform.Rotation.normalize();
             if (parsed.Version >= 2)
             {
                 std::size_t bindingCount = 0;
@@ -206,7 +220,12 @@ namespace NcmaEngine
                     const auto bindingId = SceneUuid::Parse(uuidText);
                     if (!bindingId) { error = "Invalid behaviour UUID"; return false; }
                     binding.Id = *bindingId;
-                    binding.Language = static_cast<BehaviourLanguage>(language);
+                    if (language != 0)
+                    {
+                        error = "Unsupported Behaviour language; Python gameplay has been removed on line " + std::to_string(lineNumber);
+                        return false;
+                    }
+                    binding.Language = BehaviourLanguage::CSharp;
                     binding.Enabled = enabled != 0;
                     for (std::size_t p = 0; p < propertyCount; ++p)
                     {
@@ -221,10 +240,10 @@ namespace NcmaEngine
                         property.Kind = static_cast<ExportKind>(kind);
                         binding.Properties.push_back(std::move(property));
                     }
-                    node.Behaviours.push_back(std::move(binding));
+                    gameObject.Behaviours.push_back(std::move(binding));
                 }
             }
-            parsed.Nodes.push_back(std::move(node));
+            parsed.Objects.push_back(std::move(gameObject));
         }
 
         while (ReadLine(input, text, lineNumber))
@@ -236,11 +255,63 @@ namespace NcmaEngine
             }
         }
 
+        // Legacy hierarchy is ingestion-only: bake the old engine's world TRS into independent objects.
+        // Queue traversal avoids recursion and accepts children appearing before their parents.
+        if (parsed.Version < 4)
+        {
+            std::unordered_map<std::string, std::size_t> indices;
+            for (std::size_t index = 0; index < parsed.Objects.size(); ++index)
+                if (!indices.emplace(parsed.Objects[index].PersistentId.ToString(), index).second)
+                {
+                    error = "Scene contains a duplicate GameObject UUID";
+                    return false;
+                }
+            std::vector<std::vector<std::size_t>> children(parsed.Objects.size());
+            std::vector<std::size_t> ready;
+            ready.reserve(parsed.Objects.size());
+            for (std::size_t index = 0; index < legacyParents.size(); ++index)
+            {
+                if (legacyParents[index].empty())
+                    ready.push_back(index);
+                else
+                {
+                    const auto parent = indices.find(legacyParents[index]);
+                    if (parent == indices.end())
+                    {
+                        error = "Legacy scene references a missing parent UUID";
+                        return false;
+                    }
+                    children[parent->second].push_back(index);
+                }
+            }
+            for (std::size_t cursor = 0; cursor < ready.size(); ++cursor)
+            {
+                const auto parentIndex = ready[cursor];
+                for (const auto childIndex : children[parentIndex])
+                {
+                    auto& transform = parsed.Objects[childIndex].LocalTransform;
+                    transform = Transform::Combine(parsed.Objects[parentIndex].LocalTransform, transform);
+                    if (!IsFinite(transform) || !std::isfinite(transform.Rotation.squaredNorm()) ||
+                        transform.Rotation.squaredNorm() < 0.000001F)
+                    {
+                        error = "Legacy world transform is not finite";
+                        return false;
+                    }
+                    transform.Rotation.normalize();
+                    ready.push_back(childIndex);
+                }
+            }
+            if (ready.size() != parsed.Objects.size())
+            {
+                error = "Legacy scene hierarchy contains a cycle";
+                return false;
+            }
+        }
+        parsed.Version = SceneSnapshotVersion;
         SceneWorld validator;
         if (!validator.RestoreSnapshot(parsed, error))
             return false;
-        parsed.Version = SceneSnapshotVersion;
-        snapshot = std::move(parsed);
+        snapshot = validator.CaptureSnapshot();
         error.clear();
         return true;
     }
@@ -257,6 +328,34 @@ namespace NcmaEngine
         if (filesystemError)
         {
             error = "Could not create scene directory: " + filesystemError.message();
+            return false;
+        }
+        // Loading never writes. Explicitly saving an old asset preserves its original bytes.
+        if (std::filesystem::exists(path, filesystemError))
+        {
+            std::ifstream existing(path, std::ios::binary);
+            if (!existing)
+            {
+                error = "Could not inspect existing scene before saving: " + path.string();
+                return false;
+            }
+            std::string header;
+            std::uint32_t version = 0;
+            if (existing >> header >> version; header == "NCMA_SCENE" && version >= 1 && version < SceneSnapshotVersion)
+            {
+                auto backup = path;
+                backup += ".v" + std::to_string(version) + "." + SceneUuid::New().ToString() + ".bak";
+                existing.close();
+                if (!std::filesystem::copy_file(path, backup, std::filesystem::copy_options::none, filesystemError))
+                {
+                    error = "Could not back up legacy scene before migration: " + filesystemError.message();
+                    return false;
+                }
+            }
+        }
+        if (filesystemError)
+        {
+            error = "Could not inspect scene before saving: " + filesystemError.message();
             return false;
         }
         std::ofstream output(path, std::ios::binary | std::ios::trunc);

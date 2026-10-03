@@ -18,7 +18,7 @@ public sealed class RotatorBehaviour : Behaviour
     protected override void OnUpdate(double deltaSeconds)
     {
         ElapsedSeconds += deltaSeconds;
-        Transform transform = Node.LocalTransform;
+        Transform transform = GameObject.LocalTransform;
         var rotation = new System.Numerics.Quaternion(
             transform.RotationX, transform.RotationY, transform.RotationZ, transform.RotationW);
         float angle = DegreesPerSecond * Multiplier * (Clockwise ? 1 : -1) * (float)deltaSeconds * MathF.PI / 180;
@@ -28,6 +28,6 @@ public sealed class RotatorBehaviour : Behaviour
         transform.RotationY = rotation.Y;
         transform.RotationZ = rotation.Z;
         transform.RotationW = rotation.W;
-        Node.LocalTransform = transform;
+        GameObject.LocalTransform = transform;
     }
 }

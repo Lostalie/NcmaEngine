@@ -1,5 +1,11 @@
 # Building NcmaEngine
 
+Target direction is now C# runtime/gameplay, independent Python modules and native performance
+plugins. The commands below still build the legacy C++ editor/SceneWorld and hostfxr C#
+gameplay path, plus the independent managed headless foundation. They do NOT produce a managed
+editor/Player or install pythonnet/gRPC/ZeroMQ.
+See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for the staged migration.
+
 ## Recommended Windows command
 
 Run this from an ordinary PowerShell or Command Prompt terminal at the repository root:
@@ -46,23 +52,23 @@ Requirements:
 
 - Visual Studio 2022 with **Desktop development with C++**
 - .NET 8 runtime and .NET 8 SDK or newer
-- A matching x64 CPython 3.10+ installation with development headers, import library, runtime DLL and standard library
+- Python 3.10+ only for optional CLI/MCP/tool checks (`-SkipPython` omits them); no development headers, import library or interpreter DLL is required by native targets.
 
-Third-party engine libraries are vendored under `engine/sdk`; builds do not download packages. The active core stack is Eigen 3.4.0, GLFW 3.5.0, Dear ImGui 1.91.9b, spdlog 1.15.3, Box2D 3.1.1, Jolt Physics 5.5.0, and ufbx 0.23.0. CPython is discovered from the installed SDK, not vendored. Its runtime DLL is copied under `out/`; the configured installation still supplies its standard library, so this is not standalone game packaging. CMake builds the engine dependencies from SDK sources and uses the dynamic MSVC runtime.
+Third-party engine libraries are vendored under `engine/sdk`; builds do not download packages. The active core stack is Eigen 3.4.0, GLFW 3.5.0, Dear ImGui 1.91.9b, spdlog 1.15.3, Box2D 3.1.1, Jolt Physics 5.5.0, and ufbx 0.23.0. Python gameplay embedding and interpreter DLL deployment have been removed. CMake builds the engine dependencies from SDK sources and uses the dynamic MSVC runtime.
 
 The `windows-msvc` CMake preset remains available for Visual Studio's native CMake integration. For command-line builds, use `Build.bat`; invoking the Ninja generator directly from a normal terminal does not initialize MSVC.
 
 ## C# scene authoring and reload
 
-C# and Python are equal gameplay-language choices. Both now support editor-preview node scripts.
-Choose the language per Behaviour attachment; project-wide default-language settings remain unimplemented.
-The following section describes C#. See [PYTHON_GAMEPLAY.md](PYTHON_GAMEPLAY.md) for Python.
+C# is the only gameplay language. Python gameplay SDK/host, creation language picker and reload
+entries have been removed. Python remains optional for independent specialized modules and plugins;
+see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader is implemented yet.
 
-1. Select a node (for example Character), then use Inspector > C# / Python Behaviours > + Add Behaviour.
+1. Select or create an object via + GameObject, then Inspector > C# Behaviours > + Add Behaviour.
 2. Choose `Ncma.Gameplay.Sample.RotatorBehaviour`. Speed, Clockwise and Multiplier are reflected
    from its public `[Export]` properties/field. Attach, remove, enable and property edits support Undo/Redo.
 3. Save with Ctrl+S to `assets/scenes/EditorScene.ncscene`. Ctrl+O reloads this scene.
-4. Play runs scripts on a scene copy. The reference cube previews the selected scripted node's
+4. Play runs scripts on a scene copy. The reference cube previews the selected scripted object's
    world Transform; Pause/Resume controls ticking and Stop discards runtime changes.
 5. After editing the sample C# source, run `Build.bat -GameplayOnly -Configuration Debug`, then
    press Ctrl+Shift+R or use Gameplay > Reload C# Assembly. Matching Export values survive rebind;
@@ -71,11 +77,12 @@ The following section describes C#. See [PYTHON_GAMEPLAY.md](PYTHON_GAMEPLAY.md)
 
 The full build updates native/host binaries, so close the editor before running a full build.
 GameplayOnly updates only the reloadable sample assembly in `out/managed`; it does not rebuild
-the engine/API or run the full verification suite. The full build runs nine CTest cases including
-animation runtime/ABI, FBX import/reference skinning, embedded host and hidden editor tests,
-plus managed/native smoke tests and the Python checks (ten animation/MCP tests with a real
-stdio server subprocess, three FBX tooling tests, three project-manifest tests and eight Python
-gameplay tests). Native coverage includes embedded Python, editor Python play mode and mixed-language scenes.
+the engine/API or run the full verification suite. The full build runs eight CTest cases including
+animation runtime/ABI, FBX import/reference skinning, C# host and hidden editor tests,
+including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases),
+plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v5 checks. Python gameplay
+removal is covered by rejecting language-tagged old scenes/ABI requests without modifying source
+files or destination Worlds. Passing this suite does not imply independent module transports exist.
 
 ## Action animation and AI controls
 
@@ -93,8 +100,19 @@ See [FBX_IMPORT.md](FBX_IMPORT.md) for import constraints and the read-only Pyth
 
 ## Project inspection manifest
 
-`python -m ncma_tools.cli inspect .` now emits project-manifest schema v2.
-`languages.gameplay` changed from a single string to an array of the two target language choices;
-consumers of schema v1 must adapt to this field type. The separate `gameplay.backends` entries
-report actual integration status: C# is integrated, Python gameplay is an integrated editor-preview slice.
+`python -m ncma_tools.cli inspect .` emits project-manifest schema v5.
+Target and implemented ownership remain separate: the EXE/SceneWorld are still native, but gameplay
+is actually C# only (`gameplay.csharp_only_runtime_enforced=true`). Python gameplay backend and
+object language selection are removed; `python_modules` preserves specialized-module/plugin options,
+with pythonnet/gRPC/ZeroMQ explicitly NOT implemented. The scene wire format remains v5;
+nonzero language tags (including disabled bindings/empty objects) are rejected rather than dropped
+or rewritten. GameObject semantic API is v4; base ABI and World Access ABI remain v1.
 The MCP protocol version and animation-state JSON schema are unchanged.
+
+## Independent C# runtime foundation
+
+Ncma.Runtime and Ncma.Runtime.Tests are included in NcmaEngine.sln and the canonical Build.bat path.
+The new library owns an independent headless World and shares no live state with the legacy editor.
+No NcmaNative, graphics or Python dependency is referenced. TreatWarningsAsErrors is enabled.
+Managed snapshot JSON v1 is NOT .ncscene v5; legacy import and managed Behaviour lifecycle are not implemented.
+Headless EditSession is a C# API, not yet an MCP/IPC server. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).

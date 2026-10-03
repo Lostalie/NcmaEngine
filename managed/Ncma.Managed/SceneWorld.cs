@@ -2,12 +2,15 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Ncma;
 
-public sealed class SceneWorld : IDisposable
+public sealed partial class SceneWorld : IDisposable
 {
     private readonly WorldHandle _handle;
+    private readonly int _ownerThread = Environment.CurrentManagedThreadId;
 
     public SceneWorld(string name = "Untitled")
     {
+        if (Native.GetAbiVersion() != 1 || Native.GetGameObjectApiVersion() != 4 || Native.GetWorldAccessApiVersion() != 1)
+            throw new InvalidOperationException("Native GameObject API mismatch; rebuild NcmaEngine.");
         _handle = new WorldHandle(Native.WorldCreate(name));
         if (_handle.IsInvalid)
             throw new InvalidOperationException(Native.GetLastError());
@@ -19,20 +22,31 @@ public sealed class SceneWorld : IDisposable
         _handle = new WorldHandle(borrowedHandle, ownsHandle: false);
     }
 
-    public Node CreateNode(string name, Node? parent = null)
+    public GameObject CreateObject(string name)
     {
-        ulong id = Native.WorldCreateNode(Handle, name, parent?.Id ?? 0);
+        ulong id = Native.WorldCreateObject(Handle, name, 0);
         if (id == 0)
             throw new InvalidOperationException(Native.GetLastError());
-        return new Node(this, id);
+        return new GameObject(this, id);
     }
 
-    public void Dispose() => _handle.Dispose();
+    public void Dispose()
+    {
+        VerifyThread();
+        _handle.Dispose();
+    }
+
+    private void VerifyThread()
+    {
+        if (Environment.CurrentManagedThreadId != _ownerThread)
+            throw new InvalidOperationException("World operations must run on the play-session thread.");
+    }
 
     internal nint Handle
     {
         get
         {
+            VerifyThread();
             ObjectDisposedException.ThrowIf(_handle.IsClosed, this);
             return _handle.DangerousGetHandle();
         }
@@ -50,17 +64,33 @@ public sealed class SceneWorld : IDisposable
     }
 }
 
-public sealed class Node
+public sealed class GameObject
 {
     private readonly SceneWorld _world;
 
-    internal Node(SceneWorld world, ulong id)
+    internal GameObject(SceneWorld world, ulong id)
     {
         _world = world;
         Id = id;
+        if (Native.WorldGetObjectReference(world.Handle, id, out ObjectReference reference) == 0)
+            throw new InvalidOperationException(Native.GetLastError());
+        Reference = reference;
     }
 
     public ulong Id { get; }
+    public ObjectReference Reference { get; }
+
+    public ObjectUuid PersistentId
+    {
+        get
+        {
+            if (Native.WorldGetObjectUuid(_world.Handle, Reference, out ulong high, out ulong low) == 0)
+                throw new InvalidOperationException(Native.GetLastError());
+            return new ObjectUuid(high, low);
+        }
+    }
+
+    public SceneWorld World => _world;
 
     public Transform LocalTransform
     {
@@ -77,6 +107,5 @@ public sealed class Node
         }
     }
 
-    public bool SetParent(Node? parent) => Native.WorldSetParent(_world.Handle, Id, parent?.Id ?? 0) != 0;
-    public bool Destroy(bool recursive = true) => Native.WorldDestroyNode(_world.Handle, Id, recursive ? (byte)1 : (byte)0) != 0;
+    public bool Destroy() => Native.WorldDestroyObject(_world.Handle, Id, 0) != 0;
 }

@@ -1,7 +1,10 @@
 # 动作游戏动画系统：首个运行时版本
 
 引擎方向：以角色模型、骨骼和动画驱动的动作游戏。参考 UE5 的状态机、
-姿势混合、Root Motion、Animation Notifies 的职责划分，独立实现 Ncma C++ 运行时。
+姿势混合、Root Motion、Animation Notifies 的职责划分。
+目标职责已调整：动画状态机、动作规则、通知分发和角色运动权威属于 C#；
+仅有性能依据的骨骼采样/混合/蒙皮等数值内核保留为 C++ 插件。
+下文记录当前已实现的 C++ 独立预览；托管动画系统与原生插件化尚未实现。
 这不是 UE 资产兼容层，也不是完整的 Animation Blueprint/Montage 实现。
 
 ## 已落地
@@ -72,15 +75,16 @@ bool hitWindow = state.RootElement.GetProperty("hit_window").GetBoolean();
 preview.Undo();
 ```
 
-这是独立预览会话，尚未自动挂载到 Node 或 SkinnedMeshComponent；不要将它误当作已完成的游戏角色组件。
+这是独立预览会话，尚未自动挂载到 GameObject 或 SkinnedMeshComponent；不要将它误当作已完成的游戏角色组件。
 
 ## 接下来按动作游戏需求排序
 
 1. FBX 骨架/动画/蒙皮读取与 CPU 线框预览已落地；接下来验证实际游戏角色，
    完成动画资产保存、SkinnedMeshComponent 和场景接入。角色格式优先 FBX，glTF 暂不优先。
 2. DX11 GPU 蒙皮与骨骼调试叠加；保留 API 无关数据，随后做 Vulkan 对等实现。
-3. C#/Python 共用的角色动画原生接口、两种语言的角色组件 + 固定步更新 + Jolt 角色碰撞器；
-   根运动经碰撞解算，通知驱动任选语言的游戏逻辑。Python 游戏脚本已接入预览，角色动画组件仍未实现。
+3. C# 角色动画/动作组件 + 固定步更新 + Jolt 插件适配；按性能需要批量调用原生姿势内核。
+   Python AI 只返回决策建议，不挂载角色 Behaviour 或持有动作/运动权威；
+   根运动经碰撞解算，通知驱动 C# 游戏逻辑。旧 Python 游戏脚本与预览已移除，正式角色动画组件仍未实现。
 4. 可持久化 AnimGraph/状态机编辑器、参数/条件、BlendSpace、分层遮罩、缓存姿势。
 5. 动作 Montage/Slot/Section、输入缓冲、打断优先级、连招分支和通知状态轨道。
 6. Motion Warping、足部/手部 IK、重定向；之后评估 Motion Matching，而不是现在宣称已支持。

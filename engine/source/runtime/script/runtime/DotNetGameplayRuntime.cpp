@@ -397,9 +397,10 @@ namespace NcmaEngine::Scripting
             runtime.LastError = error;
             return false;
         };
-        for (const auto& node : world.CaptureSnapshot().Nodes)
+        for (const auto& gameObject : world.CaptureSnapshot().Objects)
         {
-            for (const auto& binding : node.Behaviours)
+            if (gameObject.LogicLanguage != BehaviourLanguage::CSharp) continue;
+            for (const auto& binding : gameObject.Behaviours)
             {
                 if (binding.Language != BehaviourLanguage::CSharp) continue;
                 const auto type = std::find_if(runtime.Types.begin(), runtime.Types.end(), [&](const auto& item) {
@@ -407,7 +408,7 @@ namespace NcmaEngine::Scripting
                 });
                 if (type == runtime.Types.end()) return fail("Missing Behaviour type: " + binding.TypeName);
                 const int instance = runtime.CreateBehaviour(static_cast<int>(type - runtime.Types.begin()),
-                    world.FindNode(node.PersistentId), binding.Enabled ? 1 : 0, message.data(), capacity);
+                    world.FindObject(gameObject.PersistentId), binding.Enabled ? 1 : 0, message.data(), capacity);
                 if (instance < 0) return fail(message.data());
                 for (const auto& value : binding.Properties)
                 {

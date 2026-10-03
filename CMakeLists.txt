@@ -86,31 +86,6 @@ if(WIN32)
     target_link_libraries(NcmaCore PUBLIC d3d11 dxgi d3dcompiler advapi32)
 endif()
 
-if(WIN32)
-    find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter Development.Embed)
-    execute_process(COMMAND "${Python3_EXECUTABLE}" -c
-        "import sys; print(sys.base_prefix); print(sys.base_prefix + '/python' + str(sys.version_info.major) + str(sys.version_info.minor) + '.dll')"
-        OUTPUT_VARIABLE NCMA_PYTHON_RUNTIME_PATHS OUTPUT_STRIP_TRAILING_WHITESPACE
-        COMMAND_ERROR_IS_FATAL ANY)
-    string(REPLACE "\r" "" NCMA_PYTHON_RUNTIME_PATHS "${NCMA_PYTHON_RUNTIME_PATHS}")
-    string(REPLACE "\n" ";" NCMA_PYTHON_RUNTIME_PATHS "${NCMA_PYTHON_RUNTIME_PATHS}")
-    list(GET NCMA_PYTHON_RUNTIME_PATHS 0 NCMA_PYTHON_HOME)
-    list(GET NCMA_PYTHON_RUNTIME_PATHS 1 NCMA_PYTHON_DLL)
-    file(TO_CMAKE_PATH "${NCMA_PYTHON_HOME}" NCMA_PYTHON_HOME)
-    if(NOT EXISTS "${NCMA_PYTHON_DLL}")
-        message(FATAL_ERROR "CPython runtime DLL was not found: ${NCMA_PYTHON_DLL}")
-    endif()
-    add_library(NcmaPythonGameplay STATIC engine/source/runtime/script/runtime/PythonGameplayRuntime.cpp)
-    target_link_libraries(NcmaPythonGameplay PUBLIC NcmaCore PRIVATE Python3::Python)
-    target_compile_definitions(NcmaPythonGameplay PRIVATE NCMA_PYTHON_HOME="${NCMA_PYTHON_HOME}")
-    if(MSVC)
-        target_compile_options(NcmaPythonGameplay PRIVATE /W4 /permissive- /utf-8)
-    endif()
-    function(ncma_deploy_python target)
-        add_custom_command(TARGET ${target} POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${NCMA_PYTHON_DLL}" "$<TARGET_FILE_DIR:${target}>" VERBATIM)
-    endfunction()
-endif()
 
 target_include_directories(NcmaCore PUBLIC engine/source/runtime)
 target_link_libraries(NcmaCore PUBLIC Ncma::Eigen spdlog::spdlog box2d Jolt PRIVATE NcmaUfbx)
@@ -140,6 +115,10 @@ if(NCMA_BUILD_MANAGED)
     if(DOTNET_EXECUTABLE)
         add_custom_target(NcmaManaged
             COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/Ncma.Runtime.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
+                    --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Managed/Ncma.Managed.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
@@ -152,7 +131,7 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-            COMMENT "Building the C# gameplay API, host, and sample assembly"
+            COMMENT "Building the C# runtime foundation, gameplay API, host, and sample"
             VERBATIM
         )
     endif()
@@ -160,8 +139,8 @@ endif()
 
 if(NCMA_BUILD_TESTS)
     enable_testing()
-    add_executable(NcmaArchitectureTests tests/ArchitectureTests.cpp)
-    target_link_libraries(NcmaArchitectureTests PRIVATE NcmaCore)
+    add_executable(NcmaArchitectureTests tests/ArchitectureTests.cpp tests/SceneFlatTests.cpp tests/WorldAccessTests.cpp)
+    target_link_libraries(NcmaArchitectureTests PRIVATE NcmaCore NcmaNative)
     # Tests contain assertions with operations: keep these active in Release too.
     if(MSVC)
         target_compile_options(NcmaArchitectureTests PRIVATE /UNDEBUG)
@@ -170,6 +149,11 @@ if(NCMA_BUILD_TESTS)
     endif()
     add_test(NAME NcmaArchitectureTests COMMAND NcmaArchitectureTests)
     set_tests_properties(NcmaArchitectureTests PROPERTIES TIMEOUT 30)
+    if(NCMA_BUILD_MANAGED AND DOTNET_EXECUTABLE)
+        add_test(NAME NcmaManagedHeadlessTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Runtime.Tests.dll")
+        set_tests_properties(NcmaManagedHeadlessTests PROPERTIES TIMEOUT 30)
+    endif()
     add_executable(NcmaAnimationTests tests/AnimationTests.cpp)
     target_link_libraries(NcmaAnimationTests PRIVATE NcmaCore NcmaNative)
     if(MSVC)
@@ -185,18 +169,7 @@ if(NCMA_BUILD_TESTS)
         "${CMAKE_SOURCE_DIR}/tests/assets/fbx" "${CMAKE_SOURCE_DIR}/out/tests/fbx")
     if(WIN32)
         add_executable(NcmaManagedHostTests tests/ManagedHostTests.cpp)
-        target_link_libraries(NcmaManagedHostTests PRIVATE NcmaCore NcmaPythonGameplay)
-        ncma_deploy_python(NcmaManagedHostTests)
-        add_executable(NcmaPythonGameplayTests tests/PythonGameplayTests.cpp)
-        target_link_libraries(NcmaPythonGameplayTests PRIVATE NcmaPythonGameplay)
-        add_dependencies(NcmaPythonGameplayTests NcmaNative)
-        ncma_deploy_python(NcmaPythonGameplayTests)
-        if(MSVC)
-            target_compile_options(NcmaPythonGameplayTests PRIVATE /W4 /permissive- /utf-8)
-        endif()
-        add_test(NAME NcmaPythonGameplayTests COMMAND NcmaPythonGameplayTests
-            "${CMAKE_SOURCE_DIR}" "$<TARGET_FILE:NcmaNative>")
-        set_tests_properties(NcmaPythonGameplayTests PROPERTIES TIMEOUT 30)
+        target_link_libraries(NcmaManagedHostTests PRIVATE NcmaCore)
     endif()
 endif()
 
@@ -230,9 +203,8 @@ if(WIN32 AND NCMA_BUILD_EDITOR)
         engine/sdk/imgui/backends
     )
     target_compile_definitions(NcmaEditor PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(NcmaEditor PRIVATE NcmaCore NcmaPythonGameplay NcmaImGui glfw user32 gdi32 shell32 comdlg32)
+    target_link_libraries(NcmaEditor PRIVATE NcmaCore NcmaImGui glfw user32 gdi32 shell32 comdlg32)
     add_dependencies(NcmaEditor NcmaNative)
-    ncma_deploy_python(NcmaEditor)
     set_target_properties(NcmaEditor PROPERTIES
         OUTPUT_NAME "NcmaEngine"
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out/bin"
@@ -250,9 +222,6 @@ if(WIN32 AND NCMA_BUILD_EDITOR)
     if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaEditorSmokeTest COMMAND NcmaEditor --smoke-test)
         add_test(NAME NcmaEditorFbxSmokeTest COMMAND NcmaEditor --fbx-smoke-test)
-        add_test(NAME NcmaEditorPythonSmokeTest COMMAND NcmaEditor --python-gameplay-smoke-test)
-        set_tests_properties(NcmaEditorPythonSmokeTest PROPERTIES TIMEOUT 30
-            FAIL_REGULAR_EXPRESSION "Render pass .* failed")
         set_tests_properties(NcmaEditorFbxSmokeTest PROPERTIES TIMEOUT 30)
         set_tests_properties(NcmaEditorSmokeTest PROPERTIES TIMEOUT 20
             FAIL_REGULAR_EXPRESSION "Render pass .* failed")
@@ -261,8 +230,7 @@ if(WIN32 AND NCMA_BUILD_EDITOR)
             COMMAND NcmaManagedHostTests
                 "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Managed.Host.runtimeconfig.json"
                 "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Managed.Host.dll"
-                "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Gameplay.Sample.dll"
-                "${CMAKE_SOURCE_DIR}")
+                "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Gameplay.Sample.dll")
         set_tests_properties(NcmaManagedHostSmokeTest PROPERTIES TIMEOUT 20)
         add_test(NAME NcmaEditorGameplaySmokeTest COMMAND NcmaEditor --gameplay-smoke-test)
         set_tests_properties(NcmaEditorGameplaySmokeTest PROPERTIES TIMEOUT 30

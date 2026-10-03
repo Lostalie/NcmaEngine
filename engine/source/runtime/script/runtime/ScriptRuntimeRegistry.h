@@ -17,7 +17,6 @@ namespace NcmaEngine::Scripting
         [[nodiscard]] IScriptRuntime* Find(Language language) const;
         [[nodiscard]] std::vector<RuntimeDescriptor> Describe() const;
         [[nodiscard]] Language GetGameplayLanguage() const noexcept { return Language::CSharp; }
-        [[nodiscard]] Language GetToolsLanguage() const noexcept { return Language::Python; }
 
     private:
         std::unordered_map<Language, std::unique_ptr<IScriptRuntime>> m_Runtimes;

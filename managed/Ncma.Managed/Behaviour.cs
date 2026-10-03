@@ -3,7 +3,7 @@ namespace Ncma;
 /// <summary>Main gameplay extension point. The engine owns lifecycle invocation.</summary>
 public abstract class Behaviour
 {
-    public Node Node { get; internal set; } = null!;
+    public GameObject GameObject { get; internal set; } = null!;
 
     protected internal virtual void OnCreate() { }
     protected internal virtual void OnEnable() { }

@@ -8,14 +8,12 @@ namespace NcmaEngine::Scripting
 {
     enum class Language : std::uint8_t
     {
-        CSharp,
-        Python
+        CSharp
     };
 
     enum class RuntimeRole : std::uint8_t
     {
-        Gameplay,
-        ToolsAndAI
+        Gameplay
     };
 
     struct RuntimeDescriptor final

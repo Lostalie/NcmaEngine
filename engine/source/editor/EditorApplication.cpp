@@ -133,9 +133,9 @@ namespace NcmaEngine::Editor
 
     }
 
-    EditorApplication::EditorApplication(HINSTANCE instance, Rhi::BackendType backendType, bool smokeTest, bool gameplaySmokeTest, bool fbxSmokeTest, bool pythonSmokeTest)
+    EditorApplication::EditorApplication(HINSTANCE instance, Rhi::BackendType backendType, bool smokeTest, bool gameplaySmokeTest, bool fbxSmokeTest)
         : m_Instance(instance), m_FbxSmokeTest(fbxSmokeTest), m_SmokeTest(smokeTest), m_GameplaySmokeTest(gameplaySmokeTest),
-          m_PythonSmokeTest(pythonSmokeTest), m_BackendType(backendType)
+          m_BackendType(backendType)
     {
         std::array<wchar_t, 32768> modulePath{};
         const DWORD pathLength = GetModuleFileNameW(
@@ -186,21 +186,21 @@ namespace NcmaEngine::Editor
             if (m_SmokeTest && m_RenderedFrames >= 3)
                 m_Running = false;
         }
-        if (m_GameplaySmokeTest || m_PythonSmokeTest)
+        if (m_GameplaySmokeTest)
         {
-            const auto& runtimeError = m_PythonSmokeTest ? m_PythonRuntime->GetLastError() : m_GameplayRuntime->GetLastError();
+            const auto& runtimeError = m_GameplayRuntime->GetLastError();
             if (!m_PlayScene || !m_ScenePlaying || !runtimeError.empty()) return 2;
-            const auto playNode = m_PlayScene->FindNode(m_Scene.GetPersistentId(m_SelectedNode));
-            if (m_PlayScene->GetLocalTransform(playNode).Rotation.isApprox(Quaternion::Identity())) return 3;
-            if (m_PythonSmokeTest) ReloadPythonGameplay(); else ReloadGameplay();
-            const int count = m_PythonSmokeTest ? m_PythonRuntime->GetBehaviourCount() : m_GameplayRuntime->GetBehaviourCount();
+            const auto playObject = m_PlayScene->FindObject(m_Scene.GetPersistentId(m_SelectedObject));
+            if (m_PlayScene->GetLocalTransform(playObject).Rotation.isApprox(Quaternion::Identity())) return 3;
+            ReloadGameplay();
+            const int count = m_GameplayRuntime->GetBehaviourCount();
             if (!m_ScenePlaying || count != 1) return 4;
             TogglePlay();
-            if (!m_Scene.GetLocalTransform(m_SelectedNode).Rotation.isApprox(Quaternion::Identity())) return 5;
+            if (!m_Scene.GetLocalTransform(m_SelectedObject).Rotation.isApprox(Quaternion::Identity())) return 5;
             UndoSceneEdit();
-            if (!m_Scene.GetBehaviours(m_SelectedNode).empty()) return 6;
+            if (!m_Scene.GetBehaviours(m_SelectedObject).empty()) return 6;
             RedoSceneEdit();
-            if (m_Scene.GetBehaviours(m_SelectedNode).size() != 1) return 7;
+            if (m_Scene.GetBehaviours(m_SelectedObject).size() != 1) return 7;
         }
         if (m_FbxSmokeTest)
         {
@@ -231,15 +231,6 @@ namespace NcmaEngine::Editor
             m_ProjectRoot / "out" / "managed" / "Ncma.Managed.Host.runtimeconfig.json",
             m_ProjectRoot / "out" / "managed" / "Ncma.Managed.Host.dll",
             m_ProjectRoot / "out" / "managed" / "Ncma.Gameplay.Sample.dll");
-        m_PythonRuntime = std::make_unique<Scripting::PythonGameplayRuntime>(
-            m_ProjectRoot, m_ProjectRoot / "out" / "managed" / "NcmaNative.dll");
-        if (!m_SmokeTest || m_PythonSmokeTest)
-        {
-            std::string pythonError;
-            if (m_PythonRuntime->Start(pythonError))
-                AppendLog(std::format("Python gameplay ready: {} Behaviour types", m_PythonRuntime->GetTypes().size()));
-            else AppendLog("Python gameplay unavailable: " + pythonError);
-        }
         if (!m_SmokeTest || m_GameplaySmokeTest)
         {
             std::string gameplayError;
@@ -252,22 +243,13 @@ namespace NcmaEngine::Editor
         {
             if (!m_GameplayRuntime->IsStarted() || m_GameplayRuntime->GetTypes().empty()) return false;
             ExecuteSceneMutation("Attach Behaviour", [this] {
-                m_Scene.GetBehaviours(m_SelectedNode).push_back(m_GameplayRuntime->GetTypes().front().CreateBinding());
-            });
-            TogglePlay();
-            if (!m_ScenePlaying) return false;
-        }
-        if (m_PythonSmokeTest)
-        {
-            if (!m_PythonRuntime->IsStarted() || m_PythonRuntime->GetTypes().empty()) return false;
-            ExecuteSceneMutation("Attach Python Behaviour", [this] {
-                m_Scene.GetBehaviours(m_SelectedNode).push_back(m_PythonRuntime->GetTypes().front().CreateBinding());
+                m_Scene.AddBehaviour(m_SelectedObject, m_GameplayRuntime->GetTypes().front().CreateBinding());
             });
             TogglePlay();
             if (!m_ScenePlaying) return false;
         }
         AppendLog(std::format("NcmaEditor initialized with {}", m_Renderer->GetName()));
-        AppendLog("C# / Python gameplay use the same native scene ABI; Python also provides tools and AI adapters");
+        AppendLog("C# gameplay; Python is reserved for independent modules and tools");
         return true;
     }
 
@@ -1114,7 +1096,6 @@ float4 PSMain(PixelInput input) : SV_TARGET
     void EditorApplication::Shutdown() noexcept
     {
         if (m_GameplayRuntime) m_GameplayRuntime->Stop();
-        if (m_PythonRuntime) m_PythonRuntime->Stop();
         m_PlayScene.reset();
         if (m_ImGuiInitialized)
         {
@@ -1186,18 +1167,14 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::CreateSampleScene()
     {
-        const NodeId world = m_Scene.CreateNode("World");
-        const NodeId environment = m_Scene.CreateNode("Environment", world);
-        const NodeId light = m_Scene.CreateNode("Directional Light", environment);
-        const NodeId camera = m_Scene.CreateNode("Main Camera", world);
-        const NodeId character = m_Scene.CreateNode("Character", world);
-        (void)m_Scene.CreateNode("Visual", character);
-        (void)m_Scene.CreateNode("Animation Graph", character);
-        (void)m_Scene.CreateNode("HUD", world);
+        const GameObjectId light = m_Scene.CreateObject("Directional Light");
+        const GameObjectId camera = m_Scene.CreateObject("Main Camera");
+        const GameObjectId character = m_Scene.CreateObject("Character");
+        (void)m_Scene.CreateObject("HUD");
 
         m_Scene.GetLocalTransform(light).Rotation = Quaternion(0.90F, -0.25F, 0.35F, 0.0F).normalized();
         m_Scene.GetLocalTransform(camera).Position = {0.0F, 2.4F, -6.0F};
-        m_SelectedNode = character;
+        m_SelectedObject = character;
     }
 
     void EditorApplication::BeginFrame()
@@ -1215,23 +1192,21 @@ float4 PSMain(PixelInput input) : SV_TARGET
                 std::clamp(static_cast<double>(ImGui::GetIO().DeltaTime), 0.0, std::min(0.1, m_FbxPreview.Player->Clip().Duration * 64))); }
             catch (const std::exception& error) { m_FbxPreview.Paused = true; m_FbxError = error.what(); }
         }
+        const bool updateGameplay = m_ScenePlaying && !m_ScenePaused && m_PlayScene;
+        if (updateGameplay) m_PlayScene->BeginGameplayPhase();
         if (m_ScenePlaying && !m_ScenePaused && m_GameplayRuntime && m_GameplayRuntime->IsStarted())
         {
-            m_GameplayRuntime->Tick((m_GameplaySmokeTest || m_PythonSmokeTest) ? 1.0 / 60.0 : ImGui::GetIO().DeltaTime);
+            m_GameplayRuntime->Tick((m_GameplaySmokeTest) ? 1.0 / 60.0 : ImGui::GetIO().DeltaTime);
             if (!m_GameplayRuntime->GetLastError().empty())
             {
                 AppendLog("C# gameplay paused: " + m_GameplayRuntime->GetLastError());
                 m_ScenePaused = true;
             }
         }
-        if (m_ScenePlaying && !m_ScenePaused && m_PythonRuntime && m_PythonRuntime->IsStarted())
+        if (updateGameplay)
         {
-            m_PythonRuntime->Tick((m_GameplaySmokeTest || m_PythonSmokeTest) ? 1.0 / 60.0 : ImGui::GetIO().DeltaTime);
-            if (!m_PythonRuntime->GetLastError().empty())
-            {
-                AppendLog("Python gameplay paused: " + m_PythonRuntime->GetLastError());
-                m_ScenePaused = true;
-            }
+            if (m_ScenePaused) m_PlayScene->AbortGameplayPhase();
+            else m_PlayScene->CommitGameplayPhase();
         }
     }
 
@@ -1245,7 +1220,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
         const float menuHeight = ImGui::GetFrameHeight();
         RECT workArea{0, static_cast<LONG>(menuHeight), width, height};
         RenderToolbar(workArea);
-        RenderHierarchy(workArea);
+        RenderSceneObjects(workArea);
         RenderViewport(workArea);
         RenderInspector(workArea);
         RenderBottomPanel(workArea);
@@ -1288,13 +1263,13 @@ float4 PSMain(PixelInput input) : SV_TARGET
         m_PreviewCubeModel.block<3, 3>(0, 0) =
             (Eigen::AngleAxisf(m_PreviewRotation, Vector3::UnitY()) *
              Eigen::AngleAxisf(-0.35F, Vector3::UnitX())).toRotationMatrix();
-        // The reference mesh represents the selected scripted node until mesh components land.
-        if (m_Scene.Contains(m_SelectedNode) && !m_Scene.GetBehaviours(m_SelectedNode).empty())
+        // The reference mesh represents the selected scripted gameObject until mesh components land.
+        if (m_Scene.Contains(m_SelectedObject) && !m_Scene.GetBehaviours(m_SelectedObject).empty())
         {
             const SceneWorld& previewScene = m_PlayScene ? *m_PlayScene : m_Scene;
-            const NodeId previewNode = previewScene.FindNode(m_Scene.GetPersistentId(m_SelectedNode));
-            if (previewScene.Contains(previewNode))
-                m_PreviewCubeModel = previewScene.GetWorldTransform(previewNode).ToMatrix();
+            const GameObjectId previewObject = previewScene.FindObject(m_Scene.GetPersistentId(m_SelectedObject));
+            if (previewScene.Contains(previewObject))
+                m_PreviewCubeModel = previewScene.GetWorldTransform(previewObject).ToMatrix();
         }
         m_PreviewGroundModel = Matrix4::Identity();
         Matrix4 view = Matrix4::Identity();
@@ -1530,14 +1505,11 @@ float4 PSMain(PixelInput input) : SV_TARGET
             ImGui::TextDisabled(loaded ? "C# host: READY" : "C# host: STOPPED");
             if (ImGui::MenuItem("Reload C# Assembly", "Ctrl+Shift+R", false, m_GameplayRuntime != nullptr))
                 requestReload = true;
-            ImGui::TextDisabled(m_PythonRuntime && m_PythonRuntime->IsStarted() ? "Python host: READY" : "Python host: STOPPED");
-            if (ImGui::MenuItem("Reload Python Scripts", nullptr, false, m_PythonRuntime != nullptr))
-                ReloadPythonGameplay();
             ImGui::EndMenu();
         }
         ImGui::Separator();
         ImGui::TextColored(Color(166, 145, 255), "NcmaEngine");
-        ImGui::TextDisabled("  C++20 | C# / Python Gameplay | %s",
+        ImGui::TextDisabled("  C++20 | C# Gameplay | Python Modules | %s",
             Rhi::RenderBackendRegistry::ToString(m_BackendType).data());
         ImGui::EndMainMenuBar();
         if (m_ScenePlaying)
@@ -1586,45 +1558,33 @@ float4 PSMain(PixelInput input) : SV_TARGET
         ImGui::End();
     }
 
-    void EditorApplication::RenderHierarchy(const RECT& workArea)
+    void EditorApplication::RenderSceneObjects(const RECT& workArea)
     {
         const float toolbarBottom = static_cast<float>(workArea.top) + 48.0F;
         const float statusHeight = 27.0F;
         const float bottomHeight = m_ShowAssets ? 225.0F : 0.0F;
         const float width = 265.0F;
-        SetFixedWindow("Scene Hierarchy", 0.0F, toolbarBottom, width,
+        SetFixedWindow("Scene Objects", 0.0F, toolbarBottom, width,
             static_cast<float>(workArea.bottom) - toolbarBottom - bottomHeight - statusHeight);
         ImGui::BeginDisabled(m_ScenePlaying);
-        if (ImGui::Button("+ Node"))
-            CreateChildNode();
+        if (ImGui::Button("+ GameObject")) CreateSceneObject();
         ImGui::SameLine();
         if (ImGui::Button("Delete"))
-            DeleteSelectedNode();
+            DeleteSelectedObject();
         ImGui::EndDisabled();
         ImGui::Separator();
-        for (const NodeId root : m_Scene.GetRoots())
-            RenderHierarchyNode(root);
+        for (const GameObjectId gameObject : m_Scene.GetObjects())
+            RenderSceneObject(gameObject);
         ImGui::End();
     }
 
-    void EditorApplication::RenderHierarchyNode(NodeId node)
+    void EditorApplication::RenderSceneObject(GameObjectId gameObject)
     {
-        const auto& children = m_Scene.GetChildren(node);
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-        if (children.empty())
-            flags |= ImGuiTreeNodeFlags_Leaf;
-        if (node == m_SelectedNode)
-            flags |= ImGuiTreeNodeFlags_Selected;
-        const bool open = ImGui::TreeNodeEx(reinterpret_cast<void*>(static_cast<std::uintptr_t>(node)), flags,
-            "%s", m_Scene.GetNodeName(node).c_str());
-        if (ImGui::IsItemClicked())
-            SelectNode(node);
-        if (open)
-        {
-            for (const NodeId child : children)
-                RenderHierarchyNode(child);
-            ImGui::TreePop();
-        }
+        ImGui::PushID(reinterpret_cast<void*>(static_cast<std::uintptr_t>(gameObject)));
+        const auto label = m_Scene.GetObjectName(gameObject) + " [C#]";
+        if (ImGui::Selectable(label.c_str(), gameObject == m_SelectedObject))
+            SelectObject(gameObject);
+        ImGui::PopID();
     }
 
     void EditorApplication::RenderViewport(const RECT& workArea)
@@ -1662,7 +1622,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
         draw->AddLine({center.x, center.y}, {center.x + 115.0F, center.y}, IM_COL32(236, 86, 95, 255), 3.0F);
         draw->AddLine({center.x, center.y}, {center.x, center.y - 115.0F}, IM_COL32(91, 212, 125, 255), 3.0F);
         draw->AddLine({center.x, center.y}, {center.x - 62.0F, center.y + 72.0F}, IM_COL32(83, 142, 245, 255), 3.0F);
-        const char* text = m_SelectedNode == InvalidNodeId ? "No selection" : m_Scene.GetNodeName(m_SelectedNode).c_str();
+        const char* text = m_SelectedObject == InvalidGameObjectId ? "No selection" : m_Scene.GetObjectName(m_SelectedObject).c_str();
         draw->AddText({topLeft.x + 12.0F, topLeft.y + 10.0F}, IM_COL32(214, 219, 232, 255), text);
         ImGui::Dummy(size);
         ImGui::End();
@@ -1676,33 +1636,34 @@ float4 PSMain(PixelInput input) : SV_TARGET
         const float bottomHeight = m_ShowAssets ? 225.0F : 0.0F;
         SetFixedWindow("Inspector", static_cast<float>(workArea.right) - width, toolbarBottom, width,
             static_cast<float>(workArea.bottom) - toolbarBottom - bottomHeight - statusHeight);
-        if (m_SelectedNode == InvalidNodeId || !m_Scene.Contains(m_SelectedNode))
+        if (m_SelectedObject == InvalidGameObjectId || !m_Scene.Contains(m_SelectedObject))
         {
-            ImGui::TextDisabled("Select a scene node to inspect it.");
+            ImGui::TextDisabled("Select a scene gameObject to inspect it.");
             ImGui::End();
             return;
         }
 
         std::array<char, 128> nameBuffer{};
-        std::snprintf(nameBuffer.data(), nameBuffer.size(), "%s", m_Scene.GetNodeName(m_SelectedNode).c_str());
-        ImGui::TextDisabled("NODE");
+        std::snprintf(nameBuffer.data(), nameBuffer.size(), "%s", m_Scene.GetObjectName(m_SelectedObject).c_str());
+        ImGui::TextDisabled("GAME OBJECT");
+        ImGui::TextDisabled("Gameplay: C#");
         ImGui::BeginDisabled(m_ScenePlaying);
         const bool nameChanged = ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size());
         if (ImGui::IsItemActivated())
             BeginInspectorEdit();
         if (nameChanged)
-            m_Scene.SetNodeName(m_SelectedNode, nameBuffer.data());
+            m_Scene.SetObjectName(m_SelectedObject, nameBuffer.data());
         if (ImGui::IsItemDeactivated())
-            CommitInspectorEdit("Rename Node");
+            CommitInspectorEdit("Rename GameObject");
 
         ImGui::SeparatorText("Transform");
-        Transform& transform = m_Scene.GetLocalTransform(m_SelectedNode);
+        Transform& transform = m_Scene.GetLocalTransform(m_SelectedObject);
         if (m_ScenePlaying && m_PlayScene)
         {
-            const auto playNode = m_PlayScene->FindNode(m_Scene.GetPersistentId(m_SelectedNode));
-            if (m_PlayScene->Contains(playNode))
+            const auto playObject = m_PlayScene->FindObject(m_Scene.GetPersistentId(m_SelectedObject));
+            if (m_PlayScene->Contains(playObject))
             {
-                const auto& live = m_PlayScene->GetLocalTransform(playNode);
+                const auto& live = m_PlayScene->GetLocalTransform(playObject);
                 ImGui::TextDisabled("Live rotation: %.3f %.3f %.3f %.3f",
                     live.Rotation.x(), live.Rotation.y(), live.Rotation.z(), live.Rotation.w());
             }
@@ -1716,21 +1677,21 @@ float4 PSMain(PixelInput input) : SV_TARGET
         if (positionChanged)
             transform.Position = {position[0], position[1], position[2]};
         if (ImGui::IsItemDeactivated())
-            CommitInspectorEdit("Move Node");
+            CommitInspectorEdit("Move GameObject");
         const bool rotationChanged = ImGui::DragFloat4("Rotation", rotation, 0.01F);
         if (ImGui::IsItemActivated())
             BeginInspectorEdit();
         if (rotationChanged)
             transform.Rotation = Quaternion(rotation[3], rotation[0], rotation[1], rotation[2]).normalized();
         if (ImGui::IsItemDeactivated())
-            CommitInspectorEdit("Rotate Node");
+            CommitInspectorEdit("Rotate GameObject");
         const bool scaleChanged = ImGui::DragFloat3("Scale", scale, 0.02F, 0.001F, 100.0F);
         if (ImGui::IsItemActivated())
             BeginInspectorEdit();
         if (scaleChanged)
             transform.Scale = {scale[0], scale[1], scale[2]};
         if (ImGui::IsItemDeactivated())
-            CommitInspectorEdit("Scale Node");
+            CommitInspectorEdit("Scale GameObject");
         ImGui::EndDisabled();
         RenderBehaviourInspector();
 
@@ -1783,43 +1744,45 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::RenderBehaviourInspector()
     {
-        ImGui::SeparatorText("C# / Python Behaviours");
+        ImGui::SeparatorText("C# Behaviours");
         ImGui::BeginDisabled(m_ScenePlaying);
         std::vector<const Scripting::BehaviourDescriptor*> types;
         if (m_GameplayRuntime && m_GameplayRuntime->IsStarted())
-            for (const auto& type : m_GameplayRuntime->GetTypes()) types.push_back(&type);
-        if (m_PythonRuntime && m_PythonRuntime->IsStarted())
-            for (const auto& type : m_PythonRuntime->GetTypes()) types.push_back(&type);
+            for (const auto& type : m_GameplayRuntime->GetTypes())
+                types.push_back(&type);
         const bool ready = !types.empty();
         ImGui::BeginDisabled(!ready);
         if (ImGui::Button("+ Add Behaviour", {-1.0F, 26.0F})) ImGui::OpenPopup("AddBehaviour");
         if (ImGui::BeginPopup("AddBehaviour"))
         {
             for (const auto* type : types)
-                if (ImGui::MenuItem((type->TypeName + (type->Language == BehaviourLanguage::Python ? " [Python]" : " [C#]")).c_str()))
+                if (ImGui::MenuItem((type->TypeName + " [C#]").c_str()))
                     ExecuteSceneMutation("Attach Behaviour", [&] {
-                        m_Scene.GetBehaviours(m_SelectedNode).push_back(type->CreateBinding());
+                        m_Scene.AddBehaviour(m_SelectedObject, type->CreateBinding());
                     });
             ImGui::EndPopup();
         }
         ImGui::EndDisabled();
-        if (!ready) ImGui::TextDisabled("Load C# or Python types from the Gameplay menu.");
-        auto& bindings = m_Scene.GetBehaviours(m_SelectedNode);
+        if (!ready) ImGui::TextDisabled("Load C# types from the Gameplay menu.");
+        auto bindings = m_Scene.GetBehaviours(m_SelectedObject);
         for (std::size_t index = 0; index < bindings.size(); ++index)
         {
             auto& binding = bindings[index];
             ImGui::PushID(binding.Id.ToString().c_str());
             ImGui::Separator();
             ImGui::TextWrapped("%s", binding.TypeName.c_str());
-            ImGui::TextDisabled("%s", binding.Language == BehaviourLanguage::Python ? "Python" : "C#");
+            ImGui::TextDisabled("C#");
             bool enabled = binding.Enabled;
             if (ImGui::Checkbox("Enabled", &enabled))
-                ExecuteSceneMutation("Enable Behaviour", [&] { binding.Enabled = enabled; });
+                ExecuteSceneMutation("Enable Behaviour", [&] {
+                    binding.Enabled = enabled;
+                    m_Scene.UpdateBehaviour(m_SelectedObject, binding);
+                });
             ImGui::SameLine();
             if (ImGui::SmallButton("Remove"))
             {
                 ExecuteSceneMutation("Remove Behaviour", [&] {
-                    bindings.erase(bindings.begin() + static_cast<std::ptrdiff_t>(index));
+                    (void)m_Scene.RemoveBehaviour(m_SelectedObject, binding.Id);
                 });
                 ImGui::PopID();
                 break;
@@ -1848,6 +1811,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
                             refreshed.push_back(old == binding.Properties.end() ? metadata.Default : *old);
                         }
                         binding.Properties = std::move(refreshed);
+                        m_Scene.UpdateBehaviour(m_SelectedObject, binding);
                     });
             }
             for (auto& property : binding.Properties)
@@ -1875,7 +1839,11 @@ float4 PSMain(PixelInput input) : SV_TARGET
                 else
                     changed = ImGui::DragScalar(label.c_str(), ImGuiDataType_Double, &value, 0.1F);
                 if (ImGui::IsItemActivated()) BeginInspectorEdit();
-                if (changed && ValidExportValue({property.Name, property.Kind, value})) property.Value = value;
+                if (changed && ValidExportValue({property.Name, property.Kind, value}))
+                {
+                    property.Value = value;
+                    m_Scene.UpdateBehaviour(m_SelectedObject, binding);
+                }
                 if (ImGui::IsItemDeactivated() || (changed && property.Kind == ExportKind::Boolean))
                     CommitInspectorEdit("Edit Export Property");
                 ImGui::PopID();
@@ -1939,36 +1907,35 @@ float4 PSMain(PixelInput input) : SV_TARGET
             static_cast<float>(workArea.right), height);
         ImGui::TextColored(Color(105, 210, 149), m_SceneHistory.IsDirty() ? "Modified" : "Saved");
         ImGui::SameLine();
-        ImGui::TextDisabled("| Nodes: %zu | Backend: %s | Agent capabilities: schema-ready",
+        ImGui::TextDisabled("| Objects: %zu | Backend: %s | Agent capabilities: schema-ready",
             m_Scene.Size(), Rhi::RenderBackendRegistry::ToString(m_BackendType).data());
         ImGui::End();
     }
 
-    void EditorApplication::SelectNode(NodeId node)
+    void EditorApplication::SelectObject(GameObjectId gameObject)
     {
-        CommitInspectorEdit("Edit Node");
-        m_SelectedNode = node;
+        CommitInspectorEdit("Edit GameObject");
+        m_SelectedObject = gameObject;
     }
 
-    void EditorApplication::CreateChildNode()
+    void EditorApplication::CreateSceneObject()
     {
-        ExecuteSceneMutation("Create Node", [this] {
-            const NodeId parent = m_Scene.Contains(m_SelectedNode) ? m_SelectedNode : InvalidNodeId;
-            m_SelectedNode = m_Scene.CreateNode("New Node", parent);
+        ExecuteSceneMutation("Create GameObject", [this] {
+            m_SelectedObject = m_Scene.CreateObject("New GameObject");
         });
-        AppendLog("Created node 'New Node'");
+        AppendLog("Created C# GameObject");
     }
 
-    void EditorApplication::DeleteSelectedNode()
+    void EditorApplication::DeleteSelectedObject()
     {
-        if (m_SelectedNode == InvalidNodeId)
+        if (m_SelectedObject == InvalidGameObjectId)
             return;
-        const std::string name = m_Scene.GetNodeName(m_SelectedNode);
-        ExecuteSceneMutation("Delete Node", [this] {
-            (void)m_Scene.DestroyNode(m_SelectedNode);
-            m_SelectedNode = InvalidNodeId;
+        const std::string name = m_Scene.GetObjectName(m_SelectedObject);
+        ExecuteSceneMutation("Delete GameObject", [this] {
+            (void)m_Scene.DestroyObject(m_SelectedObject);
+            m_SelectedObject = InvalidGameObjectId;
         });
-        AppendLog(std::format("Deleted node '{}'", name));
+        AppendLog(std::format("Deleted gameObject '{}'", name));
     }
 
     void EditorApplication::NewScene()
@@ -1978,14 +1945,14 @@ float4 PSMain(PixelInput input) : SV_TARGET
             empty.Name = "Untitled";
             std::string error;
             (void)m_Scene.RestoreSnapshot(empty, error);
-            m_SelectedNode = m_Scene.CreateNode("World");
+            m_SelectedObject = InvalidGameObjectId;
         });
         AppendLog("Created a new scene");
     }
 
     void EditorApplication::OpenScene()
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         SceneSnapshot snapshot;
         std::string error;
         if (!SceneSerializer::Load(m_ScenePath, snapshot, error))
@@ -1999,8 +1966,8 @@ float4 PSMain(PixelInput input) : SV_TARGET
             AppendLog(error);
             return;
         }
-        const auto roots = m_Scene.GetRoots();
-        m_SelectedNode = roots.empty() ? InvalidNodeId : roots.front();
+        const auto objects = m_Scene.GetObjects();
+        m_SelectedObject = objects.empty() ? InvalidGameObjectId : objects.front();
         m_SceneHistory.Push("Open Scene", before, CaptureEditorState());
         m_SceneHistory.MarkSaved();
         AppendLog(std::format("Opened scene '{}'", m_ScenePath.string()));
@@ -2008,7 +1975,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::SaveScene()
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         std::string error;
         if (!SceneSerializer::Save(m_ScenePath, m_Scene.CaptureSnapshot(), error))
         {
@@ -2021,7 +1988,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::UndoSceneEdit()
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         if (!m_SceneHistory.CanUndo())
             return;
         const std::string label = m_SceneHistory.UndoLabel();
@@ -2038,7 +2005,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::RedoSceneEdit()
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         if (!m_SceneHistory.CanRedo())
             return;
         const std::string label = m_SceneHistory.RedoLabel();
@@ -2055,7 +2022,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::TogglePlay()
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         if (m_ScenePlaying)
         {
             StopGameplay();
@@ -2065,33 +2032,28 @@ float4 PSMain(PixelInput input) : SV_TARGET
         std::string error;
         auto playScene = std::make_unique<SceneWorld>();
         const auto snapshot = m_Scene.CaptureSnapshot();
-        bool hasCSharp = false, hasPython = false;
-        for (const auto& node : snapshot.Nodes)
-            for (const auto& binding : node.Behaviours)
+        bool hasCSharp = false;
+        for (const auto& gameObject : snapshot.Objects)
+            for (const auto& binding : gameObject.Behaviours)
             {
                 hasCSharp = hasCSharp || binding.Language == BehaviourLanguage::CSharp;
-                hasPython = hasPython || binding.Language == BehaviourLanguage::Python;
             }
         if (!playScene->RestoreSnapshot(snapshot, error) ||
-            (hasCSharp && !m_GameplayRuntime->BindScene(*playScene, error)) ||
-            (hasPython && !m_PythonRuntime->BindScene(*playScene, error)))
+            (hasCSharp && !m_GameplayRuntime->BindScene(*playScene, error)))
         {
             if (m_GameplayRuntime) m_GameplayRuntime->EndScene();
-            if (m_PythonRuntime) m_PythonRuntime->EndScene();
-            AppendLog("Could not enter play mode: " + error);
+                AppendLog("Could not enter play mode: " + error);
             return;
         }
         m_PlayScene = std::move(playScene);
         m_ScenePlaying = true;
         m_ScenePaused = false;
-        AppendLog(std::format("Playing {} C# and {} Python Behaviour(s)",
-            m_GameplayRuntime->GetBehaviourCount(), m_PythonRuntime->GetBehaviourCount()));
+        AppendLog(std::format("Playing {} C# Behaviour(s)", m_GameplayRuntime->GetBehaviourCount()));
     }
 
     void EditorApplication::StopGameplay()
     {
         if (m_GameplayRuntime) m_GameplayRuntime->EndScene();
-        if (m_PythonRuntime) m_PythonRuntime->EndScene();
         m_PlayScene.reset();
         m_ScenePlaying = false;
         m_ScenePaused = false;
@@ -2120,24 +2082,10 @@ float4 PSMain(PixelInput input) : SV_TARGET
         }
     }
 
-    void EditorApplication::ReloadPythonGameplay()
-    {
-        if (!m_PythonRuntime) return;
-        std::string error;
-        if (!m_PythonRuntime->Reload(error) ||
-            (m_ScenePlaying && m_PlayScene && !m_PythonRuntime->BindScene(*m_PlayScene, error)))
-        {
-            AppendLog("Python reload/rebind failed: " + error);
-            StopGameplay();
-            return;
-        }
-        AppendLog(std::format("Reloaded Python gameplay: {} types", m_PythonRuntime->GetTypes().size()));
-    }
-
     void EditorApplication::ExecuteSceneMutation(
         const std::string& label, const std::function<void()>& mutation)
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         SceneCommandStack::State before = CaptureEditorState();
         mutation();
         m_SceneHistory.Push(label, std::move(before), CaptureEditorState());
@@ -2147,19 +2095,19 @@ float4 PSMain(PixelInput input) : SV_TARGET
     {
         SceneCommandStack::State state;
         state.Scene = m_Scene.CaptureSnapshot();
-        if (m_Scene.Contains(m_SelectedNode))
-            state.Selection = m_Scene.GetPersistentId(m_SelectedNode);
+        if (m_Scene.Contains(m_SelectedObject))
+            state.Selection = m_Scene.GetPersistentId(m_SelectedObject);
         return state;
     }
 
     void EditorApplication::RestoreSelection(const std::optional<SceneUuid>& selection)
     {
-        m_SelectedNode = selection.has_value() ? m_Scene.FindNode(*selection) : InvalidNodeId;
+        m_SelectedObject = selection.has_value() ? m_Scene.FindObject(*selection) : InvalidGameObjectId;
     }
 
     void EditorApplication::BeginInspectorEdit()
     {
-        CommitInspectorEdit("Edit Node");
+        CommitInspectorEdit("Edit GameObject");
         if (!m_InspectorEditBefore.has_value())
             m_InspectorEditBefore = CaptureEditorState();
     }

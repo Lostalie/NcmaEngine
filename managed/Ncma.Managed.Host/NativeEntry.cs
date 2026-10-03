@@ -71,7 +71,8 @@ public static unsafe class NativeEntry
                     Path.GetDirectoryName(typeof(NativeEntry).Assembly.Location)!, "NcmaNative.dll")) : 0);
             s_resolverRegistered = true;
         }
-        if (Native.GetAbiVersion() != 1) throw new InvalidOperationException("Native scene ABI mismatch.");
+        if (Native.GetAbiVersion() != 1 || Native.GetGameObjectApiVersion() != 4 || Native.GetWorldAccessApiVersion() != 1)
+            throw new InvalidOperationException("Native scene/GameObject API mismatch.");
         string path = Path.GetFullPath(ReadUtf8(assemblyPath));
         var context = new GameplayLoadContext(path);
         s_loadContext = context;
@@ -151,12 +152,13 @@ public static unsafe class NativeEntry
     }, error, capacity);
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int CreateBehaviour(int type, ulong node, int enabled, byte* error, int capacity) => Guard(() =>
+    public static int CreateBehaviour(int type, ulong gameObject, int enabled, byte* error, int capacity) => Guard(() =>
     {
         if (s_world is null) throw new InvalidOperationException("No play scene is bound.");
+        var target = new GameObject(s_world, gameObject);
         var behaviour = (Behaviour)Activator.CreateInstance(s_types[type].Type)!;
-        behaviour.Node = new Node(s_world, node);
-        _ = behaviour.Node.LocalTransform;
+        behaviour.GameObject = target;
+        _ = behaviour.GameObject.LocalTransform;
         s_instances.Add(new Instance(behaviour, type, enabled != 0));
         return s_instances.Count - 1;
     }, error, capacity);

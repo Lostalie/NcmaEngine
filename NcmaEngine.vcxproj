@@ -73,13 +73,11 @@
     <ClCompile Include="engine\source\runtime\scene\SceneUuid.cpp" />
     <ClCompile Include="engine\source\runtime\scene\SceneWorld.cpp" />
     <ClCompile Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.cpp" />
-    <ClCompile Include="engine\source\runtime\script\runtime\PythonGameplayRuntime.cpp" />
     <ClCompile Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.cpp" />
     <ClCompile Include="tests\ArchitectureTests.cpp" />
     <ClCompile Include="tests\AnimationTests.cpp" />
     <ClCompile Include="tests\FbxImportTests.cpp" />
     <ClCompile Include="tests\ManagedHostTests.cpp" />
-    <ClCompile Include="tests\PythonGameplayTests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine\source\editor\EditorApplication.h" />
@@ -110,7 +108,6 @@
     <ClInclude Include="engine\source\runtime\scene\SceneUuid.h" />
     <ClInclude Include="engine\source\runtime\scene\SceneWorld.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.h" />
-    <ClInclude Include="engine\source\runtime\script\runtime\PythonGameplayRuntime.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\GameplayTypes.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntime.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.h" />

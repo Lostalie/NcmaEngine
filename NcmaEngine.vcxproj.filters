@@ -36,10 +36,8 @@
     <ClCompile Include="engine\source\runtime\scene\SceneUuid.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\scene\SceneWorld.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
-    <ClCompile Include="engine\source\runtime\script\runtime\PythonGameplayRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="tests\ManagedHostTests.cpp"><Filter>Tests</Filter></ClCompile>
-    <ClCompile Include="tests\PythonGameplayTests.cpp"><Filter>Tests</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="engine\source\editor\EditorApplication.h"><Filter>Editor</Filter></ClInclude>
@@ -70,7 +68,6 @@
     <ClInclude Include="engine\source\runtime\scene\SceneUuid.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\scene\SceneWorld.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.h"><Filter>Runtime</Filter></ClInclude>
-    <ClInclude Include="engine\source\runtime\script\runtime\PythonGameplayRuntime.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\GameplayTypes.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntime.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.h"><Filter>Runtime</Filter></ClInclude>

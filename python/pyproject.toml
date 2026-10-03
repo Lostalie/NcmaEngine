@@ -14,3 +14,4 @@ ncma-animation-mcp = "ncma_tools.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["ncma_tools", "ncma_tools.*"]

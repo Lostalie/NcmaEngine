@@ -1,0 +1,103 @@
+# A 方案与 AI 深度开发：职责、权限及首个实现切片
+
+更新：2026-10-03。用户已确认 C# 主引擎 + C++ 性能插件，AI 参与场景、动画、UI、工具与引擎扩展。
+这是产品方向，不代表所有操作已经接入当前编辑器。
+
+## 已实现的 C# headless 基础
+
+项目：managed/Ncma.Runtime；验证：managed/Ncma.Runtime.Tests，已纳入 Build.bat/CTest。
+无原生 DLL、Ncma.Managed 或 Python 依赖。它拥有自己的独立 World，不同步/镜像原生编辑器。
+
+- World/GameObject：扁平空对象、可选 Transform、对象 UUID 索引、创建/删除、owner-thread 检查。
+- ComponentRegistry：显式可信注册稳定 typeId/version/schema 和值组件校验器。拒绝可变引用字段；启动后冻结。校验器须纯函数/幂等，不修改外部 World 或做 IO。
+- 托管快照：managed JSON v1，校验大小/身份/组件/数值后原子恢复；运行时引用不保存。
+- WorldRunner：有界固定步、顺序 Systems，读已提交值、写暂存、成功提交，错误中止并 fault。
+- EditSession：编辑器与 Agent 共用事务入口，原子 create/rename/set_component、Undo/Redo、版本检查和权限。
+
+组件存储当前使用按类型字典/装箱，事务使用整场景快照；这是正确性基础，不是已优化的 ECS。
+schema 校验仅支持 closed object、number/integer/string/boolean 与 local $defs，不是完整 JSON Schema。
+System 热路径目前也有校验/序列化分配，帧预算、类型池与低分配优化尚未验收。
+新 World 尚无 Behaviour 生命周期、通用查询、结构命令队列和 .ncscene 导入。
+
+## 当前可调用能力（C# API，不是 MCP server）
+
+| 稳定名称 | 风险 | 已实现范围 |
+|---|---|---|
+| ncma.capabilities.list | read_only | 描述已实现能力及 JSON 输入/输出 schema |
+| ncma.engine.component_types | read_only | 注册组件身份、版本与 schema |
+| ncma.scene.inspect | read_only | 托管场景 UUID、组件、World 身份与 tick |
+| ncma.scene.validate | read_only | 验证当前托管场景，不改状态 |
+| ncma.scene.transaction | reversible | 1..128 项 create/rename/set_component，原子提交 |
+| ncma.scene.delete_object | destructive | 显式批准一个对象 UUID，仍可撤销 |
+| ncma.history.undo | reversible | 撤销，仍校验原命令权限 |
+| ncma.history.redo | reversible | 重做，仍校验原命令及删除目标授权 |
+
+所有返回包含 contractVersion/requestId/sessionId/revision/status/code/changed/data。
+status 为 ok/error/conflict/denied；错误不包含待执行脚本。输入关闭未知/重复字段，组件使用注册 schema。
+同一成功请求的精确重试返回已缓存结果，不重复执行；缓存上限 128，不承诺无限期 exactly-once。
+客户端不能修改旧 requestId 的内容，读取/修改应使用新 requestId。
+
+权限由宿主使用 CapabilityPermissions 显式授予，不能从 AI JSON 内的 permission 字段获得。
+默认只读；修改必须提供当前 sessionId 与 expectedRevision。
+删除还必须批准实际 persistent UUID，不能用删除命令枚举路径、删除文件或批量清空项目。
+撤销/重做不绕过原命令权限，重做删除仍需要同一 UUID 授权。
+
+事务先修改独立候选 World，完整校验后一次提交 live headless World。
+历史最多 64 项、16 MiB；达到限制丢弃最旧条目，结果报告剩余 undo/redo 数量。
+输入最多 64 KiB，组件 payload 最多 64 KiB，World 快照最多 4 MiB，对象最多 4096、每对象最多 64 组件。
+事务/Undo 使用全量恢复，所有旧运行时引用失效，必须按 UUID 重新解析。
+外部直接 World 修改令已有 EditSession 的历史失效并返回冲突，不覆盖外部修改；创建新 session 后重新授权。
+固定步内禁止结构/编辑器修改；失败只回滚暂存组件，不回滚 System 私有状态、IO 等副作用。
+Runner fault 后必须显式处理私有状态并 ResetFault；不自动重试，重置清空剩余时间。
+
+## 示例：由宿主批准一次场景创建
+
+```csharp
+using System.Text.Json;
+using Ncma.Runtime;
+
+var world = new World("ActionGame");
+var session = new EditSession(world);
+var input = JsonSerializer.SerializeToElement(new {
+    operations = new[] { new { op = "create", objectId = Guid.NewGuid(), name = "Hero" } }
+});
+// 这个授权来自用户/编辑器，不是模型自己申请就生效。
+var permissions = new CapabilityPermissions(new[] { "ncma.scene.transaction" });
+var result = session.Invoke(new CapabilityRequest(
+    1, Guid.NewGuid(), session.SessionId, session.Revision,
+    "ncma.scene.transaction", input), permissions);
+```
+
+可信 C# 插件可在创建 World 前 Register<T> 新值组件和校验器，通过相同事务设置组件。
+AI 不能提交 CLR 类型名、程序集路径、eval/exec 或动态代码作为新组件。
+动态插件加载/卸载、生成代码编译与项目文件修改网关均未实现。
+
+## 五个 AI 领域与接入顺序
+
+| 领域 | 目标工作 | 当前状态 / 下一步 |
+|---|---|---|
+| 场景 | 创建角色、组件、资源引用、参数、Prefab | headless 事务基础已实现；资产引用/Prefab/live 编辑器接入未实现 |
+| 动画 | 图节点/连线、动作片段、过渡、通知、Root Motion 测试 | 隔离原生动画 MCP 已实现；托管图命令、正式 Animator/角色链路未实现 |
+| UI | Frame、布局/样式、组件实例、交互、画布预览 | 原生数据模型存在；托管文档/求解/事务网关未实现 |
+| 工具 | 资产报告、验证、构建、测试与结构化诊断 | CLI inspect/FBX 报告/动画 MCP 已实现；受约束构建/测试 Agent 网关未实现 |
+| 引擎扩展 | 定义组件/schema、System、编辑器面板和插件适配器 | 可信值组件注册已实现；生成代码审查、路径限定文件事务、编译/装载未实现 |
+
+各领域应返回真实能力清单，而不是注册一个看似可用的空实现。
+新 headless 场景能力尚无 stdio MCP/gRPC/IPC adapter；现有 Python stdio 动画 MCP 不可调用它们，
+也不连接当前 live 编辑器。两套入口不能宣称共享实时状态。
+
+所有领域使用同一模式：读取/检查 → 有界提案 → 权限与 revision 校验 → 编辑器事务 → 验证 → 结果/撤销。
+项目源码修改与场景数据编辑不同：未来代码工具应限制项目相对路径、先呈现 diff、显式批准编译/加载。
+不向 AI 开放无约束 shell、任意解释器执行或直接 native 指针；可信扩展本身不等于安全沙箱。
+
+## 引擎职责与迁移顺序
+
+C# 拥有高层 World、组件、System、游戏逻辑、动画控制、编辑器文档/命令和独立网络服务。
+C++ 只承接 Renderer、Physics 和经测量必要的数值/导入内核；不新增原生通用框架。
+Python 为可选专长模块/插件；开发助手可以直接使用工具协议，不要求游戏安装 Python。
+AI 开发助手和运行时 AI 推理服务是不同接口；pythonnet/gRPC/ZeroMQ 仍未实现。
+
+先完成 managed Behaviour 与 .ncscene 只读导入/诊断，再让编辑器选用托管权威 World 和命令。
+切换时保持单一 live 权威，不维护长期双向同步。之后反转 C# 主入口并逐个原生插件化。
+动作游戏先打通 FBX 场景角色/GPU 蒙皮/Animator/CharacterMotor，再接动画图命令；UI 文档与画布独立开发。
+每个切片通过 Build.bat、headless/原生回归和能力状态检查，不以文档或目录拆分代替运行验收。

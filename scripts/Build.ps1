@@ -67,6 +67,7 @@ $nativeCommand = @(
     ('call "{0}" >nul' -f $vcvars),
     'set VSLANG=1033',
     ('"{0}" -S "{1}" -B "{2}" -G Ninja -DCMAKE_BUILD_TYPE={3} -DCMAKE_MAKE_PROGRAM="{4}" -DNCMA_BUILD_TESTS=ON -DNCMA_BUILD_MANAGED=ON -DNCMA_BUILD_EDITOR=ON' -f $cmake, $projectRoot, $buildDirectory, $Configuration, $ninja),
+    ('"{0}" --build "{1}" --target NcmaCore NcmaNative NcmaArchitectureTests' -f $cmake, $buildDirectory),
     ('"{0}" --build "{1}"' -f $cmake, $buildDirectory)
 ) -join ' && '
 
@@ -76,8 +77,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Native build failed with exit code $LASTEXITCODE."
 }
 
-# Both gameplay frontends borrow the play world through this versioned native bridge.
-# Deploy before editor/native Python smoke tests, independently of the managed build.
+# C# gameplay borrows the play world through the versioned native bridge.
+# Deploy before editor smoke tests, independently of the managed build.
 $engineManagedOutput = Join-Path $projectRoot 'out\managed'
 New-Item -ItemType Directory -Path $engineManagedOutput -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaNative.dll') `
@@ -85,7 +86,7 @@ Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaNative.dll') `
 
 if (-not $SkipTests) {
     Write-Host '[Ncma] Running native architecture tests...'
-    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaManagedHostSmokeTest|NcmaEditorGameplaySmokeTest'
+    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaManagedHeadlessTests|NcmaManagedHostSmokeTest|NcmaEditorGameplaySmokeTest'
     if ($LASTEXITCODE -ne 0) {
         throw "Native tests failed with exit code $LASTEXITCODE."
     }
@@ -98,6 +99,11 @@ Remove-Item Env:PATH -ErrorAction SilentlyContinue
 $env:Path = $effectivePath
 
 if (-not $SkipManaged) {
+    Write-Host '[Ncma] Building the independent C# headless runtime and command tests...'
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Runtime.Tests\Ncma.Runtime.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) {
+        throw "Managed headless runtime build failed with exit code $LASTEXITCODE."
+    }
     $managedProject = Join-Path $projectRoot 'managed\Ncma.Managed.SmokeTest\Ncma.Managed.SmokeTest.csproj'
     $managedHostProject = Join-Path $projectRoot 'managed\Ncma.Managed.Host\Ncma.Managed.Host.csproj'
     $engineManagedOutput = Join-Path $projectRoot 'out\managed'
@@ -135,8 +141,8 @@ if (-not $SkipManaged) {
         if ($LASTEXITCODE -ne 0) {
             throw "Managed/native smoke test failed with exit code $LASTEXITCODE."
         }
-        Write-Host '[Ncma] Running the embedded .NET gameplay host smoke test...'
-        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaManagedHostSmokeTest|NcmaEditorGameplaySmokeTest'
+        Write-Host '[Ncma] Running managed headless commands and embedded gameplay host tests...'
+        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaManagedHeadlessTests|NcmaManagedHostSmokeTest|NcmaEditorGameplaySmokeTest'
         if ($LASTEXITCODE -ne 0) {
             throw "Embedded .NET host smoke test failed with exit code $LASTEXITCODE."
         }

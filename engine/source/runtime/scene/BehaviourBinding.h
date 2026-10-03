@@ -9,7 +9,7 @@
 namespace NcmaEngine
 {
     enum class ExportKind : std::uint32_t { Float = 1, Double = 2, Integer = 3, Boolean = 4 };
-    enum class BehaviourLanguage : std::uint32_t { CSharp = 0, Python = 1 };
+    enum class BehaviourLanguage : std::uint32_t { CSharp = 0 };
 
     struct ExportValue final
     {

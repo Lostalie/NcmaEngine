@@ -7,7 +7,7 @@
 
 namespace NcmaEngine
 {
-    // Persistent scene identity. Runtime NodeId values are deliberately never serialized.
+    // Persistent scene identity. Runtime GameObjectId values are deliberately never serialized.
     struct SceneUuid final
     {
         std::uint64_t High = 0;

@@ -1,32 +1,64 @@
 # Development roadmap
 
+## Current direction — C# runtime, independent Python modules, C++ plugins
+
+C# owns gameplay, World/components, scheduling, scene/asset metadata and editor business logic.
+Python is an independent AI/specialized module, not a GameObject language. C++ remains only in
+performance-critical native plugins. This is a migration target, not a completed port.
+See [ARCHITECTURE.md](ARCHITECTURE.md), [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md)
+and [PYTHON_MODULES.md](PYTHON_MODULES.md).
+
+## Migration milestones — headless foundation landed, integration NOT implemented
+
+1. Managed headless World/GameObject/component schemas, snapshots, safe references and fixed-step
+   WorldRunner, with no native World or Python dependency. Initial Ncma.Runtime prototype implemented;
+   type pools/query APIs and Behaviour lifecycle remain unimplemented.
+2. Managed SceneAsset/serialization/editor commands and Undo/Play isolation; preserve old v1-v5
+   C# records; reject legacy Python bindings without modifying their source, with explicit author conversion.
+   Headless managed JSON v1, atomic EditSession and bounded Undo/Redo implemented; .ncscene import/live editor migration not implemented.
+3. C# application main loop loading a native Renderer plugin; reuse DX11 code, prove resource
+   lifetime/window/input handling. Vulkan rendering and validation remain future work.
+4. Physics plugin plus C# action/animation/character policies; batch pose/math kernels only when
+   justified. Complete FBX scene character, GPU skinning and collision-aware root motion.
+5. One independent Python request/result adapter (proposed gRPC worker), validated asynchronous
+   results at tick boundaries, timeouts/cancellation/restart/backpressure. pythonnet/ZeroMQ optional.
+6. Managed Editor/Player distribution and plugin lifecycle; retire old C++ hostfxr entry/SceneWorld
+   after asset/consumer migration and explicit cleanup authorization. Python gameplay host/SDK are already removed.
+
+Keep flat objects, composition and independent networking; network application/session services
+are C# by default, not component RPC/replication. Existing Build.bat/EXE and compatibility tests
+remain active until replacements actually pass.
+
 ## Product focus — animation-driven action games
 
-Prioritize a real skeletal character pipeline over additional preview effects: model/clip import,
-GPU skinning, animation components, collision-aware root motion and C#/Python action gameplay, then
-visual graph/Montage authoring. See [ANIMATION.md](ANIMATION.md) for the ordered action-game roadmap
-and [ANIMATION_MCP.md](ANIMATION_MCP.md) for the working, isolated preview MCP service.
-Character source format is FBX first; the current import/CPU preview is documented in [FBX_IMPORT.md](FBX_IMPORT.md).
+Prioritize imported skeletal characters, GPU skinning, animation components, collision-aware
+root motion and C# action gameplay, then visual graph/Montage authoring. Python AI returns
+proposals, not movement authority. See [ANIMATION.md](ANIMATION.md), [FBX_IMPORT.md](FBX_IMPORT.md)
+and [ANIMATION_MCP.md](ANIMATION_MCP.md).
 
-## Language direction — equal C# / Python gameplay choices
+## Current legacy/compatibility baseline — retained, not the new target
 
-C++ remains the runtime core. Users must be able to implement primary game logic in either
-C# (ProwlEngine design reference) or Python (Infernux design reference). Python also remains
-the tooling/AI language. Both languages now have editor-preview gameplay integration, selected per
-Behaviour attachment. Existing Python CLI/MCP and legacy prototype files are separate from the new
-CPython host. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PYTHON_GAMEPLAY.md](PYTHON_GAMEPLAY.md).
-
-- Completed preview: CPython host, Node/Behaviour API, lifecycle dispatch and exception reporting.
-- Completed: language-tagged `.ncscene` v3, scalar Inspector metadata, v1/v2 migration and undo/redo.
-- Completed preview: Python play-scene isolation, manual reload cleanup and gameplay regression tests.
-- Completed smoke coverage: C# and Python updating separate nodes in the same native scene.
-- NOT implemented: project-wide default language, project environments and dependency/module management.
-- NOT implemented for either language: fixed-step scheduling and standalone game export.
+Implemented native SceneWorld v5, flat objects, C#-only bindings, C# hostfxr gameplay,
+isolated Play, scalar Exports, manual reload, UUID migration/backup/Undo,
+World Access ABI v1 batches/references/signals and CLI/MCP remain available for regression.
+Python gameplay hosts/SDK/examples and object language selection have been removed.
+Python remains optional for tools, specialized modules and plugins; those transports and managed editor integration are NOT implemented. An independent managed headless World now exists.
+The following feature milestones record existing native baseline and remaining product work;
+their implementation ownership must follow the new direction above.
 
 ## Foundation — current slice
 
+Framework target: managed World + GameObject + Component + independent Systems. The legacy active implementation
+uses SceneWorld/GameObject. Scene Node source APIs have been removed and Transform is now a native
+component. Independent managed registered-component schemas and fixed-step Systems are implemented;
+full World/asset separation, generic queries, Behaviour migration and editor integration remain planned.
+See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for sequence and compatibility gates.
+
 - CMake/C++20 `NcmaCore` and `NcmaNative` targets.
-- Hybrid scene node/component model with hierarchy invariants and world transforms.
+- Independent C# Ncma.Runtime: optional value components, schema registry, UUIDs, snapshots and fixed-step Systems.
+- Shared headless Editor/Agent EditSession: 8 capabilities, revision/permission guards, atomic transactions and Undo/Redo.
+  No live editor connection or managed MCP transport yet; see [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
+- SceneWorld flat object/component store with independent world transforms and single-object deletion.
 - Stable C ABI plus a compiling C# gameplay API and managed/native smoke test.
 - Python tooling package and machine-readable project manifest.
 - RHI backend registry/capability contract and headless null backend.
@@ -35,20 +67,19 @@ CPython host. See [ARCHITECTURE.md](ARCHITECTURE.md) and [PYTHON_GAMEPLAY.md](PY
 
 ## Milestone 1 — executable editor shell
 
-Completion: editor launches, creates/saves/reloads a scene, edits hierarchy/transforms through undo/redo,
-and runs a behavior authored in either C# or Python with isolated play mode and hot reload.
-The C# and Python preview slices work; full gameplay services and game export remain future work.
+Completion: editor launches, creates/saves/reloads a scene, edits flat objects/transforms through undo/redo,
+and runs C# gameplay with isolated play mode and hot reload. Python gameplay removal is guarded by rejection tests; the managed editor integration, full gameplay services and game export remain future work.
 
-- Completed: native Win32 `NcmaEngine.exe`, real D3D11 device/swapchain, ImGui editor workspace, hierarchy selection, node creation/deletion, transform inspector, viewport shell, project/console panels, play-state toolbar, resize support, and launch smoke test.
+- Completed: native Win32 `NcmaEngine.exe`, real D3D11 device/swapchain, ImGui editor workspace, flat object selection, object creation/deletion, transform inspector, viewport shell, project/console panels, play-state toolbar, resize support, and launch smoke test.
 - Completed: D3D11 registered as a real RHI backend with capability reporting.
-- Completed: stable node UUIDs, versioned `.ncscene` serialization, editor New/Open/Save,
-  and undo/redo for hierarchy plus inspector transform/name edits.
-- Add prefab/packed-scene overrides, serializable component metadata, and lifecycle.
+- Completed: stable object UUIDs, versioned `.ncscene` serialization, editor New/Open/Save,
+  and undo/redo for object list plus inspector transform/name edits.
+- Add Prefab instances/overrides, serializable component metadata, and lifecycle.
 - Completed foundation: runtime-discovered `hostfxr` embedding, collectible gameplay
   `AssemblyLoadContext`, lifecycle dispatch, editor play-mode ticking, and assembly reload.
-- Completed: UUID-backed per-node C#/Python Behaviour attachment, enable/remove commands, numeric/bool
-  Export reflection and Inspector editing, `.ncscene` v3 persistence (v1/v2 compatible), and undo/redo.
-- Completed: isolated play scenes, real Node Transform updates over the native ABI, pause/resume,
+- Completed: UUID-backed per-object C# Behaviour attachment, enable/remove commands, numeric/bool
+  Export reflection and Inspector editing, `.ncscene` v5 persistence (C# v1-v4 readable; Python language tags rejected atomically), and undo/redo.
+- Completed: isolated play scenes, real GameObject Transform updates over the native ABI, pause/resume,
   and reload/rebind with saved Export values. `Build.bat -GameplayOnly` rebuilds gameplay while the editor runs.
 - Add private runtime-state migration, additional Export types, fixed-update scheduling, and file-watcher rebuild.
 - Completed foundation: snapshot-backed command stack with selection restored by UUID.
@@ -101,7 +132,7 @@ Completion: build a reusable responsive HUD with frames, auto-layout, components
 - Infinite canvas, selection/gizmos, snapping, rulers, zoom, layers, inspector, auto-layout, constraints.
 - Components/instances, variants, shared styles/design tokens, nine-slice images, animation, and localization preview.
 
-## Milestone 5 — native AI/Agent integration
+## Milestone 5 — independent Python AI and Agent integration
 
 Completion: an Agent can inspect a project, propose a reversible change, apply it through an undoable transaction, run validation, and report structured evidence.
 
@@ -112,5 +143,23 @@ Completion: an Agent can inspect a project, propose a reversible change, apply i
 
 - Project/query/edit/build/test/play/inspect capability families.
 - Permission scopes, dry-run plans, transactions, audit log, cancellation, budgets, and deterministic tool results.
-- Python adapters for local inference and provider-neutral remote inference; no provider SDK in the C++ core.
+- Independent Python adapters for local/remote inference behind a C# module contract; no provider SDK in native plugins.
 - Scene/asset semantic index and optional runtime AI inference service.
+
+## Independent networking — planned, NOT implemented
+
+Networking is a standalone optional C# service, with native transport kernels only when justified.
+It must not be built into Actor/GameObject/component/
+Behaviour semantics, automatic scene replication, RPC annotations or base-class network ownership.
+See [NETWORKING.md](NETWORKING.md). This direction does not change the current character/animation priority.
+
+- Separate transport/session/protocol library with no scene, renderer or scripting-host dependency.
+- Explicit message schemas, bounded queues, validation, connection lifecycle and version negotiation.
+- Application-owned adapters and session-scoped identities; apply inputs only at simulation tick boundaries.
+- Explicit C# service/message interfaces, not Behaviour RPC. Python module IPC remains a separate contract;
+  a versioned native ABI is needed only for optional native transport kernels.
+- Choose transport/security/authentication requirements before implementing a backend; no protocol is selected yet.
+- Later action-game policies: input sequencing, authority, snapshot interpolation, prediction/reconciliation
+  and lag compensation in separate gameplay synchronization services, not scene/component base classes.
+- Verify headless loopback, optional/offline operation, malformed-input rejection, disconnect/reconnect,
+  stale identity handling and deterministic synchronization under simulated loss/latency.

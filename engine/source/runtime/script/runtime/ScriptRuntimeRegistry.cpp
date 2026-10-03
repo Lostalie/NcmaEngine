@@ -11,6 +11,8 @@ namespace NcmaEngine::Scripting
         if (!runtime)
             throw std::invalid_argument("Script runtime cannot be null");
         const Language language = runtime->GetDescriptor().ScriptLanguage;
+        if (language != Language::CSharp || runtime->GetDescriptor().Role != RuntimeRole::Gameplay)
+            throw std::invalid_argument("Only C# gameplay runtimes may be registered");
         m_Runtimes[language] = std::move(runtime);
     }
 
