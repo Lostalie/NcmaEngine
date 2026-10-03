@@ -26,7 +26,13 @@ public sealed partial class SceneWorld : IDisposable
         return new(this, Runtime.Resolve(new(Runtime.Identity, id)));
     }
     public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetObjects().Select(o => new GameObject(this, o)).ToArray(); }
-    public void Dispose() { Runtime.VerifyAccess(); if (_disposed) return; if (_phase) AbortPhase(); _disposed = true; }
+    public void Dispose()
+    {
+        Runtime.VerifyAccess(); if (_disposed) return;
+        Runtime.VerifyWriteAccess();
+        if (_phase || Runtime.IsUpdating) throw new InvalidOperationException("Cannot dispose a World during gameplay.");
+        _disposed = true;
+    }
     internal bool IsInPhase => _phase;
     internal static Guid ToGuid(ulong high, ulong low) => Guid.ParseExact(high.ToString("x16") + low.ToString("x16"), "N");
     internal static ObjectUuid ToUuid(Guid value)

@@ -21,7 +21,7 @@ if (camera.LocalTransform.Position.Y != 2.0f)
     throw new InvalidOperationException("Managed/native transform round-trip failed.");
 
 if (Marshal.SizeOf<ObjectReference>() != 24 || Marshal.SizeOf<TransformWrite>() != 64 ||
-    Marshal.SizeOf<GameplaySignal>() != 72 || Marshal.OffsetOf<GameplaySignal>("Value").ToInt32() != 56)
+    Marshal.SizeOf<GameplaySignal>() != 88 || Marshal.OffsetOf<GameplaySignal>("Value").ToInt32() != 56)
     throw new InvalidOperationException("World access ABI layout mismatch.");
 if (world.FindObject(camera.PersistentId).Id != camera.Id)
     throw new InvalidOperationException("Persistent object lookup failed.");

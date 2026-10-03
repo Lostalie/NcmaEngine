@@ -1,4 +1,7 @@
 #include "script/runtime/DotNetGameplayRuntime.h"
+#include "script/runtime/ManagedHost.h"
+#include <array>
+#include <future>
 
 #include <algorithm>
 #include <cmath>
@@ -59,7 +62,59 @@ int main(int argumentCount, char** arguments)
         world.AddBehaviour(disabled, disabledBinding);
         Check(runtime.BindScene(world, error), error);
         Check(runtime.GetBehaviourCount() == 3, "Expected three bound instances");
-        runtime.Tick(0.5);
+        using Advance = int(__cdecl*)(std::uint64_t, std::uint64_t, std::uint64_t, double, NcmaPlayStatusV5*, char*, int);
+        using Control = int(__cdecl*)(std::uint64_t, std::uint64_t, std::uint64_t, std::uint32_t, NcmaPlayStatusV5*, char*, int);
+        using Version = std::uint32_t(__cdecl*)();
+        const auto advance = reinterpret_cast<Advance>(Scripting::ManagedHost::Resolve(L"AdvanceFrame"));
+        const auto control = reinterpret_cast<Control>(Scripting::ManagedHost::Resolve(L"ControlPlay"));
+        const auto version = reinterpret_cast<Version>(Scripting::ManagedHost::Resolve(L"GetBridgeVersion"));
+        Check(version() == 5 && runtime.GetPlayStatus().Version == 5, "Gameplay bridge version/layout mismatch");
+        const auto token = runtime.GetPlayStatus();
+        const auto boundBefore = world.CaptureDocument();
+        const auto rejectPlay = [&](std::uint64_t high, std::uint64_t low, double delta) {
+            NcmaPlayStatusV5 output{}; std::array<char, 2048> message{};
+            Check(advance(world.Handle(), high, low, delta, &output, message.data(), static_cast<int>(message.size())) < 0,
+                "Invalid Play request accepted");
+            Check(world.CaptureDocument() == boundBefore, "Rejected Play request changed document");
+        };
+        using End = int(__cdecl*)(std::uint64_t, std::uint64_t, std::uint64_t, char*, int);
+        using Unload = int(__cdecl*)(char*, int);
+        const auto end = reinterpret_cast<End>(Scripting::ManagedHost::Resolve(L"EndScene"));
+        const auto unload = reinterpret_cast<Unload>(Scripting::ManagedHost::Resolve(L"UnloadGameplay"));
+        std::array<char, 2048> rejected{};
+        Check(end(world.Handle(), 0, 0, rejected.data(), static_cast<int>(rejected.size())) < 0 &&
+            world.CaptureDocument() == boundBefore, "Stale Stop changed active Play");
+        Check(unload(rejected.data(), static_cast<int>(rejected.size())) < 0 &&
+            world.CaptureDocument() == boundBefore, "Unscoped unload stopped active Play");
+        NcmaInputFrameV1 input; input.Sequence = 1; input.Focused = 1;
+        Check(runtime.SubmitInput(input, error), error);
+        input.Sequence = 1; Check(!runtime.SubmitInput(input, error), "Stale input sequence accepted");
+        std::vector<NcmaRenderObjectV1> renderObjects; NcmaRenderHeaderV1 renderHeader;
+        Check(runtime.ReadRenderFrame(renderObjects, renderHeader, error), error);
+        Check(renderHeader.Version == 1 && renderObjects.size() == 4, "Copied render view missing spatial objects");
+        using Reload = int(__cdecl*)(const char*, std::uint64_t, std::uint64_t, std::uint64_t, NcmaPlayStatusV5*, char*, int);
+        const auto reload = reinterpret_cast<Reload>(Scripting::ManagedHost::Resolve(L"ReloadGameplay"));
+        NcmaPlayStatusV5 pausedStatus{};
+        Check(reload("out/managed/missing-candidate.dll", world.Handle(), token.SessionHigh, token.SessionLow, &pausedStatus,
+            rejected.data(), static_cast<int>(rejected.size())) < 0 && pausedStatus.State == NcmaPlayState::Paused &&
+            pausedStatus.SessionHigh == token.SessionHigh && world.CaptureDocument() == boundBefore,
+            "Candidate failure did not retain the old paused session");
+        Check(runtime.Resume(error), error);
+        rejectPlay(0, 0, 1.0 / 60);
+        rejectPlay(token.SessionHigh, token.SessionLow, -1);
+        auto foreign = std::async(std::launch::async, [&] {
+            NcmaPlayStatusV5 output{}; std::array<char, 2048> message{};
+            return control(world.Handle(), token.SessionHigh, token.SessionLow, 0, &output,
+                message.data(), static_cast<int>(message.size()));
+        });
+        Check(foreign.get() < 0 && world.CaptureDocument() == boundBefore, "Foreign Play control changed state");
+        bool directWriteDenied = false;
+        try { world.SetLocalTransform(fast, Transform{}); } catch (const std::exception&) { directWriteDenied = true; }
+        Check(directWriteDenied && world.CaptureDocument() == boundBefore, "Native bypass modified active Play");
+        bool legacyTickRemoved = false;
+        try { (void)Scripting::ManagedHost::Resolve(L"Tick"); } catch (const std::exception&) { legacyTickRemoved = true; }
+        Check(legacyTickRemoved, "Legacy unmanaged Tick is still callable");
+        for (int i = 0; i < 30; ++i) runtime.AdvanceFrame(1.0 / 60.0);
         Check(runtime.GetLastError().empty(), runtime.GetLastError());
         Check(std::abs(world.GetLocalTransform(fast).Rotation.y() + std::sqrt(0.5F)) < 0.0001F,
             "Float/bool/int Exports were not applied to the attached gameObject");
@@ -67,7 +122,7 @@ int main(int argumentCount, char** arguments)
             "Per-gameObject instance values are not independent");
         Check(world.GetLocalTransform(disabled).Rotation.isApprox(Quaternion::Identity()), "Disabled script updated");
         Check(world.GetLocalTransform(unattached).Rotation.isApprox(Quaternion::Identity()), "Unattached gameObject changed");
-        Check(runtime.GetTickCount() == 1, "Tick count mismatch");
+        Check(runtime.GetTickCount() == 30, "Tick count mismatch");
         runtime.EndScene();
         Check(world.Contains(fast), "Borrowed ManagedSceneClient was destroyed by managed code");
 
@@ -98,13 +153,34 @@ int main(int argumentCount, char** arguments)
         Check(runtime.Start(error), error);
         Check(runtime.BindScene(world, error), error);
         const auto beforePhase = world.GetLocalTransform(fastReloaded).Rotation;
-        world.BeginGameplayPhase();
-        runtime.Tick(0.1);
+        runtime.AdvanceFrame(0.1);
         Check(runtime.GetLastError().empty(), runtime.GetLastError());
-        Check(world.GetLocalTransform(fastReloaded).Rotation.isApprox(beforePhase), "Update became visible before commit");
-        world.CommitGameplayPhase();
-        Check(!world.GetLocalTransform(fastReloaded).Rotation.isApprox(beforePhase), "C# phase did not commit");
+        Check(runtime.GetPlayStatus().StepsExecuted == 6, "Frame must execute six fixed steps");
+        Check(!world.GetLocalTransform(fastReloaded).Rotation.isApprox(beforePhase), "Managed fixed step did not commit");
+        Check(runtime.Pause(error), error);
+        const auto pausedTick = runtime.GetPlayStatus().Tick;
+        const auto pausedRotation = world.GetLocalTransform(fastReloaded).Rotation;
+        runtime.AdvanceFrame(2.0);
+        Check(runtime.GetPlayStatus().Tick == pausedTick, "Paused frame accumulated simulation");
+        Check(runtime.Step(error), error);
+        Check(runtime.GetPlayStatus().Tick == pausedTick + 1, "Step must commit exactly one Tick");
+        Check(!world.GetLocalTransform(fastReloaded).Rotation.isApprox(pausedRotation), "Step did not simulate");
+        Check(runtime.Resume(error), error);
+        runtime.AdvanceFrame(0.0);
+        Check(runtime.GetPlayStatus().Tick == pausedTick + 1, "Resume paid paused-time debt");
+        runtime.AdvanceFrame(1.0);
+        Check(runtime.GetPlayStatus().StepsExecuted == 8 && runtime.GetPlayStatus().DroppedSeconds > 0.8,
+            "Interactive catch-up must bound and report dropped time");
         Check(world.GetLocalTransform(unattachedReloaded).Rotation.isApprox(Quaternion::Identity()), "Unattached object changed");
+        for (int reloadIndex = 0; reloadIndex < 12; ++reloadIndex)
+        {
+            const auto old = runtime.GetPlayStatus();
+            Check(runtime.Reload(error), error);
+            Check(runtime.GetPlayStatus().State == NcmaPlayState::Paused && runtime.GetPlayStatus().Tick == old.Tick &&
+                (runtime.GetPlayStatus().SessionHigh != old.SessionHigh || runtime.GetPlayStatus().SessionLow != old.SessionLow),
+                "Live reload must preserve committed World and rotate its session epoch");
+            Check(runtime.Resume(error), error);
+        }
         runtime.Stop();
         // An empty logic object can carry a Behaviour without a mandatory Transform.
         const auto logicObject = world.CreateObject("Non-spatial disabled behaviour", false);

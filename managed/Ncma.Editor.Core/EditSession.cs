@@ -14,9 +14,9 @@ public sealed partial class EditSession
     public const int MaxHistoryBytes = 16 * 1024 * 1024, MaxCachedRequests = 128;
     private sealed record FileContext(string? Path, string? SavedHash);
     private sealed record Entry(byte[] Before, byte[] After, string Label, string Capability, Guid? Target,
-        Guid? BeforeSelection, Guid? AfterSelection, FileContext? BeforeFile, FileContext? AfterFile)
+        Guid? BeforeSelection, Guid? AfterSelection, FileContext? BeforeFile, FileContext? AfterFile, CommandImpact Impact)
     { public int Bytes => Before.Length + After.Length; }
-    private sealed record Cached(string Fingerprint, CapabilityResult Result, string Permission, Guid? Target);
+    private sealed record Cached(string Fingerprint, CapabilityResult Result, string Permission, Guid? Target, CommandImpact Impact);
     private sealed record Draft(Guid Token, ulong Revision, Guid? Selection, string Label, JsonElement Input);
     private readonly SceneDocument _document;
     private readonly Dictionary<string, CapabilityDescriptor> _capabilities;
@@ -66,7 +66,7 @@ public sealed partial class EditSession
         byte[] bytes = _document.CaptureBytes();
         string hash = Hash(bytes);
         _history = []; _cursor = 0; _cache = []; _cacheOrder = [];
-        _knownRevision = _document.Revision; _currentHash = hash; _invalidated = false;
+        _knownRevision = _document.Revision; _currentHash = hash; _invalidated = false; DocumentGeneration = checked(DocumentGeneration + 1);
         if (_selection is Guid id && !Exists(SceneDocumentCodec.Decode(bytes), id)) _selection = null;
     }
     public void Select(Guid? objectId)
@@ -125,7 +125,7 @@ public sealed partial class EditSession
             if (_cache.TryGetValue(request.RequestId, out var cached))
             {
                 if (cached.Fingerprint != fingerprint) return Result(request, "conflict", "request_id_reused", false, new { });
-                if (!permissions.Allows(cached.Permission, cached.Target)) return Result(request, "denied", "permission_denied", false, new { });
+                if (!permissions.Allows(cached.Permission, cached.Target) || !permissions.InScope(cached.Impact)) return Result(request, "denied", "permission_denied", false, new { });
                 return cached.Result with { Revision = Revision, Replayed = true,
                     Data = JsonSerializer.SerializeToElement(new { history = State, execution = cached.Result.Data }, OutputJson) };
             }
@@ -135,6 +135,7 @@ public sealed partial class EditSession
                 ? History(request, permissions, fingerprint)
                 : Transaction(request, permissions, fingerprint);
         }
+        catch (EditRejectedException e) { return Result(request, "denied", e.Code, false, new { }); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or JsonException or KeyNotFoundException or FormatException or OverflowException)
         { return Result(request, "error", "invalid_input", false, new { message = e.Message }); }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -152,7 +153,7 @@ public sealed partial class EditSession
         {
             Closed(request.Input, ["objectId"], ["objectId"]);
             target = Uuid(request.Input, "objectId");
-            if (!permissions.Allows(request.Capability, target))
+            if (!permissions.Allows(request.Capability, target) || !permissions.ObjectAllowed(target.Value))
                 return Result(request, "denied", "target_not_authorized", false, new { });
             if (!Exists(candidate, target.Value)) throw new ArgumentException("Unknown object UUID.");
             candidate = candidate with { Objects = candidate.Objects.Where(o => o.Id != target).ToArray() };
@@ -165,23 +166,32 @@ public sealed partial class EditSession
             if (request.Input.TryGetProperty("selection", out var chosen)) selection = chosen.ValueKind == JsonValueKind.Null ? null : Uuid(request.Input, "selection");
             JsonElement ops = request.Input.GetProperty("operations");
             if (ops.ValueKind != JsonValueKind.Array || ops.GetArrayLength() is < 1 or > MaxOperations) throw new ArgumentException("Requires 1..128 operations.");
-            foreach (var op in ops.EnumerateArray()) candidate = Apply(candidate, op);
+            foreach (var op in ops.EnumerateArray())
+            {
+                AuthorizeIntent(permissions, op); candidate = Apply(candidate, op);
+                if (permissions.RequireTrustedBindings && Text(op, "op") == "set_bindings")
+                    foreach (var binding in candidate.Objects.Single(o => o.Id == Uuid(op, "objectId")).Behaviours) RequireBinding(binding);
+            }
+            if (request.Input.TryGetProperty("selection", out _) && selection is Guid selectedId && !permissions.ObjectAllowed(selectedId)) throw new EditRejectedException("scope_denied");
         }
         if (selection is Guid selected && !Exists(candidate, selected)) selection = null;
-        return Commit(request, fingerprint, candidate, before, label, request.Capability, target, selection);
+        return Commit(request, fingerprint, candidate, before, label, request.Capability, target, selection, permissions: permissions);
     }
     private CapabilityResult Commit(CapabilityRequest request, string fingerprint, SceneDocumentSnapshot candidate,
         byte[] before, string label, string capability, Guid? target, Guid? selection,
-        FileContext? replacementFile = null)
+        FileContext? replacementFile = null, CapabilityPermissions? permissions = null)
     {
         byte[] after = [];
         Action install = _document.PrepareRestore(candidate, request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));
+        permissions ??= CapabilityPermissions.ReadOnly;
+        var impact = RequestedImpact(request, Impact(before, after, _selection, selection, replacementFile is not null));
+        if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
         if (before.AsSpan().SequenceEqual(after) && (replacementFile is null || replacementFile == _file))
-            return Remember(request, fingerprint, Result(request, "ok", "no_change", false, new { history = State }), capability, target);
+            return Remember(request, fingerprint, Result(request, "ok", "no_change", false, new { history = State }), capability, target, impact);
         string hash = Hash(after);
         FileContext file = replacementFile ?? _file;
         var entry = new Entry(before, after, label, capability, target, _selection, selection,
-            replacementFile is null ? null : _file, replacementFile);
+            replacementFile is null ? null : _file, replacementFile, impact);
         if (entry.Bytes > MaxHistoryBytes) throw new ArgumentException("Command exceeds history budget.");
         var history = _history.Take(_cursor).Append(entry).ToArray();
         int bytes = history.Sum(e => e.Bytes);
@@ -191,10 +201,12 @@ public sealed partial class EditSession
         ulong next = checked(Revision + 1);
         var state = StateFor(next, history, history.Length, hash, file, selection) with { EditBusy = false };
         var result = Result(request, "ok", "ok", true, new { history = state }, next);
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, capability, target));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, capability, target, impact));
+        ulong generation = impact.DocumentReplacement ? checked(DocumentGeneration + 1) : DocumentGeneration;
+        if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
         install(); // No validators, allocations, history preparation or user callbacks after this point.
         _history = history; _cursor = history.Length; _knownRevision = next; _currentHash = hash;
-        _selection = selection; _file = file; _cache = cache.Values; _cacheOrder = cache.Order;
+        _selection = selection; _file = file; DocumentGeneration = generation; _cache = cache.Values; _cacheOrder = cache.Order;
         return result;
     }
     private CapabilityResult History(CapabilityRequest request, CapabilityPermissions permissions, string fingerprint)
@@ -205,6 +217,7 @@ public sealed partial class EditSession
         if (index < 0 || index >= _history.Length) return Result(request, "error", "history_empty", false, new { });
         Entry entry = _history[index];
         if (!permissions.Allows(entry.Capability, entry.Target)) return Result(request, "denied", "permission_denied", false, new { });
+        if (!permissions.InScope(entry.Impact)) return Result(request, "denied", "history_scope_denied", false, new { });
         byte[] after = [];
         Action install = _document.PrepareRestore(SceneDocumentCodec.Decode(undo ? entry.Before : entry.After),
             request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));
@@ -216,15 +229,18 @@ public sealed partial class EditSession
         var file = (undo ? entry.BeforeFile : entry.AfterFile) ?? _file;
         ulong next = checked(Revision + 1);
         var result = Result(request, "ok", "ok", true, new { history = StateFor(next, _history, cursor, hash, file, selection) }, next);
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, entry.Capability, entry.Target));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, entry.Capability, entry.Target, entry.Impact));
+        ulong generation = entry.Impact.DocumentReplacement ? checked(DocumentGeneration + 1) : DocumentGeneration;
+        if (!permissions.Allows(entry.Capability, entry.Target) || !permissions.InScope(entry.Impact)) throw new EditRejectedException("history_scope_denied");
         install();
+        DocumentGeneration = generation;
         _cursor = cursor; _knownRevision = next; _currentHash = hash; _selection = selection; _file = file;
         _cache = cache.Values; _cacheOrder = cache.Order;
         return result;
     }
-    private CapabilityResult Remember(CapabilityRequest request, string fingerprint, CapabilityResult result, string permission, Guid? target)
+    private CapabilityResult Remember(CapabilityRequest request, string fingerprint, CapabilityResult result, string permission, Guid? target, CommandImpact impact)
     {
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, permission, target));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, permission, target, impact));
         _cache = cache.Values; _cacheOrder = cache.Order; return result;
     }
     private (Dictionary<Guid, Cached> Values, Queue<Guid> Order) PrepareCache(Guid id, Cached value)
@@ -294,6 +310,8 @@ public sealed partial class EditSession
                 var bindings = operation.GetProperty("bindings").Deserialize<BehaviourBindingData[]>(SceneJson.Options)
                     ?? throw new ArgumentException("Missing bindings.");
                 item = item with { Behaviours = bindings }; break;
+            case "add_binding": case "remove_binding": case "set_binding_enabled": case "set_export":
+                item = BindingOperation(item, operation, op); break;
             default: throw new ArgumentException("Operation is not implemented. Deletion requires separate UUID authorization.");
         }
         var objects = (SceneObjectData[])scene.Objects.Clone(); objects[index] = item;

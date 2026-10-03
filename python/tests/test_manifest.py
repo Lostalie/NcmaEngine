@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class ProjectManifestTests(unittest.TestCase):
     def test_csharp_gameplay_direction_and_legacy_runtime_status(self) -> None:
         manifest = inspect_project(ROOT)
-        self.assertEqual(manifest["schema_version"], 8)
+        self.assertEqual(manifest["schema_version"], 10)
         self.assertEqual(manifest["languages"]["scope"], "target_architecture")
         self.assertEqual(manifest["languages"]["core"], "C#/.NET 8")
         self.assertEqual(manifest["languages"]["gameplay"], ["C#/.NET 8"])
@@ -54,7 +54,7 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertEqual(manifest["scene"]["legacy_scene_versions_readable"], [])
         self.assertEqual(manifest["scene"]["file_extension"], ".ncmascene")
         self.assertTrue(manifest["scene"]["atomic_file_save"])
-        self.assertEqual(manifest["gameplay"]["world_access"]["scene_host_bridge_version"], 4)
+        self.assertEqual(manifest["gameplay"]["world_access"]["scene_host_bridge_version"], 6)
         self.assertEqual(manifest["gameplay"]["world_access"]["scope"], "csharp_managed_world")
 
     def test_python_gameplay_removed_without_advertising_module_integration(self) -> None:
@@ -78,7 +78,7 @@ class ProjectManifestTests(unittest.TestCase):
                                 capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         manifest = json.loads(result.stdout)
-        self.assertEqual(manifest["schema_version"], 8)
+        self.assertEqual(manifest["schema_version"], 10)
         self.assertEqual(set(manifest["gameplay"]["backends"]), {"csharp"})
 
     def test_independent_python_transport_targets_are_not_implemented(self) -> None:
@@ -97,7 +97,7 @@ class ProjectManifestTests(unittest.TestCase):
             self.assertFalse(transport["implemented"])
 
 
-    def test_managed_commands_integrated_without_claiming_fixed_step_or_transport(self) -> None:
+    def test_managed_commands_and_fixed_step_integrated_without_claiming_transport(self) -> None:
         manifest = inspect_project(ROOT)
         runtime = manifest["managed_runtime"]
         self.assertEqual(runtime["authoritative_owner"], "C#")
@@ -109,7 +109,16 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertTrue(runtime["edit_session_live_editor_integrated"])
         self.assertEqual(runtime["editor_history_owner"], "C#")
         self.assertFalse(runtime["native_scene_command_stack"])
-        self.assertFalse(runtime["world_runner_editor_integrated"])
+        self.assertTrue(runtime["world_runner_editor_integrated"])
+        self.assertEqual(manifest["scene"]["gameplay_host_bridge_version"], 5)
+        self.assertTrue(manifest["gameplay"]["backends"]["csharp"]["fixed_update_scheduler"])
+        play = manifest["gameplay"]["play_session"]
+        self.assertEqual(play["owner"], "C#")
+        self.assertEqual(play["on_update_world_access"], "read_only")
+        for unfinished in ("input_snapshot_implemented", "render_interpolation_implemented",
+                           "runtime_structural_commands_implemented", "transactional_signal_consumption_implemented",
+                           "reload_preflight_implemented"):
+            self.assertTrue(play[unfinished])
         self.assertTrue(runtime["replaces_legacy_world"])
         self.assertTrue(runtime["managed_behaviour_lifecycle"])
         self.assertFalse(runtime["legacy_scene_import"])
@@ -121,14 +130,18 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertEqual(manifest["architecture"]["implemented"]["world_and_components"], "C#_Runtime.World")
 
     def test_managed_ai_gateway_has_narrow_honest_capabilities(self) -> None:
-        gateway = inspect_project(ROOT)["agent_contract"]
+        manifest = inspect_project(ROOT)
+        gateway = manifest["agent_contract"]
         self.assertTrue(gateway["managed_gateway_implemented"])
         self.assertEqual(gateway["managed_contract_version"], 2)
-        self.assertEqual(gateway["domains"]["scene"], "shared_active_editor_commands_no_MCP_transport")
-        self.assertFalse(gateway["managed_gateway_transport_implemented"])
+        self.assertEqual(gateway["domains"]["scene"], "active_editor_scoped_MCP_owner_thread")
+        self.assertTrue(gateway["managed_gateway_transport_implemented"])
+        self.assertTrue(manifest["editor_mcp"]["remote_mutations_implemented"])
+        self.assertTrue(manifest["editor_mcp"]["trusted_scope_grants_implemented"])
+        self.assertFalse(manifest["editor_mcp"]["enabled_by_default"])
         self.assertFalse(gateway["arbitrary_code_execution"])
         self.assertFalse(gateway["project_file_mutation_gateway"])
-        self.assertEqual(len(gateway["managed_capabilities"]), 8)
+        self.assertEqual(len(gateway["managed_capabilities"]), 10)
         self.assertIn("ncma.scene.transaction", gateway["managed_capabilities"])
         self.assertEqual(gateway["domains"]["ui"], "model_only_no_editing_gateway")
 

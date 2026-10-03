@@ -8,6 +8,8 @@ public sealed partial class EditSession
         object data;
         switch (request.Capability)
         {
+            case "ncma.scene.object.inspect": return ObjectDetails(request);
+            case "ncma.engine.behaviour_types": return BehaviourTypes(request);
             case "ncma.scene.inspect":
                 Closed(request.Input, ["offset", "limit"], []);
                 int offset = request.Input.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
@@ -32,6 +34,8 @@ public sealed partial class EditSession
                 data = new { components = _document.World.Components.Describe() }; break;
             default: throw new ArgumentException("Unknown inspection.");
         }
+        if (JsonSerializer.SerializeToUtf8Bytes(data, OutputJson).Length > 256 * 1024 - 4096)
+            return Result(request, "error", "item_too_large", false, new { });
         return Result(request, "ok", "ok", false, data);
     }
     private static string RiskName(MutationRisk risk) => risk switch
@@ -50,10 +54,14 @@ public sealed partial class EditSession
              "executionRevision":{"type":"integer","minimum":0},"replayed":{"type":"boolean"},"changed":{"type":"boolean"},"data":{"type":"object"}}}
             """;
         CapabilityDescriptor Descriptor(string name, string description, MutationRisk risk, string input) =>
-            new(name, description, risk, Json(input), Json(result));
+            new(name, description, risk, name == "ncma.scene.transaction" ? TransactionSchema(input) : Json(input), OutputSchema(result, name));
         yield return Descriptor("ncma.capabilities.list", "Inspect implemented document capabilities and schemas.", MutationRisk.ReadOnly, empty);
         yield return Descriptor("ncma.engine.component_types", "Inspect trusted registered component identities, versions and schemas.", MutationRisk.ReadOnly, empty);
         yield return Descriptor("ncma.scene.inspect", "Read bounded paged object summaries from the committed complete document.", MutationRisk.ReadOnly, """{"type":"object","additionalProperties":false,"properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":128}}}""");
+        yield return Descriptor("ncma.scene.object.inspect", "Read complete committed component or binding/export data with bounded pagination.", MutationRisk.ReadOnly,
+            """{"type":"object","additionalProperties":false,"required":["objectId","section"],"properties":{"objectId":{"type":"string","format":"uuid"},"section":{"enum":["summary","components","bindings","exports"]},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":64},"bindingId":{"type":"string","format":"uuid"}}}""");
+        yield return Descriptor("ncma.engine.behaviour_types", "Read the trusted loaded Behaviour/Export catalog; never load or execute code.", MutationRisk.ReadOnly,
+            """{"type":"object","additionalProperties":false,"properties":{"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":64}}}""");
         yield return Descriptor("ncma.scene.validate", "Validate the managed scene without changing it.", MutationRisk.ReadOnly, empty);
         yield return Descriptor("ncma.scene.transaction", "Atomically edit objects, registered components and complete C# Behaviour/Export configurations.", MutationRisk.Reversible, """
             {"type":"object","additionalProperties":false,"required":["operations"],"properties":{"label":{"type":"string","minLength":1,"maxLength":256},"selection":{"type":["string","null"],"format":"uuid"},

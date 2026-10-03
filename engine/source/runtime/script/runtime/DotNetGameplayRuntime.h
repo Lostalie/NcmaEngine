@@ -3,6 +3,7 @@
 #include "script/runtime/ScriptRuntime.h"
 #include "scene/ManagedSceneClient.h"
 #include "script/runtime/GameplayTypes.h"
+#include "interop/NcmaGameplayBridge.h"
 
 #include <filesystem>
 #include <memory>
@@ -24,7 +25,14 @@ namespace NcmaEngine::Scripting
         [[nodiscard]] const RuntimeDescriptor& GetDescriptor() const noexcept override;
         bool Start(std::string& error) override;
         void Stop() noexcept override;
-        void Tick(double deltaSeconds) override;
+        void Tick(double deltaSeconds) override; // IScriptRuntime adapter; delegates to the sole managed AdvanceFrame.
+        void AdvanceFrame(double deltaSeconds);
+        [[nodiscard]] bool SubmitInput(NcmaInputFrameV1 input, std::string& error);
+        [[nodiscard]] bool ReadRenderFrame(std::vector<NcmaRenderObjectV1>& output, NcmaRenderHeaderV1& header, std::string& error);
+        [[nodiscard]] bool Pause(std::string& error);
+        [[nodiscard]] bool Resume(std::string& error);
+        [[nodiscard]] bool Step(std::string& error);
+        [[nodiscard]] const NcmaPlayStatusV5& GetPlayStatus() const noexcept;
 
         [[nodiscard]] bool Reload(std::string& error);
         // Bind an opaque C# session handle; no native world pointer crosses the ABI.
@@ -38,6 +46,7 @@ namespace NcmaEngine::Scripting
 
     private:
         struct Implementation;
+        bool Control(std::uint32_t command, std::string& error);
         std::unique_ptr<Implementation> m_Implementation;
     };
 }

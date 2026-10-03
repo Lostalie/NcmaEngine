@@ -2,6 +2,17 @@ cmake_minimum_required(VERSION 3.25)
 
 project(NcmaEngine VERSION 0.2.0 LANGUAGES C CXX)
 
+# VS installations with only the Chinese CL resources ignore VSLANG=1033. Some
+# CMake probes decode that localized prefix incorrectly; Ninja then loses header deps.
+# Match the verified resource fallback, not the user console language.
+string(STRIP "$ENV{VSLANG}" _ncma_cl_language)
+if(MSVC AND _ncma_cl_language STREQUAL "1033")
+    get_filename_component(_ncma_cl_directory "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    if(EXISTS "${_ncma_cl_directory}/2052/clui.dll" AND NOT EXISTS "${_ncma_cl_directory}/1033/clui.dll")
+        set(CMAKE_CL_SHOWINCLUDES_PREFIX "注意: 包含文件:  ")
+    endif()
+endif()
+
 if(WIN32)
     enable_language(RC)
 endif()
@@ -136,7 +147,16 @@ if(NCMA_BUILD_MANAGED)
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Core.Tests/Ncma.Editor.Core.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
-            COMMENT "Building the C# runtime, complete document editor, gameplay API, host, and sample"
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/Ncma.Gameplay.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Managed.Host.Tests/Ncma.Managed.Host.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Transport.Tests/Ncma.Editor.Transport.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMENT "Building the C# runtime, complete document editor, Play session, host, and sample"
             VERBATIM
         )
     endif()
@@ -164,6 +184,16 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaEditorCoreTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Core.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Core.Tests.dll")
         set_tests_properties(NcmaEditorCoreTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaGameplayTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Gameplay.Tests.dll")
+        set_tests_properties(NcmaGameplayTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaManagedCatalogTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Managed.Host.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Managed.Host.Tests.dll"
+            "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Gameplay.Sample.dll")
+        set_tests_properties(NcmaManagedCatalogTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaEditorTransportTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Transport.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Transport.Tests.dll")
+        set_tests_properties(NcmaEditorTransportTests PROPERTIES TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
     endif()
     add_executable(NcmaAnimationTests tests/AnimationTests.cpp)
     target_link_libraries(NcmaAnimationTests PRIVATE NcmaCore NcmaNative)
@@ -221,12 +251,12 @@ if(WIN32 AND NCMA_BUILD_EDITOR)
     add_dependencies(NcmaEditor NcmaNative)
     set_target_properties(NcmaEditor PROPERTIES
         OUTPUT_NAME "NcmaEngine"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out/bin"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/out/bin"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/out/bin"
-        PDB_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/out/symbols"
-        PDB_OUTPUT_DIRECTORY_DEBUG "${CMAKE_SOURCE_DIR}/out/symbols"
-        PDB_OUTPUT_DIRECTORY_RELEASE "${CMAKE_SOURCE_DIR}/out/symbols"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
+        PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/symbols"
+        PDB_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/symbols"
+        PDB_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/symbols"
     )
     if(MSVC)
         target_compile_options(NcmaEditor PRIVATE /W4 /permissive- /utf-8)
@@ -246,6 +276,8 @@ if(WIN32 AND NCMA_BUILD_EDITOR)
                 "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Managed.Host.dll"
                 "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Gameplay.Sample.dll")
         set_tests_properties(NcmaManagedHostSmokeTest PROPERTIES TIMEOUT 20)
+        add_test(NAME NcmaEditorMcpSmokeTest COMMAND NcmaEditor --mcp-smoke-test)
+        set_tests_properties(NcmaEditorMcpSmokeTest PROPERTIES TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
         add_test(NAME NcmaEditorGameplaySmokeTest COMMAND NcmaEditor --gameplay-smoke-test)
         set_tests_properties(NcmaEditorGameplaySmokeTest PROPERTIES TIMEOUT 30
             FAIL_REGULAR_EXPRESSION "Render pass .* failed")

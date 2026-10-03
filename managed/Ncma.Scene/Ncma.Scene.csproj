@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Ncma.Editor.Core" />
+    <InternalsVisibleTo Include="Ncma.Gameplay" />
     <ProjectReference Include="../Ncma.Runtime/Ncma.Runtime.csproj" />
   </ItemGroup>
 </Project>

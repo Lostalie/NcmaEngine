@@ -1,6 +1,6 @@
 # A 方案与 AI 深度开发：职责、权限及首个实现切片
 
-更新：2026-10-03。用户已确认 C# 主引擎 + C++ 性能插件，AI 参与场景、动画、UI、工具与引擎扩展。
+更新：2026-10-04。用户已确认 C# 主引擎 + C++ 性能插件，AI 参与场景、动画、UI、工具与引擎扩展。
 这是产品方向，不代表所有操作已经接入当前编辑器。
 
 ## 已实现的 C# headless 基础
@@ -11,23 +11,25 @@
 - World/GameObject：扁平空对象、可选 Transform、对象 UUID 索引、创建/删除、owner-thread 检查。
 - ComponentRegistry：显式可信注册稳定 typeId/version/schema 和值组件校验器。拒绝可变引用字段；启动后冻结。校验器须纯函数/幂等，不修改外部 World 或做 IO。
 - 托管快照：managed JSON v1，校验大小/身份/组件/数值后原子恢复；运行时引用不保存。
-- WorldRunner：有界固定步、顺序 Systems，读已提交值、写暂存、成功提交，错误中止并 fault。
+- WorldRunner/PlaySession：已接入活动编辑器，OnFixedUpdate/顺序 Systems 有界固定步、OnUpdate 只读；Pause/Resume/Step/Faulted、严格与交互时间策略、丢时诊断。读已提交值、写暂存，错误中止；私有状态/IO 不回滚。
 - EditSession：编辑器与 Agent 共用事务入口，原子 create/rename/set_component/remove_component/set_bindings、完整文档 Undo/Redo、版本检查和权限。
 
 组件存储当前使用按类型字典/装箱，事务使用整场景快照；这是正确性基础，不是已优化的 ECS。
 schema 校验仅支持 closed object、number/integer/string/boolean 与 local $defs，不是完整 JSON Schema。
 System 热路径目前也有校验/序列化分配，帧预算、类型池与低分配优化尚未验收。
-已有 Behaviour 宿主已迁入此 World，`.ncmascene` JSON v1 由 C# 完整读写，旧 .ncscene 兼容代码已删除；通用查询、结构命令队列和 live MCP 传输未实现；共享 EditSession 已接入活动编辑场景。
+已有 Behaviour 宿主已迁入此 World，`.ncmascene` JSON v1 由 C# 完整读写，旧 .ncscene 兼容代码已删除；运行结构命令与活动编辑器 MCP 已实现基础；通用查询/类型池优化未实现；共享 EditSession 已接入活动编辑场景。
 
-## 当前可调用能力（C# API，不是 MCP server）
+## 当前可调用能力（C# Core + 活动编辑器 MCP）
 
 | 稳定名称 | 风险 | 已实现范围 |
 |---|---|---|
 | ncma.capabilities.list | read_only | 描述已实现能力及 JSON 输入/输出 schema |
 | ncma.engine.component_types | read_only | 注册组件身份、版本与 schema |
 | ncma.scene.inspect | read_only | 托管场景 UUID、组件、World 身份与 tick |
+| ncma.engine.behaviour_types | read_only | 可信已加载 Behaviour/Export catalog，分页读取、不执行脚本 |
+| ncma.scene.object.inspect | read_only | 完整组件/绑定/Export 配置，有界分页 |
 | ncma.scene.validate | read_only | 验证当前托管场景，不改状态 |
-| ncma.scene.transaction | reversible | 1..128 项 create/rename/set_component/remove_component/set_bindings，原子提交 |
+| ncma.scene.transaction | reversible | 1..128 项基础对象/组件/绑定操作及局部 add_binding/remove_binding/set_binding_enabled/set_export，原子提交 |
 | ncma.scene.delete_object | destructive | 显式批准一个对象 UUID，仍可撤销 |
 | ncma.history.undo | reversible | 撤销，仍校验原命令权限 |
 | ncma.history.redo | reversible | 重做，仍校验原命令及删除目标授权 |
@@ -47,7 +49,7 @@ status 为 ok/error/conflict/denied；错误不包含待执行脚本。输入关
 输入最多 64 KiB，组件 payload 最多 64 KiB，World 快照最多 4 MiB，对象最多 4096、每对象最多 64 组件。
 事务/Undo 使用全量恢复，所有旧运行时引用失效，必须按 UUID 重新解析。
 外部直接 World 修改令已有 EditSession 的历史失效并返回冲突，不覆盖外部修改；必须显式 Resynchronize；不会自动认领外部修改。
-固定步内禁止结构/编辑器修改；失败只回滚暂存组件，不回滚 System 私有状态、IO 等副作用。
+固定步内禁止结构/编辑器修改；失败回滚本步组件/结构/绑定/信号消费与发送/回执，不回滚 System 私有状态、IO 等副作用。
 Runner fault 后必须显式处理私有状态并 ResetFault；不自动重试，重置清空剩余时间。
 
 ## 示例：由宿主批准一次场景创建
@@ -78,15 +80,15 @@ AI 不能提交 CLR 类型名、程序集路径、eval/exec 或动态代码作�
 
 | 领域 | 目标工作 | 当前状态 / 下一步 |
 |---|---|---|
-| 场景 | 创建角色、组件、资源引用、参数、Prefab | 共享场景事务已接入 ImGui；资产引用/Prefab/live MCP 传输未实现 |
+| 场景 | 创建角色、组件、资源引用、参数、Prefab | 共享场景事务已接入 ImGui；活动场景 MCP 已连接相同 Editor.Core；资产引用/Prefab 未实现 |
 | 动画 | 图节点/连线、动作片段、过渡、通知、Root Motion 测试 | 隔离原生动画 MCP 已实现；托管图命令、正式 Animator/角色链路未实现 |
 | UI | Frame、布局/样式、组件实例、交互、画布预览 | 原生数据模型存在；托管文档/求解/事务网关未实现 |
 | 工具 | 资产报告、验证、构建、测试与结构化诊断 | CLI inspect/FBX 报告/动画 MCP 已实现；受约束构建/测试 Agent 网关未实现 |
 | 引擎扩展 | 定义组件/schema、System、编辑器面板和插件适配器 | 可信值组件注册已实现；生成代码审查、路径限定文件事务、编译/装载未实现 |
 
 各领域应返回真实能力清单，而不是注册一个看似可用的空实现。
-共享场景能力尚无 stdio MCP/gRPC/IPC adapter；现有 Python stdio 动画 MCP 不可调用它们，
-也不连接当前 live 编辑器。两套入口不能宣称共享实时状态。
+共享场景能力已有 C# stdio → Windows named pipe adapter，默认关闭/只读，用户批准精确提案后共用历史。
+见 [EDITOR_MCP.md](EDITOR_MCP.md)。现有 Python stdio 动画 MCP 仍是隔离预览，不与活动场景共享状态。
 
 所有领域使用同一模式：读取/检查 → 有界提案 → 权限与 revision 校验 → 编辑器事务 → 验证 → 结果/撤销。
 项目源码修改与场景数据编辑不同：未来代码工具应限制项目相对路径、先呈现 diff、显式批准编译/加载。
@@ -99,7 +101,8 @@ C++ 只承接 Renderer、Physics 和经测量必要的数值/导入内核；不�
 Python 为可选专长模块/插件；开发助手可以直接使用工具协议，不要求游戏安装 Python。
 AI 开发助手和运行时 AI 推理服务是不同接口；pythonnet/gRPC/ZeroMQ 仍未实现。
 
-managed Behaviour、托管权威 World 与 `.ncmascene` 完整文件读写已接入编辑器；完整文档命令已由 Editor.Core 接管；交互草稿、UUID 选择恢复、保存指纹和 Play 冻结已接入。下一步为固定步调度与 live MCP 传输。
+managed Behaviour、托管权威 World 与 `.ncmascene` 完整文件读写已接入编辑器；完整文档命令已由 Editor.Core 接管；交互草稿、UUID 选择恢复、保存指纹和 Play 冻结已接入。M1.3 固定步、输入/插值、运行命令、事务信号与安全重载已接入；M1.4 活动场景 MCP 已接入。
+自动验收证据及尚待人工验收见 [M1 交付报告](M1_DELIVERY_REPORT.md)。
 切换时保持单一 live 权威，不维护长期双向同步。之后反转 C# 主入口并逐个原生插件化。
 动作游戏先打通 FBX 场景角色/GPU 蒙皮/Animator/CharacterMotor，再接动画图命令；UI 文档与画布独立开发。
 每个切片通过 Build.bat、headless/原生回归和能力状态检查，不以文档或目录拆分代替运行验收。

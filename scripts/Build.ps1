@@ -7,6 +7,8 @@ param(
     [switch]$SkipManaged,
     [switch]$SkipPython,
 
+    [switch]$CleanNative,
+
     [switch]$GameplayOnly
 )
 
@@ -62,12 +64,17 @@ foreach ($requiredFile in @($vcvars, $cmake, $ctest, $ninja)) {
 
 $configurationLower = $Configuration.ToLowerInvariant()
 $buildDirectory = Join-Path $projectRoot "out\build\windows-ninja-$configurationLower"
+if ($CleanNative) {
+    $expectedBuildDirectory = [IO.Path]::GetFullPath((Join-Path $projectRoot "out\build\windows-ninja-$configurationLower"))
+    if ([IO.Path]::GetFullPath($buildDirectory) -ne $expectedBuildDirectory) { throw 'Unsafe native build path.' }
+}
+$cleanBuildOption = if ($CleanNative) { ' --clean-first' } else { '' }
 $nativeCommand = @(
-    'set VSCMD_SKIP_SENDTELEMETRY=1',
+    'set "VSCMD_SKIP_SENDTELEMETRY=1"',
     ('call "{0}" >nul' -f $vcvars),
-    'set VSLANG=1033',
+    'set "VSLANG=1033"',
     ('"{0}" -S "{1}" -B "{2}" -G Ninja -DCMAKE_BUILD_TYPE={3} -DCMAKE_MAKE_PROGRAM="{4}" -DNCMA_BUILD_TESTS=ON -DNCMA_BUILD_MANAGED=ON -DNCMA_BUILD_EDITOR=ON' -f $cmake, $projectRoot, $buildDirectory, $Configuration, $ninja),
-    ('"{0}" --build "{1}" --target NcmaCore NcmaNative NcmaArchitectureTests' -f $cmake, $buildDirectory),
+    ('"{0}" --build "{1}" --target NcmaCore NcmaNative NcmaArchitectureTests{2}' -f $cmake, $buildDirectory, $cleanBuildOption),
     ('"{0}" --build "{1}"' -f $cmake, $buildDirectory)
 ) -join ' && '
 
@@ -75,6 +82,17 @@ Write-Host "[Ncma] Building native targets ($Configuration)..."
 & $env:ComSpec /d /s /c $nativeCommand
 if ($LASTEXITCODE -ne 0) {
     throw "Native build failed with exit code $LASTEXITCODE."
+}
+
+# Keep Debug/Release link outputs isolated; always deploy the requested configuration.
+# A shared Ninja output path can otherwise leave a newer Debug executable in a Release build.
+$editorDestination = Join-Path $projectRoot 'out\bin'
+New-Item -ItemType Directory -Path $editorDestination -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $buildDirectory 'bin\NcmaEngine.exe') -Destination (Join-Path $editorDestination 'NcmaEngine.exe') -Force
+if ($Configuration -eq 'Debug') {
+    $symbolDestination = Join-Path $projectRoot 'out\symbols'
+    New-Item -ItemType Directory -Path $symbolDestination -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $buildDirectory 'symbols\NcmaEngine.pdb') -Destination $symbolDestination -Force
 }
 
 # The editor requires the C# authoritative scene host. Native DLLs contain kernels only.
@@ -86,7 +104,7 @@ Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaNative.dll') `
 
 if (-not $SkipTests) {
     Write-Host '[Ncma] Running native architecture tests...'
-    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
+    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaManagedCatalogTests|NcmaEditorTransportTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
     if ($LASTEXITCODE -ne 0) {
         throw "Native tests failed with exit code $LASTEXITCODE."
     }
@@ -108,6 +126,8 @@ if (-not $SkipManaged) {
     if ($LASTEXITCODE -ne 0) { throw "Managed scene document build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Editor.Core.Tests\Ncma.Editor.Core.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed editor core build failed with exit code $LASTEXITCODE." }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Gameplay.Tests\Ncma.Gameplay.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Managed gameplay tests build failed with exit code $LASTEXITCODE." }
     $managedProject = Join-Path $projectRoot 'managed\Ncma.Managed.SmokeTest\Ncma.Managed.SmokeTest.csproj'
     $managedHostProject = Join-Path $projectRoot 'managed\Ncma.Managed.Host\Ncma.Managed.Host.csproj'
     $engineManagedOutput = Join-Path $projectRoot 'out\managed'
@@ -120,6 +140,15 @@ if (-not $SkipManaged) {
     if ($LASTEXITCODE -ne 0) {
         throw "Managed host build failed with exit code $LASTEXITCODE."
     }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Managed.Host.Tests\Ncma.Managed.Host.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Managed catalog tests build failed with exit code $LASTEXITCODE." }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Editor.Transport.Tests\Ncma.Editor.Transport.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Editor transport tests build failed with exit code $LASTEXITCODE." }
+    $mcpOutput = Join-Path $projectRoot 'out\managed\editor-mcp'
+    $transportTestsOutput = Join-Path $projectRoot 'out\managed\editor-transport-tests'
+    New-Item -ItemType Directory -Path $mcpOutput, $transportTestsOutput -Force | Out-Null
+    Copy-Item -Path (Join-Path $projectRoot "managed\Ncma.Editor.Mcp\bin\$Configuration\net8.0\*") -Destination $mcpOutput -Force
+    Copy-Item -Path (Join-Path $projectRoot "managed\Ncma.Editor.Transport.Tests\bin\$Configuration\net8.0\*") -Destination $transportTestsOutput -Force
     Build-GameplayAssembly
     New-Item -ItemType Directory -Path $engineManagedOutput -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaNative.dll') `
@@ -135,6 +164,12 @@ if (-not $SkipManaged) {
         'Ncma.Runtime.pdb',
         'Ncma.Scene.dll',
         'Ncma.Scene.pdb',
+        'Ncma.Gameplay.dll',
+        'Ncma.Gameplay.pdb',
+        'Ncma.Editor.Protocol.dll',
+        'Ncma.Editor.Protocol.pdb',
+        'Ncma.Editor.Transport.dll',
+        'Ncma.Editor.Transport.pdb',
         'Ncma.Editor.Core.dll',
         'Ncma.Editor.Core.pdb'
     )) {
@@ -152,7 +187,7 @@ if (-not $SkipManaged) {
             throw "Managed/native smoke test failed with exit code $LASTEXITCODE."
         }
         Write-Host '[Ncma] Running managed headless commands and embedded gameplay host tests...'
-        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
+        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaManagedCatalogTests|NcmaEditorTransportTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
         if ($LASTEXITCODE -ne 0) {
             throw "Embedded .NET host smoke test failed with exit code $LASTEXITCODE."
         }

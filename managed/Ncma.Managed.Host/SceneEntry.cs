@@ -18,6 +18,7 @@ public static unsafe partial class NativeEntry
         public readonly Ncma.Scene.SceneDocument Document;
         public readonly SceneWorld World;
         public Ncma.Editor.Core.EditSession? Editor;
+        public Ncma.Editor.Transport.EditorEndpoint? Endpoint;
         public SceneSession(string name)
         {
             Document = new(name);
@@ -60,7 +61,7 @@ public static unsafe partial class NativeEntry
         }
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static uint GetSceneBridgeVersion() => 4;
+    public static uint GetSceneBridgeVersion() => 6;
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static ulong CreateScene(byte* name, byte* error, int capacity)
     {
@@ -83,7 +84,7 @@ public static unsafe partial class NativeEntry
         if (length < 0 || length > SceneLimit || (length > 0 && input is null) || output is null || outputCapacity != SceneLimit)
             throw new ArgumentException("Invalid scene ABI buffers (4 MiB output required; mutations never retry).");
         SceneSession doc = Scene(handle);
-        if (s_world == doc.World && operation is 2 or 3 or 9 or 15 or 22 or 25 or 27)
+        if (s_world == doc.World && operation is 2 or 3 or 9 or 13 or 15 or 22 or 25 or 26 or 27)
             throw new InvalidOperationException("Stop the bound play session before editing its document.");
         if (doc.Editor is not null && operation is 2 or 3 or 9 or 13 or 15 or 16 or 17 or 18 or 22 or 25 or 26 or 27)
             throw new InvalidOperationException("Editor documents require the versioned command gateway; runtime writes are Play-only.");
@@ -98,7 +99,7 @@ public static unsafe partial class NativeEntry
                 End();
                 if (s_world == doc.World) throw new InvalidOperationException("End gameplay before releasing its scene.");
                 doc.Editor?.SetFrozen(true); // Deterministically cancel an unfinished draft on release.
-                doc.World.Dispose(); lock (s_sceneLock) s_scenes.Remove(handle); break;
+                doc.Endpoint?.Dispose(); doc.Endpoint = null; doc.World.Dispose(); lock (s_sceneLock) s_scenes.Remove(handle); break;
             case 2:
                 string name = ReadText(reader); bool spatial = ReadFlag(reader); End();
                 // Explicit editor spatial creation. Public gameplay CreateObject still creates an empty container.
@@ -123,9 +124,7 @@ public static unsafe partial class NativeEntry
             case 12: ulong transformed = reader.ReadUInt64(); End(); WriteTransform(writer, doc.World.FindId(transformed).LocalTransform); break;
             case 13: ulong edited = reader.ReadUInt64(); Transform value = ReadTransform(reader); End(); doc.World.FindId(edited).LocalTransform = value; break;
             case 15: ulong bound = reader.ReadUInt64(); BindingData[] bindings = ReadBindings(reader); End(); doc.SetBindings(doc.World.FindId(bound), bindings); break;
-            case 16: End(); doc.World.BeginPhase(); break;
-            case 17: End(); doc.World.CommitPhase(); break;
-            case 18: End(); doc.World.AbortPhase(); break;
+            // Old external Begin/Commit/Abort operations 16/17/18 are intentionally removed.
             case 19: ulong has = reader.ReadUInt64(); End(); writer.Write((byte)(doc.World.FindId(has).HasTransform ? 1 : 0)); break;
             case 20: ulong attached = reader.ReadUInt64(); End(); WriteBindings(writer, doc.GetBindings(doc.World.FindId(attached))); break;
             case 21: End(); writer.Write(doc.Document.CaptureBytes()); break;

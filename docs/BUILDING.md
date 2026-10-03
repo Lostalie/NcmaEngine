@@ -81,7 +81,7 @@ the engine/API or run the full verification suite. The full build runs nine CTes
 animation runtime/ABI, FBX import/reference skinning, C# host and hidden editor tests,
 including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases)
 and NcmaSceneDocumentTests (complete components/Behaviour snapshots and failure guards),
-plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v7 checks. Python gameplay
+plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v10 checks. Python gameplay
 removal is covered by rejecting language-tagged old scenes without modifying source
 files or destination Worlds. Passing this suite does not imply independent module transports exist.
 
@@ -101,13 +101,13 @@ See [FBX_IMPORT.md](FBX_IMPORT.md) for import constraints and the read-only Pyth
 
 ## Project inspection manifest
 
-`python -m ncma_tools.cli inspect .` emits project-manifest schema v8.
+`python -m ncma_tools.cli inspect .` emits project-manifest schema v9.
 Target and implemented ownership remain separate: the EXE/ImGui shell remains native, while World/components and gameplay
 is actually C# only (`gameplay.csharp_only_runtime_enforced=true`). Python gameplay backend and
 object language selection are removed; `python_modules` preserves specialized-module/plugin options,
 with pythonnet/gRPC/ZeroMQ explicitly NOT implemented. Scene assets use only .ncmascene SceneDocument JSON v1,
 including all registered components and script configuration. Old .ncscene v1-v6 compatibility and migration are removed;
-unsupported input is rejected without rewriting it or mutating the live document. Native plugin ABI is v2; World/GameObject exports are removed. Scene host v4 and Gameplay host v3 use opaque managed tokens. Rebuild old consumers.
+unsupported input is rejected without rewriting it or mutating the live document. Native plugin ABI is v2; World/GameObject exports are removed. Scene host v6 and Gameplay host v5 use opaque managed tokens. Rebuild old consumers.
 The MCP protocol version and animation-state JSON schema are unchanged.
 
 ## Authoritative C# World and headless foundation
@@ -115,14 +115,32 @@ The MCP protocol version and animation-state JSON schema are unchanged.
 Ncma.Runtime and Ncma.Runtime.Tests are included in NcmaEngine.sln and the canonical Build.bat path.
 The library now owns active editor and Play Worlds; no native object/component authority is retained.
 Ncma.Runtime itself references no NcmaNative, graphics or Python dependency. TreatWarningsAsErrors is enabled.
-C# SceneDocument JSON v1 (.ncmascene) is the only supported scene asset format, with complete component/binding persistence and atomic saves. The old .ncscene v1-v6 codec and migration paths have been removed. Behaviour lifecycle now uses this World; editor OnFixedUpdate is not scheduled.
-Ncma.Editor.Core owns the active ImGui scene commands and complete-document history. The native scene command stack was removed. Draft previews do not write World, and Play freezes the edit document. The shared v2 capability API does not yet expose a live MCP/IPC server. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
+C# SceneDocument JSON v1 (.ncmascene) is the only supported scene asset format, with complete component/binding persistence and atomic saves. The old .ncscene v1-v6 codec and migration paths have been removed. Ncma.Gameplay.PlaySession now owns the live editor WorldRunner and dispatches OnFixedUpdate; OnUpdate has read-only World access. Pause/Resume/Step and bounded strict/interactive timing are implemented. Input snapshots, render interpolation, runtime structural commands and reload preflight remain pending.
+Ncma.Editor.Core owns the active ImGui scene commands and complete-document history. The native scene command stack was removed. Draft previews do not write World, and Play freezes the edit document. The shared v2 API has a default-off scoped local stdio/IPC server; see EDITOR_MCP.md. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
 
-The editor now requires the deployed managed host, Ncma.Managed.dll, Ncma.Runtime.dll, Ncma.Scene.dll and Ncma.Editor.Core.dll in out/managed.
+The editor now requires the deployed managed host, Ncma.Managed.dll, Ncma.Runtime.dll, Ncma.Scene.dll, Ncma.Gameplay.dll and Ncma.Editor.Core.dll in out/managed.
 Do not use -SkipManaged for a fresh editor build: it only skips deployment and runs the native-only test subset.
 The full Build.bat builds NcmaCore/NcmaNative/NcmaArchitectureTests first, deploys the C# host,
 then runs all managed-dependent editor tests. Missing hosts fail with an actionable startup error.
 
 ## M1.1 implemented document boundary
 
-Complete Ncma.Scene document snapshots v1 cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell submits UUID commands to Editor.Core and uses opaque snapshots for Play; C# .ncmascene JSON v1 files persist complete documents with atomic saves. Old .ncscene compatibility is removed. M1.2 shared managed commands/history are implemented; asset references/pipeline, fixed-step editor scheduling and live MCP remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).
+Complete Ncma.Scene document snapshots v1 cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell submits UUID commands to Editor.Core and uses opaque snapshots for Play; C# .ncmascene JSON v1 files persist complete documents with atomic saves. Old .ncscene compatibility is removed. M1.2 shared managed commands/history are implemented; M1.3 runtime/input/interpolation/commands/reload and M1.4 scoped live MCP are implemented; asset references/pipeline remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).
+
+## Historical M1.3-A/B verification
+
+Build.bat now builds Ncma.Gameplay.Tests and includes NcmaGameplayTests in CTest.
+The independent gameplay tests cover fixed-frame-rate invariance, pending writes, read-only
+callbacks, lifecycle failures, owner-thread/reentrancy checks, pause/single-step, bounded
+catch-up and time-counter overflow. The native host smoke verifies the 120-byte bridge v4
+state, session rejection, removed external phase operations and no native active-Play writes.
+
+OnFixedUpdate is the simulation mutation callback; move gameplay writes out of OnUpdate.
+Faulted sessions require Stop followed by Play; component rollback does not undo private
+script fields or external IO. This records the earlier A/B gate only. Current full runtime/MCP evidence is in M1_DELIVERY_REPORT.md.
+
+## Current M1 verification
+
+Build.bat -Configuration Debug and Build.bat -Configuration Release run the complete matrix (no Skip flags), including Gameplay.Tests, collectible catalog checks, real IPC/stdio tests and actual ImGui MCP smoke. All source projects are in NcmaEngine.sln; the canonical build initializes VS itself. Outputs remain out/bin/NcmaEngine.exe and out/managed/editor-mcp/. See [M1 report](M1_DELIVERY_REPORT.md) for actual results and outstanding manual acceptance.
+
+Native Debug/Release link artifacts are isolated inside out/build/windows-ninja-<configuration>/{bin,symbols}; Build.bat always deploys the selected executable to out/bin/NcmaEngine.exe. This avoids cross-configuration timestamp reuse. The public executable path is unchanged. Optional -CleanNative cleans only generated Ninja outputs before the same complete verification. Chinese-only VS CL resource detection corrects the /showIncludes dependency prefix; installing another language pack is not required.

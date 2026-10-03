@@ -18,10 +18,15 @@ public sealed class World
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private Dictionary<ulong, Entry> _objects = new();
     private Dictionary<Guid, ulong> _uuidIndex = new();
-    private readonly Dictionary<(ulong, Type), object> _pending = new();
+    private Dictionary<ulong, Entry>? _stepObjects;
+    private Dictionary<Guid, ulong>? _stepUuids;
+    private readonly HashSet<ulong> _touched = [];
+    private ulong _stepNextId;
+    private Exception? _stepError;
     private Guid _identity = Guid.NewGuid();
     private ulong _nextId = 1, _revision, _tick;
-    private bool _updating, _preparing;
+    private bool _updating, _preparing, _initializing;
+    private int _readOnlyDepth;
     private string _name;
 
     public World(string name = "Untitled", ComponentRegistry? components = null)
@@ -164,7 +169,34 @@ public sealed class World
     private void VerifyStructuralAccess()
     {
         VerifyAccess();
+        VerifyWriteAccess();
         if (_updating || _preparing) throw new InvalidOperationException("Structural/editor mutation is not allowed inside an update/restore preparation.");
+    }
+    internal void VerifyWriteAccess()
+    {
+        VerifyAccess();
+        if (_readOnlyDepth != 0) throw new InvalidOperationException("World mutation is forbidden in a read-only gameplay callback.");
+    }
+    internal IDisposable ReadOnly()
+    {
+        VerifyAccess();
+        if (_updating || _preparing) throw new InvalidOperationException("Read-only callbacks require a committed boundary.");
+        var scope = new ReadScope(this);
+        _readOnlyDepth++;
+        return scope;
+    }
+    private sealed class ReadScope(World world) : IDisposable
+    {
+        private bool _disposed;
+        public void Dispose() { world.VerifyAccess(); if (_disposed) return; world._readOnlyDepth--; _disposed = true; }
+    }
+    internal IDisposable PreparationReadOnly()
+    {
+        VerifyAccess(); var scope = new ReadScope(this); _readOnlyDepth++; return scope;
+    }
+    internal ObjectReference CandidateReference(Guid uuid)
+    {
+        VerifyAccess(); var target = StepEntry(uuid); return new(_identity, target.Id);
     }
     private Entry Require(ObjectReference reference)
     {
@@ -198,14 +230,24 @@ public sealed class World
         Require(reference).Components.TryGetValue(typeof(T), out var value) ? (T)value : throw new ArgumentException("Component is not attached.");
     internal void Set(ObjectReference reference, object value)
     {
+        VerifyAccess();
+        try { SetCore(reference, value); }
+        catch (Exception error) { if (_updating) _stepError ??= error; throw; }
+    }
+    private void SetCore(ObjectReference reference, object value)
+    {
+        VerifyWriteAccess();
         if (_preparing) throw new InvalidOperationException("Mutation during restore preparation.");
         Entry entry = Require(reference);
-        object validated = Components.Validate(value);
+        object validated;
+        _preparing = true;
+        try { validated = Components.Validate(value); } finally { _preparing = false; }
         Type type = validated.GetType();
         if (_updating)
         {
-            if (!entry.Components.ContainsKey(type)) throw new InvalidOperationException("Attach components outside the fixed step.");
-            _pending[(reference.Id, type)] = validated;
+            var candidate = StepEntry(entry.PersistentId);
+            if (!candidate.Entry.Components.ContainsKey(type)) throw new InvalidOperationException("Component was removed or is not attached.");
+            Touch(candidate.Id).Components[type] = validated;
         }
         else
         {
@@ -226,27 +268,102 @@ public sealed class World
         _revision = revision;
         return true;
     }
-    internal void BeginStep()
+    internal void RejectStep(Exception error) { VerifyAccess(); if (_updating) _stepError ??= error; }
+    private void VerifyCommandAccess()
+    {
+        VerifyWriteAccess();
+        if (!_updating || _initializing || _preparing) throw new InvalidOperationException("Runtime commands require a fixed step.");
+    }
+    private (ulong Id, Entry Entry) StepEntry(Guid uuid)
+    {
+        if (_stepUuids is null || !_stepUuids.TryGetValue(uuid, out ulong id)) throw new ArgumentException("Unknown or destroyed command object.");
+        return (id, _stepObjects![id]);
+    }
+    private Entry Touch(ulong id)
+    {
+        var entry = _stepObjects![id];
+        if (_touched.Add(id)) _stepObjects[id] = entry = entry with { Components = new(entry.Components) };
+        return entry;
+    }
+    internal void StageCreate(Guid uuid, string name)
+    {
+        VerifyCommandAccess(); ValidateName(name);
+        if (uuid == Guid.Empty || _stepUuids!.ContainsKey(uuid) || _uuidIndex.ContainsKey(uuid)) throw new ArgumentException("Duplicate or invalid object UUID.");
+        if (_stepObjects!.Count >= MaxObjects || _stepNextId == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
+        ulong id = _stepNextId++;
+        _stepObjects.Add(id, new(uuid, name, new())); _stepUuids.Add(uuid, id); _touched.Add(id);
+    }
+    internal void StageDestroy(Guid uuid)
+    {
+        VerifyCommandAccess(); var target = StepEntry(uuid);
+        _stepObjects!.Remove(target.Id); _stepUuids!.Remove(uuid);
+    }
+    internal void StageRename(Guid uuid, string name)
+    {
+        VerifyCommandAccess(); ValidateName(name); var target = StepEntry(uuid);
+        _stepObjects![target.Id] = target.Entry with { Name = name };
+    }
+    internal void StageAdd(Guid uuid, ComponentSnapshot value)
+    {
+        VerifyCommandAccess(); var target = StepEntry(uuid);
+        object decoded;
+        _preparing = true; try { decoded = Components.Decode(value); } finally { _preparing = false; }
+        Type type = decoded.GetType();
+        if (target.Entry.Components.ContainsKey(type)) throw new ArgumentException("Component already attached.");
+        if (target.Entry.Components.Count >= MaxComponentsPerObject) throw new ArgumentException("Component capacity exceeded.");
+        Touch(target.Id).Components.Add(type, decoded);
+    }
+    internal void StageRemove(Guid uuid, string typeId)
+    {
+        VerifyCommandAccess(); var target = StepEntry(uuid);
+        Type? type = target.Entry.Components.Keys.FirstOrDefault(t => Components.Describe(t).TypeId == typeId);
+        if (type is null) throw new ArgumentException("Component is not attached.");
+        Touch(target.Id).Components.Remove(type);
+    }
+    internal void RequireCommandTarget(Guid uuid) { VerifyCommandAccess(); _ = StepEntry(uuid); }
+    internal void BeginStep(bool initialization = false)
     {
         VerifyStructuralAccess();
         _ = checked(_revision + 1);
-        _ = checked(_tick + 1);
+        if (!initialization) _ = checked(_tick + 1);
+        var objects = new Dictionary<ulong, Entry>(_objects);
+        var uuids = new Dictionary<Guid, ulong>(_uuidIndex);
+        _stepObjects = objects; _stepUuids = uuids; _stepNextId = _nextId; _stepError = null; _touched.Clear();
+        _initializing = initialization;
         _updating = true;
+    }
+    internal Action PrepareStep(Action<WorldSnapshot>? inspect = null)
+    {
+        VerifyWriteAccess();
+        if (!_updating || _preparing) throw new InvalidOperationException("No active gameplay step.");
+        _preparing = true;
+        try
+        {
+            if (_stepError is not null) throw new InvalidOperationException("Runtime command rejected; step must abort.", _stepError);
+            var objects = _stepObjects!; var uuids = _stepUuids!; ulong nextId = _stepNextId;
+            var candidate = new WorldSnapshot(1, _name, objects.Select(pair => new ObjectSnapshot(
+                pair.Value.PersistentId, pair.Value.Name, pair.Value.Components.Values
+                .OrderBy(value => Components.Describe(value.GetType()).TypeId, StringComparer.Ordinal)
+                .Select(value => new ComponentSnapshot(Components.Describe(value.GetType()).TypeId,
+                    Components.Describe(value.GetType()).Version, Components.EncodeObject(value))).ToArray())).ToArray());
+            _ = SceneJson.EncodeBounded(candidate, MaxSnapshotBytes);
+            inspect?.Invoke(candidate);
+            return () => { _objects = objects; _uuidIndex = uuids; _nextId = nextId; _revision++; if (!_initializing) _tick++; AbortStep(); };
+        }
+        finally { _preparing = false; }
     }
     internal void CommitStep()
     {
         VerifyAccess();
         if (!_updating) throw new InvalidOperationException("No active gameplay step.");
-        foreach (var write in _pending) _objects[write.Key.Item1].Components[write.Key.Item2] = write.Value;
-        _revision++;
-        _tick++;
-        AbortStep();
+        PrepareStep()();
     }
     internal void AbortStep()
     {
         VerifyAccess();
-        _pending.Clear();
+        _stepObjects = null; _stepUuids = null; _touched.Clear(); _stepError = null;
         _updating = false;
+        _initializing = false;
     }
     internal GameObject Resolve(ObjectReference reference) { _ = Require(reference); return new(this, reference); }
     internal void FixedStep(Action update)

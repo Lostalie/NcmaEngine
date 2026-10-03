@@ -104,7 +104,7 @@ namespace NcmaEngine
         using Create = std::uint64_t(__cdecl*)(const char*, char*, int);
         using Version = std::uint32_t(__cdecl*)();
         const auto version = reinterpret_cast<Version>(Scripting::ManagedHost::Resolve(L"GetSceneBridgeVersion"));
-        if (version() != 4) throw std::runtime_error("Managed scene bridge version mismatch");
+        if (version() != 6) throw std::runtime_error("Managed scene bridge version mismatch");
         const auto create = reinterpret_cast<Create>(Scripting::ManagedHost::Resolve(L"CreateScene"));
         std::array<char, 2048> error{}; m_Handle = create(name.c_str(), error.data(), static_cast<int>(error.size()));
         if (!m_Handle) throw std::runtime_error(error.data());
@@ -219,8 +219,43 @@ namespace NcmaEngine
         catch (const std::exception& e) { error = e.what(); return false; }
     }
     void ManagedSceneClient::FreezeEditing(bool frozen) { Buffer in; in.Put<std::uint8_t>(frozen); (void)Call(40, in.Bytes); }
+    std::string ManagedSceneClient::ConfigureMcp(bool enabled, const std::filesystem::path& projectRoot)
+    {
+        Buffer input; input.Put<std::uint8_t>(enabled); const auto path = projectRoot.u8string(); input.Text(std::string(path.begin(), path.end()));
+        Buffer output{Call(50, input.Bytes)}; return output.Text();
+    }
+    McpEndpointState ManagedSceneClient::PumpMcp()
+    {
+        Buffer output{Call(51)}; McpEndpointState state; state.Enabled = output.Get<std::uint8_t>() != 0;
+        if (!state.Enabled) return state;
+        state.InstanceId = output.Uuid(); state.DocumentGeneration = output.Get<std::uint64_t>(); state.DescriptorPath = output.Text();
+        state.QueueCount = output.Get<std::uint32_t>(); const auto count = output.Get<std::uint32_t>();
+        if (count > 4) throw std::runtime_error("Invalid MCP connection count");
+        for (std::uint32_t i = 0; i < count; ++i)
+        {
+            McpConnection value; value.Id = output.Uuid(); value.Name = output.Text(); value.Paired = output.Get<std::uint8_t>() != 0;
+            value.Connected = output.Get<std::uint8_t>() != 0; value.Pending = output.Get<std::uint32_t>(); state.Connections.push_back(std::move(value));
+        }
+        const auto proposalCount = output.Get<std::uint32_t>();
+        if (proposalCount > 16) throw std::runtime_error("Invalid MCP proposal count");
+        for (std::uint32_t i = 0; i < proposalCount; ++i)
+        {
+            McpProposal value; value.Id = output.Uuid(); value.ConnectionId = output.Uuid(); value.Capability = output.Text(); value.Risk = output.Text();
+            value.Revision = output.Get<std::uint64_t>(); value.Summary = output.Text(); value.Destructive = output.Get<std::uint8_t>() != 0;
+            if (value.Destructive) value.DeleteTarget = output.Uuid();
+            state.Proposals.push_back(std::move(value));
+        }
+        state.GrantSummary = output.Text(); state.AuditSummary = output.Text();
+        return state;
+    }
+    void ManagedSceneClient::PairMcp(SceneUuid connection, bool approve) { Buffer input; input.Uuid(connection); input.Put<std::uint8_t>(approve); (void)Call(52, input.Bytes); }
+    void ManagedSceneClient::RevokeMcp(SceneUuid connection) { Buffer input; input.Uuid(connection); (void)Call(53, input.Bytes); }
+    void ManagedSceneClient::ApproveMcp(SceneUuid proposal, bool history, const SceneUuid* confirmedDelete)
+    {
+        Buffer input; input.Uuid(proposal); input.Put<std::uint8_t>(history); input.Put<std::uint8_t>(confirmedDelete != nullptr);
+        if (confirmedDelete) input.Uuid(*confirmedDelete);
+        (void)Call(54, input.Bytes);
+    }
+    void ManagedSceneClient::RevokeMcpGrants(SceneUuid connection) { Buffer input; input.Uuid(connection); (void)Call(55, input.Bytes); }
     std::string ManagedSceneClient::InvokeReadOnlyCapability(std::string request) const { Buffer in; in.Text(request); Buffer out{Call(31, in.Bytes)}; return out.Text(); }
-    void ManagedSceneClient::BeginGameplayPhase() { (void)Call(16); }
-    void ManagedSceneClient::CommitGameplayPhase() { (void)Call(17); }
-    void ManagedSceneClient::AbortGameplayPhase() { (void)Call(18); }
 }

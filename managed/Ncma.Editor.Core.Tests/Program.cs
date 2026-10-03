@@ -39,6 +39,83 @@ static string TestFolder()
 
 var cases = new (string Name, Action Run)[]
 {
+    ("Scoped multi-target transactions selection history and cached retries cannot escape", () => {
+        var doc = new SceneDocument(); var a = doc.World.CreateObject("A"); var b = doc.World.CreateObject("B"); Guid aId = a.PersistentId, bId = b.PersistentId;
+        var session = new EditSession(doc); var scope = new CapabilityPermissions(["ncma.scene.transaction","ncma.history.undo","ncma.history.redo"], objectScope: [aId], createScope: [], allowDocumentHistory: false);
+        var multiple = Element(new { operations = new object[] { new { op = "rename", objectId = aId, name = "Good" }, new { op = "rename", objectId = bId, name = "Bad" } } });
+        var before = doc.CaptureBytes(); Check(session.Invoke(Request(session, "ncma.scene.transaction", multiple), scope).Code == "scope_denied" && doc.CaptureBytes().SequenceEqual(before));
+        var request = Request(session, "ncma.scene.transaction", Rename(aId, "Allowed")); Check(session.Invoke(request, scope).Changed);
+        var other = new CapabilityPermissions(["ncma.scene.transaction"], objectScope: [bId], allowDocumentHistory: false);
+        Check(session.Invoke(request, other).Status == "denied");
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", Rename(bId, "User")), EditPermissions()).Changed);
+        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), scope).Code == "history_scope_denied");
+        Check(doc.World.FindObject(bId).Name == "User");
+        var newId = Guid.NewGuid(); Check(session.Invoke(Request(session, "ncma.scene.transaction", Create(newId)), scope).Code == "scope_denied");
+        var select = Element(new { operations = new[] { new { op = "rename", objectId = aId, name = "Selection" } }, selection = bId });
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", select), scope).Code == "scope_denied");
+        var noChange = Request(session, "ncma.scene.transaction", Rename(aId, "Allowed")); Check(session.Invoke(noChange, scope).Code == "no_change");
+        Check(session.Invoke(noChange, other).Status == "denied");
+    }),
+    ("Document and file replacement history is never an Agent privilege", () => {
+        var doc = new SceneDocument(); var obj = doc.World.CreateObject("A"); var session = new EditSession(doc);
+        ulong generation = session.DocumentGeneration; Check(session.NewDocument(session.Revision, EditPermissions()).Changed);
+        Check(session.DocumentGeneration > generation);
+        var agent = new CapabilityPermissions(["ncma.scene.transaction", "ncma.history.undo"], allowDocumentHistory: false);
+        var before = doc.CaptureBytes(); Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), agent).Code == "history_scope_denied");
+        Check(doc.CaptureBytes().SequenceEqual(before)); Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), EditPermissions()).Changed);
+    }),
+    ("Final installation rechecks revocation after trusted component validation", () => {
+        bool active = true, revoke = false;
+        var registry = ComponentRegistry.CreateDefault(); registry.Register<Health>("game.health", 1,
+            """{"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}""", h => { if (revoke) active = false; return h; });
+        var doc = new SceneDocument(components: registry); var obj = doc.World.CreateObject("A"); var id = obj.PersistentId; obj.Set(new Health(1));
+        var session = new EditSession(doc); var permission = new CapabilityPermissions(["ncma.scene.transaction"], objectScope: [id], isCurrent: () => active);
+        var bytes = doc.CaptureBytes(); var request = Request(session, "ncma.scene.transaction", Element(new { operations = new[] { new { op = "set_component", objectId = id, typeId = "game.health", version = 1, data = new { points = 8 } } } }));
+        revoke = true; var result = session.Invoke(request, permission); Check(!result.Changed && result.Code == "scope_denied" && doc.CaptureBytes().SequenceEqual(bytes) && session.State.UndoCount == 0);
+    }),
+    ("Binding deltas preserve unmentioned configuration and enforce trusted catalog and ranges", () => {
+        var doc = new SceneDocument(); var obj = doc.World.CreateObject("A"); var id = obj.PersistentId; var first = Guid.NewGuid(); var second = Guid.NewGuid();
+        doc.SetBindings(id, [new(first, "Test.Probe", true, [new("Speed", ExportKind.Float, 4), new("Health", ExportKind.Integer, 9)]),
+            new(second, "Unresolved", false, [])]); var session = new EditSession(doc);
+        session.SetBehaviourCatalog(new(Guid.NewGuid(), [new("Test.Probe", [new("Speed", 1, "Speed", "", 0), new("Health", 3, "Health", "", 0)])]));
+        var scope = new CapabilityPermissions(["ncma.scene.transaction","ncma.history.undo","ncma.history.redo"], objectScope: [id], bindingScope: [first], requireTrustedBindings: true, allowDocumentHistory: false);
+        var input = Element(new { operations = new[] { new { op = "set_export", objectId = id, bindingId = first, name = "Speed", kind = 1, value = 12 } } });
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", input), scope).Changed);
+        Check(doc.GetBindings(id).Single(b => b.Id == first).Exports.Single(e => e.Name == "Health").Value == 9 && doc.GetBindings(id).Any(b => b.Id == second));
+        Check(session.Invoke(Request(session, "ncma.history.undo", Json("{}")), scope).Changed && doc.GetBindings(id).Single(b => b.Id == first).Exports.Single(e => e.Name == "Speed").Value == 4);
+        Check(session.Invoke(Request(session, "ncma.history.redo", Json("{}")), scope).Changed);
+        var outside = Element(new { operations = new[] { new { op = "remove_binding", objectId = id, bindingId = second } } });
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", outside), scope).Code == "scope_denied");
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", outside), EditPermissions()).Changed && doc.GetBindings(id).Length == 1);
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", Element(new { operations = new[] { new { op = "set_export", objectId = id, bindingId = first, name = "Private", kind = 1, value = 1 } } })), scope).Code == "invalid_input");
+    }),
+    ("Detail queries return complete component binding and export data without runtime callbacks", () => {
+        var doc = new SceneDocument(); var obj = doc.World.CreateObject("Detail"); obj.Set(TransformData.Identity);
+        var binding = new BehaviourBindingData(Guid.NewGuid(), "Test.Probe", false, [new("Speed", ExportKind.Float, 7), new("Health", ExportKind.Integer, 8)]);
+        doc.SetBindings(obj.PersistentId, [binding]); var session = new EditSession(doc); var bytes = doc.CaptureBytes(); var revision = session.Revision;
+        var components = session.Invoke(Request(session, "ncma.scene.object.inspect", Element(new { objectId = obj.PersistentId, section = "components" })));
+        Check(components.Status == "ok" && components.Data.GetProperty("items")[0].GetProperty("data").GetProperty("rotation").GetProperty("w").GetSingle() == 1);
+        var bindings = session.Invoke(Request(session, "ncma.scene.object.inspect", Element(new { objectId = obj.PersistentId, section = "bindings" })));
+        Check(bindings.Data.GetProperty("items")[0].GetProperty("exportCount").GetInt32() == 2);
+        var exports = session.Invoke(Request(session, "ncma.scene.object.inspect", Element(new { objectId = obj.PersistentId, section = "exports", bindingId = binding.Id, limit = 1 })));
+        Check(exports.Data.GetProperty("returnedCount").GetInt32() == 1 && !exports.Data.GetProperty("complete").GetBoolean() && exports.Data.GetProperty("nextOffset").GetInt32() == 1);
+        Check(session.Invoke(Request(session, "ncma.scene.object.inspect", Element(new { objectId = Guid.NewGuid(), section = "summary" }))).Code == "object_not_found");
+        Check(session.Invoke(Request(session, "ncma.scene.object.inspect", Element(new { objectId = obj.PersistentId, section = "summary", bindingId = binding.Id }))).Code == "invalid_input");
+        Check(session.Invoke(Request(session, "ncma.engine.behaviour_types", Json("{}"))).Code == "catalog_unavailable");
+        session.SetBehaviourCatalog(new(Guid.NewGuid(), [new("Test.Probe", [new("Speed", 1, "Speed", "Test", 7)])]));
+        var catalog = session.Invoke(Request(session, "ncma.engine.behaviour_types", Json("{}"))); Check(catalog.Status == "ok" && catalog.Data.GetProperty("items")[0].GetProperty("exports")[0].GetProperty("kind").GetUInt32() == 1);
+        Check(doc.CaptureBytes().SequenceEqual(bytes) && session.Revision == revision);
+        foreach (var capability in session.Describe()) Check(capability.OutputSchema.GetProperty("properties").GetProperty("data").TryGetProperty("anyOf", out _));
+    }),
+    ("Detail pagination honors document revision and refuses oversized single catalog item", () => {
+        var doc = new SceneDocument(); var obj = doc.World.CreateObject("Detail"); var session = new EditSession(doc);
+        var request = Request(session, "ncma.scene.object.inspect", Element(new { objectId = obj.PersistentId, section = "summary", limit = 64 }));
+        Check(session.Invoke(request).Status == "ok");
+        Check(session.Invoke(Request(session, "ncma.scene.transaction", Rename(obj.PersistentId, "Changed")), EditPermissions()).Changed);
+        Check(session.Invoke(request).Code == "revision_conflict");
+        session.SetBehaviourCatalog(new(Guid.NewGuid(), [new("Test.Huge", [new("Value", 1, new string('x', 300000), "Test", 0)])]));
+        Check(session.Invoke(Request(session, "ncma.engine.behaviour_types", Json("{}"))).Code == "item_too_large");
+    }),
     ("Registered extensions and frozen metadata", () => {
         var registry = Extensions(); var document = new SceneDocument(components: registry); var world = document.World; var a = world.CreateObject("A");
         a.Set(new Health(100)); Check(a.Get<Health>().Points == 100);
@@ -52,7 +129,7 @@ var cases = new (string Name, Action Run)[]
         Check(world.FindObject(id).Get<Health>().Points == 42);
     }),
     ("Capability schemas and read-only default", () => {
-        var document = new SceneDocument(); var world = document.World; var session = new EditSession(document); Check(session.Describe().Count == 8);
+        var document = new SceneDocument(); var world = document.World; var session = new EditSession(document); Check(session.Describe().Count == 10);
         foreach (var descriptor in session.Describe()) { Check(descriptor.InputSchema.ValueKind == JsonValueKind.Object); Check(descriptor.OutputSchema.GetProperty("required").GetArrayLength() == 10); }
         var inspect = session.Invoke(Request(session, "ncma.scene.inspect", Json("{}")));
         Check(inspect.Status == "ok" && !inspect.Changed && inspect.Data.GetProperty("scene").GetProperty("objects").GetArrayLength() == 0);

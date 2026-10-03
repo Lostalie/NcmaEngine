@@ -29,7 +29,7 @@ public sealed partial class EditSession
                 "ncma.scene.transaction", Json("{}"));
             Guid? selected = snapshot.Objects.Length == 0 ? null : snapshot.Objects[0].Id;
             return Commit(request, request.RequestId.ToString(), snapshot, _document.CaptureBytes(), label,
-                request.Capability, null, selected, file);
+                request.Capability, null, selected, file, permissions);
         }
         finally { _invoking = false; }
     }
@@ -40,11 +40,12 @@ public sealed partial class EditSession
         // Prepare all state before IO. Failed atomic file saves leave history and association untouched.
         string hash = Hash(_document.CaptureBytes());
         var context = new FileContext(full, hash);
+        ulong generation = full != _file.Path ? checked(DocumentGeneration + 1) : DocumentGeneration;
         _invoking = true;
         try
         {
             SceneDocumentFiles.Save(_document, full);
-            _file = context;
+            _file = context; DocumentGeneration = generation;
             _currentHash = hash;
         }
         finally { _invoking = false; }

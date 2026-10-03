@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ncma-editor": {
+      "command": "dotnet",
+      "args": [
+        "F:\\NcmaEngine\\out\\managed\\editor-mcp\\Ncma.Editor.Mcp.dll",
+        "--descriptor",
+        "F:\\NcmaEngine\\out\\sessions\\REPLACE_WITH_SELECTED_INSTANCE.json"
+      ]
+    }
+  }
+}

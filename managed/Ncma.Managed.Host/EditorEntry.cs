@@ -52,11 +52,55 @@ public static unsafe partial class NativeEntry
         {
             end(); if (scene.Editor is not null) throw new InvalidOperationException("One edit session per document.");
             if (s_world == scene.World) throw new InvalidOperationException("End gameplay before activating the editor.");
-            scene.Editor = new(scene.Document); return;
+            scene.Editor = new(scene.Document); scene.Editor.SetBehaviourCatalog(CurrentCatalog()); return;
         }
         var edit = scene.Editor ?? throw new InvalidOperationException("Activate an editor session first.");
         switch (operation)
         {
+            case 50:
+                bool enabled = ReadFlag(reader); string root = ReadText(reader); end();
+                scene.Endpoint?.Dispose(); scene.Endpoint = enabled ? new(edit, root) : null;
+                WriteText(writer, scene.Endpoint?.DescriptorPath ?? ""); break;
+            case 51:
+                end();
+                var endpoint = scene.Endpoint;
+                writer.Write((byte)(endpoint is null ? 0 : 1));
+                if (endpoint is null) break;
+                ulong beforePumpRevision = edit.Revision;
+                _ = endpoint.Pump(); if (beforePumpRevision != edit.Revision) scene.World.Restored(); var view = endpoint.View;
+                WriteUuid(writer, view.InstanceId); writer.Write(view.DocumentGeneration); WriteText(writer, view.DescriptorPath);
+                writer.Write(view.QueueCount); writer.Write(view.Connections.Length);
+                foreach (var connection in view.Connections)
+                {
+                    WriteUuid(writer, connection.ConnectionId); WriteText(writer, connection.ClientName);
+                    writer.Write((byte)(connection.Paired ? 1 : 0)); writer.Write((byte)(connection.Connected ? 1 : 0));
+                    writer.Write(connection.PendingCount);
+                }
+                var proposals = endpoint.Proposals;
+                writer.Write(proposals.Length);
+                foreach (var proposal in proposals)
+                {
+                    WriteUuid(writer, proposal.Id); WriteUuid(writer, proposal.ConnectionId); WriteText(writer, proposal.Capability);
+                    WriteText(writer, proposal.Risk); writer.Write(proposal.Revision);
+                    WriteText(writer, "Request: " + proposal.RequestId + "\nObjects: " + string.Join(", ", proposal.Objects) + "\nCreated: " + string.Join(", ", proposal.CreatedObjects) +
+                        "\nComponents: " + string.Join(", ", proposal.ComponentTypes) + "\nBindings: " + string.Join(", ", proposal.Bindings) + "\nIntent: " + endpoint.ProposalInput(proposal.Id));
+                    writer.Write((byte)(proposal.DeleteTarget.HasValue ? 1 : 0)); if (proposal.DeleteTarget is Guid proposalTarget) WriteUuid(writer, proposalTarget);
+                }
+                WriteText(writer, string.Join("\n", endpoint.Grants.Select(g => $"{g.ConnectionId}: request {g.RequestId}; {g.RemainingSeconds}s; history={g.AllowHistory}")));
+                WriteText(writer, string.Join("\n", endpoint.Audit.TakeLast(8).Select(a => $"{a.Capability}: {a.Code}; changed={a.Changed}; replayed={a.Replayed}; {a.DurationMs:F2}ms")));
+                break;
+            case 54:
+                Guid proposalId = ReadUuid(reader); bool historyGrant = ReadFlag(reader); Guid? confirmed = ReadFlag(reader) ? ReadUuid(reader) : null; end();
+                (scene.Endpoint ?? throw new ArgumentException("Endpoint disabled.")).Approve(proposalId, historyGrant, confirmed); break;
+            case 55:
+                Guid grantConnection = ReadUuid(reader); end();
+                (scene.Endpoint ?? throw new ArgumentException("Endpoint disabled.")).RevokeGrants(grantConnection); break;
+            case 52:
+                Guid paired = ReadUuid(reader); bool approved = ReadFlag(reader); end();
+                (scene.Endpoint ?? throw new ArgumentException("Endpoint disabled.")).Pair(paired, approved); break;
+            case 53:
+                Guid revoked = ReadUuid(reader); end();
+                (scene.Endpoint ?? throw new ArgumentException("Endpoint disabled.")).Revoke(revoked); break;
             case 31:
                 string json = ReadText(reader); end();
                 WriteText(writer, EditSession.EncodeResult(edit.InvokeJson(Encoding.UTF8.GetBytes(json)))); break; // Always read-only.
@@ -85,7 +129,7 @@ public static unsafe partial class NativeEntry
                 Guid committed = ReadUuid(reader); end(); Accepted(scene, edit.CommitInteraction(committed, UserPermissions()));
                 WriteEditorState(writer, edit.State); break;
             case 39: Guid cancelled = ReadUuid(reader); end(); edit.CancelInteraction(cancelled); break;
-            case 40: bool frozen = ReadFlag(reader); end(); edit.SetFrozen(frozen); break;
+            case 40: bool frozen = ReadFlag(reader); end(); edit.SetFrozen(frozen); scene.Endpoint?.Pump(); break;
             case 41: end(); edit.Resynchronize(); break;
             case 43:
                 ulong newRevision = reader.ReadUInt64(); end(); Accepted(scene, edit.NewDocument(newRevision, UserPermissions()));

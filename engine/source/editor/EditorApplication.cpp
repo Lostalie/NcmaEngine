@@ -133,17 +133,22 @@ namespace NcmaEngine::Editor
 
     }
 
-    EditorApplication::EditorApplication(HINSTANCE instance, Rhi::BackendType backendType, bool smokeTest, bool gameplaySmokeTest, bool fbxSmokeTest)
+    EditorApplication::EditorApplication(HINSTANCE instance, Rhi::BackendType backendType, bool smokeTest, bool gameplaySmokeTest, bool fbxSmokeTest, bool mcpSmokeTest)
         : m_Instance(instance), m_FbxSmokeTest(fbxSmokeTest), m_SmokeTest(smokeTest), m_GameplaySmokeTest(gameplaySmokeTest),
           m_BackendType(backendType)
     {
         std::array<wchar_t, 32768> modulePath{};
         const DWORD pathLength = GetModuleFileNameW(
             nullptr, modulePath.data(), static_cast<DWORD>(modulePath.size()));
-        if (pathLength > 0 && pathLength < modulePath.size())
-            m_ProjectRoot = std::filesystem::path(modulePath.data()).parent_path().parent_path().parent_path();
-        else
-            m_ProjectRoot = std::filesystem::current_path();
+        m_ProjectRoot = pathLength > 0 && pathLength < modulePath.size() ?
+            std::filesystem::path(modulePath.data()).parent_path() : std::filesystem::current_path();
+        while (!std::filesystem::exists(m_ProjectRoot / "CMakeLists.txt") || !std::filesystem::exists(m_ProjectRoot / "engine"))
+        {
+            const auto parent = m_ProjectRoot.parent_path();
+            if (parent == m_ProjectRoot || parent.empty()) throw std::runtime_error("Engine workspace root was not found");
+            m_ProjectRoot = parent;
+        }
+        m_McpSmokeTest = mcpSmokeTest;
         m_ScenePath = m_ProjectRoot / "assets" / "scenes" / "EditorScene.ncmascene";
         m_PreviewMaterial.BaseColor[0] = 0.32F;
         m_PreviewMaterial.BaseColor[1] = 0.16F;
@@ -177,6 +182,14 @@ namespace NcmaEngine::Editor
             if (m_Minimized && !m_SmokeTest)
             {
                 CancelInspectorEdit();
+                if (m_ScenePlaying && m_GameplayRuntime && m_GameplayRuntime->GetPlayStatus().State == NcmaPlayState::Running)
+                {
+                    NcmaInputFrameV1 input; input.Sequence = ++m_InputSequence;
+                    std::string error;
+                    if (!m_GameplayRuntime->SubmitInput(input, error)) AppendLog(error);
+                    m_InputHeld.fill(0); m_InputPressed.fill(0); m_InputReleased.fill(0); m_InputFocused = false;
+                }
+                m_McpState = m_Scene.PumpMcp();
                 glfwWaitEventsTimeout(0.016);
                 continue;
             }
@@ -184,9 +197,17 @@ namespace NcmaEngine::Editor
             RenderEditor();
             EndFrame();
             ++m_RenderedFrames;
-            if (m_SmokeTest && m_RenderedFrames >= 3)
+            if (m_McpSmokeTest && m_McpSmokeProcess)
+            {
+                DWORD exitCode = STILL_ACTIVE;
+                if (!GetExitCodeProcess(m_McpSmokeProcess, &exitCode)) throw std::runtime_error("MCP smoke process status failed");
+                if (exitCode != STILL_ACTIVE) { m_McpSmokeResult = static_cast<int>(exitCode); m_Running = false; }
+                else if (GetTickCount64() - m_McpSmokeStarted > 25000) { m_McpSmokeResult = 2; m_Running = false; }
+            }
+            if (m_SmokeTest && !m_McpSmokeTest && m_RenderedFrames >= 3)
                 m_Running = false;
         }
+        if (m_McpSmokeTest) return m_McpSmokeResult;
         if (m_GameplaySmokeTest)
         {
             const auto& runtimeError = m_GameplayRuntime->GetLastError();
@@ -234,7 +255,7 @@ namespace NcmaEngine::Editor
             m_ProjectRoot / "out" / "managed" / "Ncma.Managed.Host.runtimeconfig.json",
             m_ProjectRoot / "out" / "managed" / "Ncma.Managed.Host.dll",
             m_ProjectRoot / "out" / "managed" / "Ncma.Gameplay.Sample.dll");
-        if (!m_SmokeTest || m_GameplaySmokeTest)
+        if (!m_SmokeTest || m_GameplaySmokeTest || m_McpSmokeTest)
         {
             std::string gameplayError;
             if (m_GameplayRuntime->Start(gameplayError))
@@ -278,11 +299,23 @@ namespace NcmaEngine::Editor
             TogglePlay();
             if (!m_ScenePlaying) return false;
         }
-        if (m_SmokeTest && !m_GameplaySmokeTest)
+        if (m_SmokeTest && !m_GameplaySmokeTest && !m_McpSmokeTest)
         {
             BeginInspectorEdit("Escape smoke");
             m_InspectorDraft->Name = "Escape discarded";
             m_Scene.PreviewName(m_InspectorDraft->Token, m_InspectorDraft->Object, m_InspectorDraft->Name);
+        }
+        if (m_McpSmokeTest)
+        {
+            m_Scene.RenameEditorObject(m_Scene.GetPersistentId(m_SelectedObject), "Live MCP fixture"); RefreshEditorSelection();
+            const auto descriptor = m_Scene.ConfigureMcp(true, m_ProjectRoot);
+            std::wstring command = L"dotnet \"" + (m_ProjectRoot / "out/managed/editor-transport-tests/Ncma.Editor.Transport.Tests.dll").wstring() +
+                L"\" --live \"" + std::filesystem::path(descriptor).wstring() + L"\"";
+            STARTUPINFOW startup{}; startup.cb = sizeof(startup); PROCESS_INFORMATION process{};
+            if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
+                m_ProjectRoot.c_str(), &startup, &process)) throw std::runtime_error("MCP smoke child launch failed");
+            CloseHandle(process.hThread); m_McpSmokeProcess = process.hProcess; m_McpSmokeStarted = GetTickCount64();
+            m_ShowMcpPanel = true;
         }
         AppendLog(std::format("NcmaEditor initialized with {}", m_Renderer->GetName()));
         AppendLog("C# gameplay; Python is reserved for independent modules and tools");
@@ -308,6 +341,20 @@ namespace NcmaEngine::Editor
         if (!ApplyWindowIcons())
             return false;
         glfwSetWindowUserPointer(m_Window, this);
+        // Install before ImGui: its backend chains these event callbacks. Preserve press+release within one poll.
+        glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int, int action, int) {
+            auto* app = static_cast<EditorApplication*>(glfwGetWindowUserPointer(window));
+            if (!app || key < 0 || key >= 384) return;
+            if (action == GLFW_PRESS) app->m_InputPressed[key / 64] |= (std::uint64_t{1} << (key % 64));
+            if (action == GLFW_RELEASE) app->m_InputReleased[key / 64] |= (std::uint64_t{1} << (key % 64));
+        });
+        glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int) {
+            auto* app = static_cast<EditorApplication*>(glfwGetWindowUserPointer(window));
+            if (!app || button < 0 || button >= 8) return;
+            const int key = 384 + button;
+            if (action == GLFW_PRESS) app->m_InputPressed[key / 64] |= (std::uint64_t{1} << (key % 64));
+            if (action == GLFW_RELEASE) app->m_InputReleased[key / 64] |= (std::uint64_t{1} << (key % 64));
+        });
         glfwSetFramebufferSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
             auto* application = static_cast<EditorApplication*>(glfwGetWindowUserPointer(window));
             application->m_Minimized = width == 0 || height == 0;
@@ -1131,6 +1178,12 @@ float4 PSMain(PixelInput input) : SV_TARGET
 
     void EditorApplication::Shutdown() noexcept
     {
+        if (m_McpSmokeProcess)
+        {
+            DWORD exitCode = STILL_ACTIVE; (void)GetExitCodeProcess(m_McpSmokeProcess, &exitCode);
+            if (exitCode == STILL_ACTIVE) (void)TerminateProcess(m_McpSmokeProcess, 3);
+            CloseHandle(m_McpSmokeProcess); m_McpSmokeProcess = nullptr;
+        }
         if (m_GameplayRuntime) m_GameplayRuntime->Stop();
         m_PlayScene.reset();
         try { CancelInspectorEdit(); if (m_ScenePlaying) m_Scene.FreezeEditing(false); } catch (...) { }
@@ -1241,6 +1294,25 @@ float4 PSMain(PixelInput input) : SV_TARGET
         if (escapeSmoke && (m_InspectorDraft || m_Scene.GetDocumentRevision() != escapeRevision ||
             m_Scene.GetEditorState().UndoCount != escapeUndoCount || m_Scene.GetObjectName(m_SelectedObject) == "Escape discarded"))
             throw std::runtime_error("Escape must cancel the Inspector draft without changing the document or history");
+        m_McpState = m_Scene.PumpMcp();
+        if (m_McpState.Enabled) RefreshEditorSelection();
+        if (m_McpSmokeTest)
+        {
+            // Explicit hidden test mode only; production always needs human pairing/approval.
+            for (const auto& proposal : m_McpState.Proposals)
+                if (proposal.Capability == "ncma.scene.transaction" && !proposal.Destructive)
+                    m_Scene.ApproveMcp(proposal.Id, true, nullptr);
+            if (!m_McpSmokeUndoDone && m_Scene.GetObjectName(m_SelectedObject) == "Live MCP approved")
+            {
+                std::string undoError;
+                if (!m_Scene.UndoEditor(false, undoError)) throw std::runtime_error(undoError);
+                m_McpSmokeUndoDone = true; RefreshEditorSelection();
+            }
+        }
+        if (m_McpSmokeTest)
+            for (const auto& connection : m_McpState.Connections)
+                if (connection.Connected && !connection.Paired && connection.Name == "Ncma MCP stdio") m_Scene.PairMcp(connection.Id, true);
+        if (m_McpState.Enabled) RefreshEditorSelection();
         m_AnimationPreview.Tick(std::clamp(static_cast<double>(ImGui::GetIO().DeltaTime), 0.0, 0.1));
         if (m_FbxPreview.Player && !m_FbxPreview.Paused)
         {
@@ -1248,21 +1320,43 @@ float4 PSMain(PixelInput input) : SV_TARGET
                 std::clamp(static_cast<double>(ImGui::GetIO().DeltaTime), 0.0, std::min(0.1, m_FbxPreview.Player->Clip().Duration * 64))); }
             catch (const std::exception& error) { m_FbxPreview.Paused = true; m_FbxError = error.what(); }
         }
-        const bool updateGameplay = m_ScenePlaying && !m_ScenePaused && m_PlayScene;
-        if (updateGameplay) m_PlayScene->BeginGameplayPhase();
-        if (m_ScenePlaying && !m_ScenePaused && m_GameplayRuntime && m_GameplayRuntime->IsStarted())
+        if (m_ScenePlaying && m_PlayScene && m_GameplayRuntime && m_GameplayRuntime->IsStarted() &&
+            (m_GameplayRuntime->GetPlayStatus().State == NcmaPlayState::Running || m_GameplayRuntime->GetPlayStatus().State == NcmaPlayState::Paused))
         {
-            m_GameplayRuntime->Tick((m_GameplaySmokeTest) ? 1.0 / 60.0 : ImGui::GetIO().DeltaTime);
-            if (!m_GameplayRuntime->GetLastError().empty())
+            NcmaInputFrameV1 input;
+            input.Sequence = ++m_InputSequence;
+            const auto& io = ImGui::GetIO();
+            input.Focused = glfwGetWindowAttrib(m_Window, GLFW_FOCUSED) == GLFW_TRUE && !m_Minimized ? 1U : 0U;
+            for (int key = GLFW_KEY_SPACE; key <= GLFW_KEY_LAST; ++key)
+                if (input.Focused && !io.WantCaptureKeyboard && glfwGetKey(m_Window, key) == GLFW_PRESS)
+                    input.Held[key / 64] |= (std::uint64_t{1} << (key % 64));
+            for (int button = 0; button <= GLFW_MOUSE_BUTTON_LAST; ++button)
+                if (input.Focused && !io.WantCaptureMouse && glfwGetMouseButton(m_Window, button) == GLFW_PRESS)
+                {
+                    const int key = 384 + button; input.Held[key / 64] |= (std::uint64_t{1} << (key % 64));
+                }
+            for (std::size_t i = 0; i < m_InputHeld.size(); ++i)
             {
-                AppendLog("C# gameplay paused: " + m_GameplayRuntime->GetLastError());
-                m_ScenePaused = true;
+                const bool captured = !input.Focused || (i < 6 ? io.WantCaptureKeyboard : io.WantCaptureMouse);
+                input.Pressed[i] = captured ? 0 : m_InputPressed[i] | (input.Held[i] & ~m_InputHeld[i]);
+                input.Released[i] = captured ? 0 : m_InputReleased[i] | (m_InputHeld[i] & ~input.Held[i]); m_InputHeld[i] = input.Held[i];
             }
+            double x = 0, y = 0; glfwGetCursorPos(m_Window, &x, &y);
+            if (input.Focused && m_InputFocused && !io.WantCaptureMouse)
+            { input.PointerX = x - m_InputCursorX; input.PointerY = y - m_InputCursorY; }
+            m_InputCursorX = x; m_InputCursorY = y; m_InputFocused = input.Focused != 0;
+            std::string inputError;
+            if (!m_GameplayRuntime->SubmitInput(input, inputError)) AppendLog(inputError);
+            if (m_GameplayRuntime->GetPlayStatus().State == NcmaPlayState::Running)
+                m_GameplayRuntime->AdvanceFrame(m_GameplaySmokeTest ? 1.0 / 60.0 : io.DeltaTime);
+            if (!m_GameplayRuntime->GetLastError().empty())
+                AppendLog("C# gameplay faulted: " + m_GameplayRuntime->GetLastError());
         }
-        if (updateGameplay)
+        m_InputPressed.fill(0); m_InputReleased.fill(0);
+        if (m_ScenePlaying && m_GameplayRuntime)
         {
-            if (m_ScenePaused) m_PlayScene->AbortGameplayPhase();
-            else m_PlayScene->CommitGameplayPhase();
+            std::string renderError;
+            if (!m_GameplayRuntime->ReadRenderFrame(m_RenderObjects, m_RenderHeader, renderError)) AppendLog(renderError);
         }
     }
 
@@ -1283,6 +1377,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
         RenderStatusBar(workArea);
         RenderAnimationLab();
         RenderFbxCharacter();
+        RenderMcpPanel();
     }
 
     void EditorApplication::EndFrame()
@@ -1326,6 +1421,21 @@ float4 PSMain(PixelInput input) : SV_TARGET
             const GameObjectId previewObject = previewScene.FindObject(m_Scene.GetPersistentId(m_SelectedObject));
             if (previewScene.Contains(previewObject))
                 m_PreviewCubeModel = (m_InspectorDraft && m_InspectorDraft->HasTransform ? m_InspectorDraft->LocalTransform : previewScene.GetWorldTransform(previewObject)).ToMatrix();
+            if (m_PlayScene)
+            {
+                const auto uuid = m_Scene.GetPersistentId(m_SelectedObject);
+                const auto found = std::find_if(m_RenderObjects.begin(), m_RenderObjects.end(), [&](const auto& value) {
+                    return value.ObjectHigh == uuid.High && value.ObjectLow == uuid.Low;
+                });
+                if (found != m_RenderObjects.end())
+                {
+                    Transform value;
+                    value.Position = Vector3(found->Position[0], found->Position[1], found->Position[2]);
+                    value.Rotation = Quaternion(found->Rotation[3], found->Rotation[0], found->Rotation[1], found->Rotation[2]);
+                    value.Scale = Vector3(found->Scale[0], found->Scale[1], found->Scale[2]);
+                    m_PreviewCubeModel = value.ToMatrix();
+                }
+            }
         }
         m_PreviewGroundModel = Matrix4::Identity();
         Matrix4 view = Matrix4::Identity();
@@ -1552,8 +1662,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
         }
         if (ImGui::BeginMenu("AI"))
         {
-            ImGui::MenuItem("Agent Workspace", nullptr, false, false);
-            ImGui::TextDisabled("Capability registry ready");
+            ImGui::MenuItem("Editor MCP connections", nullptr, &m_ShowMcpPanel);
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Gameplay"))
@@ -1585,6 +1694,76 @@ float4 PSMain(PixelInput input) : SV_TARGET
             ReloadGameplay();
     }
 
+    void EditorApplication::RenderMcpPanel()
+    {
+        if (!m_ShowMcpPanel) return;
+        ImGui::SetNextWindowSize({620, 360}, ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Editor MCP", &m_ShowMcpPanel))
+        {
+            bool enabled = m_McpState.Enabled;
+            if (ImGui::Checkbox("Enable local editor endpoint (default: OFF)", &enabled))
+            {
+                try { (void)m_Scene.ConfigureMcp(enabled, m_ProjectRoot); m_McpState = m_Scene.PumpMcp(); }
+                catch (const std::exception& error) { AppendLog(error.what()); }
+            }
+            ImGui::TextWrapped("Only this editor instance is routed. Pairing is read-only. Approve an exact proposal below to grant writes for 60 seconds. Play/document replacement revokes grants.");
+            if (m_McpState.Enabled)
+            {
+                ImGui::TextWrapped("Descriptor: %s", m_McpState.DescriptorPath.c_str());
+                if (ImGui::Button("Copy descriptor path")) ImGui::SetClipboardText(m_McpState.DescriptorPath.c_str());
+                ImGui::Text("Generation %llu | waiting %u", static_cast<unsigned long long>(m_McpState.DocumentGeneration), m_McpState.QueueCount);
+                for (const auto& connection : m_McpState.Connections)
+                {
+                    const auto uuid = connection.Id.ToString(); ImGui::PushID(uuid.c_str());
+                    ImGui::Text("%s | %s | pending %u", connection.Name.c_str(), connection.Connected ? "connected" : "offline", connection.Pending);
+                    ImGui::TextDisabled("%s", uuid.c_str());
+                    try
+                    {
+                        if (!connection.Paired)
+                        {
+                            if (ImGui::Button("Pair read-only")) m_Scene.PairMcp(connection.Id, true);
+                            ImGui::SameLine(); if (ImGui::Button("Reject")) m_Scene.PairMcp(connection.Id, false);
+                        }
+                        else
+                        {
+                            if (ImGui::Button("Revoke connection")) m_Scene.RevokeMcp(connection.Id);
+                            ImGui::SameLine(); if (ImGui::Button("Revoke writes")) m_Scene.RevokeMcpGrants(connection.Id);
+                        }
+                    }
+                    catch (const std::exception& error) { AppendLog(error.what()); }
+                    ImGui::PopID();
+                }
+                static bool allowHistory = false;
+                static char deleteConfirmation[40]{};
+                ImGui::SeparatorText("Pending proposals (never auto-approved)");
+                ImGui::Checkbox("Also allow Undo/Redo within this exact scope", &allowHistory);
+                for (const auto& proposal : m_McpState.Proposals)
+                {
+                    const auto proposalId = proposal.Id.ToString(); ImGui::PushID(proposalId.c_str());
+                    ImGui::TextWrapped("%s | %s | revision %llu", proposal.Capability.c_str(), proposal.Risk.c_str(), static_cast<unsigned long long>(proposal.Revision));
+                    ImGui::TextWrapped("Connection: %s", proposal.ConnectionId.ToString().c_str());
+                    ImGui::TextWrapped("%s", proposal.Summary.c_str());
+                    const auto target = proposal.DeleteTarget.ToString();
+                    if (proposal.Destructive)
+                    {
+                        ImGui::TextWrapped("DESTRUCTIVE: type target UUID %s", target.c_str());
+                        ImGui::InputText("Confirm UUID", deleteConfirmation, sizeof(deleteConfirmation));
+                    }
+                    ImGui::BeginDisabled(proposal.Destructive && target != deleteConfirmation);
+                    if (ImGui::Button("Approve exact request (60s)"))
+                    {
+                        try { m_Scene.ApproveMcp(proposal.Id, allowHistory, proposal.Destructive ? &proposal.DeleteTarget : nullptr); deleteConfirmation[0] = '\0'; }
+                        catch (const std::exception& error) { AppendLog(error.what()); }
+                    }
+                    ImGui::EndDisabled(); ImGui::PopID();
+                }
+                ImGui::SeparatorText("Active write grants"); ImGui::TextWrapped("%s", m_McpState.GrantSummary.c_str());
+                ImGui::SeparatorText("Recent audit"); ImGui::TextWrapped("%s", m_McpState.AuditSummary.c_str());
+            }
+        }
+        ImGui::End();
+    }
+
     void EditorApplication::RenderToolbar(const RECT& workArea)
     {
         const float height = 48.0F;
@@ -1603,10 +1782,36 @@ float4 PSMain(PixelInput input) : SV_TARGET
             TogglePlay();
         }
         ImGui::SameLine();
-        ImGui::BeginDisabled(!m_ScenePlaying);
-        if (ImGui::Button(m_ScenePaused ? "Resume" : "Pause", {74.0F, 27.0F}))
-            m_ScenePaused = !m_ScenePaused;
+        const auto play = m_GameplayRuntime ? m_GameplayRuntime->GetPlayStatus() : NcmaPlayStatusV5{};
+        const bool paused = play.State == NcmaPlayState::Paused;
+        const bool faulted = play.State == NcmaPlayState::Faulted;
+        ImGui::BeginDisabled(!m_ScenePlaying || faulted);
+        if (ImGui::Button(paused ? "Resume" : "Pause", {74.0F, 27.0F}))
+        {
+            std::string error;
+            const bool ok = paused ? m_GameplayRuntime->Resume(error) : m_GameplayRuntime->Pause(error);
+            if (!ok) AppendLog(error);
+        }
         ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!m_ScenePlaying || !paused);
+        if (ImGui::Button("Step", {52.0F, 27.0F}))
+        {
+            std::string error;
+            if (!m_GameplayRuntime->Step(error)) AppendLog(error);
+        }
+        ImGui::EndDisabled();
+        if (m_ScenePlaying)
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("Tick %llu | alpha %.2f | dropped %.3fs%s", static_cast<unsigned long long>(play.Tick), play.InterpolationAlpha, play.TotalDroppedSeconds, faulted ? " FAULT" : "");
+        }
+        if (m_ScenePlaying)
+        {
+            ImGui::SameLine();
+            if (ImGui::Button("Restart")) { StopGameplay(); TogglePlay(); }
+            if (faulted && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", m_GameplayRuntime->GetLastError().c_str());
+        }
         ImGui::SameLine(ImGui::GetWindowWidth() - 230.0F);
         ImGui::TextDisabled("Renderer");
         ImGui::SameLine();
@@ -2094,12 +2299,8 @@ float4 PSMain(PixelInput input) : SV_TARGET
         std::string error;
         auto playScene = std::make_unique<ManagedSceneClient>();
         const auto snapshot = m_Scene.CaptureDocument();
-        const auto view = m_Scene.CaptureView();
-        bool hasCSharp = false;
-        for (const auto& gameObject : view.Objects)
-            hasCSharp = hasCSharp || !gameObject.Behaviours.empty();
         if (!playScene->RestoreDocument(snapshot, error) ||
-            (hasCSharp && !m_GameplayRuntime->BindScene(*playScene, error)))
+            !m_GameplayRuntime->BindScene(*playScene, error))
         {
             if (m_GameplayRuntime) m_GameplayRuntime->EndScene();
                 AppendLog("Could not enter play mode: " + error);
@@ -2107,8 +2308,8 @@ float4 PSMain(PixelInput input) : SV_TARGET
         }
         m_Scene.FreezeEditing(true);
         m_PlayScene = std::move(playScene);
+        m_InputSequence = 0; m_InputHeld.fill(0); m_InputFocused = false; m_RenderObjects.clear();
         m_ScenePlaying = true;
-        m_ScenePaused = false;
         AppendLog(std::format("Playing {} C# Behaviour(s)", m_GameplayRuntime->GetBehaviourCount()));
     }
 
@@ -2117,8 +2318,7 @@ float4 PSMain(PixelInput input) : SV_TARGET
         if (m_GameplayRuntime) m_GameplayRuntime->EndScene();
         m_PlayScene.reset();
         if (m_ScenePlaying) m_Scene.FreezeEditing(false);
-        m_ScenePlaying = false;
-        m_ScenePaused = false;
+        m_ScenePlaying = false; m_RenderObjects.clear(); m_InputHeld.fill(0); m_InputFocused = false;
     }
 
     void EditorApplication::ReloadGameplay()
@@ -2128,19 +2328,13 @@ float4 PSMain(PixelInput input) : SV_TARGET
         std::string error;
         if (m_GameplayRuntime->Reload(error))
         {
-            if (m_ScenePlaying && m_PlayScene && !m_GameplayRuntime->BindScene(*m_PlayScene, error))
-            {
-                AppendLog("C# rebind failed: " + error);
-                StopGameplay();
-                return;
-            }
+            m_InputSequence = 0; m_InputHeld.fill(0); m_InputFocused = false;
             AppendLog(std::format(
                 "Reloaded C# gameplay: {} types", m_GameplayRuntime->GetTypes().size()));
         }
         else
         {
-            AppendLog("C# gameplay reload failed: " + error);
-            StopGameplay();
+            AppendLog("C# gameplay reload failed (old session Paused or new session Faulted): " + error);
         }
     }
 

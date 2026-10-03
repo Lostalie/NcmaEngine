@@ -5,6 +5,8 @@ using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text;
 using Ncma;
+using Ncma.Gameplay;
+using Ncma.Scene;
 
 namespace Ncma.ManagedHost;
 
@@ -41,52 +43,99 @@ public static unsafe partial class NativeEntry
     }
 
     private sealed record ScriptType(Type Type, ExportMember[] Exports);
-    private sealed class Instance(Behaviour behaviour, int typeIndex, bool enabled)
-    {
-        public Behaviour Behaviour = behaviour;
-        public int TypeIndex = typeIndex;
-        public bool Enabled = enabled;
-        public bool Created;
-        public bool Activated;
-    }
-
+    private static readonly int s_ownerThread = Environment.CurrentManagedThreadId;
     private static GameplayLoadContext? s_loadContext;
     private static ScriptType[] s_types = [];
-    private static readonly List<Instance> s_instances = [];
-    private static SceneWorld? s_world;
-    private static long s_tickCount;
+    private static PlaySession? s_play;
+    private static ulong s_playScene;
+    private static SceneWorld? s_world => s_play?.Facade;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static uint GetBridgeVersion() => 3;
+    public static uint GetBridgeVersion() => 5;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int LoadGameplay(byte* assemblyPath, byte* error, int capacity) => Guard(() =>
     {
-        UnloadCore();
-        string path = Path.GetFullPath(ReadUtf8(assemblyPath));
-        var context = new GameplayLoadContext(path);
-        s_loadContext = context;
+        if (s_play is not null) throw new InvalidOperationException("End Play before loading another gameplay catalog.");
+        var candidate = LoadCandidate(ReadUtf8(assemblyPath));
         try
         {
-            using FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            Assembly assembly = context.LoadFromStream(stream);
-            s_types = assembly.GetTypes()
-                .Where(type => typeof(Behaviour).IsAssignableFrom(type) && !type.IsAbstract && !type.ContainsGenericParameters)
-                .OrderBy(type => type.FullName, StringComparer.Ordinal).Select(DescribeType).ToArray();
-            s_tickCount = 0;
+            foreach (var scene in s_scenes.Values.Where(s => s.Editor is not null))
+                using (scene.Document.World.ReadOnly())
+                    foreach (var obj in scene.Document.CaptureSnapshot().Objects)
+                        foreach (var binding in obj.Behaviours) _ = Instantiate(candidate.Types, binding);
+            var previous = s_loadContext;
+            s_loadContext = candidate.Context; s_types = candidate.Types; PublishEditorCatalog(); previous?.Unload();
             return s_types.Length;
         }
-        catch
-        {
-            s_types = [];
-            s_loadContext = null;
-            context.Unload();
-            throw;
-        }
+        catch { candidate.Context.Unload(); throw; }
     }, error, capacity);
 
+    private static (GameplayLoadContext Context, ScriptType[] Types) LoadCandidate(string assemblyPath)
+    {
+        string path = Path.GetFullPath(assemblyPath);
+        var context = new GameplayLoadContext(path);
+        try
+        {
+            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var assembly = context.LoadFromStream(stream);
+            var types = assembly.GetTypes().Where(t => typeof(Behaviour).IsAssignableFrom(t) && !t.IsAbstract && !t.ContainsGenericParameters)
+                .OrderBy(t => t.FullName, StringComparer.Ordinal).Select(DescribeType).ToArray();
+            return (context, types);
+        }
+        catch { context.Unload(); throw; }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int ReloadGameplay(byte* path, ulong scene, ulong high, ulong low, PlayStatusV5* output,
+        byte* error, int capacity) => Guard(() =>
+    {
+        PlaySession? play = null;
+        if (s_play is not null)
+        {
+            if (output is null) throw new ArgumentException("Null reload status.");
+            play = Play(scene, high, low); play.Pause();
+        }
+        try
+        {
+            var candidate = LoadCandidate(ReadUtf8(path));
+            bool published = false;
+            try
+            {
+                if (play is not null) play.Reload(binding => Instantiate(candidate.Types, binding));
+                else foreach (var doc in s_scenes.Values.Where(s => s.Editor is not null))
+                    using (doc.Document.World.ReadOnly())
+                        foreach (var obj in doc.Document.CaptureSnapshot().Objects)
+                            foreach (var binding in obj.Behaviours) _ = Instantiate(candidate.Types, binding);
+                Publish();
+                return candidate.Types.Length;
+            }
+            catch { if (play?.State == PlayState.Faulted) Publish(); throw; }
+            finally { if (!published) candidate.Context.Unload(); }
+            void Publish()
+            {
+                var previous = s_loadContext; s_loadContext = candidate.Context; s_types = candidate.Types;
+                published = true; PublishEditorCatalog(); previous?.Unload();
+            }
+        }
+        finally { if (play is not null) *output = CopyStatus(play.Status); }
+    }, error, capacity);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static WeakReference ProbeCollectibleCatalog(string path)
+    {
+        var candidate = LoadCandidate(path);
+        foreach (var type in candidate.Types)
+            if (type.Type.BaseType != typeof(Behaviour) && !typeof(Behaviour).IsAssignableFrom(type.Type))
+                throw new InvalidOperationException("Shared SDK identity mismatch.");
+        var weak = new WeakReference(candidate.Context);
+        candidate.Context.Unload();
+        return weak;
+    }
     private static ScriptType DescribeType(Type type)
     {
+        if (type.FullName is null || Encoding.UTF8.GetByteCount(type.FullName) >= 512)
+            throw new ArgumentException("Behaviour type name exceeds the ABI budget.");
         var prototype = (Behaviour)Activator.CreateInstance(type)!;
         var exports = new List<ExportMember>();
         foreach (MemberInfo member in type.GetMembers(BindingFlags.Public | BindingFlags.Instance).OrderBy(m => m.Name, StringComparer.Ordinal))
@@ -106,7 +155,10 @@ public static unsafe partial class NativeEntry
             if (kind == 0) throw new NotSupportedException($"Unsupported Export type: {valueType.Name} on {member.Name}.");
             double number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
             if (!double.IsFinite(number)) throw new InvalidOperationException("Export defaults must be finite.");
-            exports.Add(new(member, kind, attribute.DisplayName ?? member.Name, attribute.Category ?? "Gameplay", number));
+            string display = attribute.DisplayName ?? member.Name, category = attribute.Category ?? "Gameplay";
+            if (Encoding.UTF8.GetByteCount(member.Name) >= 128 || Encoding.UTF8.GetByteCount(display) >= 128 || Encoding.UTF8.GetByteCount(category) >= 128)
+                throw new ArgumentException("Export metadata exceeds the ABI budget.");
+            exports.Add(new(member, kind, display, category, number));
         }
         return new(type, exports.ToArray());
     }
@@ -132,84 +184,117 @@ public static unsafe partial class NativeEntry
         return 0;
     }, error, capacity);
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int BeginScene(ulong world, byte* error, int capacity) => Guard(() =>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PlayStatusV5
     {
-        ClearInstances();
-        var scene = Scene(world);
-        if (scene.Editor is not null) throw new InvalidOperationException("Clone the committed edit document into an isolated Play scene.");
-        s_world = scene.World;
-        s_tickCount = 0;
-        return 0;
-    }, error, capacity);
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int CreateBehaviour(int type, ulong gameObject, int enabled, byte* error, int capacity) => Guard(() =>
+        public uint Version, State;
+        public ulong SessionHigh, SessionLow, WorldHigh, WorldLow, FrameCount, Tick;
+        public int StepsExecuted;
+        public uint Reserved;
+        public double FixedDeltaSeconds, SimulationSeconds, Accumulator, InterpolationAlpha, DroppedSeconds, TotalDroppedSeconds;
+        public uint FaultCode, Reserved2;
+    }
+    private static PlayStatusV5 CopyStatus(PlayStatus status)
     {
-        if (s_world is null) throw new InvalidOperationException("No play scene is bound.");
-        var target = s_world.FindId(gameObject);
-        var behaviour = (Behaviour)Activator.CreateInstance(s_types[type].Type)!;
-        behaviour.GameObject = target;
-        s_instances.Add(new Instance(behaviour, type, enabled != 0));
-        return s_instances.Count - 1;
-    }, error, capacity);
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int SetProperty(int instance, int property, double value, byte* error, int capacity) => Guard(() =>
-    {
-        Instance target = s_instances[instance];
-        if (target.Created) throw new InvalidOperationException("Configure properties before activation.");
-        s_types[target.TypeIndex].Exports[property].Set(target.Behaviour, value);
-        return 0;
-    }, error, capacity);
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int ActivateScene(byte* error, int capacity) => Guard(() =>
-    {
-        foreach (Instance instance in s_instances)
+        var session = SceneWorld.ToUuid(status.SessionId); var world = SceneWorld.ToUuid(status.WorldId);
+        return new()
         {
-            if (instance.Created) continue;
-            instance.Created = true;
-            instance.Behaviour.DispatchCreate();
-            if (!instance.Enabled) continue;
-            instance.Activated = true;
-            instance.Behaviour.DispatchEnable();
-        }
-        return s_instances.Count;
-    }, error, capacity);
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int Tick(double deltaSeconds, byte* error, int capacity) => Guard(() =>
+            Version = 5, State = (uint)status.State, SessionHigh = session.High, SessionLow = session.Low,
+            WorldHigh = world.High, WorldLow = world.Low, FrameCount = status.FrameCount, Tick = status.Tick,
+            StepsExecuted = status.StepsExecuted, FixedDeltaSeconds = status.FixedDeltaSeconds,
+            SimulationSeconds = status.SimulationSeconds, Accumulator = status.Accumulator,
+            InterpolationAlpha = status.InterpolationAlpha, DroppedSeconds = status.DroppedSeconds,
+            TotalDroppedSeconds = status.TotalDroppedSeconds, FaultCode = status.Fault is null ? 0u : 1u
+        };
+    }
+    private static PlaySession Play(ulong scene, ulong high, ulong low)
     {
-        if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentException("Invalid delta time.");
-        foreach (Instance instance in s_instances)
-            if (instance.Activated) instance.Behaviour.DispatchUpdate(deltaSeconds);
-        ++s_tickCount;
-        return s_instances.Count;
+        _ = Scene(scene); // Thread/disposal checks precede session validation.
+        var play = s_play ?? throw new InvalidOperationException("No bound Play session.");
+        if (scene != s_playScene || play.SessionId != SceneWorld.ToGuid(high, low))
+            throw new InvalidOperationException("Stale or foreign Play session.");
+        return play;
+    }
+    private static Behaviour Instantiate(BehaviourBindingData binding) => Instantiate(s_types, binding);
+    private static Behaviour Instantiate(ScriptType[] catalog, BehaviourBindingData binding)
+    {
+        var type = catalog.FirstOrDefault(t => t.Type.FullName == binding.TypeName)
+            ?? throw new ArgumentException("Missing Behaviour type: " + binding.TypeName);
+        var instance = (Behaviour)Activator.CreateInstance(type.Type)!;
+        foreach (var value in binding.Exports)
+        {
+            var member = type.Exports.FirstOrDefault(e => e.Member.Name == value.Name && e.Kind == (uint)value.Kind)
+                ?? throw new ArgumentException("Missing or changed Export: " + value.Name);
+            member.Set(instance, value.Value);
+        }
+        return instance;
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int BeginScene(ulong sceneToken, PlayStatusV5* output, byte* error, int capacity) => Guard(() =>
+    {
+        if (output is null) throw new ArgumentException("Null Play status.");
+        var scene = Scene(sceneToken);
+        if (scene.Editor is not null) throw new InvalidOperationException("Clone the committed edit document into an isolated Play scene.");
+        if (s_play is not null) throw new InvalidOperationException("End the current Play session before binding another.");
+        var candidate = new PlaySession(scene.Document, scene.World);
+        try { candidate.Start(Instantiate); }
+        catch { candidate.Dispose(); throw; }
+        s_play = candidate; s_playScene = sceneToken;
+        *output = CopyStatus(candidate.Status);
+        return candidate.BehaviourCount;
     }, error, capacity);
-
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int EndScene(byte* error, int capacity) => Guard(() => { ClearInstances(); return 0; }, error, capacity);
-
+    public static int AdvanceFrame(ulong scene, ulong high, ulong low, double deltaSeconds, PlayStatusV5* output,
+        byte* error, int capacity) => Guard(() =>
+    {
+        if (output is null) throw new ArgumentException("Null Play status.");
+        var result = Play(scene, high, low).AdvanceFrame(deltaSeconds);
+        *output = CopyStatus(result);
+        if (result.Fault is { } fault)
+            throw new InvalidOperationException($"{fault.Phase} world={fault.WorldId} session={fault.SessionId} committedTick={fault.Tick} attemptedTick={fault.AttemptTick} object={fault.ObjectId} binding={fault.BindingId} type={fault.TypeName}: {fault.Message}");
+        return result.StepsExecuted;
+    }, error, capacity);
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int UnloadGameplay(byte* error, int capacity) => Guard(() => { UnloadCore(); return 0; }, error, capacity);
-
+    public static int ControlPlay(ulong scene, ulong high, ulong low, uint command, PlayStatusV5* output,
+        byte* error, int capacity) => Guard(() =>
+    {
+        if (output is null) throw new ArgumentException("Null Play status.");
+        var play = Play(scene, high, low);
+        var result = command switch
+        {
+            0 => play.Pause(), 1 => play.Resume(), 2 => play.Step(),
+            _ => throw new ArgumentException("Unknown Play control.")
+        };
+        *output = CopyStatus(result);
+        if (result.Fault is { } fault) throw new InvalidOperationException(fault.Phase + ": " + fault.Message);
+        return 0;
+    }, error, capacity);
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static long GetTickCount() => s_tickCount;
-
+    public static int GetPlayStatus(ulong scene, PlayStatusV5* output, byte* error, int capacity) => Guard(() =>
+    {
+        if (output is null || s_play is null || s_playScene != scene) throw new ArgumentException("No bound Play session.");
+        _ = Scene(scene); *output = CopyStatus(s_play.Status); return 0;
+    }, error, capacity);
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int EndScene(ulong scene, ulong high, ulong low, byte* error, int capacity) => Guard(() =>
+    { _ = Play(scene, high, low); ClearInstances(); return 0; }, error, capacity);
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int UnloadGameplay(byte* error, int capacity) => Guard(() =>
+    {
+        if (s_play is not null) throw new InvalidOperationException("End Play before unloading gameplay.");
+        UnloadCore(); return 0;
+    }, error, capacity);
     private static void ClearInstances()
     {
-        List<Exception> errors = [];
-        foreach (Instance instance in s_instances)
+        var previous = s_play;
+        // Reject foreign/reentrant cleanup before releasing ownership.
+        if (previous is null) return;
+        try { previous.Stop(); }
+        finally
         {
-            try { if (instance.Activated) instance.Behaviour.DispatchDisable(); }
-            catch (Exception exception) { errors.Add(exception); }
-            try { if (instance.Created) instance.Behaviour.DispatchDestroy(); }
-            catch (Exception exception) { errors.Add(exception); }
+            if (previous.State == PlayState.Stopped)
+            { s_play = null; s_playScene = 0; previous.Dispose(); }
         }
-        s_instances.Clear();
-        s_world = null;
-        if (errors.Count != 0) throw new AggregateException(errors);
     }
 
     private static void UnloadCore()
@@ -217,10 +302,13 @@ public static unsafe partial class NativeEntry
         try { ClearInstances(); }
         finally
         {
-            s_types = [];
-            GameplayLoadContext? context = s_loadContext;
-            s_loadContext = null;
-            context?.Unload();
+            if (s_play is null)
+            {
+                s_types = [];
+                GameplayLoadContext? context = s_loadContext;
+                s_loadContext = null;
+                context?.Unload();
+            }
         }
     }
 
@@ -240,6 +328,8 @@ public static unsafe partial class NativeEntry
     {
         try
         {
+            if (Environment.CurrentManagedThreadId != s_ownerThread)
+                throw new InvalidOperationException("Managed host entry requires its owner thread.");
             int result = operation();
             if (error is not null && capacity > 0) error[0] = 0;
             return result;
@@ -262,7 +352,16 @@ public static unsafe partial class NativeEntry
         private readonly AssemblyDependencyResolver _resolver = new(path);
         protected override Assembly? Load(AssemblyName name)
         {
-            if (name.Name == typeof(Behaviour).Assembly.GetName().Name) return typeof(Behaviour).Assembly;
+            foreach (var shared in new[] { typeof(Behaviour).Assembly, typeof(Ncma.Runtime.World).Assembly,
+                typeof(SceneDocument).Assembly, typeof(PlaySession).Assembly })
+                if (AssemblyName.ReferenceMatchesDefinition(name, shared.GetName()))
+                {
+                    var definition = shared.GetName();
+                    if (name.Version != definition.Version || (name.CultureName ?? "") != (definition.CultureName ?? "") ||
+                        !(name.GetPublicKeyToken() ?? []).SequenceEqual(definition.GetPublicKeyToken() ?? []))
+                        throw new ArgumentException("Shared gameplay assembly identity mismatch.");
+                    return shared;
+                }
             string? resolved = _resolver.ResolveAssemblyToPath(name);
             if (resolved is null) return null;
             using var stream = File.Open(resolved, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

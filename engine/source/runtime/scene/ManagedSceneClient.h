@@ -16,6 +16,19 @@ namespace NcmaEngine
         std::optional<SceneUuid> Selection;
         std::string FilePath;
     };
+    struct McpConnection final
+    {
+        SceneUuid Id; std::string Name; bool Paired = false, Connected = false; std::uint32_t Pending = 0;
+    };
+    struct McpProposal final
+    {
+        SceneUuid Id, ConnectionId, DeleteTarget; std::string Capability, Risk, Summary; std::uint64_t Revision = 0; bool Destructive = false;
+    };
+    struct McpEndpointState final
+    {
+        bool Enabled = false; SceneUuid InstanceId; std::uint64_t DocumentGeneration = 0;
+        std::string DescriptorPath, GrantSummary, AuditSummary; std::uint32_t QueueCount = 0; std::vector<McpConnection> Connections; std::vector<McpProposal> Proposals;
+    };
     // Complete C#-encoded snapshot; native code never interprets it as an object store.
     struct SceneDocumentBlob final
     {
@@ -78,10 +91,13 @@ namespace NcmaEngine
         void CancelInteraction(SceneUuid token);
         bool UndoEditor(bool redo, std::string& error);
         void FreezeEditing(bool frozen);
+        std::string ConfigureMcp(bool enabled, const std::filesystem::path& projectRoot);
+        McpEndpointState PumpMcp();
+        void PairMcp(SceneUuid connection, bool approve);
+        void RevokeMcp(SceneUuid connection);
+        void ApproveMcp(SceneUuid proposal, bool history, const SceneUuid* confirmedDelete);
+        void RevokeMcpGrants(SceneUuid connection);
         std::string InvokeReadOnlyCapability(std::string request) const;
-        void BeginGameplayPhase();
-        void CommitGameplayPhase();
-        void AbortGameplayPhase();
     private:
         std::vector<std::byte> Call(int operation, std::span<const std::byte> input = {}) const;
         std::uint64_t m_Handle = 0;

@@ -8,8 +8,11 @@
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Ncma.Managed.Host.Tests" />
     <ProjectReference Include="../Ncma.Managed/Ncma.Managed.csproj" />
+    <ProjectReference Include="../Ncma.Gameplay/Ncma.Gameplay.csproj" />
     <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />
     <ProjectReference Include="../Ncma.Editor.Core/Ncma.Editor.Core.csproj" />
+    <ProjectReference Include="../Ncma.Editor.Transport/Ncma.Editor.Transport.csproj" />
   </ItemGroup>
 </Project>

@@ -15,7 +15,7 @@ public sealed class RotatorBehaviour : Behaviour
 
     public double ElapsedSeconds { get; private set; }
 
-    protected override void OnUpdate(double deltaSeconds)
+    protected override void OnFixedUpdate(double deltaSeconds)
     {
         ElapsedSeconds += deltaSeconds;
         Transform transform = GameObject.LocalTransform;

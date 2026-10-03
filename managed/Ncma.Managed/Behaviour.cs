@@ -4,6 +4,8 @@ namespace Ncma;
 public abstract class Behaviour
 {
     public GameObject GameObject { get; internal set; } = null!;
+    public IGameplayContext Context => GameObject.World.Context;
+    public CleanupContext? Cleanup { get; internal set; }
 
     protected internal virtual void OnCreate() { }
     protected internal virtual void OnEnable() { }

@@ -19,15 +19,34 @@ public sealed class CapabilityPermissions
 {
     private readonly HashSet<string> _allowed;
     private readonly HashSet<Guid> _targets;
-    public CapabilityPermissions(IEnumerable<string>? allowedMutations = null, IEnumerable<Guid>? approvedDestructiveTargets = null)
+    private readonly HashSet<Guid>? _scope, _created, _bindings;
+    private readonly HashSet<string>? _components;
+    private readonly Func<bool>? _isCurrent;
+    internal bool AllowsDocumentHistory { get; }
+    internal bool RequireTrustedBindings { get; }
+    public CapabilityPermissions(IEnumerable<string>? allowedMutations = null, IEnumerable<Guid>? approvedDestructiveTargets = null,
+        IEnumerable<Guid>? objectScope = null, IEnumerable<Guid>? createScope = null,
+        IEnumerable<string>? componentScope = null, IEnumerable<Guid>? bindingScope = null,
+        bool allowDocumentHistory = true, bool requireTrustedBindings = false, Func<bool>? isCurrent = null)
     {
         _allowed = new(allowedMutations ?? [], StringComparer.Ordinal);
         _targets = new(approvedDestructiveTargets ?? []);
+        _scope = objectScope is null ? null : new(objectScope); _created = createScope is null ? null : new(createScope);
+        _components = componentScope is null ? null : new(componentScope, StringComparer.Ordinal);
+        _bindings = bindingScope is null ? null : new(bindingScope); _isCurrent = isCurrent;
+        AllowsDocumentHistory = allowDocumentHistory; RequireTrustedBindings = requireTrustedBindings;
     }
     public static CapabilityPermissions ReadOnly { get; } = new();
     internal bool Allows(string capability, Guid? target = null) =>
-        _allowed.Contains(capability) && (target is null || _targets.Contains(target.Value));
+        (_isCurrent?.Invoke() ?? true) && _allowed.Contains(capability) && (target is null || _targets.Contains(target.Value));
+    internal bool InScope(CommandImpact impact) =>
+        (_isCurrent?.Invoke() ?? true) && (!impact.DocumentReplacement || AllowsDocumentHistory) &&
+        (_scope is null || impact.Objects.All(_scope.Contains)) && (_created is null || impact.CreatedObjects.All(_created.Contains)) &&
+        (_components is null || impact.ComponentTypes.All(_components.Contains)) && (_bindings is null || impact.Bindings.All(_bindings.Contains));
+    internal bool ObjectAllowed(Guid id, bool creating = false) =>
+        (_isCurrent?.Invoke() ?? true) && (_scope is null || _scope.Contains(id)) && (!creating || _created is null || _created.Contains(id));
 }
+public sealed record CommandImpact(Guid[] Objects, Guid[] CreatedObjects, string[] ComponentTypes, Guid[] Bindings, bool DocumentReplacement);
 public sealed record EditState(Guid SessionId, ulong Revision, int UndoCount, int RedoCount,
     string UndoLabel, string RedoLabel, bool Dirty, bool HistoryInvalidated, bool EditBusy,
     bool Frozen, Guid? Selection, string? FilePath);

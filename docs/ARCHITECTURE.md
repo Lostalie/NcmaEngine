@@ -1,6 +1,6 @@
 # NcmaEngine 引擎架构
 
-更新：2026-10-03。定位：模型与动画驱动的动作游戏引擎。
+更新：2026-10-04。定位：模型与动画驱动的动作游戏引擎。
 
 本文区分目标架构和实际实现。标记“已实现”只表示所述切片可运行，不代表整个系统完成。
 A 方案已确认，AI 深度参与场景、动画、UI、工具和引擎扩展。
@@ -14,7 +14,7 @@ C# Editor / Player / Headless                         [headless 测试入口已�
                   |
 C# Runtime: World + GameObject + Component + Systems  [权威 World 已接入现有编辑器]
                   |
-          C# 游戏逻辑 / 应用服务                      [Behaviour 已绑定托管 World，OnFixedUpdate 尚未调度]
+          C# 游戏逻辑 / 应用服务                      [PlaySession/WorldRunner 已派发 OnFixedUpdate；OnUpdate 只读]
           /             |                 \
 原生插件适配层     可选 Python 模块适配层      独立网络服务
      |              |                         |
@@ -63,13 +63,13 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 | World / GameObject | 扁平对象存储、UUID、运行时引用、创建/销毁 | C# World 已接管编辑器和 Play，C++ 只持有不透明会话令牌 |
 | Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | 托管类型/schema 注册和组件存储已实现基础；类型池/通用查询未实现 |
 | Behaviour Host | C# 生命周期、实例绑定、Export、程序集加载/重载 | 已接入托管 World；私有状态迁移、自动重建未实现 |
-| WorldRunner / Systems | 固定步、呈现步、依赖和结构命令提交 | 托管独立固定步/顺序 Systems 已实现；结构命令与编辑器接入未实现 |
+| WorldRunner / Systems | 固定步、呈现步、依赖和结构命令提交 | PlaySession 固定步/顺序 Systems 已接入编辑器；输入/插值/运行结构命令已实现基础 |
 | SceneAsset / Serialization | 通用组件记录、资产引用、版本迁移 | C# `.ncmascene` JSON v1 通用组件读写/原子保存已实现；旧 .ncscene 不兼容；资产引用/迁移流水线未实现 |
-| Editor Commands | 文档修改、事务、Undo/Redo、隔离 Play | 原生命令保留；C# headless 事务/Undo 已实现，ImGui 业务迁移未实现 |
+| Editor Commands | 文档修改、事务、Undo/Redo、隔离 Play | Editor.Core 持有完整文档事务/唯一 Undo；ImGui 提交 UUID 意图，原生命令栈已删除 |
 | Gameplay Services | 输入、角色、动作、战斗、任务等游戏 API | 未实现完整 SDK；当前只有基础门面/示例 |
 
 当前 C# Behaviour 已支持挂载、禁用、删除、数值/布尔 Export 编辑及隔离 Play。
-旧 SDK 的 OnFixedUpdate 仍未调度。Ncma.Runtime 的独立 IWorldSystem 固定步已实现；Behaviour 共享该 World，但编辑器仍按帧调度 OnUpdate。手动程序集重载保留保存的 Export，私有状态重置。
+M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpdate/顺序 Systems，帧后 OnUpdate 只读。默认 1/60 秒、最多追赶 8 步；严格与交互时间策略、Pause/Resume/Step/Faulted 已接入 ImGui。安全重载先隔离预检再清理/激活，成功 Paused，失败保留旧暂停或激活后 Faulted；重置私有状态，私有状态迁移未实现。
 详细构建与作者流程见 [BUILDING.md](BUILDING.md)。
 
 高频访问优先在托管组件池内完成；跨原生插件使用可复用批量缓冲区，不逐对象反射或 IPC。
@@ -201,7 +201,7 @@ Agent/MCP 是能力接口，不依赖某个模型厂商：
 - 默认只读；修改经编辑器同一命令/Undo/事务路径，破坏性操作需显式授权。
 - 当前能力注册表与隔离动画 stdio MCP 已实现，动画会话有 revision guard 和独立 Undo/Redo。
 - C# Editor.Core 已提供 8 个共享 v2 能力及完整文档原子场景事务，含默认只读、权限、版本、重试去重和 Undo/Redo。
-- 托管命令网关已接入 ImGui，但尚无 MCP/IPC 传输；UI、动画图、项目文件修改工具未实现。
+- 托管命令网关与本地 MCP 已接入同一 ImGui EditSession；UI、动画图、项目文件修改工具未实现。
 - 引擎扩展目前仅支持可信 C# 启动时注册值组件/schema；动态模块加载/编译/发布工具未实现。
 - 不开放任意 Python 执行，不因提供 MCP 就赋予 AI 直接写 World 权限。
 
@@ -225,7 +225,7 @@ Ncma.Editor.Core.Tests → 共享命令 / 完整历史 / 草稿 / 文件状态�
 ```
 
 - 原生插件基础 ABI 升为 v2，移除所有 ncma_world_* 和旧 World/GameObject 版本导出；旧二进制须重建。
-- 托管 Gameplay bridge v3 改用 uint64 场景令牌，Scene host 二进制交换 v4 使用有界 4 MiB 缓冲；不传 CLR 对象或 C++ 指针。
+- 托管 Gameplay bridge v5 改用 uint64 场景令牌，Scene host 二进制交换 v6 使用有界 4 MiB 缓冲；不传 CLR 对象或 C++ 指针。
 - 唯一场景文件为 `.ncmascene` JSON v1；不带语言选择或兼容槽，支持空对象、全部注册组件与 C# 脚本配置。
 - 旧 `.ncscene` v1-v6 不再读取、转换或保存；旧读写和迁移代码已删除。
 - 加载失败不改源文件或目标场景；不静默删除/转译。旧 Python 逻辑需作者改为 C# 或独立模块。
@@ -237,7 +237,7 @@ Ncma.Editor.Core.Tests → 共享命令 / 完整历史 / 草稿 / 文件状态�
 ## 10. 开发顺序与参考边界
 
 已完成首切片：独立 C# headless World/组件、固定步、快照和 AI/编辑器共用事务基础。
-本次已接管编辑器/Play 的 World、Behaviour 与完整新场景文档，不保留 C++ World。M1.2 已将场景命令/历史迁入 C# Editor.Core，删除原生撤销栈。下一切片：固定步调度与 live MCP；之后反转主入口并逐个插件化渲染/物理。
+本次已接管编辑器/Play 的 World、Behaviour 与完整新场景文档，不保留 C++ World。M1.2 已将场景命令/历史迁入 C# Editor.Core，删除原生撤销栈。M1.3-A/B 已接入固定步与运行控制；下一切片为输入/插值、运行结构命令、信号/生命周期/重载安全边界，随后 live MCP；之后反转主入口并逐个插件化渲染/物理。
 新的字典/装箱存储尚未性能优化，不能宣称类型池/ECS 或完整托管游戏运行时完成。
 AI 的分域权限、能力状态与闭环见 [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)。
 动作游戏功能优先打通 FBX 场景角色 → GPU 蒙皮 → Animator/CharacterMotor →
@@ -257,4 +257,11 @@ Godot、Piccolo、Hazel 不作为框架参考。参考不等于运行依赖、�
 
 ## M1.1 implemented document boundary
 
-Complete Ncma.Scene document snapshots v1 now cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell uses opaque snapshots for Undo and Play; C# .ncmascene JSON v1 files persist complete documents with atomic saves. Old .ncscene compatibility is removed. Shared managed commands, asset references/pipeline, fixed-step editor scheduling and live MCP remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).
+Complete Ncma.Scene document snapshots v1 now cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell uses opaque snapshots for Undo and Play; C# .ncmascene JSON v1 files persist complete documents with atomic saves. Old .ncscene compatibility is removed. Shared commands, fixed-step/input/runtime commands and scoped live MCP are implemented; asset references/pipeline remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).
+
+## M1 新增边界（2026-10-04）
+
+Ncma.Gameplay 负责输入消费、RenderFrameView、运行命令、生命周期和原子信号；结构安装不全量 Restore，不使存活对象引用整体失效。Editor.Core 编辑/Undo 仍是全量文档恢复。
+Ncma.Editor.Protocol（纯 DTO）→ Editor.Transport（owner-thread 安全队列）→ 当前 Editor.Core。Editor.Mcp 仅依赖 Protocol，stdio helper 不加载场景或原生 DLL。IO 线程不执行 validator/脚本。
+默认关闭/只读；用户批准精确请求后允许同事务修改/局部绑定/有范围历史，删除 UUID 另确认；Play/文档替换撤权。没有 Agent 任意代码或文件网关。版本：Scene 6、Gameplay 5、IPC 1、能力 2、native 2、场景 JSON 1、manifest 10。
+见 [EDITOR_MCP](EDITOR_MCP.md) 与 [交付报告](M1_DELIVERY_REPORT.md)；人工客户端验收仍待完成。

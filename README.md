@@ -13,10 +13,10 @@
 - 网络继续是独立服务，目标由 C# 组装，不添加组件 RPC、复制标记或网络角色。
 
 A 方案已确认：C# 主引擎 + C++ 性能插件，AI 深度参与场景、动画、UI、工具与引擎扩展。
-Python 游戏脚本特性已移除；独立 C# headless World、固定步、场景事务与 Undo 基础已实现，C++ SceneWorld 已移除，但主入口、编辑器业务和独立插件的迁移尚未完成。
+Python 游戏脚本特性已移除；C# World、Editor.Core 场景事务/唯一 Undo 和 M1.3 固定步/输入/插值/运行命令/安全重载及 M1.4 活动场景 MCP已接入当前编辑器。C++ SceneWorld 已移除，C# 主入口、剩余面板业务和独立插件迁移尚未完成。
 目前 out/bin/NcmaEngine.exe 仍是 C++/ImGui 外壳，场景权威存储已迁为 C# Runtime.World。
 C++ SceneWorld、对象/组件索引和原生 World 导出已删除；编辑器通过 hostfxr 和不透明场景令牌访问 C#。Python 游戏宿主、SDK、示例、编辑器挂载与重载入口已删除。
-托管主入口、共享命令服务的 live 编辑器接入、固定步调度、独立 Renderer/Physics plugins 与 Python AI worker 均未实现。
+Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/Step 与故障状态；C++ 不再拥有 Begin/Commit 阶段。输入快照/插值/运行命令、事务信号、安全重载与本地 scoped MCP 已实现基础。托管主入口、独立 Renderer/Physics plugins 与 Python AI worker 未实现；M1 人工客户端/UI 验收待完成。
 新的 Ncma.Runtime 已接管编辑器/隔离 Play，不维护两份 live 权威 World；M1.2 的 Ncma.Editor.Core 已接管 ImGui 的场景命令与唯一 Undo/Redo；原生命令栈已删除，交互草稿不修改已提交场景。Ncma.Scene 完整组件/脚本快照用于托管历史与隔离 Play；C# `.ncmascene` JSON v1 保存全部注册组件与脚本配置，并原子替换文件。
 旧 `.ncscene` v1-v6 格式及其兼容/迁移入口已删除，不再可读。默认场景为 `assets/scenes/EditorScene.ncmascene`；新格式支持空容器与可选 Transform，加载失败保留原文件和当前场景。
 
@@ -31,6 +31,8 @@ C++ SceneWorld、对象/组件索引和原生 World 导出已删除；编辑器�
 - [独立 Python 模块与通信选型](docs/PYTHON_MODULES.md)
 - [AI 深度开发契约与已实现 headless 能力](docs/AI_DEVELOPMENT.md)
 - [最新路线图](docs/ROADMAP.md)
+- [M1 自动交付与剩余人工验收](docs/M1_DELIVERY_REPORT.md)
+- [活动编辑器 MCP 使用与授权](docs/EDITOR_MCP.md)
 - [M1.1 完整托管场景文档与清理记录](docs/M1_1_SCENE_DOCUMENT.md)
 - [构建与当前运行方式](docs/BUILDING.md)
 - [动作动画](docs/ANIMATION.md)

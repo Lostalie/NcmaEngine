@@ -43,8 +43,8 @@ World 与组件权威数据只保存在 C#，插件仅保留必要的子系统�
 1. **建立 C# Runtime 与无图形测试入口**：新增托管 World、GameObject、组件/TypeRegistry、
    代次引用、命令队列、快照和固定步 WorldRunner，不依赖 NcmaNative 世界存储或 Python。
    已实现 Ncma.Runtime headless 空容器/可选值组件、UUID/失效引用、managed JSON v1 快照和顺序固定步，测试不依赖原生 DLL/Python。
-   已有 Behaviour 生命周期和旧场景导入已接入同一 C# World；类型池、通用查询和结构命令队列未实现。
-2. **场景/编辑器命令与 Play 数据迁移**：C# Editor.Core 已接管活动 ImGui 场景事务、完整快照 Undo/Redo 和 8 个 v2 能力；live MCP 传输尚未实现。
+   已有 Behaviour 生命周期和唯一 .ncmascene 文档接入同一 C# World；结构命令已实现，类型池/通用查询未实现。
+2. **场景/编辑器命令与 Play 数据迁移**：C# Editor.Core 已接管活动 ImGui 场景事务、完整快照 Undo/Redo 和 10 个 v2 能力；活动场景本地 MCP 已实现，人工客户端验收待完成。
    托管 SceneAsset/serializer/Undo 需进一步共享完整资产 schema；
    新 .ncmascene 文档已接入 C# World，完整保存/撤销/隔离 Play/UUID 已回归，旧格式不兼容；下一步将编辑器业务及旧命令栈迁到 C# 服务。
    当前 Python/未知语言记录拒绝加载，原文件保留；新托管格式另行设计迁移，不静默丢弃。
@@ -73,7 +73,7 @@ shutdown 前停止作业、释放 GPU/物理对象、清理回调，再卸载 DL
 依赖 Eigen/GLFW/ImGui/spdlog/Box2D/Jolt/ufbx 时，不把其类型泄露到托管 World。
 
 旧 NcmaNative 是兼容聚合桥，不是独立 Renderer/Physics plugins 已完成的证据。
-批量/引用/信号语义现在在 C# 内测试，原生 World ABI 不再存在；编辑器 Begin -> C# Tick -> Commit/Abort 仍回归，不是独立 Python AI 调度。
+批量/引用/信号语义现在在 C# 内测试，原生 World ABI 不再存在；编辑器改由 C# PlaySession/WorldRunner 独占固定步，OnUpdate 只读；C++ 外部 Begin/Commit/Abort 已删除，不是独立 Python AI 调度。
 
 ## 5. Python 与网络边界
 
@@ -91,7 +91,7 @@ Agent 修改继续走编辑器同一 Undo/事务，不开放任意 Python 执行
 ## 6. 旧资产与 API 兼容
 
 唯一场景文件为 `.ncmascene` SceneDocument JSON v1；保存全部注册组件与脚本配置，同目录临时写入后原子替换。旧 `.ncscene` v1-v6 编解码/导入/导出/迁移/备份入口已删除，不再兼容。
-原生 ABI v2 删除 World/GameObject 导出；Gameplay host v3 和 Scene host v4 使用不透明托管令牌；旧消费者必须重新编译。
+原生 ABI v2 删除 World/GameObject 导出；Gameplay host v5 和 Scene host v6 使用不透明托管令牌；旧消费者必须重新编译。
 新格式不含对象/绑定语言标签。未知字段、组件版本和不支持的格式明确拒绝；失败不改目标 World 或源文件。
 Python 游戏宿主、SDK、示例、重载与编辑器语言入口均已删除，不存在停用绑定加载路径。
 旧 Python 逻辑需由作者改写为 C# 或独立模块；显式转换前备份，不自动转译或覆盖。
@@ -108,4 +108,4 @@ Infernux 仅作为 Python 模块工具分层参考。这些不是运行依赖或
 
 ## M1.1 implemented document boundary
 
-Complete Ncma.Scene document snapshots v1 now cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell uses opaque snapshots for Undo and Play; C# .ncmascene JSON v1 files persist all registered components with atomic saves. Old .ncscene compatibility is removed. Shared managed commands, asset references/pipeline, fixed-step editor scheduling and live MCP remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).
+Complete Ncma.Scene document snapshots v1 now cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell uses opaque snapshots for Undo and Play; C# .ncmascene JSON v1 files persist all registered components with atomic saves. Old .ncscene compatibility is removed. Shared commands, fixed-step runtime and scoped live MCP are implemented; asset references/pipeline remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).

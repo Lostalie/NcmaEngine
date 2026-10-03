@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <stdexcept>
 
 void TestSceneDocumentFiles()
 {
@@ -17,13 +18,13 @@ void TestSceneDocumentFiles()
     const auto directory = std::filesystem::current_path() / "out" / "tests" / ("document-" + SceneUuid::New().ToString());
     const auto path = directory / "Scene.ncmascene";
     std::string error;
-    assert(source.SaveDocument(path, error));
+    if (!source.SaveDocument(path, error)) throw std::runtime_error("Scene save failed: " + error);
     ManagedSceneClient clone;
     assert(clone.LoadDocument(path, error) && clone.CaptureDocument() == before);
     assert(clone.Size() == 2 && !clone.HasTransform(clone.FindObject(logicId)));
     assert(clone.GetBehaviours(clone.FindObject(logicId)) == std::vector<BehaviourBinding>{binding});
     source.SetObjectName(spatial, "Updated");
-    assert(source.SaveDocument(path, error)); // Existing supported document is atomically replaced.
+    if (!source.SaveDocument(path, error)) throw std::runtime_error("Scene save failed: " + error); // Existing supported document is atomically replaced.
     assert(clone.LoadDocument(path, error) && clone.GetObjectName(clone.FindObject(heroId)) == "Updated");
     const auto safe = clone.CaptureDocument();
     const auto revision = clone.GetDocumentRevision();

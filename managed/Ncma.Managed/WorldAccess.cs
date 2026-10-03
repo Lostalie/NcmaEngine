@@ -35,13 +35,17 @@ public struct GameplaySignal
     public uint Code;
     public double Value;
     public ulong Sequence;
+    public Guid Epoch;
 }
 
 public sealed partial class SceneWorld
 {
     public const int AccessCapacity = 4096;
-    private readonly List<GameplaySignal> _ready = [], _pendingSignals = [];
+    private List<GameplaySignal> _ready = [];
+    private readonly List<GameplaySignal> _pendingSignals = [];
+    private readonly HashSet<ulong> _consumed = [];
     private ulong _sequence = 1;
+    private Guid _signalEpoch = Guid.NewGuid();
     private bool _phase;
     public GameObject FindObject(ObjectUuid uuid)
     {
@@ -58,7 +62,7 @@ public sealed partial class SceneWorld
     }
     public void WriteTransforms(ReadOnlySpan<TransformWrite> writes)
     {
-        Verify();
+        Verify(); Runtime.VerifyWriteAccess();
         if (writes.Length > AccessCapacity) throw new ArgumentException("Invalid batch length.");
         var targets = new HashSet<ulong>();
         var staged = new (Ncma.Runtime.GameObject, Ncma.Runtime.TransformData)[writes.Length];
@@ -72,30 +76,46 @@ public sealed partial class SceneWorld
     }
     public void SendSignal(GameObject source, GameObject target, uint code, double value = 0)
     {
-        Verify();
+        Verify(); Runtime.VerifyWriteAccess();
         _ = Resolve(source.Reference); _ = Resolve(target.Reference);
         if (source.World != this || target.World != this || !double.IsFinite(value)) throw new ArgumentException("Invalid signal.");
         if (_ready.Count + _pendingSignals.Count >= AccessCapacity || _sequence == ulong.MaxValue) throw new InvalidOperationException("Signal capacity exceeded.");
-        GameplaySignal signal = new() { Source = source.Reference, Target = target.Reference, Code = code, Value = value, Sequence = _sequence++ };
+        GameplaySignal signal = new() { Source = source.Reference, Target = target.Reference, Code = code, Value = value, Sequence = _sequence++, Epoch = _signalEpoch };
         (_phase ? _pendingSignals : _ready).Add(signal);
     }
     public int ReceiveSignals(GameObject target, Span<GameplaySignal> output)
     {
-        Verify(); _ = Resolve(target.Reference);
+        Verify(); Runtime.VerifyWriteAccess(); _ = Resolve(target.Reference);
         if (target.World != this || output.Length > AccessCapacity) throw new ArgumentException("Invalid signal target/buffer.");
         int count = 0;
         for (int i = 0; i < _ready.Count && count < output.Length;)
-            if (_ready[i].Target.Id == target.Id) { output[count++] = _ready[i]; _ready.RemoveAt(i); } else i++;
+            if (_ready[i].Target.Id == target.Id && !_consumed.Contains(_ready[i].Sequence))
+            {
+                output[count++] = _ready[i];
+                if (_phase) { _consumed.Add(_ready[i].Sequence); i++; } else _ready.RemoveAt(i);
+            }
+            else i++;
         return count;
     }
-    internal void BeginPhase() { Verify(); Runtime.BeginStep(); _phase = true; }
-    internal void CommitPhase()
+    internal void BeginPhase(bool initialization = false) { Verify(); Runtime.BeginStep(initialization); _phase = true; }
+    internal Action PreparePhase(Action<Ncma.Runtime.WorldSnapshot>? inspect = null)
     {
         Verify();
         if (!_phase) throw new InvalidOperationException("No active gameplay phase.");
-        Runtime.CommitStep(); _ready.AddRange(_pendingSignals); _pendingSignals.Clear(); _phase = false;
+        List<GameplaySignal>? ready = null;
+        Action commit = Runtime.PrepareStep(world =>
+        {
+            var alive = world.Objects.Select(o => o.PersistentId).ToHashSet();
+            var ids = Runtime.GetObjects().Where(o => alive.Contains(o.PersistentId)).Select(o => o.Reference.Id).ToHashSet();
+            ready = _ready.Where(s => !_consumed.Contains(s.Sequence) && ids.Contains(s.Source.Id) && ids.Contains(s.Target.Id))
+                .Concat(_pendingSignals.Where(s => ids.Contains(s.Source.Id) && ids.Contains(s.Target.Id))).ToList();
+            if (ready.Count > AccessCapacity) throw new InvalidOperationException("Signal capacity exceeded.");
+            inspect?.Invoke(world);
+        });
+        return () => { commit(); _ready = ready!; _pendingSignals.Clear(); _consumed.Clear(); _phase = false; };
     }
-    internal void AbortPhase() { Verify(); Runtime.AbortStep(); _pendingSignals.Clear(); _phase = false; }
+    internal void CommitPhase() => PreparePhase()();
+    internal void AbortPhase() { Verify(); Runtime.AbortStep(); _pendingSignals.Clear(); _consumed.Clear(); _phase = false; }
     internal void Forget(ulong id) { _ready.RemoveAll(s => s.Source.Id == id || s.Target.Id == id); _pendingSignals.RemoveAll(s => s.Source.Id == id || s.Target.Id == id); }
-    internal void Restored() { _ready.Clear(); _pendingSignals.Clear(); _sequence = 1; }
+    internal void Restored() { _ready.Clear(); _pendingSignals.Clear(); _sequence = 1; _signalEpoch = Guid.NewGuid(); }
 }

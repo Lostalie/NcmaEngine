@@ -26,13 +26,6 @@ void TestManagedSceneBridge()
     const auto current = scene.FindObject(uuid);
     assert(current != a && !scene.Contains(a) && !scene.Contains(b));
     assert(!scene.HasTransform(scene.FindObject(emptyUuid)));
-    scene.BeginGameplayPhase();
-    changed = scene.GetLocalTransform(current); changed.Position.x() = 9;
-    scene.SetLocalTransform(current, changed);
-    assert(scene.GetLocalTransform(current).Position.x() == 1);
-    assert(!scene.RestoreDocument(snapshot, error));
-    scene.AbortGameplayPhase();
-    assert(scene.GetLocalTransform(current).Position.x() == 1);
     const auto before = scene.CaptureDocument();
     auto invalid = before; invalid.Bytes.pop_back();
     assert(!scene.RestoreDocument(invalid, error));
@@ -52,6 +45,9 @@ void TestManagedSceneBridge()
     reject(scene.Handle(), 2, nullptr, 0, 1);
     reject(scene.Handle(), 4, nullptr, 0, static_cast<int>(output.size()));
     reject(scene.Handle(), 14, nullptr, 0, static_cast<int>(output.size()));
+    reject(scene.Handle(), 16, nullptr, 0, static_cast<int>(output.size()));
+    reject(scene.Handle(), 17, nullptr, 0, static_cast<int>(output.size()));
+    reject(scene.Handle(), 18, nullptr, 0, static_cast<int>(output.size()));
     reject(scene.Handle(), 900, nullptr, 0, static_cast<int>(output.size()));
     reject(0, 5, nullptr, 0, static_cast<int>(output.size()));
     std::array<std::byte, 4> truncated{}; truncated[0] = std::byte{8};
@@ -66,7 +62,7 @@ void TestManagedSceneBridge()
     reject(released, 5, nullptr, 0, static_cast<int>(output.size()));
     using Version = std::uint32_t(__cdecl*)();
     const auto version = reinterpret_cast<Version>(Scripting::ManagedHost::Resolve(L"GetSceneBridgeVersion"));
-    assert(version() == 4);
+    assert(version() == 6);
     // Complete opaque document snapshots drive history and play clones, not UI projections.
     {
         ManagedSceneClient document("Complete document");
@@ -97,9 +93,7 @@ void TestManagedSceneBridge()
         auto bad = safe; bad.Bytes.pop_back();
         const auto rev = document.GetDocumentRevision();
         assert(!document.RestoreDocument(bad, error) && document.GetDocumentRevision() == rev && document.CaptureDocument() == safe);
-        bool editorPhaseDenied = false;
-        try { document.BeginGameplayPhase(); } catch (const std::exception&) { editorPhaseDenied = true; }
-        assert(editorPhaseDenied && !document.RestoreDocument(full, error));
+        assert(!document.RestoreDocument(full, error));
         assert(document.CaptureDocument() == safe);
     }
     {

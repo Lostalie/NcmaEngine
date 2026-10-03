@@ -17,9 +17,8 @@ namespace NcmaEngine::Scripting
     namespace
     {
         using LoadGameplay = int(__cdecl*)(const char*, char*, int);
-        using TickGameplay = int(__cdecl*)(double, char*, int);
+        using AdvanceGameplay = int(__cdecl*)(std::uint64_t, std::uint64_t, std::uint64_t, double, NcmaPlayStatusV5*, char*, int);
         using UnloadGameplay = int(__cdecl*)(char*, int);
-        using ManagedGetTickCountFunction = std::int64_t(__cdecl*)();
         std::string ToUtf8(const std::filesystem::path& path)
         {
             const auto value = path.u8string();
@@ -35,17 +34,19 @@ namespace NcmaEngine::Scripting
         std::filesystem::path HostAssembly;
         std::filesystem::path GameplayAssembly;
         LoadGameplay Load = nullptr;
-        TickGameplay Tick = nullptr;
+        AdvanceGameplay Advance = nullptr;
         UnloadGameplay Unload = nullptr;
-        ManagedGetTickCountFunction ManagedTickCount = nullptr;
+        std::uint64_t SceneHandle = 0;
+        NcmaPlayStatusV5 Status;
         std::uint32_t(__cdecl* BridgeVersion)() = nullptr;
         int(__cdecl* TypeInfo)(int, char*, int, char*, int) = nullptr;
         int(__cdecl* PropertyInfo)(int, int, NcmaExportPropertyV2*, char*, int) = nullptr;
-        int(__cdecl* BeginScene)(std::uint64_t, char*, int) = nullptr;
-        int(__cdecl* CreateBehaviour)(int, std::uint64_t, int, char*, int) = nullptr;
-        int(__cdecl* SetProperty)(int, int, double, char*, int) = nullptr;
-        UnloadGameplay ActivateScene = nullptr;
-        UnloadGameplay EndScene = nullptr;
+        int(__cdecl* BeginScene)(std::uint64_t, NcmaPlayStatusV5*, char*, int) = nullptr;
+        int(__cdecl* ControlPlay)(std::uint64_t, std::uint64_t, std::uint64_t, std::uint32_t, NcmaPlayStatusV5*, char*, int) = nullptr;
+        int(__cdecl* EndScene)(std::uint64_t, std::uint64_t, std::uint64_t, char*, int) = nullptr;
+        int(__cdecl* SubmitPlayInput)(std::uint64_t, const NcmaInputFrameV1*, char*, int) = nullptr;
+        int(__cdecl* GetRenderFrame)(std::uint64_t, std::uint64_t, std::uint64_t, NcmaRenderHeaderV1*, NcmaRenderObjectV1*, int, char*, int) = nullptr;
+        int(__cdecl* ReloadGameplay)(const char*, std::uint64_t, std::uint64_t, std::uint64_t, NcmaPlayStatusV5*, char*, int) = nullptr;
         std::vector<BehaviourDescriptor> Types;
         bool SceneBound = false;
         bool Started = false;
@@ -62,11 +63,12 @@ namespace NcmaEngine::Scripting
                 };
                 resolve(L"GetBridgeVersion", BridgeVersion);
                 if (BridgeVersion() != NcmaGameplayBridgeVersion) throw std::runtime_error("Managed scene bridge ABI mismatch");
-                resolve(L"LoadGameplay", Load); resolve(L"Tick", Tick); resolve(L"UnloadGameplay", Unload);
-                resolve(L"GetTickCount", ManagedTickCount); resolve(L"GetTypeInfo", TypeInfo);
+                resolve(L"LoadGameplay", Load); resolve(L"AdvanceFrame", Advance); resolve(L"UnloadGameplay", Unload);
+                resolve(L"GetTypeInfo", TypeInfo);
                 resolve(L"GetPropertyInfo", PropertyInfo); resolve(L"BeginScene", BeginScene);
-                resolve(L"CreateBehaviour", CreateBehaviour); resolve(L"SetProperty", SetProperty);
-                resolve(L"ActivateScene", ActivateScene); resolve(L"EndScene", EndScene);
+                resolve(L"ControlPlay", ControlPlay); resolve(L"EndScene", EndScene);
+                resolve(L"ReloadGameplay", ReloadGameplay);
+                resolve(L"SubmitPlayInput", SubmitPlayInput); resolve(L"GetRenderFrame", GetRenderFrame);
                 return true;
             }
             catch (const std::exception& exception) { error = exception.what(); return false; }
@@ -83,8 +85,13 @@ namespace NcmaEngine::Scripting
                 LastError = error;
                 return false;
             }
+            return ReadTypes(result, error);
+        }
+        bool ReadTypes(int result, std::string& error)
+        {
+            std::array<char, 2048> managedError{};
+            std::vector<BehaviourDescriptor> candidate;
             Started = true; // Ensure partial metadata failures can unload the newly loaded context.
-            Types.clear();
             for (int t = 0; t < result; ++t)
             {
                 std::array<char, 512> typeName{};
@@ -100,9 +107,9 @@ namespace NcmaEngine::Scripting
                     type.Properties.push_back({{property.Name, static_cast<ExportKind>(property.Kind),
                         property.DefaultValue}, property.DisplayName, property.Category});
                 }
-                Types.push_back(std::move(type));
+                candidate.push_back(std::move(type));
             }
-            BehaviourCount = 0;
+            Types = std::move(candidate);
             Started = true;
             LastError.clear();
             error.clear();
@@ -157,30 +164,75 @@ namespace NcmaEngine::Scripting
     {
         if (!m_Implementation->Started || m_Implementation->Unload == nullptr)
             return;
+        EndScene();
         std::array<char, 2048> error{};
         if (m_Implementation->Unload(error.data(), static_cast<int>(error.size())) < 0)
             m_Implementation->LastError = error.data();
         m_Implementation->Started = false;
         m_Implementation->BehaviourCount = 0;
         m_Implementation->SceneBound = false;
+        m_Implementation->SceneHandle = 0;
+        m_Implementation->Status = {};
         m_Implementation->Types.clear();
     }
 
-    void DotNetGameplayRuntime::Tick(double deltaSeconds)
+    void DotNetGameplayRuntime::Tick(double deltaSeconds) { AdvanceFrame(deltaSeconds); }
+    void DotNetGameplayRuntime::AdvanceFrame(double deltaSeconds)
     {
-        if (!m_Implementation->Started || !m_Implementation->SceneBound)
-            return;
+        auto& runtime = *m_Implementation;
+        if (!runtime.Started || !runtime.SceneBound) return;
         std::array<char, 2048> error{};
-        if (m_Implementation->Tick(deltaSeconds, error.data(), static_cast<int>(error.size())) < 0)
-            m_Implementation->LastError = error.data();
-        else
-            m_Implementation->LastError.clear();
+        if (runtime.Advance(runtime.SceneHandle, runtime.Status.SessionHigh, runtime.Status.SessionLow,
+            deltaSeconds, &runtime.Status, error.data(), static_cast<int>(error.size())) < 0)
+            runtime.LastError = error.data();
+        else runtime.LastError.clear();
     }
+    bool DotNetGameplayRuntime::SubmitInput(NcmaInputFrameV1 input, std::string& error)
+    {
+        auto& runtime = *m_Implementation;
+        if (!runtime.SceneBound) { error = "No bound Play session"; return false; }
+        input.SessionHigh = runtime.Status.SessionHigh; input.SessionLow = runtime.Status.SessionLow;
+        std::array<char, 2048> message{};
+        if (runtime.SubmitPlayInput(runtime.SceneHandle, &input, message.data(), static_cast<int>(message.size())) < 0)
+        { error = message.data(); return false; }
+        error.clear(); return true;
+    }
+    bool DotNetGameplayRuntime::ReadRenderFrame(std::vector<NcmaRenderObjectV1>& output, NcmaRenderHeaderV1& header, std::string& error)
+    {
+        auto& runtime = *m_Implementation;
+        if (!runtime.SceneBound) { error = "No bound Play session"; return false; }
+        std::vector<NcmaRenderObjectV1> candidate(4096);
+        std::array<char, 2048> message{};
+        const int count = runtime.GetRenderFrame(runtime.SceneHandle, runtime.Status.SessionHigh, runtime.Status.SessionLow,
+            &header, candidate.data(), static_cast<int>(candidate.size()), message.data(), static_cast<int>(message.size()));
+        if (count < 0) { error = message.data(); return false; }
+        candidate.resize(static_cast<std::size_t>(count)); output = std::move(candidate); error.clear(); return true;
+    }
+    bool DotNetGameplayRuntime::Control(std::uint32_t command, std::string& error)
+    {
+        auto& runtime = *m_Implementation;
+        if (!runtime.Started || !runtime.SceneBound) { error = "No bound Play session"; return false; }
+        std::array<char, 2048> message{};
+        if (runtime.ControlPlay(runtime.SceneHandle, runtime.Status.SessionHigh, runtime.Status.SessionLow,
+            command, &runtime.Status, message.data(), static_cast<int>(message.size())) < 0)
+        { error = message.data(); runtime.LastError = error; return false; }
+        error.clear(); runtime.LastError.clear(); return true;
+    }
+    bool DotNetGameplayRuntime::Pause(std::string& error) { return Control(0, error); }
+    bool DotNetGameplayRuntime::Resume(std::string& error) { return Control(1, error); }
+    bool DotNetGameplayRuntime::Step(std::string& error) { return Control(2, error); }
+    const NcmaPlayStatusV5& DotNetGameplayRuntime::GetPlayStatus() const noexcept { return m_Implementation->Status; }
 
     bool DotNetGameplayRuntime::Reload(std::string& error)
     {
-        Stop();
-        return Start(error);
+        auto& runtime = *m_Implementation;
+        if (!runtime.Started) return Start(error);
+        const auto path = ToUtf8(runtime.GameplayAssembly);
+        std::array<char, 2048> message{};
+        const int count = runtime.ReloadGameplay(path.c_str(), runtime.SceneHandle, runtime.Status.SessionHigh, runtime.Status.SessionLow,
+            &runtime.Status, message.data(), static_cast<int>(message.size()));
+        if (count < 0) { error = message.data(); runtime.LastError = error; return false; }
+        return runtime.ReadTypes(count, error);
     }
 
     bool DotNetGameplayRuntime::IsStarted() const noexcept { return m_Implementation->Started; }
@@ -192,9 +244,11 @@ namespace NcmaEngine::Scripting
         auto& runtime = *m_Implementation;
         if (!runtime.Started || !runtime.SceneBound) return;
         std::array<char, 2048> message{};
-        if (runtime.EndScene(message.data(), static_cast<int>(message.size())) < 0)
+        if (runtime.EndScene(runtime.SceneHandle, runtime.Status.SessionHigh, runtime.Status.SessionLow,
+            message.data(), static_cast<int>(message.size())) < 0)
             runtime.LastError = message.data();
         runtime.SceneBound = false;
+        runtime.SceneHandle = 0; runtime.Status = {};
         runtime.BehaviourCount = 0;
     }
 
@@ -204,51 +258,21 @@ namespace NcmaEngine::Scripting
         EndScene();
         auto& runtime = *m_Implementation;
         std::array<char, 2048> message{};
-        constexpr int capacity = static_cast<int>(message.size());
-        if (runtime.BeginScene(world.Handle(), message.data(), capacity) < 0)
-        { error = message.data(); return false; }
+        const int count = runtime.BeginScene(world.Handle(), &runtime.Status,
+            message.data(), static_cast<int>(message.size()));
+        if (count < 0)
+        { error = message.data(); runtime.LastError = error; return false; }
+        runtime.SceneHandle = world.Handle();
         runtime.SceneBound = true;
-        const auto fail = [&](std::string reason) {
-            EndScene();
-            error = std::move(reason);
-            runtime.LastError = error;
-            return false;
-        };
-        for (const auto& gameObject : world.CaptureView().Objects)
-        {
-            for (const auto& binding : gameObject.Behaviours)
-            {
-                const auto type = std::find_if(runtime.Types.begin(), runtime.Types.end(), [&](const auto& item) {
-                    return item.TypeName == binding.TypeName;
-                });
-                if (type == runtime.Types.end()) return fail("Missing Behaviour type: " + binding.TypeName);
-                const int instance = runtime.CreateBehaviour(static_cast<int>(type - runtime.Types.begin()),
-                    world.FindObject(gameObject.PersistentId), binding.Enabled ? 1 : 0, message.data(), capacity);
-                if (instance < 0) return fail(message.data());
-                for (const auto& value : binding.Properties)
-                {
-                    const auto property = std::find_if(type->Properties.begin(), type->Properties.end(), [&](const auto& item) {
-                        return item.Default.Name == value.Name && item.Default.Kind == value.Kind;
-                    });
-                    if (property == type->Properties.end()) return fail("Missing or changed Export: " + value.Name);
-                    if (!ValidExportValue(value)) return fail("Invalid Export value: " + value.Name);
-                    if (runtime.SetProperty(instance, static_cast<int>(property - type->Properties.begin()),
-                        value.Value, message.data(), capacity) < 0) return fail(message.data());
-                }
-            }
-        }
-        const int count = runtime.ActivateScene(message.data(), capacity);
-        if (count < 0) return fail(message.data());
         runtime.BehaviourCount = count;
-        runtime.LastError.clear();
-        error.clear();
+        runtime.LastError.clear(); error.clear();
         return true;
     }
     int DotNetGameplayRuntime::GetBehaviourCount() const noexcept { return m_Implementation->BehaviourCount; }
 
     std::int64_t DotNetGameplayRuntime::GetTickCount() const noexcept
     {
-        return m_Implementation->ManagedTickCount == nullptr ? 0 : m_Implementation->ManagedTickCount();
+        return static_cast<std::int64_t>(m_Implementation->Status.Tick);
     }
 
     const std::string& DotNetGameplayRuntime::GetLastError() const noexcept

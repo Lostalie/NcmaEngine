@@ -28,7 +28,7 @@ namespace NcmaEngine::Editor
     public:
         explicit EditorApplication(
             HINSTANCE instance, Rhi::BackendType backendType = Rhi::BackendType::Direct3D11,
-            bool smokeTest = false, bool gameplaySmokeTest = false, bool fbxSmokeTest = false);
+            bool smokeTest = false, bool gameplaySmokeTest = false, bool fbxSmokeTest = false, bool mcpSmokeTest = false);
         ~EditorApplication();
 
         int Run();
@@ -65,6 +65,7 @@ namespace NcmaEngine::Editor
         void ExecuteFbxEdit(const std::function<void(FbxPreviewState&)>& edit);
         void UndoFbxEdit(bool redo = false);
         void RenderStatusBar(const RECT& workArea);
+        void RenderMcpPanel();
         void RenderSceneObject(SceneUuid object);
 
         void SelectObject(GameObjectId gameObject);
@@ -98,7 +99,19 @@ namespace NcmaEngine::Editor
         bool m_ImGuiInitialized = false;
         bool m_GlfwInitialized = false;
         bool m_ScenePlaying = false;
+        std::uint64_t m_InputSequence = 0;
+        std::array<std::uint64_t, 8> m_InputHeld{}, m_InputPressed{}, m_InputReleased{};
+        double m_InputCursorX = 0, m_InputCursorY = 0;
+        bool m_InputFocused = false;
+        std::vector<NcmaRenderObjectV1> m_RenderObjects;
+        NcmaRenderHeaderV1 m_RenderHeader;
         bool m_ShowAssets = true;
+        bool m_ShowMcpPanel = false;
+        bool m_McpSmokeTest = false, m_McpSmokeUndoDone = false;
+        HANDLE m_McpSmokeProcess = nullptr;
+        ULONGLONG m_McpSmokeStarted = 0;
+        int m_McpSmokeResult = 1;
+        McpEndpointState m_McpState;
         bool m_ShowAnimationLab = false;
         float m_AnimationSpeed = 0;
         std::string m_AnimationCommandError;
@@ -167,7 +180,6 @@ namespace NcmaEngine::Editor
         std::filesystem::path m_ScenePath;
         std::filesystem::path m_ProjectRoot;
         std::unique_ptr<ManagedSceneClient> m_PlayScene;
-        bool m_ScenePaused = false;
         std::unique_ptr<Scripting::DotNetGameplayRuntime> m_GameplayRuntime;
         std::vector<std::string> m_Logs;
     };
