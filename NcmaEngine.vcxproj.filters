@@ -1,60 +1,90 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="源文件">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
-    <Filter Include="头文件">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
-    </Filter>
-    <Filter Include="资源文件">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
+    <Filter Include="Editor"><UniqueIdentifier>{3ED92A07-4F04-4E4C-9F78-6D870BE98928}</UniqueIdentifier></Filter>
+    <Filter Include="Runtime"><UniqueIdentifier>{679C827C-E29A-4184-80C1-01AC5EEAE81D}</UniqueIdentifier></Filter>
+    <Filter Include="Tests"><UniqueIdentifier>{DE33FA58-B86C-487B-A9A4-293DBF4BA546}</UniqueIdentifier></Filter>
+    <Filter Include="Build"><UniqueIdentifier>{B5806807-A572-47C6-B990-7BA8514392F9}</UniqueIdentifier></Filter>
+    <Filter Include="Resources"><UniqueIdentifier>{ED660B07-7E17-4D83-B3C2-2E1AF1B04D50}</UniqueIdentifier></Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="engine\source\runtime\launch\Launch.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\source\runtime\core\CoreGlobal.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\source\runtime\core\Core.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\source\runtime\engine\Engine.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\source\runtime\gui\GuiLayer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="engine\source\runtime\core\log\Log.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
+    <ClCompile Include="engine\source\editor\EditorMain.cpp"><Filter>Editor</Filter></ClCompile>
+    <ClCompile Include="engine\source\editor\EditorApplication.cpp"><Filter>Editor</Filter></ClCompile>
+    <ClCompile Include="engine\source\editor\EditorAnimation.cpp"><Filter>Editor</Filter></ClCompile>
+    <ClCompile Include="engine\source\editor\EditorFbxCharacter.cpp"><Filter>Editor</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\assets\FbxCharacterImporter.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="tests\ArchitectureTests.cpp"><Filter>Tests</Filter></ClCompile>
+    <ClCompile Include="tests\AnimationTests.cpp"><Filter>Tests</Filter></ClCompile>
+    <ClCompile Include="tests\FbxImportTests.cpp"><Filter>Tests</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\ai\AgentCapabilityRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\animation\AnimationGraph.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\animation\AnimationRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\animation\ActionAnimationWorkspace.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\core\log\Log.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\interop\NcmaNativeApi.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\interop\NcmaAnimationApi.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\interop\NcmaCharacterApi.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\physics\runtime\PhysicsWorld2D.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\physics\runtime\PhysicsWorld3D.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\renderer\rendergraph\RenderGraph.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\renderer\rhi\RhiResources.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\renderer\rhi\RenderBackendRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\scene\SceneCommandStack.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\scene\SceneSerializer.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\scene\SceneUuid.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\scene\SceneWorld.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\script\runtime\PythonGameplayRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
+    <ClCompile Include="tests\ManagedHostTests.cpp"><Filter>Tests</Filter></ClCompile>
+    <ClCompile Include="tests\PythonGameplayTests.cpp"><Filter>Tests</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="engine\source\runtime\core\CoreGlobal.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\source\runtime\core\Core.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\source\runtime\engine\Engine.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\source\runtime\gui\GuiLayer.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\source\runtime\core\generic\Generic.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\source\runtime\core\CoreTypes.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="engine\source\runtime\core\log\Log.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
+    <ClInclude Include="engine\source\editor\EditorApplication.h"><Filter>Editor</Filter></ClInclude>
+    <ClInclude Include="engine\source\editor\EditorResources.h"><Filter>Resources</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\assets\FbxCharacterImporter.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\ai\AgentCapabilityRegistry.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\animation\AnimationGraph.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\animation\AnimationRuntime.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\animation\ActionAnimationWorkspace.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\core\log\Log.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\foundation\MathTypes.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\interop\NcmaNativeApi.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\interop\NcmaAnimationApi.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\interop\NcmaCharacterApi.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\interop\NcmaGameplayBridge.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\BehaviourBinding.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\physics\runtime\PhysicsWorld2D.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\physics\runtime\PhysicsWorld3D.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\pipeline\PbrPipelineSettings.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\rendergraph\RenderGraph.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\rhi\RhiResources.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\rhi\RenderBackend.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\rhi\RenderBackendRegistry.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\SceneCommandStack.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\SceneSerializer.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\SceneUuid.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\scene\SceneWorld.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\script\runtime\PythonGameplayRuntime.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\script\runtime\GameplayTypes.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntime.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.h"><Filter>Runtime</Filter></ClInclude>
+    <ClInclude Include="engine\source\runtime\ui\UiDocument.h"><Filter>Runtime</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="AGENTS.md"><Filter>Build</Filter></None>
+    <None Include="Build.bat"><Filter>Build</Filter></None>
+    <None Include="CMakeLists.txt"><Filter>Build</Filter></None>
+    <None Include="CMakePresets.json"><Filter>Build</Filter></None>
+    <None Include="LaunchEditor.cmd"><Filter>Build</Filter></None>
+    <None Include="README.md"><Filter>Build</Filter></None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="engine\source\editor\NcmaEditor.rc"><Filter>Resources</Filter></ResourceCompile>
   </ItemGroup>
 </Project>

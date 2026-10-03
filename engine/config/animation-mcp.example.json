@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ncma-animation": {
+      "command": "python",
+      "args": ["-m", "ncma_tools.cli", "mcp", "--root", "F:\\NcmaEngine"],
+      "env": {"PYTHONPATH": "F:\\NcmaEngine\\python\\src"}
+    }
+  }
+}

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ncma-tools"
+version = "0.2.0"
+description = "NcmaEngine tooling, automation, and future AI integration boundary"
+requires-python = ">=3.10"
+
+[project.scripts]
+ncma = "ncma_tools.cli:main"
+ncma-animation-mcp = "ncma_tools.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

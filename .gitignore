@@ -37,6 +37,43 @@
 bin/
 intermediate/
 .vs/
+out/
+
+# .NET
+managed/**/bin/
+managed/**/obj/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
 
 #rider
 .idea/
+
+# Local editor and assistant state
+*.vcxproj.user
+.claude/settings.local.json
+engine/config/NcmaEditor.ini
+
+# Vendored SDK build output (Jolt's Build directory also contains sources)
+engine/sdk/glfw/build/
+engine/sdk/box2d/Build/
+engine/sdk/JoltPhysics/Build/CMakeFiles/
+engine/sdk/JoltPhysics/Build/*.dir/
+engine/sdk/JoltPhysics/Build/Debug/
+engine/sdk/JoltPhysics/Build/Release/
+engine/sdk/JoltPhysics/Build/RelWithDebInfo/
+engine/sdk/JoltPhysics/Build/MinSizeRel/
+engine/sdk/JoltPhysics/Build/x64/
+engine/sdk/JoltPhysics/Build/*.vcxproj
+engine/sdk/JoltPhysics/Build/*.vcxproj.filters
+engine/sdk/JoltPhysics/Build/*.sln
+engine/sdk/JoltPhysics/Build/CMakeCache.txt
+engine/sdk/JoltPhysics/Build/cmake_install.cmake
+engine/sdk/JoltPhysics/Build/CTestTestfile.cmake
+engine/sdk/JoltPhysics/Build/JoltConfig.cmake
+*.pdb
+*.ilk
+*.iobj
+*.ipdb
