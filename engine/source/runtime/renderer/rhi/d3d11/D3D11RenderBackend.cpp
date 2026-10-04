@@ -145,10 +145,8 @@ namespace NcmaEngine::Rhi
         };
         D3D_FEATURE_LEVEL createdLevel{};
         UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-#if defined(_DEBUG)
         if (createInfo.EnableValidation)
             flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
 
         HRESULT result = D3D11CreateDeviceAndSwapChain(
             nullptr,
@@ -164,16 +162,7 @@ namespace NcmaEngine::Rhi
             &createdLevel,
             &m_DeviceContext);
 
-#if defined(_DEBUG)
-        if (FAILED(result) && (flags & D3D11_CREATE_DEVICE_DEBUG) != 0)
-        {
-            flags &= ~D3D11_CREATE_DEVICE_DEBUG;
-            result = D3D11CreateDeviceAndSwapChain(
-                nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-                requestedLevels, static_cast<UINT>(std::size(requestedLevels)), D3D11_SDK_VERSION,
-                &swapChainDescription, &m_SwapChain, &m_Device, &createdLevel, &m_DeviceContext);
-        }
-#endif
+
         if (FAILED(result))
         {
             error = HResultError("D3D11CreateDeviceAndSwapChain", result);
@@ -289,16 +278,18 @@ namespace NcmaEngine::Rhi
 
     void D3D11RenderBackend::Resize(std::uint32_t width, std::uint32_t height)
     {
-        if (!m_Initialized || width == 0 || height == 0 || !m_SwapChain)
-            return;
+        std::string error;
+        (void)ResizeChecked(width,height,error);
+    }
+    bool D3D11RenderBackend::ResizeChecked(uint32_t width,uint32_t height,std::string& error)
+    {
+        if (!m_Initialized || width == 0 || height == 0 || !m_SwapChain) { error="Invalid resize."; return false; }
+        m_DeviceContext->OMSetRenderTargets(0,nullptr,nullptr);
         ReleaseRenderTarget();
-        const HRESULT result = m_SwapChain->ResizeBuffers(0, width, height, DXGI_FORMAT_UNKNOWN, 0);
-        if (FAILED(result))
-            return;
-        m_CreateInfo.Width = width;
-        m_CreateInfo.Height = height;
-        std::string ignoredError;
-        (void)CreateRenderTarget(ignoredError);
+        const HRESULT result=m_SwapChain->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0);
+        if (FAILED(result)) { error=HResultError("ResizeBuffers",result); return false; }
+        m_CreateInfo.Width=width; m_CreateInfo.Height=height;
+        return CreateRenderTarget(error);
     }
 
     void D3D11RenderBackend::SetClearColor(float red, float green, float blue, float alpha) noexcept

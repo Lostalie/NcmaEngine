@@ -52,14 +52,14 @@ public static unsafe partial class NativeEntry
         {
             end(); if (scene.Editor is not null) throw new InvalidOperationException("One edit session per document.");
             if (s_world == scene.World) throw new InvalidOperationException("End gameplay before activating the editor.");
-            scene.Editor = new(scene.Document); scene.Editor.SetBehaviourCatalog(CurrentCatalog()); return;
+            scene.Owner.ActivateEditor(); return;
         }
         var edit = scene.Editor ?? throw new InvalidOperationException("Activate an editor session first.");
         switch (operation)
         {
             case 50:
                 bool enabled = ReadFlag(reader); string root = ReadText(reader); end();
-                scene.Endpoint?.Dispose(); scene.Endpoint = enabled ? new(edit, root) : null;
+                scene.Owner.ConfigureEndpoint(enabled, root);
                 WriteText(writer, scene.Endpoint?.DescriptorPath ?? ""); break;
             case 51:
                 end();

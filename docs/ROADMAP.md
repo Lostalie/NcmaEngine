@@ -39,7 +39,7 @@
 
 补充说明：
 
-- 当前原生插件聚合 ABI 为 2，动画/角色子接口仍各自为 1；Gameplay Host Bridge 为 4，Scene Host Bridge 为 5。版本独立，不表示所有原生插件边界已经完成。
+- 当前原生插件聚合 ABI 为 2，动画/角色子接口仍各自为 1；Gameplay Host Bridge 为 5，Scene Host Bridge 为 6。版本独立，不表示所有原生插件边界已经完成。
 - `Ncma.Managed.SceneWorld` 是兼容玩法 API 的纯托管外观，不是被删除的 C++ SceneWorld。原生 ManagedSceneClient 只保留令牌与复制的 DTO。
 - 当前编辑器经 hostfxr 使用 C# World，但外壳仍在 C++，场景编解码、命令、保存状态和撤销栈已在 C#。不能将“场景已托管”描述为“整个编辑器已托管”。
 - 完整快照恢复会使运行时引用失效；后续命令、选择和调试接口必须按 UUID 重新解析。外部直接修改也不能与 EditSession 历史混用。
@@ -82,13 +82,31 @@ M1.1 已将脚本配置收敛到 Ncma.Scene，完整快照、新文件读写/原
 **状态：未实现完整迁移；复用现有 native 内核。**
 
 - 建立 C# Editor/Player 应用入口、项目配置、主循环、输入/时间服务、错误报告与日志入口。
-- 先验证 C# Dear ImGui 绑定与现有 native 版本兼容，再迁移面板、Inspector、菜单、工具和编辑器业务；补齐 DPI、字体与布局管理。
+- 详细方案建议延续已确认的 C++/Dear ImGui，先验证 C# 驱动的原生 GUI 薄适配；C# 接管面板、Inspector、菜单、工具业务，原生只画控件并返回复制意图，补齐 DPI、字体与布局管理。ImGui.NET 不作为强制前置。
 - 抽出 Renderer/Physics 插件契约，明确能力查询、资源生命周期、初始化失败、线程和关闭顺序。高层不得直接调用 D3D/Vulkan。
 - 复用 D3D11、GLFW、Box2D/Jolt 实现；只保留必要原生引导与后台模块。不要把现有 NcmaNative 聚合 DLL 误称为完整插件体系。
-- 新入口通过启动/关闭、场景编辑、Play、重载和异常测试后，再逐项退出旧 C++ 外壳/业务实现。
+- M2 期间保留受控旧入口用于对照，新入口通过验收后在 H7 切换正式路径；M2 全部结束后统一清除已替代旧 C++ 入口/桥接及关联构建部署项，再完整复测，不分阶段提前删除。
 - 维持最终程序名 `NcmaEngine.exe` 和 `out/bin/` 输出约定。
 
 验收：C# 应用可独立管理编辑与运行会话；native 资源无悬挂/重复释放；旧编辑/脚本流程无回归；程序集与 ABI 不匹配能够明确失败。
+
+M2.1/M2.2 已通过自动门禁；M2.3/M2.4 候选链路及联合自动回归见 [交付报告](M2_3_4_TEST_REPORT.md)。M2.5 的场景/Inspector/Play/MCP、大 JSON 分页、完整 reference PBR/阴影控件、FBX 线框/Orbit/报告、动画 ABI 2 与 C#/隔离 Python 策略、偏好/文件选择/快捷键/原生 Console 已迁移；H5 人工门禁未完成，见 [当前记录](M2_5_H5_DELIVERY_REPORT.md)。人工验收待完成，生产入口未切换；M2.6 薄 C++ Physics 插件 + C# 高层物理服务见 [交付记录](M2_6_DELIVERY_REPORT.md)，尚无场景物理；M2.7 已交付共享运行服务、Player/Headless 与 framework-dependent 候选包，见 [记录](M2_7_DELIVERY_REPORT.md)；自包含/H7 正式切换待验；H8 总验收与旧入口统一清理留待后续实施。
+
+详细方案（2026-10-04，按交付状态区分已实施与后续建议）：[M2 总览](M2_IMPLEMENTATION_PLAN.md)。
+
+| 小阶段 | 方案与主要交付 |
+| --- | --- |
+| M2.1 | [应用服务与宿主去静态化](M2_1_IMPLEMENTATION_PLAN.md)：项目/脚本/catalog、应用生命周期与假平台循环 |
+| M2.2 | [插件 ABI 与加载器](M2_2_IMPLEMENTATION_PLAN.md)：版本、内存、线程、租约、装载/关闭故障矩阵 |
+| M2.3 | [平台输入与 GUI 适配](M2_3_IMPLEMENTATION_PLAN.md)：GLFW、输入/capture、DPI/字体、候选托管窗口 |
+| M2.4 | [Renderer 插件](M2_4_IMPLEMENTATION_PLAN.md)：DX11 参考预览/GUI合成、资源释放与实际 API 验证 |
+| M2.5 | [托管编辑器业务](M2_5_IMPLEMENTATION_PLAN.md)：现有面板、草稿/历史/Play/MCP及独立预览迁移 |
+| M2.6 | [Physics 插件](M2_6_IMPLEMENTATION_PLAN.md)：薄 Box2D/Jolt 插件、C# 生命周期/单步/批次/诊断服务，不提前接入场景模拟 |
+| M2.7 | [Player 与发布](M2_7_IMPLEMENTATION_PLAN.md)：headless、包布局、Rider/Build/启动器与默认入口切换 |
+| M2.8 | [最终验收与清理预检](M2_8_IMPLEMENTATION_PLAN.md)：联合矩阵/人工/性能证据，核定清单；M2 结束后统一清理并复测，再移交 M3 |
+
+可以先完成规划；正式实施前补齐 M1 人工验收，并确认 TFM（当前 net8.0，建议独立评估 .NET 10 LTS）。
+H7 前候选程序不覆盖 out/bin 默认入口；H8 前不把 M2 标为完成。计划不新增已实现能力或自动授权工具。
 
 ### M3：资产系统与 FBX 角色落地
 

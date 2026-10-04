@@ -17,6 +17,16 @@
 仅支持本地 Windows 当前用户；管道 ACL 为当前用户、拒绝远程客户端、首实例独占。发现文件不含凭证。
 凭证只经私有管道传递并留在进程内；不要记录、放在命令行或粘贴到聊天。Helper 不自动重连或自动重试写请求。
 
+## M2.5 候选验收入口
+
+正式 out/bin 仍是旧比较入口。验收当前 H5 应使用 out/verification/m2/candidate/Release/NcmaEngine.exe
+--editor --project <绝对 .ncmaproject 路径>，在可滚动的 Play / Status / Console 中点击 Enable local MCP。
+无项目模式不可启用端点；端点默认关闭，配对/审批仍是可信本机 UI 操作。
+使用当前展示的 descriptor 路径配置同一个 C# helper；配置模板/协议/工具名不变，不复用旧实例描述。
+候选按钮名为 Pair this client / Approve displayed proposal / Revoke this client，
+删除输入精确 UUID；完整 input 与范围仍须逐项人工核查。
+第三方可见候选闭环尚待人工记录；测试不能替代它。详见 [当前 H5 清单](M2_5_H5_DELIVERY_REPORT.md)。
+
 ## 工具与操作
 
 六项读取：ncma.capabilities.list、ncma.engine.component_types、ncma.engine.behaviour_types、

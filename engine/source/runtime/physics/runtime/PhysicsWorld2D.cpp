@@ -1,88 +1,50 @@
-#include "physics/runtime/PhysicsWorld2D.h"
-
-#include <algorithm>
+#include "PhysicsWorld2D.h"
+#include <box2d/box2d.h>
+#include <unordered_map>
 #include <stdexcept>
-
-namespace NcmaEngine::Physics
-{
-    PhysicsWorld2D::PhysicsWorld2D(Vector2 gravity)
-    {
-        b2WorldDef worldDefinition = b2DefaultWorldDef();
-        worldDefinition.gravity = {gravity.x(), gravity.y()};
-        m_World = b2CreateWorld(&worldDefinition);
-        if (!b2World_IsValid(m_World))
-            throw std::runtime_error("Failed to create Box2D world");
+namespace NcmaEngine::Physics {
+struct PhysicsWorld2D::State {
+    b2WorldId world = b2_nullWorldId;
+    std::unordered_map<BodyHandle2D, b2BodyId> bodies;
+    BodyHandle2D next = 1;
+    explicit State(Vector2 gravity) {
+        auto def = b2DefaultWorldDef(); def.gravity = {gravity.x(), gravity.y()};
+        world = b2CreateWorld(&def);
+        if (!b2World_IsValid(world)) throw std::runtime_error("Box2D world creation failed.");
     }
-
-    PhysicsWorld2D::~PhysicsWorld2D()
-    {
-        if (b2World_IsValid(m_World))
-            b2DestroyWorld(m_World);
-    }
-
-    BodyHandle2D PhysicsWorld2D::CreateBox(
-        const Vector2& position, const Vector2& halfExtents, bool dynamicBody, float density)
-    {
-        b2BodyDef bodyDefinition = b2DefaultBodyDef();
-        bodyDefinition.type = dynamicBody ? b2_dynamicBody : b2_staticBody;
-        bodyDefinition.position = {position.x(), position.y()};
-        const b2BodyId body = b2CreateBody(m_World, &bodyDefinition);
-        if (!b2Body_IsValid(body))
-            throw std::runtime_error("Failed to create Box2D body");
-
-        b2ShapeDef shapeDefinition = b2DefaultShapeDef();
-        shapeDefinition.density = std::max(density, 0.0F);
-        shapeDefinition.material.friction = 0.4F;
-        const b2Polygon box = b2MakeBox(std::max(halfExtents.x(), 0.001F), std::max(halfExtents.y(), 0.001F));
-        const b2ShapeId shape = b2CreatePolygonShape(body, &shapeDefinition, &box);
-        if (!b2Shape_IsValid(shape))
-        {
-            b2DestroyBody(body);
-            throw std::runtime_error("Failed to create Box2D box shape");
-        }
-        const BodyHandle2D handle = m_NextBody++;
-        m_Bodies.emplace(handle, body);
-        return handle;
-    }
-
-    void PhysicsWorld2D::DestroyBody(BodyHandle2D body)
-    {
-        const auto it = m_Bodies.find(body);
-        if (it == m_Bodies.end())
-            return;
-        if (b2Body_IsValid(it->second))
-            b2DestroyBody(it->second);
-        m_Bodies.erase(it);
-    }
-
-    void PhysicsWorld2D::Step(float deltaSeconds, int subSteps)
-    {
-        if (deltaSeconds > 0.0F)
-            b2World_Step(m_World, deltaSeconds, std::max(subSteps, 1));
-    }
-
-    Vector2 PhysicsWorld2D::GetPosition(BodyHandle2D body) const
-    {
-        const b2Vec2 position = b2Body_GetPosition(RequireBody(body));
-        return {position.x, position.y};
-    }
-
-    Vector2 PhysicsWorld2D::GetVelocity(BodyHandle2D body) const
-    {
-        const b2Vec2 velocity = b2Body_GetLinearVelocity(RequireBody(body));
-        return {velocity.x, velocity.y};
-    }
-
-    void PhysicsWorld2D::SetVelocity(BodyHandle2D body, const Vector2& velocity)
-    {
-        b2Body_SetLinearVelocity(RequireBody(body), {velocity.x(), velocity.y()});
-    }
-
-    b2BodyId PhysicsWorld2D::RequireBody(BodyHandle2D body) const
-    {
-        const auto it = m_Bodies.find(body);
-        if (it == m_Bodies.end() || !b2Body_IsValid(it->second))
-            throw std::out_of_range("Unknown Box2D body handle");
+    ~State() { if (b2World_IsValid(world)) b2DestroyWorld(world); }
+    b2BodyId Require(BodyHandle2D id) const {
+        auto it = bodies.find(id);
+        if (it == bodies.end() || !b2Body_IsValid(it->second)) throw std::out_of_range("Unknown Box2D body.");
         return it->second;
     }
+};
+PhysicsWorld2D::PhysicsWorld2D(Vector2 gravity) : m_State(std::make_unique<State>(gravity)) {}
+PhysicsWorld2D::~PhysicsWorld2D() = default;
+BodyHandle2D PhysicsWorld2D::CreateBox(const Vector2& position, const Vector2& extent, bool dynamic, float density) {
+    auto& s = *m_State;
+    s.bodies.reserve(s.bodies.size() + 1);
+    auto def = b2DefaultBodyDef(); def.type = dynamic ? b2_dynamicBody : b2_staticBody;
+    def.position = {position.x(), position.y()};
+    const auto body = b2CreateBody(s.world, &def);
+    if (!b2Body_IsValid(body)) throw std::runtime_error("Box2D body creation failed.");
+    try {
+        auto shapeDef = b2DefaultShapeDef(); shapeDef.density = density; shapeDef.material.friction = .4F;
+        const auto box = b2MakeBox(extent.x(), extent.y());
+        if (!b2Shape_IsValid(b2CreatePolygonShape(body, &shapeDef, &box))) throw std::runtime_error("Box2D shape creation failed.");
+        const auto handle = s.next++;
+        s.bodies.emplace(handle, body); return handle;
+    } catch (...) { b2DestroyBody(body); throw; }
+}
+void PhysicsWorld2D::DestroyBody(BodyHandle2D body) {
+    auto& s = *m_State; const auto it = s.bodies.find(body);
+    if (it == s.bodies.end()) return;
+    b2DestroyBody(it->second); s.bodies.erase(it);
+}
+void PhysicsWorld2D::Step(float dt, int subSteps) { if (dt > 0) b2World_Step(m_State->world, dt, subSteps); }
+Vector2 PhysicsWorld2D::GetPosition(BodyHandle2D body) const { auto v = b2Body_GetPosition(m_State->Require(body)); return {v.x,v.y}; }
+Vector2 PhysicsWorld2D::GetVelocity(BodyHandle2D body) const { auto v = b2Body_GetLinearVelocity(m_State->Require(body)); return {v.x,v.y}; }
+float PhysicsWorld2D::GetRotation(BodyHandle2D body) const { return b2Rot_GetAngle(b2Body_GetRotation(m_State->Require(body))); }
+void PhysicsWorld2D::SetVelocity(BodyHandle2D body, const Vector2& v) { b2Body_SetLinearVelocity(m_State->Require(body), {v.x(),v.y()}); }
+std::size_t PhysicsWorld2D::GetBodyCount() const noexcept { return m_State->bodies.size(); }
 }

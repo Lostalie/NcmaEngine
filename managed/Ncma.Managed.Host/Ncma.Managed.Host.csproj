@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Ncma.Managed.Host.Tests" />
+    <ProjectReference Include="../Ncma.Editor.Services/Ncma.Editor.Services.csproj" />
+    <ProjectReference Include="../Ncma.Scripting/Ncma.Scripting.csproj" />
     <ProjectReference Include="../Ncma.Managed/Ncma.Managed.csproj" />
     <ProjectReference Include="../Ncma.Gameplay/Ncma.Gameplay.csproj" />
     <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />

@@ -84,4 +84,4 @@ using (var state = System.Text.Json.JsonDocument.Parse(animation.InspectJson()))
 }
 animation.Redo();
 animation.Reset();
-Console.WriteLine("Ncma managed/native animation smoke test passed (animation ABI 1).");
+Console.WriteLine("Ncma managed/native animation smoke test passed (animation ABI 2; managed clock/history).");

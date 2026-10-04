@@ -5,13 +5,14 @@ namespace Ncma.Gameplay;
 
 public enum PlayState : uint { Stopped, Starting, Running, Paused, Faulted, Stopping }
 public enum FrameTimePolicy { Strict, Interactive }
+public enum PlayAdvanceMode { Frames, FixedSteps }
 public sealed record PlayFault(string Code, string Phase, Guid SessionId, Guid WorldId, ulong Tick,
     Guid? ObjectId, Guid? BindingId, string? TypeName, string Message, ulong AttemptTick);
 public sealed record PlayStatus(Guid SessionId, Guid WorldId, PlayState State, ulong FrameCount, ulong Tick,
     double FixedDeltaSeconds, double SimulationSeconds, double Accumulator, double InterpolationAlpha,
     int StepsExecuted, double DroppedSeconds, double TotalDroppedSeconds, PlayFault? Fault);
 
-// Owns lifecycle and the sole runner. The supplied document must be an isolated Play clone.
+// Owns lifecycle and the sole runner. Editor supplies a clone; Player owns its runtime document directly.
 public sealed class PlaySession : IDisposable, IGameplayContext
 {
     private sealed class Instance(Guid objectId, BehaviourBindingData binding, Behaviour behaviour)
@@ -33,6 +34,8 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     private readonly SceneWorld _facade;
     private readonly WorldRunner _runner;
     private readonly FrameTimePolicy _policy;
+    private readonly PlayAdvanceMode _advanceMode;
+    private bool _ownsFacade;
     private Instance[] _instances = [];
     private Instance[] _retired = [];
     private Func<BehaviourBindingData, Behaviour>? _factory;
@@ -60,14 +63,15 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     internal StepProfile LastStepProfile { get; private set; }
     private Instance? _current;
     public PlaySession(SceneDocument document, FrameTimePolicy policy = FrameTimePolicy.Interactive,
-        double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerFrame = 8)
-        : this(document, new SceneWorld((document ?? throw new ArgumentNullException(nameof(document))).World), policy, fixedDeltaSeconds, maxStepsPerFrame) { }
+        double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerFrame = 8, PlayAdvanceMode advanceMode = PlayAdvanceMode.Frames)
+        : this(document, new SceneWorld((document ?? throw new ArgumentNullException(nameof(document))).World), policy, fixedDeltaSeconds, maxStepsPerFrame, advanceMode) { _ownsFacade = true; }
     internal PlaySession(SceneDocument document, SceneWorld facade, FrameTimePolicy policy = FrameTimePolicy.Interactive,
-        double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerFrame = 8)
+        double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerFrame = 8, PlayAdvanceMode advanceMode = PlayAdvanceMode.Frames)
     {
         document.VerifyAccess();
-        if (document.World != facade.Runtime || !Enum.IsDefined(policy)) throw new ArgumentException("Invalid Play context.");
-        _document = document; _facade = facade; _policy = policy; _commands = new(this);
+        if (document.World != facade.Runtime || !Enum.IsDefined(policy) || !Enum.IsDefined(advanceMode) ||
+            advanceMode == PlayAdvanceMode.FixedSteps && policy != FrameTimePolicy.Strict) throw new ArgumentException("Invalid Play context.");
+        _document = document; _facade = facade; _policy = policy; _advanceMode = advanceMode; _commands = new(this);
         _runner = new(document.World, fixedDeltaSeconds, maxStepsPerFrame, RunStep);
         _runner.AddSystem(new Dispatcher(this));
     }
@@ -143,6 +147,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     public PlayStatus AdvanceFrame(double deltaSeconds)
     {
         Control();
+        if (_advanceMode != PlayAdvanceMode.Frames) throw new InvalidOperationException("Fixed-step sessions cannot advance frames.");
         if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentException("Invalid frame delta.");
         if (State == PlayState.Faulted) throw new InvalidOperationException("Stop/Restart the faulted Play session.");
         if (State is not (PlayState.Running or PlayState.Paused)) throw new InvalidOperationException("No active Play session.");
@@ -178,6 +183,18 @@ public sealed class PlaySession : IDisposable, IGameplayContext
             if (!timeRecorded) AccumulateDropped();
             SetFault(error);
         }
+        finally { _busy = false; }
+        return Status;
+    }
+    // Headless uses the exact same transactional runner, without OnUpdate or wall-clock debt.
+    public PlayStatus AdvanceFixedStep()
+    {
+        Control();
+        if (_advanceMode != PlayAdvanceMode.FixedSteps || State != PlayState.Running)
+            throw new InvalidOperationException("Running fixed-step session required.");
+        _busy = true; _steps = 0; _dropped = 0; _phase = "fixed_update"; _current = null; _attemptTick = Tick;
+        try { _runner.ClearAccumulator(); _steps = _runner.Advance(_runner.FixedDeltaSeconds); _phase = "control"; }
+        catch (Exception error) { SetFault(error); }
         finally { _busy = false; }
         return Status;
     }
@@ -394,6 +411,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     {
         if (_disposed) { _document.VerifyAccess(); return; }
         Control();
-        try { Stop(); } finally { _disposed = true; }
+        try { Stop(); }
+        finally { if (_ownsFacade && State == PlayState.Stopped) _facade.Dispose(); _disposed = true; }
     }
 }

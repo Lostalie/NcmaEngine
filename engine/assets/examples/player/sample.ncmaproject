@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "projectId": "0ad83c60-879d-4fbd-8a47-d7f79ea3f001",
+  "name": "NcmaPlayer reference sample",
+  "startupScene": "start.ncmascene",
+  "gameplayAssembly": "Ncma.Gameplay.Sample.dll",
+  "renderer": "Direct3D11",
+  "plugins": [],
+  "physicsEnabled": false
+}

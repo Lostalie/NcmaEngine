@@ -1,19 +1,18 @@
 #pragma once
 
 #include "animation/AnimationRuntime.h"
+#include "animation/ActionDemoLibrary.h"
 
 #include <cstdint>
 
 namespace NcmaEngine::Animation
 {
     // This action laboratory is a preview session, not a serialized scene component.
-    // Editor controls, C# and MCP all execute this same reversible command path.
+    // Legacy C++ comparison entry only. ABI 2 consumers own policy/history in C# or isolated tools.
     enum class AnimationCommand : std::uint32_t
     {
         SetSpeed = 1, TriggerAction = 2, SetPaused = 3, Step = 4, Reset = 5, Undo = 6, Redo = 7
     };
-
-    [[nodiscard]] std::shared_ptr<const AnimationLibrary> CreateActionDemoLibrary();
 
     class ActionAnimationWorkspace final
     {

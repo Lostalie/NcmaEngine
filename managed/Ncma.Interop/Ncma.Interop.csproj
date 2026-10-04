@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ncma.Interop.Tests" />
+    <InternalsVisibleTo Include="Ncma.Platform" />
+    <InternalsVisibleTo Include="Ncma.Gui" />
+    <InternalsVisibleTo Include="Ncma.Rendering" />
+    <InternalsVisibleTo Include="Ncma.Physics" />
+  </ItemGroup>
+</Project>

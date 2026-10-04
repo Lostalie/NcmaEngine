@@ -5,6 +5,7 @@ public sealed partial class EditSession
 {
     private CapabilityResult Inspect(CapabilityRequest request)
     {
+        if (_inspections.ContainsKey(request.Capability)) return InspectExtension(request);
         object data;
         switch (request.Capability)
         {

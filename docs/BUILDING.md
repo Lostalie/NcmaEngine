@@ -2,8 +2,8 @@
 
 Target direction is now C# runtime/gameplay, independent Python modules and native performance
 plugins. The commands below build the C++/ImGui shell and its authoritative C# World/hostfxr
-gameplay path. C++ SceneWorld and native world exports are removed. They do NOT yet produce a fully managed
-editor/Player or install pythonnet/gRPC/ZeroMQ.
+gameplay path. C++ SceneWorld and native world exports are removed. They also produce separate managed Editor/Player candidates (see M2_7_DELIVERY_REPORT.md),
+but do NOT promote those candidates to the default entry or install pythonnet/gRPC/ZeroMQ.
 See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for the staged migration.
 
 ## Recommended Windows command
@@ -77,11 +77,11 @@ see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader
 
 The full build updates native/host binaries, so close the editor before running a full build.
 GameplayOnly updates only the reloadable sample assembly in `out/managed`; it does not rebuild
-the engine/API or run the full verification suite. The full build runs nine CTest cases including
+the engine/API or run the full verification suite. The current full build runs 29 CTest registrations (8 native then 21 managed/combinations, including the legacy image fixture), including
 animation runtime/ABI, FBX import/reference skinning, C# host and hidden editor tests,
 including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases)
 and NcmaSceneDocumentTests (complete components/Behaviour snapshots and failure guards),
-plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v10 checks. Python gameplay
+plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v11 checks. Python gameplay
 removal is covered by rejecting language-tagged old scenes without modifying source
 files or destination Worlds. Passing this suite does not imply independent module transports exist.
 
@@ -101,7 +101,7 @@ See [FBX_IMPORT.md](FBX_IMPORT.md) for import constraints and the read-only Pyth
 
 ## Project inspection manifest
 
-`python -m ncma_tools.cli inspect .` emits project-manifest schema v9.
+`python -m ncma_tools.cli inspect .` emits project-manifest schema v11.
 Target and implemented ownership remain separate: the EXE/ImGui shell remains native, while World/components and gameplay
 is actually C# only (`gameplay.csharp_only_runtime_enforced=true`). Python gameplay backend and
 object language selection are removed; `python_modules` preserves specialized-module/plugin options,
@@ -115,7 +115,7 @@ The MCP protocol version and animation-state JSON schema are unchanged.
 Ncma.Runtime and Ncma.Runtime.Tests are included in NcmaEngine.sln and the canonical Build.bat path.
 The library now owns active editor and Play Worlds; no native object/component authority is retained.
 Ncma.Runtime itself references no NcmaNative, graphics or Python dependency. TreatWarningsAsErrors is enabled.
-C# SceneDocument JSON v1 (.ncmascene) is the only supported scene asset format, with complete component/binding persistence and atomic saves. The old .ncscene v1-v6 codec and migration paths have been removed. Ncma.Gameplay.PlaySession now owns the live editor WorldRunner and dispatches OnFixedUpdate; OnUpdate has read-only World access. Pause/Resume/Step and bounded strict/interactive timing are implemented. Input snapshots, render interpolation, runtime structural commands and reload preflight remain pending.
+C# SceneDocument JSON v1 (.ncmascene) is the only supported scene asset format, with complete component/binding persistence and atomic saves. The old .ncscene v1-v6 codec and migration paths have been removed. Ncma.Gameplay.PlaySession now owns the live editor WorldRunner and dispatches OnFixedUpdate; OnUpdate has read-only World access. Pause/Resume/Step and bounded strict/interactive timing are implemented. Input snapshots, render interpolation, runtime structural commands and reload preflight are implemented; real manual UI/MCP acceptance remains pending.
 Ncma.Editor.Core owns the active ImGui scene commands and complete-document history. The native scene command stack was removed. Draft previews do not write World, and Play freezes the edit document. The shared v2 API has a default-off scoped local stdio/IPC server; see EDITOR_MCP.md. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
 
 The editor now requires the deployed managed host, Ncma.Managed.dll, Ncma.Runtime.dll, Ncma.Scene.dll, Ncma.Gameplay.dll and Ncma.Editor.Core.dll in out/managed.

@@ -173,23 +173,65 @@ namespace
 
     void Abi()
     {
-        Check(ncma_animation_abi_version() == 1, "Animation ABI mismatch");
-        Check(ncma_animation_create(99) == 0, "Unsupported ABI accepted");
-        const auto session = ncma_animation_create(1);
-        Check(session != 0, "Native session failed to start");
-        Check(ncma_animation_command(session, 2, 0, "Dodge") != 0, "Native action command failed");
-        Check(ncma_animation_command(session, 4, 0.1, nullptr) != 0, "Native step failed");
-        Check(std::string(ncma_animation_inspect(session)).find("\"invulnerable\":true") != std::string::npos, "Native inspect failed");
-        Check(ncma_animation_command(session, 99, 0, nullptr) == 0, "Unknown command accepted");
-        Check(ncma_animation_command(session, 4, std::numeric_limits<double>::quiet_NaN(), nullptr) == 0, "NaN accepted across ABI");
-        ncma_animation_destroy(session);
-        Check(ncma_animation_inspect(session) == nullptr, "Disposed handle accepted");
-        ncma_animation_destroy(session); // Idempotent disposal.
+        Check(ncma_animation_abi_version()==2,"Animation ABI mismatch");
+        Check(ncma_animation_create(1)==0 && ncma_animation_create(99)==0,"Old/unknown ABI accepted");
+        const auto resource=ncma_animation_create(2);
+        Check(resource!=0,"Immutable resource create failed");
+        std::uint32_t count=0;
+        Check(ncma_animation_read_library(resource,nullptr,0,&count)==2 && count>2,"Metadata query failed");
+        std::vector<char> report(count);
+        Check(ncma_animation_read_library(resource,report.data(),count,&count)==1,"Metadata copy failed");
+        Check(std::string(report.data()).find("\"schema_version\":2")!=std::string::npos,"Metadata schema");
+        const auto library=CreateActionDemoLibrary(); AnimationPlayer player(library);
+        player.Play("Attack",0); player.Advance(.2);
+        std::vector<float> sample(12*26,-999);
+        Check(ncma_animation_sample(resource,2,.2,nullptr,0,1,nullptr,0,&count)==2 && count==sample.size(),"Pose query");
+        Check(ncma_animation_sample(resource,2,.2,nullptr,0,1,sample.data(),1,&count)==2 && sample[0]==-999,"Short buffer wrote");
+        Check(ncma_animation_sample(resource,2,.2,nullptr,0,1,sample.data(),count,&count)==1,"Pose sample");
+        for(std::size_t i=0;i<12;i++)
+            for(std::size_t j=0;j<16;j++) Check(Near(sample[120+i*16+j],player.ModelMatrices()[i].data()[j]),"Pose reference mismatch");
+        float motion[10]{};
+        Check(ncma_animation_motion(resource,2,0,.2,motion,10,&count)==1 && Near(motion[2],.5),"Root reference mismatch");
+        Check(ncma_animation_notifies(resource,2,0,.2,nullptr,0,&count)==2,"Notify query");
+        std::vector<char> events(count);
+        Check(ncma_animation_notifies(resource,2,0,.2,events.data(),count,&count)==1 &&
+            std::string(events.data()).find("Hit.Start")!=std::string::npos,"Notify reference mismatch");
+        const auto saved=sample;
+        Check(ncma_animation_sample(resource,99,0,nullptr,0,1,sample.data(),static_cast<std::uint32_t>(sample.size()),&count)==0 && saved==sample,"Invalid clip partially wrote");
+        Check(ncma_animation_sample(resource,0,std::numeric_limits<double>::quiet_NaN(),nullptr,0,1,sample.data(),static_cast<std::uint32_t>(sample.size()),&count)==0,"NaN accepted");
+        Check(ncma_animation_command(resource,4,.1,nullptr)==0 && ncma_animation_inspect(resource)==nullptr,"Legacy policy accepted");
+        ncma_animation_destroy(resource);
+        Check(ncma_animation_read_library(resource,nullptr,0,&count)==0,"Disposed generation accepted");
+        const auto next=ncma_animation_create(2); Check(next>resource,"Generation reused"); ncma_animation_destroy(next);
+
     }
 }
 
-int main()
+int main(int argc, char** argv)
 {
+    if (argc==2 && std::string(argv[1])=="--action-reference") {
+        ActionAnimationWorkspace w;
+        std::cout << '[' << w.InspectJson();
+        auto run=[&](AnimationCommand c,double value=0,const char* name="") {
+            w.Execute(c,value,name); std::cout << ',' << w.InspectJson();
+        };
+        run(AnimationCommand::SetSpeed,1);
+        run(AnimationCommand::Step,.1);
+        run(AnimationCommand::TriggerAction,0,"Attack");
+        run(AnimationCommand::Step,.2);
+        run(AnimationCommand::Step,.25);
+        run(AnimationCommand::TriggerAction,0,"Attack");
+        run(AnimationCommand::Undo);
+        run(AnimationCommand::Redo);
+        run(AnimationCommand::Step,1);
+        run(AnimationCommand::Reset);
+        run(AnimationCommand::TriggerAction,0,"Dodge");
+        run(AnimationCommand::Step,.1);
+        run(AnimationCommand::Step,.8);
+        run(AnimationCommand::Undo);
+        run(AnimationCommand::Redo);
+        std::cout << "]"; return 0;
+    }
     try
     {
         SamplingAndValidation(); RootMotionAndNotifies(); TransitionsAndCommands(); Abi();

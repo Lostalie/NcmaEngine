@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ncma.Application/Ncma.Application.csproj" />
+    <ProjectReference Include="../Ncma.Editor.Services/Ncma.Editor.Services.csproj" />
+    <ProjectReference Include="../Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ncma.Scripting/Ncma.Scripting.csproj" />
+    <ProjectReference Include="../Ncma.Application.Runtime/Ncma.Application.Runtime.csproj" />
+    <ProjectReference Include="../Ncma.Editor.Transport/Ncma.Editor.Transport.csproj" />
+    <ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" />
+    <InternalsVisibleTo Include="Ncma.Managed.Host" />
+  </ItemGroup>
+</Project>

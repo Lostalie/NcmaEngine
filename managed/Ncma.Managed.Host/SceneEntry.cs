@@ -15,14 +15,14 @@ public static unsafe partial class NativeEntry
     // Host ownership/lifecycle wrapper only. Document rules live in Ncma.Scene.
     private sealed class SceneSession
     {
-        public readonly Ncma.Scene.SceneDocument Document;
-        public readonly SceneWorld World;
-        public Ncma.Editor.Core.EditSession? Editor;
-        public Ncma.Editor.Transport.EditorEndpoint? Endpoint;
+        public readonly Ncma.Editor.Services.EditorSessionOwner Owner;
+        public Ncma.Scene.SceneDocument Document => Owner.Document;
+        public SceneWorld World => Owner.Facade;
+        public Ncma.Editor.Core.EditSession? Editor => Owner.Edit;
+        public Ncma.Editor.Transport.EditorEndpoint? Endpoint => Owner.Endpoint;
         public SceneSession(string name)
         {
-            Document = new(name);
-            World = new SceneWorld(Document.World); // Borrow exactly the authoritative World.
+            Owner = new(name, s_catalog, activateEditor: false, components: Ncma.Rendering.RenderConfiguration.CreateRegistry());
         }
         public void Verify() { Document.VerifyAccess(); World.Verify(); }
         public SceneData CaptureView()
@@ -98,8 +98,7 @@ public static unsafe partial class NativeEntry
             case 1:
                 End();
                 if (s_world == doc.World) throw new InvalidOperationException("End gameplay before releasing its scene.");
-                doc.Editor?.SetFrozen(true); // Deterministically cancel an unfinished draft on release.
-                doc.Endpoint?.Dispose(); doc.Endpoint = null; doc.World.Dispose(); lock (s_sceneLock) s_scenes.Remove(handle); break;
+                doc.Owner.Dispose(); lock (s_sceneLock) s_scenes.Remove(handle); break;
             case 2:
                 string name = ReadText(reader); bool spatial = ReadFlag(reader); End();
                 // Explicit editor spatial creation. Public gameplay CreateObject still creates an empty container.

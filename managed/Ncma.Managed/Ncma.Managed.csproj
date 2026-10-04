@@ -12,6 +12,7 @@
     <ProjectReference Include="../Ncma.Runtime/Ncma.Runtime.csproj" />
     <InternalsVisibleTo Include="Ncma.Managed.SmokeTest" />
     <InternalsVisibleTo Include="Ncma.Managed.Host" />
+    <InternalsVisibleTo Include="Ncma.Editor.Services" />
     <InternalsVisibleTo Include="Ncma.Gameplay" />
   </ItemGroup>
 </Project>

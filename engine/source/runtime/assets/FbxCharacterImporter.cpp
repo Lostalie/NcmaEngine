@@ -359,6 +359,12 @@ namespace NcmaEngine::Assets
             out << "{\"uuid\":" << Quote(clip.Id.ToString()) << ",\"name\":" << Quote(clip.Name)
                 << ",\"duration\":" << clip.Duration << ",\"tracks\":" << clip.Tracks.size() << '}';
         }
+        out << "],\"skeleton\":[";
+        const auto& bones = Animations->GetSkeleton().Bones;
+        for (std::size_t i = 0; i < bones.size(); ++i) {
+            if (i) out << ',';
+            out << "{\"name\":" << Quote(bones[i].Name) << ",\"parent\":" << bones[i].Parent << '}';
+        }
         out << "],\"warnings\":["; first = true;
         for (const auto& warning : Warnings) { if (!first) out << ','; first = false; out << Quote(warning); }
         out << "]}"; return out.str();

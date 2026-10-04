@@ -77,3 +77,13 @@ engine/sdk/JoltPhysics/Build/JoltConfig.cmake
 *.ilk
 *.iobj
 *.ipdb
+
+# Managed Editor application is source, not the legacy binary ignore pattern.
+!managed/Ncma.Editor.App/
+!managed/Ncma.Editor.App/*.cs
+!managed/Ncma.Editor.App/*.csproj
+
+# Managed Player source is not a packaged .App binary directory.
+!managed/Ncma.Player.App/
+!managed/Ncma.Player.App/*.cs
+!managed/Ncma.Player.App/*.csproj

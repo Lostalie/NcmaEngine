@@ -6,7 +6,7 @@ import subprocess
 import sys
 import unittest
 
-from ncma_tools.fbx import inspect_fbx
+from ncma_tools.fbx import ImportedCharacter, inspect_fbx
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +32,18 @@ class FbxToolsTests(unittest.TestCase):
             inspect_fbx(ROOT, source, float("nan"))
         with self.assertRaises(FileNotFoundError):
             inspect_fbx(ROOT, FIXTURES / "missing.fbx")
+
+    def test_immutable_report_copy_and_disposal(self) -> None:
+        character = ImportedCharacter(ROOT, FIXTURES / "blender_279_sausage_7400_binary.fbx")
+        try:
+            copied = character.inspect()
+            copied["bones"] = -1
+            self.assertGreaterEqual(character.inspect()["bones"], 3)
+        finally:
+            character.close()
+        character.close()
+        with self.assertRaises(RuntimeError):
+            character.inspect()
 
     def test_cli(self) -> None:
         base = [sys.executable, "-m", "ncma_tools.cli", "import-fbx"]

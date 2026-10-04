@@ -1,14 +1,15 @@
 # 动画 AI 控制：本地 MCP
 
-这是可运行的 stdio JSON-RPC MCP 服务，不只是能力清单。Python 只负责协议和参数校验，
-经独立版本化的动画 C ABI v1 调用 `NcmaNative.dll`；动画和撤销逻辑全部在 C++。
+这是可运行的 stdio JSON-RPC MCP 服务，不只是能力清单。M2.5 已升级独立动画 C ABI 2：Python 工具管理协议、参数校验、独立预览时钟/策略/通知消费和有界历史，
+`NcmaNative.dll` 仅提供不可变内置库与 pose/blend/root-motion/Notify 区间复制数值；旧 ABI 1 明确拒绝。
 
 ## 范围与权限
 
 - 每个 MCP 子进程拥有一个**独立的内置动作预览会话**，不连接正在运行的编辑器。
 - 不修改场景、文件或资产；无网络监听、shell、Python eval、删除工具或模型 API key。
 - 默认只读。用户在启动参数加入 `--allow-mutations` 后，允许可撤销的预览修改。
-- 工具修改复用编辑器实验室的 `ActionAnimationWorkspace::Execute`，不是复制一套 Python 动画逻辑。
+- 工具修改通过 Python 自己的隔离预览命令域；与候选 C# ActionAnimationSession 有相同策略回归序列，共用原生数值内核。
+  工具不连接活动场景，也不新增 Python gameplay 或 live World 权威。
 - 根目录由启动配置固定，只从该目录下 `out/managed/NcmaNative.dll` 加载；拒绝解析到根目录外的库路径。
 - 只支持有限、同步的调用。无后台训练、云上传、异步任务或无限运行指令。
 - 状态不保存到磁盘；关闭 MCP 客户端连接/EOF 后释放原生会话。不要在持有 DLL 的 MCP 进程运行时完整重建引擎。

@@ -1,9 +1,9 @@
-# FBX 角色导入：首个可验证流程
+# FBX 角色导入与 M2.5 托管预览迁移
 
 当前链路：FBX → C++ 资产导入器 → 骨架/蒙皮网格/动画库 → 编辑器 CPU 蒙皮线框预览。
 使用固定版本 ufbx 0.23.0，源码与许可证位于 `engine/sdk/ufbx`，构建不联网。
 
-## 使用
+## 使用旧生产入口（对照，尚未切换）
 
 1. 运行根目录 `Build.bat`，启动 `out/bin/NcmaEngine.exe`。
 2. 打开 Window > FBX Character Import，点击 Open FBX 选择角色文件。
@@ -23,7 +23,19 @@ python -m ncma_tools.cli import-fbx 'F:\Characters\Hero.fbx' --root F:\NcmaEngin
 ```
 
 输出 JSON 包括骨架/网格/片段 UUID、骨骼数量、网格统计、动画长度、单位和警告。
-它通过角色 C ABI v1 调用 C++，不是 Python 游戏组件。没有新增任意脚本执行入口。
+它通过角色 C ABI **2** 创建不可变资源、复制调用方缓冲区报告并 finally 释放，不是 Python 游戏组件。角色 ABI 1 已明确拒绝，需同时更新 DLL 与工具。没有新增任意脚本执行入口。
+
+## M2.5 候选入口
+
+Build.bat 后启动 out/verification/m2/candidate/<Debug 或 Release>/NcmaEngine.exe --editor。
+Play / Status / Console 中输入绝对 FBX 路径，使用 Import FBX、片段分页按钮、
+Play/Pause、Step 1/60、Preview Undo/Redo 和 Inspect CPU pose。
+路径输入是本地人工动作，不是 MCP 任意文件加载工具。
+预览状态/时钟/8 项历史由 C# FbxPreviewSession 保存，场景 Undo 与 Play Tick 不受影响。
+CPU 数值输出包括骨骼 model 矩阵和所有网格的蒙皮顶点；候选 C# 投影/Orbit/线框画布、
+骨骼名称/parent、完整报告分页已迁移。最多显示一万三角形，报告只读且不截断；
+中央 GPU reference cube 仍不是场景角色，FBX 画布是独立 CPU 预览。
+详见 [当前 H5 交付](M2_5_H5_DELIVERY_REPORT.md)；可见窗口人工验收尚未完成。
 
 ## 已实现
 

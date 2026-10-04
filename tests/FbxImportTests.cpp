@@ -114,8 +114,57 @@ namespace
         for (std::size_t i = 0; i < initial.size(); ++i)
             moved = moved || !initial[i].ToMatrix().isApprox(player.LocalPose()[i].ToMatrix(), 0.00001F);
         Check(moved, "Imported animation did not change bone poses");
-        Check(ncma_character_abi_version() == 1, "Character ABI version mismatch");
-        Check(ncma_character_inspect_fbx(1, filename.c_str(), 30) != nullptr, "Native FBX inspector failed");
+        Check(ncma_character_abi_version() == 2, "Character ABI version mismatch");
+        const auto identity = options.AssetId.ToString();
+        const auto handle = ncma_character_import(2, filename.c_str(), 30, identity.c_str());
+        Check(handle != 0, "Native immutable FBX import failed");
+        std::uint32_t required = 0;
+        Check(ncma_character_read_report(handle, nullptr, 0, &required) == 2 && required > 1, "Report size query failed");
+        std::vector<char> report(required, '#');
+        auto needed = required;
+        Check(ncma_character_read_report(handle, report.data(), required - 1, &needed) == 2 &&
+            report.front() == '#', "Short report buffer modified");
+        Check(ncma_character_read_report(handle, report.data(), required, &needed) == 1 &&
+            report.back() == '\0' && std::string(report.data()) == character->InspectJson(), "Caller-owned report copy mismatch");
+        Check(ncma_character_read_report(handle, nullptr, 1, &needed) == 0, "Null output/nonzero capacity accepted");
+        Check(ncma_character_sample(handle, 1, localTime, nullptr, 0, &needed) == 2, "Numerical size query failed");
+        std::vector<float> sampled(needed, -123.0F);
+        required = needed;
+        Check(ncma_character_sample(handle, 1, localTime, sampled.data(), required - 1, &needed) == 2 &&
+            sampled.front() == -123.0F, "Short numerical buffer modified");
+        Check(ncma_character_sample(handle, 1, localTime, sampled.data(), required, &needed) == 1, "Numerical sample failed");
+        const auto bones = character->Animations->GetSkeleton().Bones.size();
+        std::vector<Transform> pose(bones);
+        std::vector<Matrix4> model(bones), skin(bones);
+        character->Animations->Sample(1, localTime, pose);
+        character->Animations->BuildMatrices(pose, model, skin);
+        std::size_t offset = 0;
+        for (const auto& matrix : model)
+            for (std::size_t lane = 0; lane < 16; ++lane)
+                Check(std::abs(sampled[offset++] - matrix.data()[lane]) < 0.00001F, "ABI model matrix mismatch");
+        for (std::size_t meshIndex = 0; meshIndex < character->Meshes.size(); ++meshIndex)
+        {
+            const auto& mesh = character->Meshes[meshIndex];
+            std::vector<Vector3> positions(mesh.Vertices.size());
+            SkinPositions(mesh, model, positions);
+            for (const auto& position : positions)
+                for (std::size_t lane = 0; lane < 3; ++lane)
+                    Check(std::abs(sampled[offset++] - position.data()[lane]) < 0.00001F, "ABI CPU skin mismatch");
+            Check(ncma_character_read_indices(handle, static_cast<std::uint32_t>(meshIndex), nullptr, 0, &needed) == 2, "Index query failed");
+            std::vector<std::uint32_t> indices(needed);
+            Check(ncma_character_read_indices(handle, static_cast<std::uint32_t>(meshIndex), indices.data(), needed, &required) == 1 &&
+                indices == mesh.Indices, "Index copy mismatch");
+        }
+        const auto original = sampled;
+        Check(ncma_character_sample(handle, 9999, 0, sampled.data(), static_cast<std::uint32_t>(sampled.size()), &needed) == 0 &&
+            sampled == original, "Invalid clip changed destination");
+        Check(ncma_character_sample(handle, 0, std::numeric_limits<double>::quiet_NaN(), nullptr, 0, &needed) == 0, "NaN sample accepted");
+        Check(ncma_character_sample(handle, 0, -1, nullptr, 0, &needed) == 0, "Negative sample accepted");
+        Check(ncma_character_read_indices(handle, 9999, nullptr, 0, &needed) == 0, "Invalid mesh accepted");
+        Check(ncma_character_release(handle) == 1, "Native resource release failed");
+        Check(ncma_character_read_report(handle, nullptr, 0, &needed) == 0 && needed == 0, "Released generation accepted");
+        Check(ncma_character_release(handle) == 0, "Double release accepted");
+        Check(std::string(report.data()) == character->InspectJson(), "Caller-owned report invalidated by release");
         std::cout << character->InspectJson() << '\n';
     }
 }
@@ -144,7 +193,37 @@ int main(int argc, char** argv)
         Reject([&] { (void)FbxCharacterImporter::Import(valid, budget); });
         budget = {}; budget.SampleRate = std::numeric_limits<double>::quiet_NaN();
         Reject([&] { (void)FbxCharacterImporter::Import(valid, budget); });
-        Check(ncma_character_inspect_fbx(99, Utf8(valid).c_str(), 30) == nullptr, "Unsupported character ABI accepted");
+        Check(ncma_character_import(1, Utf8(valid).c_str(), 30, nullptr) == 0, "Old character ABI accepted");
+        Check(ncma_character_import(99, Utf8(valid).c_str(), 30, nullptr) == 0, "Unknown character ABI accepted");
+        Check(ncma_character_import(2, Utf8(valid).c_str(), 30, "invalid") == 0, "Invalid persistent UUID accepted");
+        Check(ncma_character_import(2, nullptr, 30, nullptr) == 0, "Null import path accepted");
+        Check(ncma_character_inspect_fbx(1, Utf8(valid).c_str(), 30) == nullptr, "Legacy inspector must reject ABI 1");
+        const auto immutable = ncma_character_import(2, Utf8(unicode).c_str(), 30, nullptr);
+        Check(immutable != 0, "Unicode ABI import failed");
+        { std::ofstream replacement(unicode, std::ios::binary); replacement << "changed test-owned fixture"; }
+        std::uint32_t count = 0;
+        Check(ncma_character_read_report(immutable, nullptr, 0, &count) == 2, "Read unexpectedly reimported changed file");
+        Check(ncma_character_sample(immutable, 1, 0.2, nullptr, 0, &count) == 2, "Sample unexpectedly read source file");
+        Check(ncma_character_release(immutable) == 1, "Immutable release failed");
+        std::vector<std::uint64_t> leases;
+        for (std::size_t i = 0; i < 16; ++i)
+        {
+            const auto handle = ncma_character_import(2, Utf8(valid).c_str(), 30, nullptr);
+            Check(handle != 0, "Resource budget rejected a valid slot");
+            leases.push_back(handle);
+        }
+        Check(ncma_character_import(2, Utf8(valid).c_str(), 30, nullptr) == 0, "Live resource budget bypassed");
+        Check(ncma_character_read_report(leases.front(), nullptr, 0, &count) == 2, "Budget failure damaged existing resource");
+        for (const auto handle : leases) Check(ncma_character_release(handle) == 1, "Budget lease release failed");
+        const auto next = ncma_character_import(2, Utf8(valid).c_str(), 30, nullptr);
+        Check(next > leases.back(), "Resource generation reused");
+        Check(ncma_character_read_report(leases.front(), nullptr, 0, &count) == 0, "Old generation alias accepted");
+        Check(ncma_character_release(next) == 1, "Next generation release failed");
+        Check(ncma_character_import(1, Utf8(valid).c_str(), 30, nullptr) == 0, "Old ABI accepted");
+        Check(ncma_character_read_error(nullptr, 0, &count) == 2 && count > 1, "Copied error query failed");
+        std::vector<char> errorCopy(count);
+        Check(ncma_character_read_error(errorCopy.data(), count, &count) == 1 &&
+            std::string(errorCopy.data()).find("ABI 2") != std::string::npos, "Caller-owned ABI error missing");
         Check(ncma_character_inspect_fbx(1, nullptr, 30) == nullptr, "Null source path accepted");
         std::cout << "FBX: ASCII/binary, skeleton, topology, weights, reference skinning, animation, UUIDs, Unicode and rejection checks passed\n";
         return 0;

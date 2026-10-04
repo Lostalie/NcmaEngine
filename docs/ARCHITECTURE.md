@@ -5,12 +5,12 @@
 本文区分目标架构和实际实现。标记“已实现”只表示所述切片可运行，不代表整个系统完成。
 A 方案已确认，AI 深度参与场景、动画、UI、工具和引擎扩展。
 Python 游戏脚本已移除；托管 World/固定步/事务基础已实现，C++ SceneWorld 和原生 World 导出已删除。
-编辑器及隔离 Play 已接入 C# World；统一 Editor.Core/EditSession 编辑链路已实现；C# 主入口和独立原生插件化尚未完成。
+编辑器及隔离 Play 已接入 C# World；统一 Editor.Core/EditSession 编辑链路已实现；生产 C# 主入口切换尚未完成。M2 候选入口已有 Platform/GUI/DX11 Renderer 与独立 Physics 插件；M2.5 候选 A–F 业务迁移已落地，人工验收未完成，见 [H5 记录](M2_5_H5_DELIVERY_REPORT.md)。
 
 ## 1. 总体分层
 
 ```text
-C# Editor / Player / Headless                         [headless 测试入口已实现，Editor/Player 未迁移]
+C# Editor / Player / Headless                         [C# 候选 Editor/Player/Headless 已实现，生产 Editor 未切换]
                   |
 C# Runtime: World + GameObject + Component + Systems  [权威 World 已接入现有编辑器]
                   |
@@ -59,7 +59,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 
 | 模块 | 职责 | 当前状态 |
 |---|---|---|
-| Application / Services | Editor、Player、Headless 入口和服务生命周期 | Editor/Player 未实现；已有托管 headless 测试入口，编辑器仍为 C++ EXE |
+| Application / Services | Editor、Player、Headless 入口和服务生命周期 | C# 候选 Editor/Player/Headless 与共享运行服务已实现；生产 Editor 仍为 C++ EXE，自包含/H7 待验 |
 | World / GameObject | 扁平对象存储、UUID、运行时引用、创建/销毁 | C# World 已接管编辑器和 Play，C++ 只持有不透明会话令牌 |
 | Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | 托管类型/schema 注册和组件存储已实现基础；类型池/通用查询未实现 |
 | Behaviour Host | C# 生命周期、实例绑定、Export、程序集加载/重载 | 已接入托管 World；私有状态迁移、自动重建未实现 |
@@ -78,8 +78,7 @@ M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpda
 
 ## 4. 原生性能插件
 
-目标为可按需装载的 Renderer、Physics 和必要数值内核。当前 NcmaNative 仍是聚合桥，
-并无独立 Renderer/Physics 插件发布与加载体系。
+目标为可按需装载的 Renderer、Physics 和必要数值内核。生产入口仍借助 NcmaNative 聚合桥；候选 C# 入口已有版本化 PluginLoader、Platform/GUI/DX11 Renderer 模块；M2.6 新增独立 NcmaPhysics/Ncma.Physics。候选装载不等于生产入口切换。
 
 统一边界：
 
@@ -108,15 +107,15 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 | Vulkan 设备/交换链/绘制和双 API 参考场景一致性 | 未实现 |
 | 完整材质/贴图资产、IBL、延迟/聚类渲染 | 未实现 |
 | GPU 蒙皮角色、场景渲染提取和可合成视口纹理 | 未实现 |
-| 独立 Renderer 插件和 C# 应用装载 | 未实现 |
+| 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
 当前 D3D11 使用 HLSL shader model 5 编译；共享着色器反射/SPIR-V 管线未实现。
 构建和编辑器 smoke 通过不等于完成双 API 验证；不能宣称 Vulkan 已可渲染。
 
 ### 物理
 
-Box2D/Jolt 已有独立原生世界、基础 Box 刚体、步进和位置/速度读写测试。
-C# 场景组件同步、碰撞事件、CharacterMotor、Root Motion 碰撞解算和独立 Physics 插件未实现。
+Box2D/Jolt 独立 Physics 插件与 C# 批量客户端已实现，见 [M2.6 交付记录](M2_6_DELIVERY_REPORT.md)：Physics ABI 1.1 原始计数/单次耗时（保留 1.0），独立 2D/3D Box/density/重力/线速度/旋转状态与模拟序号；C# PhysicsService/PhysicsSimulation 管理世界、暂停/单步、有界速度暂存、复制快照、诊断/profile 与故障关闭。C++ 只保留求解器资源、边界自保和数值批处理，应用策略不进入原生。最多 16 world、4096 body/world/batch；Jolt factory/job pool 集中在 DLL，数值内核不再编入 NcmaCore。项目 physicsEnabled 默认 false，启用也只装载模块。
+C# 场景组件同步、碰撞事件、raycast、CharacterMotor、Root Motion 碰撞解算未实现。不能把 solver Step 直接接入可中止的托管固定步，跨域提交/回滚与运动权威留在 M4。
 物理句柄仅标识求解器资源，不替代 GameObject 身份。
 
 ## 5. 动作动画与 FBX
@@ -133,10 +132,12 @@ C# 场景组件同步、碰撞事件、CharacterMotor、Root Motion 碰撞解算
 | 模块 | 当前状态 |
 |---|---|
 | Skeleton/Clip、采样、姿势混合、逐骨骼遮罩 | 已实现原生独立运行时 |
-| Root Motion 提取、循环累计与通知区间派发 | 已实现原生预览；场景碰撞应用未实现 |
+| Root Motion/Notify 区间数值 | 已实现原生 kernel；C# / 隔离 Python 工具消费，场景碰撞应用未实现 |
 | Idle/Run/Attack/Dodge 实验室、调试与 Undo/Redo | 已实现独立程序化预览 |
-| C# ActionAnimationSession / 动画 C ABI | 已实现独立实验会话 |
-| FBX 骨架/蒙皮网格/动画导入与 CPU 线框预览 | 已实现，基于 ufbx |
+| C# ActionAnimationSession / 动画 C ABI 2 | 已实现：C# 时钟/策略/128 项历史，原生不可变 demo + 复制数值；旧 ABI 1 拒绝 |
+| FBX 骨架/蒙皮网格/动画导入与 CPU 线框预览 | 已实现，基于 ufbx；候选 C# Orbit/骨架/CPU 蒙皮线框已迁移（最多一万三角形） |
+| FBX 角色资源 C ABI 2 | 已实现：不可变资源、复制报告/索引、显式时间采样/CPU 蒙皮；角色 ABI 1 拒绝 |
+| 候选 C# FBX 独立播放/暂停/片段/Undo/Redo | 已实现有界预览服务/完整报告分页及控件；可见窗口人工验收未完成 |
 | 动画图类型/引脚/连线及基础合法性检查 | 已实现数据模型 |
 | 通用图编译/执行、完整可视化节点编辑器 | 未实现；节点枚举不代表对应求值器存在 |
 | BlendSpace、Montage、IK、重定向、动画压缩 | 未实现完整功能 |
@@ -155,7 +156,10 @@ FBX 窗口与动作实验室是独立会话，尚未与场景角色或实时 MCP
 
 当前编辑器：C++ + GLFW + ImGui，包含对象列表、Inspector、视口、资产分类、Console、
 Play 控制、动作实验室与 FBX 窗口，场景修改使用快照 Undo/Redo。
-当前为固定工作区；自由 docking、多文档业务和托管编辑器未实现。
+正式入口仍是 C++ 对照；候选 C# 编辑器业务已迁移（M2.5），平台/GUI/DX11 仍薄 C++ 插件。
+候选含共享场景命令/历史、Inspector 草稿、Play/脚本/MCP、独立 FBX/动作预览、本机偏好/文件选择/快捷键和有界 Console。
+固定工作区的侧栏宽度/工具栏高度可保存；自由 docking、多场景文档与类 Figma 制作未实现。
+H5 自动回归与人工未验项见 [当前交付](M2_5_H5_DELIVERY_REPORT.md)，生产入口尚未切换。
 
 目标 C# Editor services：资产/场景文档、Selection、Inspector schema、命令/事务、
 动画图文档和 UI 文档。原生仅承担平台/绘制能力，不承载高层业务规则。
@@ -232,7 +236,7 @@ Ncma.Editor.Core.Tests → 共享命令 / 完整历史 / 草稿 / 文件状态�
 - 不序列化运行时句柄；编辑与 Agent 都使用可撤销命令。
 - Build.bat 是 Windows 规范入口；原生不再需要 Python 开发 SDK 或运行时 DLL。
   Python 仅为可选工具验证依赖，使用 -SkipPython 可跳过；完整 C# 游戏发布仍未实现。
-- 不宣称新应用入口、独立 Renderer/Physics 插件或 Python 通信已完成。
+- 不宣称生产入口切换、完整场景渲染/物理或 Python 通信已完成；候选原生模块和独立 C# Physics 服务属于已经实现的有限切片。
 
 ## 10. 开发顺序与参考边界
 

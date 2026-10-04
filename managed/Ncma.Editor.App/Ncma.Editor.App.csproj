@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><AssemblyName>NcmaEngine</AssemblyName><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <PublishTrimmed>false</PublishTrimmed><PublishAot>false</PublishAot><PublishSingleFile>false</PublishSingleFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>../../engine/build/resources/NcmaEngine.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ncma.Editor.Services.Tests" />
+    <ProjectReference Include="../Ncma.Application/Ncma.Application.csproj" />
+    <ProjectReference Include="../Ncma.Editor.Services/Ncma.Editor.Services.csproj" />
+    <ProjectReference Include="../Ncma.Gui/Ncma.Gui.csproj" />
+    <ProjectReference Include="../Ncma.Physics/Ncma.Physics.csproj" />
+    <None Include="../../engine/build/resources/NcmaEngine.ico" Link="NcmaEngine.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

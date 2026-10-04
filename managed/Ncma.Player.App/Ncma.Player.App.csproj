@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><AssemblyName>NcmaPlayer</AssemblyName><TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ApplicationIcon>../../engine/build/resources/NcmaEngine.ico</ApplicationIcon>
+    <PublishTrimmed>false</PublishTrimmed><PublishAot>false</PublishAot><PublishSingleFile>false</PublishSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ncma.Application.Runtime/Ncma.Application.Runtime.csproj" />
+    <ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" />
+    <ProjectReference Include="../Ncma.Physics/Ncma.Physics.csproj" />
+    <None Include="../../engine/build/resources/NcmaEngine.ico" Link="NcmaEngine.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

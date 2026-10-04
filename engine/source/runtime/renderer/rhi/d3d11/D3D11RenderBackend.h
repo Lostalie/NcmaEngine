@@ -48,6 +48,11 @@ namespace NcmaEngine::Rhi
 
         [[nodiscard]] ID3D11Device* GetDevice() const noexcept { return m_Device.Get(); }
         [[nodiscard]] ID3D11DeviceContext* GetDeviceContext() const noexcept { return m_DeviceContext.Get(); }
+        [[nodiscard]] IDXGISwapChain* GetSwapChain() const noexcept { return m_SwapChain.Get(); }
+        [[nodiscard]] size_t GetLiveResourceCount() const noexcept {
+            return m_Buffers.size()+m_Textures.size()+m_Samplers.size()+m_Pipelines.size();
+        }
+        bool ResizeChecked(uint32_t width, uint32_t height, std::string& error);
         void SetClearColor(float red, float green, float blue, float alpha) noexcept;
 
     private:

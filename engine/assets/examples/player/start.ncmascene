@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "NcmaPlayer reference sample",
+  "objects": [
+    {
+      "id": "0ad83c60-879d-4fbd-8a47-d7f79ea3f002",
+      "name": "Reference Character",
+      "components": [
+        {
+          "typeId": "ncma.transform",
+          "version": 1,
+          "data": {
+            "position": { "x": 0, "y": 0, "z": 0 },
+            "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+            "scale": { "x": 1, "y": 1, "z": 1 }
+          }
+        }
+      ],
+      "behaviours": [
+        {
+          "id": "0ad83c60-879d-4fbd-8a47-d7f79ea3f003",
+          "typeName": "Ncma.Gameplay.Sample.RotatorBehaviour",
+          "enabled": true,
+          "exports": [
+            { "name": "DegreesPerSecond", "kind": 1, "value": 45 },
+            { "name": "Clockwise", "kind": 4, "value": 1 },
+            { "name": "Multiplier", "kind": 3, "value": 1 }
+          ]
+        }
+      ]
+    }
+  ]
+}

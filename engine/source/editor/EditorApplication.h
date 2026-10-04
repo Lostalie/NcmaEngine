@@ -34,6 +34,7 @@ namespace NcmaEngine::Editor
         int Run();
 
     private:
+        friend int RunLegacyReferenceFixture(EditorApplication&, const std::filesystem::path&);
         struct FbxPreviewState final
         {
             std::shared_ptr<const Assets::ImportedCharacter> Character;
