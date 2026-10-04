@@ -95,3 +95,15 @@ H7 候选为 e104663；独立检出暴露 Eigen 必需头文件未入库，由 f
 并推送 origin/main；实际结果、提交号和 EXE 身份在完成后追加。
 只提交源码/文档/冻结 fixture，不提交生成包或用户 .vs/.user 设置。
 H5 人工、H7 Ready/Production、H8 全体验收仍未完成；默认入口保留，不清理旧代码。
+
+18ae5ca99262b3988cf4c53d4eadc1790e38c1dd 已提交完整 H8 候选。
+其提交后 Debug 和 Release -CleanNative 完整 Build.bat 均退出 0，
+日志为 out/verification/h8-postcommit-debug.log、h8-postcommit-release.log；
+每配置 30 CTest、40 Editor Services、22 Player、41 Python 通过。
+Debug 历史 commands:1:64 median 为 0.6768/0.5656/0.5722 ms，历史为 0.4744 ms，
+触发 time review；分配未变。这是待复核的历史性能变化，不是功能测试失败或正式性能验收。
+
+Release 原生重编译暴露测试命令行 /DNDEBUG 与 /UNDEBUG 的 D9025 警告。
+修复改用测试专用 forced-include TestAssertions.h，在任何源码头文件前取消 NDEBUG，
+保留 Debug/Release 全部原有 assert 行为；未屏蔽警告、未改断言、不影响生产宏配置。
+修复提交后将重跑双配置完整验证；上述首次日志保留，最终结果在下方追加。
