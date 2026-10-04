@@ -196,6 +196,15 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     target_compile_options(NcmaRendererNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
     target_link_libraries(NcmaRendererNativeTests PRIVATE NcmaPlatform glfw Ncma::Eigen d3d11 dxgi d3dcompiler)
     set_target_properties(NcmaRendererNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
+    add_executable(NcmaKernelReferenceCapture tests/plugins/KernelReferenceCapture.cpp
+        engine/source/plugins/renderer/ReferenceKernel.cpp
+        engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
+        engine/source/runtime/renderer/rhi/RhiResources.cpp)
+    target_include_directories(NcmaKernelReferenceCapture PRIVATE engine/source/runtime engine/source/plugins)
+    target_compile_definitions(NcmaKernelReferenceCapture PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)
+    target_compile_options(NcmaKernelReferenceCapture PRIVATE /W4 /WX /permissive- /utf-8)
+    target_link_libraries(NcmaKernelReferenceCapture PRIVATE glfw Ncma::Eigen d3d11 dxgi d3dcompiler)
+    set_target_properties(NcmaKernelReferenceCapture PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
     add_executable(NcmaRendererValidationProbe tests/plugins/RendererValidationProbe.cpp)
     target_link_libraries(NcmaRendererValidationProbe PRIVATE d3d11)
     target_compile_options(NcmaRendererValidationProbe PRIVATE /W4 /WX /permissive- /utf-8)
@@ -296,6 +305,8 @@ if(NCMA_BUILD_TESTS)
     if(WIN32)
         add_test(NAME NcmaPhysicsNativeTests COMMAND NcmaPhysicsNativeTests)
         set_tests_properties(NcmaPhysicsNativeTests PROPERTIES TIMEOUT 120)
+        add_test(NAME NcmaKernelReferenceCapture COMMAND NcmaKernelReferenceCapture "${CMAKE_SOURCE_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release>)
+        set_tests_properties(NcmaKernelReferenceCapture PROPERTIES FIXTURES_SETUP kernel_reference_image TIMEOUT 30)
         add_test(NAME NcmaRendererNativeTests COMMAND NcmaRendererNativeTests $<TARGET_FILE:NcmaPlatform>)
         set_tests_properties(NcmaRendererNativeTests PROPERTIES TIMEOUT 30)
         add_test(NAME NcmaPresentationNativeTests COMMAND NcmaPresentationNativeTests $<TARGET_FILE:NcmaPlatform> "${CMAKE_SOURCE_DIR}/engine/build/resources/NcmaEngine.ico")
@@ -321,9 +332,10 @@ if(NCMA_BUILD_TESTS)
             set_tests_properties(NcmaPhysicsTests PROPERTIES TIMEOUT 120)
             add_test(NAME NcmaRenderingTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
-                "${CMAKE_BINARY_DIR}/m2/plugins" "${CMAKE_SOURCE_DIR}/out/verification/m2/reference-$<IF:$<CONFIG:Debug>,Debug,Release>.rgba"
-                "${CMAKE_SOURCE_DIR}/out/verification/m2/render-$<IF:$<CONFIG:Debug>,Debug,Release>")
-            set_tests_properties(NcmaRenderingTests PROPERTIES TIMEOUT 240 FIXTURES_REQUIRED reference_image)
+                "${CMAKE_BINARY_DIR}/m2/plugins" "${CMAKE_SOURCE_DIR}/out/verification/m2-8/kernel-$<IF:$<CONFIG:Debug>,Debug,Release>/reference.rgba"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/render-$<IF:$<CONFIG:Debug>,Debug,Release>"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/reference-$<IF:$<CONFIG:Debug>,Debug,Release>.rgba")
+            set_tests_properties(NcmaRenderingTests PROPERTIES TIMEOUT 240 FIXTURES_REQUIRED "reference_image;kernel_reference_image")
             add_test(NAME NcmaCandidateGraphicsSmoke COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.App/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaEngine.dll"
                 --smoke-test --plugins "${CMAKE_BINARY_DIR}/m2/plugins")

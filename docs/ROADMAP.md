@@ -90,7 +90,7 @@ M1.1 已将脚本配置收敛到 Ncma.Scene，完整快照、新文件读写/原
 
 验收：C# 应用可独立管理编辑与运行会话；native 资源无悬挂/重复释放；旧编辑/脚本流程无回归；程序集与 ABI 不匹配能够明确失败。
 
-M2.1/M2.2 已通过自动门禁；M2.3/M2.4 候选链路及联合自动回归见 [交付报告](M2_3_4_TEST_REPORT.md)。M2.5 的场景/Inspector/Play/MCP、大 JSON 分页、完整 reference PBR/阴影控件、FBX 线框/Orbit/报告、动画 ABI 2 与 C#/隔离 Python 策略、偏好/文件选择/快捷键/原生 Console 已迁移；H5 人工门禁未完成，见 [当前记录](M2_5_H5_DELIVERY_REPORT.md)。人工验收待完成，生产入口未切换；M2.6 薄 C++ Physics 插件 + C# 高层物理服务见 [交付记录](M2_6_DELIVERY_REPORT.md)，尚无场景物理；M2.7 已交付共享运行服务、Player/Headless 与 framework-dependent 候选包，见 [记录](M2_7_DELIVERY_REPORT.md)；自包含/H7 正式切换待验；H8 总验收与旧入口统一清理留待后续实施。
+M2.1/M2.2 已通过自动门禁；M2.3/M2.4 候选链路及联合自动回归见 [交付报告](M2_3_4_TEST_REPORT.md)。M2.5 的场景/Inspector/Play/MCP、大 JSON 分页、完整 reference PBR/阴影控件、FBX 线框/Orbit/报告、动画 ABI 2 与 C#/隔离 Python 策略、偏好/文件选择/快捷键/原生 Console 已迁移；H5 人工门禁未完成，见 [当前记录](M2_5_H5_DELIVERY_REPORT.md)。人工验收待完成，生产入口未切换；M2.6 薄 C++ Physics 插件 + C# 高层物理服务见 [交付记录](M2_6_DELIVERY_REPORT.md)，尚无场景物理；M2.7 已交付共享运行服务、Player/Headless 与 framework-dependent 候选包，见 [记录](M2_7_DELIVERY_REPORT.md)；自包含/H7 正式切换待验，M2.8 已实施冻结参考、内核独立GPU图像/三方对照、直接Export与活动reload、历史运行时三轮测量及只读包/消费者预检，见 [记录](M2_8_DELIVERY_REPORT.md)；H8 未通过，旧入口未清理。
 
 详细方案（2026-10-04，按交付状态区分已实施与后续建议）：[M2 总览](M2_IMPLEMENTATION_PLAN.md)。
 

@@ -1,7 +1,7 @@
 # M2 总体实施方案：C# 应用入口与原生插件边界
 
 更新日期：2026-10-04。基线提交：a1ac9d444063721ed27d5791b059530c49286489。
-性质：已按用户指令进入实施。M2.1/M2.2 自动门禁通过；M2.3/M2.4 候选实现及联合自动测试见 [交付报告](M2_3_4_TEST_REPORT.md)，人工验收尚未完成。M2.5 候选面板/预览/偏好/Console 已迁移，H5 人工未过，见 [记录](M2_5_H5_DELIVERY_REPORT.md)；M2.6 独立 Physics 实现见 [交付记录](M2_6_DELIVERY_REPORT.md)；M2.7 候选 Player/Headless 与框架依赖包见 [交付记录](M2_7_DELIVERY_REPORT.md)，完整 H7 未通过；M2.8 总验收与清理预检按未来方案执行，H8 未完成。
+性质：已按用户指令进入实施。M2.1/M2.2 自动门禁通过；M2.3/M2.4 候选实现及联合自动测试见 [交付报告](M2_3_4_TEST_REPORT.md)，人工验收尚未完成。M2.5 候选面板/预览/偏好/Console 已迁移，H5 人工未过，见 [记录](M2_5_H5_DELIVERY_REPORT.md)；M2.6 独立 Physics 实现见 [交付记录](M2_6_DELIVERY_REPORT.md)；M2.7 候选 Player/Headless 与框架依赖包见 [交付记录](M2_7_DELIVERY_REPORT.md)，完整 H7 未通过；M2.8 预检/冻结参考/部分替代验证已实施，见 [记录](M2_8_DELIVERY_REPORT.md)；H8 未通过。
 
 ## 1. 目标、前置与不变量
 

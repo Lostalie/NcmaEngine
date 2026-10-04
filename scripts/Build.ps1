@@ -107,7 +107,7 @@ Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaNative.dll') `
 
 if (-not $SkipTests) {
     Write-Host '[Ncma] Running native architecture tests...'
-    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaPhysicsTests|NcmaRenderingTests|NcmaLegacyReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaManagedCatalogTests|NcmaEditorTransportTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
+    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaLegacyReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaManagedCatalogTests|NcmaEditorTransportTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
     if ($LASTEXITCODE -ne 0) {
         throw "Native tests failed with exit code $LASTEXITCODE."
     }
@@ -228,7 +228,7 @@ if (-not $SkipManaged) {
             throw "Managed/native smoke test failed with exit code $LASTEXITCODE."
         }
         Write-Host '[Ncma] Running managed headless commands and embedded gameplay host tests...'
-        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaPhysicsTests|NcmaRenderingTests|NcmaLegacyReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaManagedCatalogTests|NcmaEditorTransportTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
+        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaLegacyReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaManagedCatalogTests|NcmaEditorTransportTests|NcmaManagedHostSmokeTest|NcmaEditor.*SmokeTest'
         if ($LASTEXITCODE -ne 0) {
             throw "Embedded .NET host smoke test failed with exit code $LASTEXITCODE."
         }
@@ -252,4 +252,18 @@ if (-not $SkipPython) {
     }
 }
 
+if (-not $SkipTests -and -not $SkipManaged -and -not $SkipPython) {
+    $profileDirectory = Join-Path $projectRoot "out\verification\m2-8\profiles-$Configuration"
+    New-Item -ItemType Directory -Path $profileDirectory -Force | Out-Null
+    $profileAssembly = Join-Path $projectRoot "managed\Ncma.Gameplay.Tests\bin\$Configuration\net8.0\Ncma.Gameplay.Tests.dll"
+    for ($profileRound = 1; $profileRound -le 3; $profileRound++) {
+        Write-Host "[Ncma] M2.8 retained runtime fixture measurement round $profileRound/3..."
+        $profileLog = Join-Path $profileDirectory "runtime-round-$profileRound.log"
+        & dotnet $profileAssembly --benchmark --pressure-benchmark 2>&1 | Out-File -LiteralPath $profileLog -Encoding utf8
+        if ($LASTEXITCODE -ne 0) { throw "M2.8 runtime profile failed with exit code $LASTEXITCODE." }
+    }
+    Write-Host '[Ncma] Recording M2.8 read-only candidate/consumer preflight (not H8 acceptance)...'
+    & python -m ncma_tools.m2_audit --root $projectRoot --configuration $Configuration
+    if ($LASTEXITCODE -ne 0) { throw "M2.8 preflight failed with exit code $LASTEXITCODE." }
+}
 Write-Host "[Ncma] Build succeeded: $buildDirectory" -ForegroundColor Green

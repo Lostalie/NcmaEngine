@@ -18,8 +18,7 @@ CTest、Ncma.Managed/native smoke、Python inspect/unittest。
 不能用原工作区混有未提交 H8 改动的测试结果，冒充该检查点的回归。
 原有 ABI/格式拒绝、权限/历史/关闭和资源断言保持，不为通过测试放宽门禁。
 
-当前尚未执行这次提交后的验证；实际提交号、日志、计数及结果在完成后追加。
-通过后推送 origin 的 main；若失败，先保留证据并修复相关问题，再重测。
+以下记录区分独立 H7 检出与后续完整 H8 候选验证；不得混用结果。
 
 ## 提交后发现与修复
 
@@ -30,6 +29,18 @@ Windows 忽略大小写匹配下同时排除了公开 Core 入口和 src/Core �
 保留失败日志 out/verification/h7-postcommit-debug.log。
 修复仅添加精确 Eigen/Core、Eigen/src/Core/ 和其内容的忽略例外，
 将既有 166 个必需头文件纳入版本控制；不更新 Eigen 版本、不下载依赖。
+
+修复提交 f3fce5a4d814790ffc03ff6f0b9be5369c4f5b8c 的独立检出 Debug
+完整 Build.bat 已退出 0：29 个 CTest 注册项、28 个 Python 测试及 smoke/inspect 通过。
+日志：out/verification/h7-postcommit-fixed-debug.log。
+该独立 H7 检出未执行 Release；不将后续含 H8 的 Release 回归归入它。
+
+## 后续授权（2026-10-05 继续执行）
+
+用户随后要求“ H8提交推送，M2.8提交推送 ”及“重新构建Exe”。
+因此继续提交完整 H8/M2.8 候选实现，并在该提交后执行完整 Debug/Release 验证，
+最终重建 out/bin/NcmaEngine.exe；结果追加至 M2_TEST_STATUS.md。
+授权改变提交范围，不关闭人工/生产门禁，不提前清理旧入口。
 
 ## 仍未完成
 

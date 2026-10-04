@@ -77,7 +77,7 @@ see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader
 
 The full build updates native/host binaries, so close the editor before running a full build.
 GameplayOnly updates only the reloadable sample assembly in `out/managed`; it does not rebuild
-the engine/API or run the full verification suite. The current full build runs 29 CTest registrations (8 native then 21 managed/combinations, including the legacy image fixture), including
+the engine/API or run the full verification suite. The current full build runs 30 CTest registrations (8 native then 22 managed/combinations, including both image fixtures), including
 animation runtime/ABI, FBX import/reference skinning, C# host and hidden editor tests,
 including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases)
 and NcmaSceneDocumentTests (complete components/Behaviour snapshots and failure guards),
@@ -144,3 +144,26 @@ script fields or external IO. This records the earlier A/B gate only. Current fu
 Build.bat -Configuration Debug and Build.bat -Configuration Release run the complete matrix (no Skip flags), including Gameplay.Tests, collectible catalog checks, real IPC/stdio tests and actual ImGui MCP smoke. All source projects are in NcmaEngine.sln; the canonical build initializes VS itself. Outputs remain out/bin/NcmaEngine.exe and out/managed/editor-mcp/. See [M1 report](M1_DELIVERY_REPORT.md) for actual results and outstanding manual acceptance.
 
 Native Debug/Release link artifacts are isolated inside out/build/windows-ninja-<configuration>/{bin,symbols}; Build.bat always deploys the selected executable to out/bin/NcmaEngine.exe. This avoids cross-configuration timestamp reuse. The public executable path is unchanged. Optional -CleanNative cleans only generated Ninja outputs before the same complete verification. Chinese-only VS CL resource detection corrects the /showIncludes dependency prefix; installing another language pack is not required.
+
+## M2.8 preflight (not final acceptance)
+
+Full Build.bat (without SkipTests/SkipManaged/SkipPython) records a read-only source/consumer/package audit
+under out/verification/m2-8/<configuration>/<uuid>. Full builds also run three rounds of the retained
+Gameplay benchmark/pressure fixtures (8 warmups, 32 samples per case), writing profiles-<configuration>/.
+Historical measurements are tracked JSON fixtures, so fresh builds do not require ignored M1 logs.
+Legacy/kernel/managed image comparisons and resource validation remain enabled.
+These profiles compare historical runtime measurements, not simultaneous old/new entry performance.
+audit_passed only means preflight succeeded;
+h8_accepted/production_promoted/cleanup_authorized_by_this_report remain false.
+There is no deletion/promotion action in this tool. The copied LastTest.log covers the final CTest invocation
+only; use the complete canonical build log for both native and managed rounds.
+For a standalone audit after the matching full build (PowerShell):
+
+~~~powershell
+$env:PYTHONPATH = 'F:\NcmaEngine\python\src'
+python -m ncma_tools.m2_audit --root F:\NcmaEngine --configuration Release
+~~~
+
+Run Debug/Release sequentially: builds share the latest default deployment and out/managed.
+Do not run them concurrently or use the other configuration's latest deployment as acceptance evidence.
+See [M2.8 evidence and remaining gates](M2_8_DELIVERY_REPORT.md) and [cleanup preflight](M2_8_CLEANUP_AUDIT.md).

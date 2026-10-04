@@ -1,0 +1,421 @@
+{
+  "schemaVersion": 1,
+  "scope": "historical_M1_retained_runtime_fixtures",
+  "configuration": "Release",
+  "sourceLogs": [
+    {
+      "path": "out/verification/m1/final-profile-release.log",
+      "sha256": "722853B4C03BD712B8AEA3830A9890AF3F7205ADC0FBD6BD6DEC01A20A49F294"
+    },
+    {
+      "path": "out/verification/m1/runtime-pressure-release.log",
+      "sha256": "5D69944B19D4D4C0F9C41F9030DD5EDDEBBCAB530B2B80A5311A3A0200AD51EF"
+    }
+  ],
+  "rows": [
+    {
+      "environment": "Microsoft Windows NT 10.0.19045.0",
+      "architecture": "X64",
+      "runtime": ".NET 8.0.28",
+      "cpuCount": 12
+    },
+    {
+      "steps": 0,
+      "commandsPerSuccessfulStep": 0,
+      "samples": 32,
+      "medianMs": 0.0004,
+      "p95Ms": 0.002,
+      "maxMs": 0.0071,
+      "medianFrameAllocationBytes": 328,
+      "maxFrameAllocationBytes": 608
+    },
+    {
+      "steps": 0,
+      "commandsPerSuccessfulStep": 64,
+      "samples": 32,
+      "medianMs": 0.0004,
+      "p95Ms": 0.0006,
+      "maxMs": 0.0035,
+      "medianFrameAllocationBytes": 328,
+      "maxFrameAllocationBytes": 608
+    },
+    {
+      "steps": 0,
+      "commandsPerSuccessfulStep": 1024,
+      "samples": 32,
+      "medianMs": 0.0003,
+      "p95Ms": 0.0004,
+      "maxMs": 0.0021,
+      "medianFrameAllocationBytes": 328,
+      "maxFrameAllocationBytes": 608
+    },
+    {
+      "steps": 1,
+      "commandsPerSuccessfulStep": 0,
+      "samples": 32,
+      "medianMs": 0.2236,
+      "p95Ms": 0.2667,
+      "maxMs": 0.2757,
+      "medianFrameAllocationBytes": 34280,
+      "maxFrameAllocationBytes": 34560
+    },
+    {
+      "steps": 1,
+      "commandsPerSuccessfulStep": 64,
+      "samples": 32,
+      "medianMs": 0.4566,
+      "p95Ms": 0.9809,
+      "maxMs": 1.3149,
+      "medianFrameAllocationBytes": 268912,
+      "maxFrameAllocationBytes": 269192
+    },
+    {
+      "steps": 1,
+      "commandsPerSuccessfulStep": 1024,
+      "samples": 32,
+      "medianMs": 0.8708,
+      "p95Ms": 2.302,
+      "maxMs": 4.192,
+      "medianFrameAllocationBytes": 660720,
+      "maxFrameAllocationBytes": 661000
+    },
+    {
+      "steps": 8,
+      "commandsPerSuccessfulStep": 0,
+      "samples": 32,
+      "medianMs": 2.0469,
+      "p95Ms": 2.1524,
+      "maxMs": 2.159,
+      "medianFrameAllocationBytes": 271944,
+      "maxFrameAllocationBytes": 272224
+    },
+    {
+      "steps": 8,
+      "commandsPerSuccessfulStep": 64,
+      "samples": 32,
+      "medianMs": 4.6032,
+      "p95Ms": 5.977,
+      "maxMs": 6.3695,
+      "medianFrameAllocationBytes": 2149000,
+      "maxFrameAllocationBytes": 2149280
+    },
+    {
+      "steps": 8,
+      "commandsPerSuccessfulStep": 1024,
+      "samples": 32,
+      "medianMs": 12.5132,
+      "p95Ms": 14.835,
+      "maxMs": 15.4146,
+      "medianFrameAllocationBytes": 5283464,
+      "maxFrameAllocationBytes": 5283744
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 128,
+      "componentsPerObject": 9,
+      "bindingsPerObject": 4,
+      "systems": 1,
+      "sceneBytes": 144445,
+      "renderObjects": 128,
+      "samples": 32,
+      "frameMs": {
+        "median": 36.4108,
+        "p95": 52.849,
+        "max": 57.0704
+      },
+      "allocationBytes": {
+        "median": 8217368,
+        "p95": 8221696,
+        "max": 8221696
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 4.3305,
+          "p95": 7.1827,
+          "max": 7.5686
+        },
+        "system": {
+          "median": 0.0403,
+          "p95": 0.0614,
+          "max": 0.0616
+        },
+        "setup": {
+          "median": 14.6648,
+          "p95": 21.0246,
+          "max": 22.9463
+        },
+        "callbacks": {
+          "median": 4.4793,
+          "p95": 7.4059,
+          "max": 7.7853
+        },
+        "inputPrepare": {
+          "median": 0.0003,
+          "p95": 0.0007,
+          "max": 0.0008
+        },
+        "worldAndSignalsPrepare": {
+          "median": 4.3843,
+          "p95": 6.4897,
+          "max": 7.0231
+        },
+        "metadataPrepare": {
+          "median": 11.8228,
+          "p95": 18.1261,
+          "max": 18.3836
+        },
+        "instancesPrepare": {
+          "median": 0.3417,
+          "p95": 0.4991,
+          "max": 0.5141
+        },
+        "receiptsPrepare": {
+          "median": 0.0225,
+          "p95": 0.0357,
+          "max": 0.0462
+        },
+        "renderPrepare": {
+          "median": 0.5883,
+          "p95": 1.1817,
+          "max": 5.1779
+        },
+        "install": {
+          "median": 0.0124,
+          "p95": 0.0184,
+          "max": 0.0188
+        }
+      }
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 32,
+      "componentsPerObject": 9,
+      "bindingsPerObject": 64,
+      "systems": 1,
+      "sceneBytes": 231969,
+      "renderObjects": 32,
+      "samples": 32,
+      "frameMs": {
+        "median": 16.7577,
+        "p95": 25.3707,
+        "max": 28.3876
+      },
+      "allocationBytes": {
+        "median": 11804928,
+        "p95": 11812176,
+        "max": 11812552
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 5.4714,
+          "p95": 7.8272,
+          "max": 8.5359
+        },
+        "system": {
+          "median": 0.0122,
+          "p95": 0.0218,
+          "max": 0.0228
+        },
+        "setup": {
+          "median": 4.588,
+          "p95": 9.1035,
+          "max": 9.6559
+        },
+        "callbacks": {
+          "median": 5.9215,
+          "p95": 8.0894,
+          "max": 8.9199
+        },
+        "inputPrepare": {
+          "median": 0.0003,
+          "p95": 0.0005,
+          "max": 0.0007
+        },
+        "worldAndSignalsPrepare": {
+          "median": 0.3634,
+          "p95": 0.7405,
+          "max": 0.8435
+        },
+        "metadataPrepare": {
+          "median": 4.2204,
+          "p95": 9.9459,
+          "max": 11.1966
+        },
+        "instancesPrepare": {
+          "median": 0.5323,
+          "p95": 4.2945,
+          "max": 8.3272
+        },
+        "receiptsPrepare": {
+          "median": 0.0098,
+          "p95": 0.0173,
+          "max": 0.0193
+        },
+        "renderPrepare": {
+          "median": 0.0721,
+          "p95": 0.6779,
+          "max": 0.7524
+        },
+        "install": {
+          "median": 0.0269,
+          "p95": 0.0529,
+          "max": 0.4784
+        }
+      }
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 1024,
+      "componentsPerObject": 1,
+      "bindingsPerObject": 1,
+      "systems": 1,
+      "sceneBytes": 351189,
+      "renderObjects": 1024,
+      "samples": 32,
+      "frameMs": {
+        "median": 27.8893,
+        "p95": 37.7063,
+        "max": 45.3352
+      },
+      "allocationBytes": {
+        "median": 22506016,
+        "p95": 22506880,
+        "max": 22507032
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 2.7111,
+          "p95": 4.661,
+          "max": 5.1788
+        },
+        "system": {
+          "median": 0.0485,
+          "p95": 0.0947,
+          "max": 0.0972
+        },
+        "setup": {
+          "median": 9.6612,
+          "p95": 12.1332,
+          "max": 12.245
+        },
+        "callbacks": {
+          "median": 2.8304,
+          "p95": 4.7827,
+          "max": 5.2861
+        },
+        "inputPrepare": {
+          "median": 0.0002,
+          "p95": 0.0007,
+          "max": 0.0009
+        },
+        "worldAndSignalsPrepare": {
+          "median": 3.6392,
+          "p95": 7.2566,
+          "max": 7.8388
+        },
+        "metadataPrepare": {
+          "median": 8.2402,
+          "p95": 21.9837,
+          "max": 26.2915
+        },
+        "instancesPrepare": {
+          "median": 0.3589,
+          "p95": 0.6065,
+          "max": 2.002
+        },
+        "receiptsPrepare": {
+          "median": 0.0339,
+          "p95": 0.0437,
+          "max": 0.0587
+        },
+        "renderPrepare": {
+          "median": 1.1921,
+          "p95": 3.1587,
+          "max": 3.3024
+        },
+        "install": {
+          "median": 0.0058,
+          "p95": 0.0108,
+          "max": 0.0121
+        }
+      }
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 4096,
+      "componentsPerObject": 1,
+      "bindingsPerObject": 1,
+      "systems": 1,
+      "sceneBytes": 1407957,
+      "renderObjects": 4096,
+      "samples": 32,
+      "frameMs": {
+        "median": 138.0619,
+        "p95": 161.1718,
+        "max": 177.1317
+      },
+      "allocationBytes": {
+        "median": 90806504,
+        "p95": 90811496,
+        "max": 90813416
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 10.0014,
+          "p95": 27.6932,
+          "max": 29.3966
+        },
+        "system": {
+          "median": 0.3043,
+          "p95": 0.5026,
+          "max": 0.5071
+        },
+        "setup": {
+          "median": 57.0712,
+          "p95": 71.9473,
+          "max": 77.235
+        },
+        "callbacks": {
+          "median": 10.8179,
+          "p95": 28.6574,
+          "max": 30.1977
+        },
+        "inputPrepare": {
+          "median": 0.0003,
+          "p95": 0.0004,
+          "max": 0.0007
+        },
+        "worldAndSignalsPrepare": {
+          "median": 19.5681,
+          "p95": 26.2631,
+          "max": 29.0669
+        },
+        "metadataPrepare": {
+          "median": 42.3694,
+          "p95": 53.696,
+          "max": 54.7454
+        },
+        "instancesPrepare": {
+          "median": 2.2497,
+          "p95": 13.5283,
+          "max": 18.571
+        },
+        "receiptsPrepare": {
+          "median": 0.1303,
+          "p95": 0.1543,
+          "max": 0.1877
+        },
+        "renderPrepare": {
+          "median": 4.8745,
+          "p95": 8.4014,
+          "max": 8.4823
+        },
+        "install": {
+          "median": 0.0211,
+          "p95": 0.0334,
+          "max": 0.0526
+        }
+      }
+    }
+  ]
+}

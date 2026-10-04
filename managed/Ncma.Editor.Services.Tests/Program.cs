@@ -62,6 +62,17 @@ void AssertSceneSequence(JsonElement expected,string baseline,string saved) {
         ui.New(ui.Stamp,false);Assert();ui.History(ui.Stamp,false);Assert();
         Check(index==expected.GetArrayLength());
 }
+void AssertActionSequence(JsonElement expected,Ncma.ActionAnimationSession animation) {
+        var commands=new (uint Command,double Value,string Text)[] {
+            (1,1,""),(4,.1,""),(2,0,"Attack"),(4,.2,""),(4,.25,""),(2,0,"Attack"),
+            (6,0,""),(7,0,""),(4,1,""),(5,0,""),(2,0,"Dodge"),(4,.1,""),(4,.8,""),(6,0,""),(7,0,"")
+        };
+        void Assert(int i) {using var actual=JsonDocument.Parse(animation.InspectJson());Compare(expected[i],actual.RootElement);}
+        Assert(0);int index=1;
+        foreach(var command in commands) {animation.Execute(command.Command,command.Value,command.Text);Assert(index++);}
+        Check(index==expected.GetArrayLength());
+}
+
 [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
 static WeakReference ProbeManagedCatalog(string path) {
     using var catalog=new Ncma.Scripting.ScriptCatalogService();
@@ -169,6 +180,45 @@ var cases = new (string, Action)[] {
             Check(owner.Play.Tick==2);ui.PlayControl(ui.Stamp,"stop");
             Check(owner.Play is null && !owner.Edit!.State.Frozen && before.SequenceEqual(owner.Document.CaptureBytes()));
         }
+    }),
+    ("M2.8 bounded current snapshot/cached-list measurement evidence", () => {
+        var rows=new List<object>();
+        foreach(int count in new[]{0,256,4096}) {
+            using var owner=new EditorSessionOwner("Measurement",activateEditor:false);
+            for(int i=0;i<count;i++)owner.Document.World.CreateObject("Object"+i).Set(TransformData.Identity);
+            owner.ActivateEditor();var ui=new EditorWorkspace(owner);
+            foreach(string workload in new[]{"snapshot_copy","cached_list_32"}) {
+                void Run() {if(workload=="snapshot_copy")_ = owner.Document.CaptureBytes();else _ = ui.Capture();}
+                for(int i=0;i<8;i++)Run();
+                var times=new double[32];var allocations=new long[32];
+                int[] collections=Enumerable.Range(0,3).Select(GC.CollectionCount).ToArray();
+                for(int i=0;i<32;i++) {
+                    long allocated=GC.GetAllocatedBytesForCurrentThread(),start=Stopwatch.GetTimestamp();Run();
+                    times[i]=Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                    allocations[i]=GC.GetAllocatedBytesForCurrentThread()-allocated;
+                }
+                Array.Sort(times);Array.Sort(allocations);
+                rows.Add(new {workload,objects=count,warmup=8,samples=32,medianMs=(times[15]+times[16])/2,p95Ms=times[30],maxMs=times[31],
+                    medianThreadBytes=(allocations[15]+allocations[16])/2,maxThreadBytes=allocations[31],
+                    gcCollections=Enumerable.Range(0,3).Select(i=>GC.CollectionCount(i)-collections[i]).ToArray()});
+            }
+        }
+        string path=Path.Combine(output,"performance.json");
+        File.WriteAllText(path,JsonSerializer.Serialize(new {schemaVersion=1,scope="current_managed_document_and_cached_list_only",oldBaselineComparison=false,frameRateAcceptance=false,rows}));
+        Console.WriteLine("M2.8 measurements: "+path);
+    }),
+    ("Frozen scene reference uses direct managed commands without old bridge process", () => {
+        string baseline=Path.Combine(output,"frozen.ncmascene");
+        var document=new SceneDocument("Baseline");
+        document.World.CreateObject("Original",Guid.Parse("11111111-1111-1111-1111-111111111111")).Set(TransformData.Identity);
+        SceneDocumentFiles.Save(document,baseline);
+        using var reference=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root,"tests/assets/m2/scene-command-reference.json")));
+        AssertSceneSequence(reference.RootElement,baseline,Path.Combine(output,"frozen.saved.ncmascene"));
+    }),
+    ("Frozen action reference uses managed policy and numerical ABI 2 only", () => {
+        using var reference=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root,"tests/assets/m2/action-command-reference.json")));
+        using var animation=new Ncma.ActionAnimationSession(Path.Combine(root,"out/managed/NcmaNative.dll"));
+        AssertActionSequence(reference.RootElement,animation);
     }),
     ("Old bridge/new application independent-process scene command parity", () => {
         Guid id=Guid.Parse("11111111-1111-1111-1111-111111111111");

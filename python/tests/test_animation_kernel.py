@@ -21,6 +21,10 @@ class AnimationKernelTests(unittest.TestCase):
         reference = json.loads(result.stdout)
         self._compare_reference(reference)
 
+    def test_frozen_reference_sequence(self):
+        reference = json.loads((ROOT / "tests/assets/m2/action-command-reference.json").read_text(encoding="utf-8"))
+        self._compare_reference(reference)
+
     def _compare_reference(self, reference):
         commands = [(1, 1, ""), (4, .1, ""), (2, 0, "Attack"), (4, .2, ""), (4, .25, ""),
                     (2, 0, "Attack"), (6, 0, ""), (7, 0, ""), (4, 1, ""), (5, 0, ""),

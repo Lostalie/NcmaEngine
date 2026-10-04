@@ -1,0 +1,6651 @@
+[
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 0,
+    "state": "Idle",
+    "time": 0,
+    "duration": 2,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 0,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": false,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 1,
+    "state": "Run",
+    "time": 0,
+    "duration": 1,
+    "blend_weight": 0,
+    "paused": true,
+    "speed": 1,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 2,
+    "state": "Run",
+    "time": 0.1,
+    "duration": 1,
+    "blend_weight": 0.666666687,
+    "paused": true,
+    "speed": 1,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0.200000003
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0.200000003
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            -0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            -0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0485685468,
+          0.218518481
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0485685468,
+          -0.218518481
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 3,
+    "state": "Attack",
+    "time": 0,
+    "duration": 0.8,
+    "blend_weight": 0,
+    "paused": true,
+    "speed": 1,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0.200000003
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            -0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            -0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0485685468,
+          0.218518481
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0.129634142,
+            0,
+            0,
+            0.99156189
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0485685468,
+          -0.218518481
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 4,
+    "state": "Attack",
+    "time": 0.2,
+    "duration": 0.8,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 1,
+    "action_active": true,
+    "hit_window": true,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0.699999988
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0.5
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Hit.Start",
+        "offset": 0.18
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.225321233,
+            0.97428453
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.175621599,
+          1.65938425,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.190508515,
+          1.5934391,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.549892783,
+          1.76906073,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.348567933,
+          1.33000672,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.55711621,
+            0.830434561
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.322359771,
+          0.930866241,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 5,
+    "state": "Attack",
+    "time": 0.45,
+    "duration": 0.8,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 1,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": true,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        1
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0.300000012
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Hit.End",
+        "offset": 0.12
+      },
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Combo.Open",
+        "offset": 0.22
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.150290474,
+            0.988641918
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.118866764,
+          1.68193018,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.232957631,
+          1.56101871,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.614887834,
+          1.67988551,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.339937717,
+          1.38271844,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.382260561,
+            0.924054623
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.526275694,
+          1.02877188,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 6,
+    "state": "Attack",
+    "time": 0,
+    "duration": 0.8,
+    "blend_weight": 0,
+    "paused": true,
+    "speed": 1,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        1
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.150290474,
+            0.988641918
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.118866764,
+          1.68193018,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.232957631,
+          1.56101871,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.614887834,
+          1.67988551,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.339937717,
+          1.38271844,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.382260561,
+            0.924054623
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.526275694,
+          1.02877188,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 7,
+    "state": "Attack",
+    "time": 0.45,
+    "duration": 0.8,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 1,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": true,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": true,
+    "actor": {
+      "position": [
+        0,
+        0,
+        1
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0.300000012
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Hit.End",
+        "offset": 0.12
+      },
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Combo.Open",
+        "offset": 0.22
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.150290474,
+            0.988641918
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.118866764,
+          1.68193018,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.232957631,
+          1.56101871,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.614887834,
+          1.67988551,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.339937717,
+          1.38271844,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.382260561,
+            0.924054623
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.526275694,
+          1.02877188,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 8,
+    "state": "Attack",
+    "time": 0,
+    "duration": 0.8,
+    "blend_weight": 0,
+    "paused": true,
+    "speed": 1,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        1
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.150290474,
+            0.988641918
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.118866764,
+          1.68193018,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.232957631,
+          1.56101871,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.614887834,
+          1.67988551,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.339937717,
+          1.38271844,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.382260561,
+            0.924054623
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.526275694,
+          1.02877188,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 9,
+    "state": "Run",
+    "time": 0.2,
+    "duration": 1,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 1,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        2.20000005
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        1.20000005
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Hit.Start",
+        "offset": 0.18
+      },
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Hit.End",
+        "offset": 0.32
+      },
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Combo.Open",
+        "offset": 0.42
+      },
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Combo.Close",
+        "offset": 0.62
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0.0649542511,
+            0,
+            0,
+            0.997888327
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            -0.0649542511,
+            0,
+            0,
+            0.997888327
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            -0.0649542511,
+            0,
+            0,
+            0.997888327
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0271723866,
+          0.11018905
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0.0649542511,
+            0,
+            0,
+            0.997888327
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0271723866,
+          -0.11018905
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 10,
+    "state": "Idle",
+    "time": 0,
+    "duration": 2,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 0,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 11,
+    "state": "Dodge",
+    "time": 0,
+    "duration": 0.6,
+    "blend_weight": 0,
+    "paused": true,
+    "speed": 0,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.29999995,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0,
+          1.69999993,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.300000012,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.700000048,
+          1.48000002,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 12,
+    "state": "Dodge",
+    "time": 0.1,
+    "duration": 0.6,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 0,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": true,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0.400000036
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0.400000036
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Invulnerability.Start",
+        "offset": 0.05
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.816666663,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.816666663,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.116402194,
+            0.993202209
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0.0809276402,
+          1.15718198,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.173416376,
+          1.54634237,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.169322759,
+          1.40167069,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.558483183,
+          1.49415946,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.414417893,
+          1.26293766,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.803578317,
+          1.1704489,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.183890924,
+          0.778142273,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.380429506,
+          -0.0488236547,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.146895424,
+          0.699526846,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          -0.049643144,
+          -0.127439082,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 13,
+    "state": "Idle",
+    "time": 0.3,
+    "duration": 2,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 0,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        2.4000001
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        2
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Invulnerability.End",
+        "offset": 0.3
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.30599999,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.356000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0.00449998444,
+            0.999989867
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          -0.00359995104,
+          1.70598388,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.301607847,
+          1.48329282,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.701591671,
+          1.47969282,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.298367918,
+          1.48869264,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.698351741,
+          1.49229264,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 14,
+    "state": "Dodge",
+    "time": 0.1,
+    "duration": 0.6,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 0,
+    "action_active": true,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": true,
+    "can_undo": true,
+    "can_redo": true,
+    "actor": {
+      "position": [
+        0,
+        0,
+        0.400000036
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        0.400000036
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Invulnerability.Start",
+        "offset": 0.05
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.816666663,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.816666663,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            -0.116402194,
+            0.993202209
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0.0809276402,
+          1.15718198,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.349999994,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          0.173416376,
+          1.54634237,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.169322759,
+          1.40167069,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.558483183,
+          1.49415946,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.414417893,
+          1.26293766,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.803578317,
+          1.1704489,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.183890924,
+          0.778142273,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.380429506,
+          -0.0488236547,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.146895424,
+          0.699526846,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          -0.049643144,
+          -0.127439082,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  },
+  {
+    "schema_version": 1,
+    "session_kind": "action_animation_preview",
+    "revision": 15,
+    "state": "Idle",
+    "time": 0.3,
+    "duration": 2,
+    "blend_weight": 1,
+    "paused": true,
+    "speed": 0,
+    "action_active": false,
+    "hit_window": false,
+    "combo_window": false,
+    "invulnerable": false,
+    "can_undo": true,
+    "can_redo": false,
+    "actor": {
+      "position": [
+        0,
+        0,
+        2.4000001
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "root_delta": {
+      "position": [
+        0,
+        0,
+        2
+      ],
+      "rotation_xyzw": [
+        0,
+        0,
+        0,
+        1
+      ],
+      "scale": [
+        1,
+        1,
+        1
+      ]
+    },
+    "events": [
+      {
+        "clip_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Invulnerability.End",
+        "offset": 0.3
+      }
+    ],
+    "skeleton_uuid": "51bb55ce-7181-4c1d-9913-431e27c2a001",
+    "bones": [
+      {
+        "name": "Root",
+        "parent": -1,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hips",
+        "parent": 0,
+        "position": [
+          0,
+          0.949999988,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.949999988,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Spine",
+        "parent": 1,
+        "position": [
+          0,
+          1.30599999,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.356000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0.00449998444,
+            0.999989867
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Head",
+        "parent": 2,
+        "position": [
+          -0.00359995104,
+          1.70598388,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            0.400000006,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.L",
+        "parent": 2,
+        "position": [
+          -0.301607847,
+          1.48329282,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.L",
+        "parent": 4,
+        "position": [
+          -0.701591671,
+          1.47969282,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Arm.R",
+        "parent": 2,
+        "position": [
+          0.298367918,
+          1.48869264,
+          0
+        ],
+        "local": {
+          "position": [
+            0.300000012,
+            0.180000007,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Hand.R",
+        "parent": 6,
+        "position": [
+          0.698351741,
+          1.49229264,
+          0
+        ],
+        "local": {
+          "position": [
+            0.400000006,
+            0,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.L",
+        "parent": 1,
+        "position": [
+          -0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            -0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.L",
+        "parent": 8,
+        "position": [
+          -0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Leg.R",
+        "parent": 1,
+        "position": [
+          0.170000002,
+          0.870000005,
+          0
+        ],
+        "local": {
+          "position": [
+            0.170000002,
+            -0.0799999982,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "name": "Foot.R",
+        "parent": 10,
+        "position": [
+          0.170000002,
+          0.0199999809,
+          0
+        ],
+        "local": {
+          "position": [
+            0,
+            -0.850000024,
+            0
+          ],
+          "rotation_xyzw": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "clips": [
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a002",
+        "name": "Idle",
+        "duration": 2,
+        "loop": true,
+        "root_motion": false
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a003",
+        "name": "Run",
+        "duration": 1,
+        "loop": true,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a004",
+        "name": "Attack",
+        "duration": 0.8,
+        "loop": false,
+        "root_motion": true
+      },
+      {
+        "uuid": "51bb55ce-7181-4c1d-9913-431e27c2a005",
+        "name": "Dodge",
+        "duration": 0.6,
+        "loop": false,
+        "root_motion": true
+      }
+    ]
+  }
+]

@@ -87,7 +87,7 @@ internal static unsafe class Program
     public static int Main(string[] args)
     {
         try {
-            if(args.Length!=3)return 2;
+            if(args.Length is not (3 or 4))return 2;
             string root=Path.GetFullPath(args[0]),baselinePath=Path.GetFullPath(args[1]),output=Path.GetFullPath(args[2]);Directory.CreateDirectory(output);
             Check(Marshal.SizeOf<RenderFrame>()==112 && Marshal.SizeOf<RendererStats>()==88 && Marshal.SizeOf<RenderPass>()==32,"Renderer layout");
             var frameView=new RenderFrameView(Guid.NewGuid(),1,Guid.NewGuid(),new Ncma.Runtime.TransformData(new(1,2,3),System.Numerics.Quaternion.Identity,new(2,3,4)));
@@ -120,7 +120,17 @@ internal static unsafe class Program
 
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
-            byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Legacy reference fixture dimension");
+            byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");
+            int legacyMax=0;double legacyMean=0;
+            if(args.Length==4) {
+                byte[] legacy=File.ReadAllBytes(Path.GetFullPath(args[3]));
+                Check(legacy.Length==baseline.Length,"Legacy comparison fixture dimension");
+                long sum=0;
+                for(int i=0;i<baseline.Length;i++){int delta=Math.Abs(baseline[i]-legacy[i]);legacyMax=Math.Max(legacyMax,delta);sum+=delta;}
+                legacyMean=sum/(double)baseline.Length;
+                Check(legacyMax<=4 && legacyMean<=.1,$"Kernel/legacy mismatch max={legacyMax} mean={legacyMean}");
+                Console.WriteLine($"PASS kernel/legacy reference parity max={legacyMax}; mean={legacyMean}");
+            }
             byte[] image=new byte[baseline.Length];double mean=0;int max=0;ulong calls=0,bytes=0;double submit=0,gpu=0;
             string hardware="";
             for(int cycleIndex=0;cycleIndex<32;cycleIndex++) {
@@ -194,7 +204,7 @@ internal static unsafe class Program
                 gui.Dispose();resources.Dispose();Check(renderer.Stats.LiveGroups==0,"GPU resource group leak");renderer.Dispose();window.Dispose();
                 Check(native.Status.LiveResources==0 && guiModule.Status.LiveResources==0 && platform.Status.LiveResources==0,"Native live resource leak");
             }
-            File.WriteAllText(Path.Combine(output,"render-results.json"),JsonSerializer.Serialize(new{schema=1,backend="DX11 reference",hardware,cycles=32,width=256,height=256,vsync=false,validation=true,maxChannelError=max,meanChannelError=mean,submitCalls=calls,copiedBytes=bytes,lastSubmitMsAverage=submit/32,gpuMsAverage=gpu/32,cachedSubmitFrames=64,cachedOwnerAllocatedBytes=_cachedThreadBytes,cachedProcessAllocatedBytes=_cachedProcessBytes,cachedSubmitElapsedMs=_cachedElapsedMs,manualAcceptance=false},new JsonSerializerOptions{WriteIndented=true}));
+            File.WriteAllText(Path.Combine(output,"render-results.json"),JsonSerializer.Serialize(new{schema=1,backend="DX11 reference",hardware,cycles=32,width=256,height=256,vsync=false,validation=true,maxChannelError=max,meanChannelError=mean,submitCalls=calls,copiedBytes=bytes,lastSubmitMsAverage=submit/32,gpuMsAverage=gpu/32,kernelReference=true,legacyComparison=args.Length==4,legacyMaxChannelError=legacyMax,legacyMeanChannelError=legacyMean,cachedSubmitFrames=64,cachedOwnerAllocatedBytes=_cachedThreadBytes,cachedProcessAllocatedBytes=_cachedProcessBytes,cachedSubmitElapsedMs=_cachedElapsedMs,manualAcceptance=false},new JsonSerializerOptions{WriteIndented=true}));
             Console.WriteLine($"PASS real reference/GUI/customization/32 cycles; max={max}; mean={mean}; validation=0/0");
             return 0;
         }catch(Exception e){Console.Error.WriteLine(e);return 1;}

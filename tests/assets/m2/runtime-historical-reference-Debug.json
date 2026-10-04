@@ -1,0 +1,421 @@
+{
+  "schemaVersion": 1,
+  "scope": "historical_M1_retained_runtime_fixtures",
+  "configuration": "Debug",
+  "sourceLogs": [
+    {
+      "path": "out/verification/m1/final-profile-debug.log",
+      "sha256": "14FE3A9C72CD2F7A76F3E3437AB0F04C995AA9DBFA4B277DCE6A200C7467BE01"
+    },
+    {
+      "path": "out/verification/m1/runtime-pressure-debug.log",
+      "sha256": "C036D8BFBD04C005BD4E093452F0FB25CF915324C57D404AF6EA2A00262EBE0C"
+    }
+  ],
+  "rows": [
+    {
+      "environment": "Microsoft Windows NT 10.0.19045.0",
+      "architecture": "X64",
+      "runtime": ".NET 8.0.28",
+      "cpuCount": 12
+    },
+    {
+      "steps": 0,
+      "commandsPerSuccessfulStep": 0,
+      "samples": 32,
+      "medianMs": 0.0004,
+      "p95Ms": 0.0021,
+      "maxMs": 0.0026,
+      "medianFrameAllocationBytes": 328,
+      "maxFrameAllocationBytes": 608
+    },
+    {
+      "steps": 0,
+      "commandsPerSuccessfulStep": 64,
+      "samples": 32,
+      "medianMs": 0.0004,
+      "p95Ms": 0.002,
+      "maxMs": 0.003,
+      "medianFrameAllocationBytes": 328,
+      "maxFrameAllocationBytes": 608
+    },
+    {
+      "steps": 0,
+      "commandsPerSuccessfulStep": 1024,
+      "samples": 32,
+      "medianMs": 0.0004,
+      "p95Ms": 0.0023,
+      "maxMs": 0.0028,
+      "medianFrameAllocationBytes": 328,
+      "maxFrameAllocationBytes": 608
+    },
+    {
+      "steps": 1,
+      "commandsPerSuccessfulStep": 0,
+      "samples": 32,
+      "medianMs": 0.247,
+      "p95Ms": 0.2692,
+      "maxMs": 0.2714,
+      "medianFrameAllocationBytes": 34280,
+      "maxFrameAllocationBytes": 34560
+    },
+    {
+      "steps": 1,
+      "commandsPerSuccessfulStep": 64,
+      "samples": 32,
+      "medianMs": 0.4744,
+      "p95Ms": 1.1834,
+      "maxMs": 1.195,
+      "medianFrameAllocationBytes": 268912,
+      "maxFrameAllocationBytes": 269192
+    },
+    {
+      "steps": 1,
+      "commandsPerSuccessfulStep": 1024,
+      "samples": 32,
+      "medianMs": 1.3378,
+      "p95Ms": 1.4073,
+      "maxMs": 3.3855,
+      "medianFrameAllocationBytes": 660720,
+      "maxFrameAllocationBytes": 661000
+    },
+    {
+      "steps": 8,
+      "commandsPerSuccessfulStep": 0,
+      "samples": 32,
+      "medianMs": 1.8634,
+      "p95Ms": 2.1638,
+      "maxMs": 2.2526,
+      "medianFrameAllocationBytes": 271944,
+      "maxFrameAllocationBytes": 272224
+    },
+    {
+      "steps": 8,
+      "commandsPerSuccessfulStep": 64,
+      "samples": 32,
+      "medianMs": 4.3705,
+      "p95Ms": 6.605,
+      "maxMs": 6.7597,
+      "medianFrameAllocationBytes": 2149000,
+      "maxFrameAllocationBytes": 2149280
+    },
+    {
+      "steps": 8,
+      "commandsPerSuccessfulStep": 1024,
+      "samples": 32,
+      "medianMs": 12.0833,
+      "p95Ms": 16.938,
+      "maxMs": 18.2734,
+      "medianFrameAllocationBytes": 5283464,
+      "maxFrameAllocationBytes": 5283744
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 128,
+      "componentsPerObject": 9,
+      "bindingsPerObject": 4,
+      "systems": 1,
+      "sceneBytes": 144445,
+      "renderObjects": 128,
+      "samples": 32,
+      "frameMs": {
+        "median": 29.4219,
+        "p95": 32.729,
+        "max": 33.633
+      },
+      "allocationBytes": {
+        "median": 8211504,
+        "p95": 8221696,
+        "max": 8221696
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 3.5649,
+          "p95": 5.1612,
+          "max": 5.2305
+        },
+        "system": {
+          "median": 0.0357,
+          "p95": 0.0509,
+          "max": 0.0514
+        },
+        "setup": {
+          "median": 11.3741,
+          "p95": 13.8908,
+          "max": 15.2069
+        },
+        "callbacks": {
+          "median": 3.7189,
+          "p95": 5.2809,
+          "max": 5.3848
+        },
+        "inputPrepare": {
+          "median": 0.0002,
+          "p95": 0.0006,
+          "max": 0.0008
+        },
+        "worldAndSignalsPrepare": {
+          "median": 3.7889,
+          "p95": 5.9306,
+          "max": 6.5209
+        },
+        "metadataPrepare": {
+          "median": 8.6598,
+          "p95": 11.0634,
+          "max": 11.6299
+        },
+        "instancesPrepare": {
+          "median": 0.3295,
+          "p95": 0.3855,
+          "max": 0.4144
+        },
+        "receiptsPrepare": {
+          "median": 0.0204,
+          "p95": 0.0305,
+          "max": 0.0308
+        },
+        "renderPrepare": {
+          "median": 0.5535,
+          "p95": 0.6846,
+          "max": 1.6283
+        },
+        "install": {
+          "median": 0.0084,
+          "p95": 0.0115,
+          "max": 0.0164
+        }
+      }
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 32,
+      "componentsPerObject": 9,
+      "bindingsPerObject": 64,
+      "systems": 1,
+      "sceneBytes": 231969,
+      "renderObjects": 32,
+      "samples": 32,
+      "frameMs": {
+        "median": 18.0135,
+        "p95": 25.9198,
+        "max": 26.7922
+      },
+      "allocationBytes": {
+        "median": 11804928,
+        "p95": 11810880,
+        "max": 11810904
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 6.6396,
+          "p95": 10.4645,
+          "max": 11.764
+        },
+        "system": {
+          "median": 0.0129,
+          "p95": 0.0203,
+          "max": 0.0217
+        },
+        "setup": {
+          "median": 4.6433,
+          "p95": 7.7058,
+          "max": 8.8383
+        },
+        "callbacks": {
+          "median": 6.9487,
+          "p95": 10.8395,
+          "max": 12.1325
+        },
+        "inputPrepare": {
+          "median": 0.0002,
+          "p95": 0.0005,
+          "max": 0.0005
+        },
+        "worldAndSignalsPrepare": {
+          "median": 0.4953,
+          "p95": 1.2197,
+          "max": 1.7373
+        },
+        "metadataPrepare": {
+          "median": 4.7229,
+          "p95": 6.8542,
+          "max": 8.4724
+        },
+        "instancesPrepare": {
+          "median": 0.4857,
+          "p95": 0.8221,
+          "max": 0.8587
+        },
+        "receiptsPrepare": {
+          "median": 0.0098,
+          "p95": 0.0148,
+          "max": 0.0182
+        },
+        "renderPrepare": {
+          "median": 0.0526,
+          "p95": 0.7341,
+          "max": 0.9985
+        },
+        "install": {
+          "median": 0.0213,
+          "p95": 0.0334,
+          "max": 0.0869
+        }
+      }
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 1024,
+      "componentsPerObject": 1,
+      "bindingsPerObject": 1,
+      "systems": 1,
+      "sceneBytes": 351189,
+      "renderObjects": 1024,
+      "samples": 32,
+      "frameMs": {
+        "median": 32.5166,
+        "p95": 47.5468,
+        "max": 49.8842
+      },
+      "allocationBytes": {
+        "median": 22506016,
+        "p95": 22506880,
+        "max": 22507032
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 3.8121,
+          "p95": 4.7787,
+          "max": 4.9877
+        },
+        "system": {
+          "median": 0.1028,
+          "p95": 0.1625,
+          "max": 0.1827
+        },
+        "setup": {
+          "median": 11.8391,
+          "p95": 16.2349,
+          "max": 16.7973
+        },
+        "callbacks": {
+          "median": 4.0617,
+          "p95": 5.1548,
+          "max": 5.2545
+        },
+        "inputPrepare": {
+          "median": 0.0003,
+          "p95": 0.0004,
+          "max": 0.0005
+        },
+        "worldAndSignalsPrepare": {
+          "median": 3.4055,
+          "p95": 5.9499,
+          "max": 6.9636
+        },
+        "metadataPrepare": {
+          "median": 10.9112,
+          "p95": 27.5667,
+          "max": 29.6028
+        },
+        "instancesPrepare": {
+          "median": 0.5623,
+          "p95": 0.834,
+          "max": 3.1334
+        },
+        "receiptsPrepare": {
+          "median": 0.0385,
+          "p95": 0.0541,
+          "max": 0.063
+        },
+        "renderPrepare": {
+          "median": 1.26,
+          "p95": 2.2074,
+          "max": 4.0084
+        },
+        "install": {
+          "median": 0.0138,
+          "p95": 0.0196,
+          "max": 0.0205
+        }
+      }
+    },
+    {
+      "fixture": "runtime_pressure_one_fixed_step",
+      "objects": 4096,
+      "componentsPerObject": 1,
+      "bindingsPerObject": 1,
+      "systems": 1,
+      "sceneBytes": 1407957,
+      "renderObjects": 4096,
+      "samples": 32,
+      "frameMs": {
+        "median": 156.0802,
+        "p95": 184.9144,
+        "max": 186.8851
+      },
+      "allocationBytes": {
+        "median": 90806496,
+        "p95": 90809888,
+        "max": 90810008
+      },
+      "layerMs": {
+        "behaviour": {
+          "median": 13.5419,
+          "p95": 28.234,
+          "max": 28.7727
+        },
+        "system": {
+          "median": 0.5335,
+          "p95": 0.7683,
+          "max": 0.8567
+        },
+        "setup": {
+          "median": 61.2431,
+          "p95": 70.1928,
+          "max": 71.7899
+        },
+        "callbacks": {
+          "median": 15.3771,
+          "p95": 30.0526,
+          "max": 30.3113
+        },
+        "inputPrepare": {
+          "median": 0.0003,
+          "p95": 0.0009,
+          "max": 0.001
+        },
+        "worldAndSignalsPrepare": {
+          "median": 19.9167,
+          "p95": 25.1721,
+          "max": 26.8132
+        },
+        "metadataPrepare": {
+          "median": 50.7725,
+          "p95": 67.1925,
+          "max": 68.0036
+        },
+        "instancesPrepare": {
+          "median": 2.7502,
+          "p95": 3.9968,
+          "max": 8.2124
+        },
+        "receiptsPrepare": {
+          "median": 0.1417,
+          "p95": 0.193,
+          "max": 0.1992
+        },
+        "renderPrepare": {
+          "median": 5.1578,
+          "p95": 8.0932,
+          "max": 8.5117
+        },
+        "install": {
+          "median": 0.0497,
+          "p95": 0.0699,
+          "max": 0.072
+        }
+      }
+    }
+  ]
+}

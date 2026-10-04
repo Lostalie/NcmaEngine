@@ -1,0 +1,482 @@
+[
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Original",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 1,
+    "undo": 1,
+    "redo": 0,
+    "dirty": false,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 2,
+    "undo": 2,
+    "redo": 0,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 2,
+    "undo": 2,
+    "redo": 0,
+    "dirty": true,
+    "busy": true,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 2,
+    "undo": 2,
+    "redo": 0,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 2,
+                  "y": 3,
+                  "z": 4
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 3,
+    "undo": 3,
+    "redo": 0,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 4,
+    "undo": 2,
+    "redo": 1,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 2,
+                  "y": 3,
+                  "z": 4
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 5,
+    "undo": 3,
+    "redo": 0,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": []
+    },
+    "revision": 6,
+    "undo": 4,
+    "redo": 0,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": null
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 2,
+                  "y": 3,
+                  "z": 4
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 7,
+    "undo": 3,
+    "redo": 1,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 2,
+                  "y": 3,
+                  "z": 4
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 7,
+    "undo": 3,
+    "redo": 1,
+    "dirty": false,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Untitled",
+      "objects": []
+    },
+    "revision": 8,
+    "undo": 4,
+    "redo": 0,
+    "dirty": true,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": null
+  },
+  {
+    "document": {
+      "version": 1,
+      "name": "Baseline",
+      "objects": [
+        {
+          "id": "11111111-1111-1111-1111-111111111111",
+          "name": "Renamed",
+          "components": [
+            {
+              "typeId": "ncma.transform",
+              "version": 1,
+              "data": {
+                "position": {
+                  "x": 2,
+                  "y": 3,
+                  "z": 4
+                },
+                "rotation": {
+                  "x": 0,
+                  "y": 0,
+                  "z": 0,
+                  "w": 1
+                },
+                "scale": {
+                  "x": 1,
+                  "y": 1,
+                  "z": 1
+                }
+              }
+            }
+          ],
+          "behaviours": []
+        }
+      ]
+    },
+    "revision": 9,
+    "undo": 3,
+    "redo": 1,
+    "dirty": false,
+    "busy": false,
+    "invalidated": false,
+    "frozen": false,
+    "selection": "11111111-1111-1111-1111-111111111111"
+  }
+]

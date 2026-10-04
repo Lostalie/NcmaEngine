@@ -8,7 +8,7 @@ from typing import Any
 def inspect_project(root: Path) -> dict[str, Any]:
     root = root.resolve()
     return {
-        "schema_version": 10,
+        "schema_version": 11,
         "engine": "NcmaEngine",
         "root": str(root),
         "languages": {
@@ -44,7 +44,12 @@ def inspect_project(root: Path) -> dict[str, Any]:
                 "gameplay_languages": ["C#/.NET 8"],
             },
             "candidate": {
-                "scope": "M2.1-M2.7_candidate_H7_incomplete",
+                "scope": "M2.1-M2.8_candidate_H7_H8_incomplete",
+                "m2_8_read_only_preflight": True,
+                "m2_8_frozen_semantic_references": True,
+                "m2_8_kernel_reference_fixture": True,
+                "m2_8_kernel_reference_scope": "shared_numerical_shaders_not_independent_algorithm_oracle",
+                "m2_8_report": "docs/M2_8_DELIVERY_REPORT.md",
                 "h8_accepted": False,
                 "consolidated_cleanup_completed": False,
                 "managed_runtime_service": True,

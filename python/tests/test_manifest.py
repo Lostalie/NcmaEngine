@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class ProjectManifestTests(unittest.TestCase):
     def test_csharp_gameplay_direction_and_legacy_runtime_status(self) -> None:
         manifest = inspect_project(ROOT)
-        self.assertEqual(manifest["schema_version"], 10)
+        self.assertEqual(manifest["schema_version"], 11)
         self.assertEqual(manifest["languages"]["scope"], "target_architecture")
         self.assertEqual(manifest["languages"]["core"], "C#/.NET 8")
         self.assertEqual(manifest["languages"]["gameplay"], ["C#/.NET 8"])
@@ -102,6 +102,20 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertEqual(manifest["gameplay"]["world_access"]["scene_host_bridge_version"], 6)
         self.assertEqual(manifest["gameplay"]["world_access"]["scope"], "csharp_managed_world")
 
+    def test_m2_8_preflight_does_not_promote_or_authorize_cleanup(self) -> None:
+        candidate = inspect_project(ROOT)["architecture"]["candidate"]
+        self.assertTrue(candidate["m2_8_read_only_preflight"])
+        self.assertTrue(candidate["m2_8_frozen_semantic_references"])
+        self.assertTrue(candidate["m2_8_kernel_reference_fixture"])
+        self.assertEqual(candidate["m2_8_kernel_reference_scope"], "shared_numerical_shaders_not_independent_algorithm_oracle")
+        for gate in ("h8_accepted", "consolidated_cleanup_completed", "default_entry_switched", "player_h7_complete"):
+            self.assertFalse(candidate[gate])
+        self.assertTrue((ROOT / candidate["m2_8_report"]).is_file())
+        for configuration in ("Debug", "Release"):
+            reference = json.loads((ROOT / f"tests/assets/m2/runtime-historical-reference-{configuration}.json").read_text(encoding="utf-8"))
+            self.assertEqual(reference["configuration"], configuration)
+            self.assertEqual(len(reference["rows"]), 14)
+
     def test_python_gameplay_removed_without_advertising_module_integration(self) -> None:
         manifest = inspect_project(ROOT)
         backends = manifest["gameplay"]["backends"]
@@ -124,7 +138,7 @@ class ProjectManifestTests(unittest.TestCase):
                                 capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         manifest = json.loads(result.stdout)
-        self.assertEqual(manifest["schema_version"], 10)
+        self.assertEqual(manifest["schema_version"], 11)
         self.assertEqual(set(manifest["gameplay"]["backends"]), {"csharp"})
 
     def test_independent_python_transport_targets_are_not_implemented(self) -> None:
