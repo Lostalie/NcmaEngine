@@ -161,3 +161,18 @@ LastTest.log 仅含最后的 22 个组合注册项，完整 30 项以两轮 cano
 本轮未删除旧入口、桥、构建目标或测试，也未提交/推送。
 下一步先继续核定 Animation/Agent/Script/UI 旧策略测试替代与消费者，
 再完成第 4 节真实 UI/MCP、H7 部署恢复、完整性能与一小时人工稳定性门禁。
+
+## 7. 后续源码提交与 EXE 重建（2026-10-05）
+
+用户随后授权 H8/M2.8 提交推送和重新构建 EXE。
+候选实现提交 18ae5ca；Release 冷重编译发现测试宏冲突，经 35bc6ac 修复，
+使用测试专用前置头保持全部 Release assert，不屏蔽警告、不降低断言。
+修复提交后的完整 Debug、Release -CleanNative 均退出 0，
+每配置 30 CTest、40 Editor Services、22 Player、41 Python 及 smoke/inspect 全部通过。
+DX11 parity max/mean 和 API validation errors/warnings 均为 0/0。
+本轮只读审计通过但 H8 acceptance/production/cleanup 仍 false。
+
+最终 Release out/bin/NcmaEngine.exe 已重新生成并与 Release 链接产物 hash 相同。
+提交身份、日志/审计路径、SHA256、首次性能 review 和最终结果见
+[M2 测试状态第 6–7 节](M2_TEST_STATUS.md)。
+本次提交授权只改变源码交付范围，不完成第 4 节人工/生产/长稳门禁，不删除旧入口。

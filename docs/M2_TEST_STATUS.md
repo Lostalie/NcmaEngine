@@ -107,3 +107,49 @@ Release 原生重编译暴露测试命令行 /DNDEBUG 与 /UNDEBUG 的 D9025 警
 修复改用测试专用 forced-include TestAssertions.h，在任何源码头文件前取消 NDEBUG，
 保留 Debug/Release 全部原有 assert 行为；未屏蔽警告、未改断言、不影响生产宏配置。
 修复提交后将重跑双配置完整验证；上述首次日志保留，最终结果在下方追加。
+
+## 7. 最终提交后回归与 EXE（2026-10-05）
+
+实际受测源码提交：35bc6aca39bca3f3fca1f73ee09680d130540841。
+其后的交付记录提交只修改文档，不修改受测源码。
+按 Debug → Release -CleanNative 顺序运行完整 Build.bat，无任何 Skip，均退出 0。
+Release 清理的 321 项仅为构建目录生成文件，并已全部重编译；没有删除旧入口或用户数据。
+
+| 验证项 | Debug | Release |
+| --- | --- | --- |
+| CTest 注册项（8 native + 22 managed/组合） | 30/30 | 30/30 |
+| Editor Services 内部用例 | 40/40 | 40/40 |
+| Player 内部用例 | 22/22 | 22/22 |
+| Python unittest | 41/41 | 41/41 |
+| managed/native smoke、Python inspect | 通过 | 通过 |
+| DX11 legacy/kernel/managed 图像 max/mean | 0/0 | 0/0 |
+| DX11 32 循环 API validation errors/warnings | 0/0 | 0/0 |
+| 三轮 retained runtime 历史比较 | 完成，reviewRequired=false | 完成，reviewRequired=false |
+
+两次日志未发现编译 warning/error；本机 Git ignore 权限提示仍保留，未改全局配置。
+首次 Debug 的时间 review 记录保留；本轮未再触发，不据此推断源码优化或关闭正式性能门禁。
+
+| 配置 | 完整日志 | 只读审计 |
+| --- | --- | --- |
+| Debug | out/verification/h8-fixed-debug.log | out/verification/m2-8/Debug/7440ddf5b20d4fe5b9c2f00a5c7426ee/audit.json |
+| Release | out/verification/h8-fixed-release.log | out/verification/m2-8/Release/cdd4259e874d458eb1ae77a7ce037a23/audit.json |
+
+日志 SHA256：
+
+- Debug：0E67817A12E33F1F9BAE4472D67912C9DF9D15BBA7729DDEA80AD3435318DD09
+- Release：A316A172B4C1BBAB4E9814C3BBF57FB3C4863CD563B6E1BE8F67A15A443F1F17
+
+两配置源码清单 SHA256：e690aa36bec55fc2d8c56cc9e061a0270cdadb31a8e0f4a24dcacd36505bbc4a。
+该清单仍非全仓库快照；audit 的 source_dirty=true 来自保留的 .vs/.user 本机设置。
+受测时其余源码/文档与提交一致，没有未提交 H8 源码。
+两审计 audit_passed=true；h8_accepted、production_promoted 和 cleanup 授权仍为 false。
+
+最终 EXE：out/bin/NcmaEngine.exe，Release，5,957,120 bytes。
+SHA256：87282A286C6BD77EA8CEA3562BD5648DEE3508764A7FB43F2BAF34C4AF08952C。
+与 out/build/windows-ninja-release/bin/NcmaEngine.exe 精确一致。
+仍为旧 C++ 生产外壳搭配 C# 权威服务；没有将候选 C# Editor 提前 promote。
+
+提交/推送目标为 origin/main（Lostalie/NcmaEngine）：H7 检查点 e104663、
+Eigen 入库修复 f3fce5a、H8/M2.8 候选 18ae5ca、测试宏修复 35bc6ac 和本记录。
+EXE/生成包不入 Git；用户 .vs/.user 改动不入提交。
+第 4 节人工、部署、完整性能/长稳及统一清理门禁继续待完成，不能标记整个 M2 已完成。
