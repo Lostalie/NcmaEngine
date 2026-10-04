@@ -1,5 +1,11 @@
 # M2.8 联合验证与清理预检交付记录
 
+2026-10-05 最新状态：用户已确认调整门槛，以自动回归作为本次默认入口切换和旧入口/桥清理条件。
+C# apphost 现部署到 out/bin；27 个旧入口/桥/专属测试文件已移除，19 个旧生成项移入可恢复隔离目录。
+部署包含完整包校验、精确目标/锁检查、分代备份、journal、显式恢复和正式路径 smoke。
+人工 UI/MCP、自包含目标环境、完整性能/一小时长稳及剩余旧策略审查仍待完成，H8/M2 未关闭。
+下方第 1–7 节保留历史证据，关于默认 C++、不允许清理的旧描述已被本次授权覆盖；当前结果见第 8 节。
+
 日期：2026-10-04。状态：**已实施可自动执行的预检与部分替代验证；H8 未通过，M2 未结束。**
 默认生产入口未切换，旧入口/桥/对照未删除。本记录不是最终 M2_DELIVERY_REPORT.md。
 
@@ -176,3 +182,84 @@ DX11 parity max/mean 和 API validation errors/warnings 均为 0/0。
 提交身份、日志/审计路径、SHA256、首次性能 review 和最终结果见
 [M2 测试状态第 6–7 节](M2_TEST_STATUS.md)。
 本次提交授权只改变源码交付范围，不完成第 4 节人工/生产/长稳门禁，不删除旧入口。
+
+## 8. 正式入口切换与旧桥清理（2026-10-05）
+
+用户明确调整本次门槛：自动回归通过后允许切换和精确清理，保留人工/自包含/长稳待验。
+这不是自动审计工具授权，也不关闭整个 H8/M2。当前源码尚未提交/推送；HEAD 为
+37a92a2da93cee532b9d6eeb729c001b6887211c，dirty=true，包括本次改动与保留的用户 .vs/.user 设置。
+
+### 入口、部署与退出机制
+
+- 正式 out/bin/NcmaEngine.exe 是 Ncma.Editor.App 的 .NET 8 C# apphost；无参数打开编辑器。
+  C# Application/Services/Core/Scene/Gameplay/Runtime 拥有业务与唯一 World；ImGui/GLFW/渲染/物理/资源使用原生插件。
+- 全量 Build.bat 先构建 NcmaCore/NcmaNative/NcmaArchitectureTests，完整自动回归和预检通过后才部署；
+  SkipTests/SkipManaged/SkipPython 不部署，不会生成一个缺 DLL 的新默认入口。
+- 部署整个 manifest/hash 校验包，拒绝未知文件、锁定安装、链接、越界目标与未完成 journal。
+  暂存验证→备份→移动完整包→正式路径实际图形 smoke→Complete；失败显式恢复，不静默运行旧入口。
+  既有已知、有限日志与偏好保留；不清空 out/ 或用户项目。
+- scripts/Recover-Editor.bat 按当前 journal 验证备份原始哈希，恢复上一代安装。
+  重复部署保留上一代 journal-Complete/RolledBack.json；首次安装也有单独回归。
+  当前 journal generation 为 ae4c96c4166645c78ae1572528994e69，phase=Complete，configuration=Release。
+- 27 个旧入口/自定义 CLR、Scene、Gameplay 桥/专属测试源码退出，CMake/solution/NMake/Build 同步解除，
+  没有新增兼容转发层。精确清单在 [清理记录第 6 节](M2_8_CLEANUP_AUDIT.md)。
+  19 个旧生成文件及两个专属宿主 bin/obj 目录（106+111 文件）移动到
+  out/deployment/retired-artifacts-20261005，可恢复；源码可从前一 Git 版本恢复。
+
+### 最终自动回归
+
+先完成 Release -CleanNative 冷构建，再对最终部署逻辑执行 Debug→Release 完整 Build.bat，均 exit 0，无 Skip。
+未发现编译 warning/error；未降低图像容差、物理零分配、安全负例或 Release assert。
+旧机制退出后 CTest 注册项由 30 变为 24，Editor Services 40→39 仅退出重复实时旧桥比较；
+12 个冻结旧场景快照、直接 catalog/Export/12 次 reload/64 次 Play、IPC/stdio 及数值测试继续保留。
+
+| 验证项 | Debug | Release |
+| --- | --- | --- |
+| CTest（8 native + 16 managed/组合） | 24/24 | 24/24 |
+| Editor Services / Player | 39/39 / 22/22 | 39/39 / 22/22 |
+| Python unittest / managed-native smoke / inspect | 42/42 / 通过 / 通过 | 42/42 / 通过 / 通过 |
+| 部署用例（CTest 内部） | 7/7 | 7/7 |
+| 冻结旧图像→kernel / kernel→managed max/mean | 0/0 / 0/0 | 0/0 / 0/0 |
+| DX11 32 循环 API errors/warnings | 0/0 | 0/0 |
+| 13 项 retained runtime ×3 轮 | 完成，reviewRequired=false | 完成，reviewRequired=false |
+
+| 配置 | 完整日志 | 部署后审计 |
+| --- | --- | --- |
+| Debug | out/verification/m2-entry-final-debug.log | out/verification/m2-8/Debug/2c3c867017b944eab0ef6816662068fa/audit.json |
+| Release | out/verification/m2-entry-final-release.log | out/verification/m2-8/Release/968c7d9434344e43867d1f74d7e53bed/audit.json |
+
+完整日志 SHA256：Debug 4A3ADCEF095CC2395B79D493716F73B4CC9DF241FABB1839E72C637B76189A52；
+Release BF2320EB35DCC871F67AF2333C7156B75F3CF8814157444B6647CA7F99C1297A。
+两配置源码清单 SHA256：35c6d9aea3df50a76b0860d5469aa6c605503065100fafc888b7205ff3578567，
+范围仍不含 docs/SDK/生成目录，不是 clean-commit 全仓库证据。
+归档 LastTest.log 仅含最后 16 项，完整 24 项以 canonical 双轮日志为准。
+
+当前 EXE 为 357,376 bytes，SHA256 20BBE1BB216EF3E6003DC8AE045BBC5E89C262004FCD33457ECD7456CF753256，
+与本次 Release editor package 的 apphost 一致；.NET apphost 的 Debug/Release EXE 可同哈希，
+配置身份由配套 manifest、托管 DLL 与 native plugin 文件清单共同确认，不能只看 EXE hash。
+已安装 manifest product=NcmaEngine-editor、production=true、framework-dependent，
+manualAcceptance/selfContainedVerified=false；候选包仍独立，未虚称自包含发布。
+两审计 audit_passed/production_promoted=true，h8_accepted/cleanup_authorized_by_this_report=false。
+
+### 仍保留的边界
+
+冻结旧图像来自清理前 Release，不由新 Renderer 生成；共享 kernel/Shader 不构成独立算法 oracle。
+ActionAnimationWorkspace/AgentCapabilityRegistry/ScriptRuntimeRegistry 和原生 UI/render-graph 策略原型仍有独立测试，
+不在本次旧入口/桥清理范围；consolidated_cleanup_completed=false。
+H3/H4/H5 真实 UI/MCP、H7 自包含/Explorer/Rider、完整性能与一小时长稳未完成。
+本次不会因正式目录切换而宣称 Vulkan、通用场景渲染、场景物理、完整 Animator/Figma UI 或 Python AI worker 已实现。
+
+两个 retired managed 缓存目录移出源码目录后，追加 Python 42/42 与 Release 只读审计通过；
+日志 out/verification/m2-entry-post-archive-python.log，审计
+out/verification/m2-8/Release/2e0dc328ab214236bc0b6aa8d31f8641/audit.json。
+这次只移动 ignored 生成项，未修改最终双配置受测源码或正式安装。
+
+后续用户明确要求“提交推送”，已授权交付本次受测源码、文档和冻结参考。
+第 8 节的未提交描述记录该授权之前的状态；提交不包含 out/ 生成包、备份或 .vs/.user 设置，
+也不关闭仍待完成的人工、自包含、性能/长稳与剩余旧策略清理门禁。
+
+提交前再次执行 Release 只读审计通过：
+out/verification/m2-8/Release/43f83e3363ad4fc284983fa8ddeb579c/audit.json。
+当前清单 hash=d183e7bcfc002ca2cb936210efa0a6d59d9b3042cabbb6633780f81492a59c4c；
+与最终完整回归清单逐项比较，唯一变化为 AGENTS.md 补充用户提交/推送授权，
+可执行源码、构建脚本与冻结参考均未变化。其他本次后续记录仅在 docs/ 中。

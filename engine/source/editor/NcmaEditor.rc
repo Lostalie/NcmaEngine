@@ -1,3 +1,0 @@
-#include "EditorResources.h"
-
-IDI_NCMA_EDITOR ICON "../../build/resources/NcmaEngine.ico"

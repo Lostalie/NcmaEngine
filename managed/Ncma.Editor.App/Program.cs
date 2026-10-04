@@ -17,6 +17,8 @@ internal static class Program
     {
         try {
             if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName))) DeploymentManifest.Validate(AppContext.BaseDirectory);
+            if (args.SequenceEqual(new[] { "--validate-package" })) return 0;
+            if (args.Length == 0) args = ["--editor"];
             string? projectPath = null, plugins = null; bool smoke = false, cpuOnly = false, preview = false, editor = false; ulong frames = ulong.MaxValue;
             var flags = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < args.Length; i++) {
@@ -100,7 +102,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         var physics = _physics.Inspect();
         if (physics.Enabled)
             _log.Write("info", "physics.module_ready", $"Physics service ABI {physics.AbiMajor}.{physics.AbiMinor}; capabilities={physics.Capabilities}; scene integration disabled.", _correlation);
-        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaEngine — managed candidate", 1280, 720, !smoke);
+        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaEngine", 1280, 720, !smoke);
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico"));
         string font=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts),"msyh.ttc");
         if(!smoke && !preview)_preferences=new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/preferences.json"),font);

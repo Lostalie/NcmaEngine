@@ -8,7 +8,7 @@ from typing import Any
 def inspect_project(root: Path) -> dict[str, Any]:
     root = root.resolve()
     return {
-        "schema_version": 11,
+        "schema_version": 12,
         "engine": "NcmaEngine",
         "root": str(root),
         "languages": {
@@ -20,7 +20,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
         },
         "architecture": {
             "direction": "managed_runtime_python_modules_native_plugins",
-            "migration_status": "managed_document_commands_native_ImGui_shell",
+            "migration_status": "managed_apphost_native_plugins_manual_acceptance_pending",
             "target": {
                 "application_host": "C#",
                 "world_and_components": "C#",
@@ -34,13 +34,13 @@ def inspect_project(root: Path) -> dict[str, Any]:
             },
             "implemented": {
                 "scope": "production_default_entry",
-                "application_host": "C++",
+                "application_host": "C#",
                 "world_and_components": "C#_Runtime.World",
-                "editor_business_logic": "C#_Editor.Core_with_C++_ImGui_shell",
+                "editor_business_logic": "C#_Editor.Services_with_native_ImGui_plugin",
                 "managed_world_is_native_wrapper": False,
-                "managed_application_host": False,
+                "managed_application_host": True,
                 "managed_authoritative_world": True,
-                "independent_renderer_physics_plugins": False,
+                "independent_renderer_physics_plugins": True,
                 "gameplay_languages": ["C#/.NET 8"],
             },
             "candidate": {
@@ -52,6 +52,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
                 "m2_8_report": "docs/M2_8_DELIVERY_REPORT.md",
                 "h8_accepted": False,
                 "consolidated_cleanup_completed": False,
+                "old_entry_bridge_removed": True,
                 "managed_runtime_service": True,
                 "player_project": "managed/Ncma.Player.App",
                 "player_headless_implemented": True,
@@ -100,13 +101,13 @@ def inspect_project(root: Path) -> dict[str, Any]:
                 "manual_acceptance_passed": False,
                 "h5_accepted": False,
                 "visible_third_party_client_acceptance_passed": False,
-                "default_entry_switched": False,
+                "default_entry_switched": True,
                 "report": "docs/M2_3_4_TEST_REPORT.md",
             },
         },
         "managed_runtime": {
             "project": "managed/Ncma.Runtime",
-            "status": "authoritative_world_editor_bridge",
+            "status": "authoritative_managed_apphost",
             "authoritative_owner": "C#",
             "native_dependency": False,
             "python_dependency": False,
@@ -196,7 +197,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
             "world_access": {
                 "scope": "csharp_managed_world",
                 "native_api_version": None,
-                "scene_host_bridge_version": 6,
+                "scene_host_bridge_version": None,
                 "safe_runtime_references": True,
                 "uuid_lookup": "indexed",
                 "transform_batch_read_write": True,
@@ -222,7 +223,7 @@ def inspect_project(root: Path) -> dict[str, Any]:
             "node_frontend_api": False,
             "native_object_api_version": None,
             "native_plugin_abi_version": 2,
-            "gameplay_host_bridge_version": 5,
+            "gameplay_host_bridge_version": None,
             "legacy_native_exports": False,
             "format_version": 1,
             "organization": "flat_object_list",

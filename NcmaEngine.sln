@@ -7,8 +7,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "NcmaEngine", "NcmaEngine.vc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Managed", "managed\Ncma.Managed\Ncma.Managed.csproj", "{AB747229-2448-41B8-B7C6-E21BFD263D0A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Managed.Host", "managed\Ncma.Managed.Host\Ncma.Managed.Host.csproj", "{DFD6AAED-AE66-4A1A-BFCC-FDE92FF53B44}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Gameplay.Sample", "managed\Ncma.Gameplay.Sample\Ncma.Gameplay.Sample.csproj", "{7ED250E0-FDC8-45DC-B0E6-DDEB4B708ED0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Managed.SmokeTest", "managed\Ncma.Managed.SmokeTest\Ncma.Managed.SmokeTest.csproj", "{596A9474-A996-4D35-88EE-D68C221BF8EF}"
@@ -28,8 +26,6 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Gameplay", "managed\Ncma.Gameplay\Ncma.Gameplay.csproj", "{A9FAD17B-31F7-4F74-A0A2-4D35982FC671}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Gameplay.Tests", "managed\Ncma.Gameplay.Tests\Ncma.Gameplay.Tests.csproj", "{6DB00A51-E727-4F53-803C-0AD5F1B2C970}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Managed.Host.Tests", "managed\Ncma.Managed.Host.Tests\Ncma.Managed.Host.Tests.csproj", "{B6F79A10-4849-4D87-A0A8-15CD00000001}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Editor.Protocol", "managed\Ncma.Editor.Protocol\Ncma.Editor.Protocol.csproj", "{B6F79A10-4849-4D87-A0A8-15CD00000002}"
 EndProject
@@ -113,8 +109,6 @@ Global
 		{FB202100-2026-4021-8021-000000000002}.Release|x64.ActiveCfg = Release|Any CPU
 		{FB202100-2026-4021-8021-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{FB202100-2026-4021-8021-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
-		{B6F79A10-4849-4D87-A0A8-15CD00000001}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{B6F79A10-4849-4D87-A0A8-15CD00000001}.Release|x64.ActiveCfg = Release|Any CPU
 		{B6F79A10-4849-4D87-A0A8-15CD00000002}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{B6F79A10-4849-4D87-A0A8-15CD00000002}.Release|x64.ActiveCfg = Release|Any CPU
 		{B6F79A10-4849-4D87-A0A8-15CD00000003}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -145,8 +139,6 @@ Global
 		{79CA7F77-63C1-4B3C-A010-9EB038892D7B}.Release|x64.Build.0 = Release|x64
 		{AB747229-2448-41B8-B7C6-E21BFD263D0A}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{AB747229-2448-41B8-B7C6-E21BFD263D0A}.Release|x64.ActiveCfg = Release|Any CPU
-		{DFD6AAED-AE66-4A1A-BFCC-FDE92FF53B44}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{DFD6AAED-AE66-4A1A-BFCC-FDE92FF53B44}.Release|x64.ActiveCfg = Release|Any CPU
 		{7ED250E0-FDC8-45DC-B0E6-DDEB4B708ED0}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{7ED250E0-FDC8-45DC-B0E6-DDEB4B708ED0}.Release|x64.ActiveCfg = Release|Any CPU
 		{596A9474-A996-4D35-88EE-D68C221BF8EF}.Debug|x64.ActiveCfg = Debug|Any CPU

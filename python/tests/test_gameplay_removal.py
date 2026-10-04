@@ -10,6 +10,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class GameplayRemovalTests(unittest.TestCase):
+    def test_old_entry_and_bridge_sources_and_build_consumers_removed(self) -> None:
+        for relative in ("engine/source/editor/EditorMain.cpp", "engine/source/runtime/script/runtime/ManagedHost.cpp",
+                         "engine/source/runtime/scene/ManagedSceneClient.cpp", "engine/source/runtime/interop/NcmaGameplayBridge.h",
+                         "managed/Ncma.Managed.Host/Ncma.Managed.Host.csproj", "tests/plugins/LegacyReferenceCapture.cpp"):
+            self.assertFalse((ROOT / relative).exists())
+        for relative in ("CMakeLists.txt", "NcmaEngine.sln", "NcmaEngine.vcxproj", "scripts/Build.ps1"):
+            text = (ROOT / relative).read_text(encoding="utf-8-sig")
+            for removed in ("Ncma.Managed.Host", "ManagedSceneClient", "DotNetGameplayRuntime", "NcmaLegacyReferenceCapture"):
+                self.assertNotIn(removed, text)
+        self.assertTrue((ROOT / "scripts/EditorDeployment.ps1").is_file())
+        self.assertTrue((ROOT / "tests/assets/m2/render-legacy-reference.json").is_file())
+
     def test_no_python_gameplay_source_or_packaged_api(self) -> None:
         for relative in (
             "python/src/ncma_gameplay/api.py",
@@ -28,9 +40,7 @@ class GameplayRemovalTests(unittest.TestCase):
         cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         for removed in ("NcmaPythonGameplay", "Development.Embed", "Python3::Python", "ncma_deploy_python"):
             self.assertNotIn(removed, cmake)
-        header = (ROOT / "engine/source/editor/EditorApplication.h").read_text(encoding="utf-8")
-        self.assertNotIn("PythonGameplayRuntime", header)
-        self.assertNotIn("ReloadPythonGameplay", header)
+        self.assertFalse((ROOT / "engine/source/editor/EditorApplication.h").exists())
 
     def test_native_scene_world_and_world_exports_removed(self) -> None:
         for path in ("engine/source/runtime/scene/SceneWorld.cpp", "engine/source/runtime/scene/SceneWorld.h",
@@ -50,9 +60,7 @@ class GameplayRemovalTests(unittest.TestCase):
         for path in ("managed/Ncma.Runtime/Editing.cs", "engine/source/runtime/scene/SceneCommandStack.h",
                      "engine/source/runtime/scene/SceneCommandStack.cpp"):
             self.assertFalse((ROOT / path).exists())
-        editor = (ROOT / "engine/source/editor/EditorApplication.cpp").read_text(encoding="utf-8")
-        for removed in ("m_SceneCommands", "CaptureEditorState", "MarkSaved", "m_Scene.UpdateBehaviour", "m_Scene.SetObjectName", "m_Scene.RestoreDocument"):
-            self.assertNotIn(removed, editor)
+        self.assertFalse((ROOT / "engine/source/editor/EditorApplication.cpp").exists())
         cmake = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
         self.assertNotIn("SceneCommandStack", cmake)
         self.assertIn("NcmaEditorCoreTests", cmake)

@@ -1,9 +1,13 @@
 # Building NcmaEngine
 
-Target direction is now C# runtime/gameplay, independent Python modules and native performance
-plugins. The commands below build the C++/ImGui shell and its authoritative C# World/hostfxr
-gameplay path. C++ SceneWorld and native world exports are removed. They also produce separate managed Editor/Player candidates (see M2_7_DELIVERY_REPORT.md),
-but do NOT promote those candidates to the default entry or install pythonnet/gRPC/ZeroMQ.
+The default Editor is now the C#/.NET apphost with native ImGui/rendering/physics/resource plugins.
+Complete Build.bat regression stages, verifies and deploys its entire framework-dependent package
+to out/bin, with a recoverable backup and maintenance journal in out/deployment.
+SkipTests/SkipManaged/SkipPython never deploy. LaunchEditor.cmd refuses interrupted deployment;
+use scripts/Recover-Editor.bat for explicit recovery, never silent runtime fallback.
+Old C++ Editor and custom CLR/scene bridges are removed. Python transports remain unimplemented.
+Manual UI/MCP, self-contained target environment and long-run acceptance remain pending under
+the user's adjusted automatic-regression threshold. Older verification descriptions below are historical.
 See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for the staged migration.
 
 ## Recommended Windows command
@@ -30,14 +34,14 @@ After a Debug build, run or double-click:
 LaunchEditor.cmd
 ```
 
-The default renderer is Direct3D 11. Renderer selection is explicit and forwarded by the launcher:
+The default renderer is Direct3D 11. Open a project explicitly with:
 
 ```batch
-LaunchEditor.cmd --renderer=d3d11
-LaunchEditor.cmd --renderer=vulkan
+LaunchEditor.cmd --editor --project "F:\NcmaEngine\out\bin\sample\sample.ncmaproject"
 ```
 
-Until the Vulkan RHI target is available, requesting Vulkan reports whether the Windows Vulkan loader is installed and exits without silently falling back to D3D11.
+Renderer choice is in the project configuration. Non-Direct3D11 projects fail explicitly;
+Vulkan drawing is not implemented. The retired native --renderer flags are not supported.
 
 The executable is generated at `out/bin/NcmaEngine.exe`. `LaunchEditor.cmd` invokes `Build.bat` automatically when the executable is missing.
 
@@ -45,8 +49,9 @@ Native outputs are placed directly in the selected CMake build directory:
 
 - Debug/Release editor: `out/bin/NcmaEngine.exe` (the latest configuration replaces the previous one)
 - Debug native algorithm plugin: `out/build/windows-ninja-debug/NcmaNative.dll`
-- Embedded .NET host and reloadable gameplay assemblies: `out/managed/`
-- Editor debug symbols: `out/symbols/NcmaEngine.pdb`
+- Independent tooling/native smoke resources and gameplay assembly: `out/managed/`
+- Installed editor managed symbols: `out/bin/NcmaEngine.pdb`
+- Complete editor package: `out/bin/` (managed DLLs, `plugins/`, icon, licenses and sample)
 
 Requirements:
 
@@ -67,21 +72,25 @@ see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader
 1. Select or create an object via + GameObject, then Inspector > C# Behaviours > + Add Behaviour.
 2. Choose `Ncma.Gameplay.Sample.RotatorBehaviour`. Speed, Clockwise and Multiplier are reflected
    from its public `[Export]` properties/field. Attach, remove, enable and property edits support Undo/Redo.
-3. Save with Ctrl+S to `assets/scenes/EditorScene.ncmascene`. Ctrl+O reloads this scene.
+3. Use the editor's Save/Open actions for `.ncmascene` files. Project association is explicit.
 4. Play runs scripts on a scene copy. The reference cube previews the selected scripted object's
    world Transform; Pause/Resume controls ticking and Stop discards runtime changes.
-5. After editing the sample C# source, run `Build.bat -GameplayOnly -Configuration Debug`, then
-   press Ctrl+Shift+R or use Gameplay > Reload C# Assembly. Matching Export values survive rebind;
+5. For development, configure your project's gameplay assembly path to the reloadable
+   `out/managed/Ncma.Gameplay.Sample.dll`. After editing its source, run
+   `Build.bat -GameplayOnly -Configuration Debug`, then use Reload configured gameplay.
+   GameplayOnly does not overwrite a deployed package's hash-checked sample DLL; the installed
+   sample project needs a new full package build to receive source changes.
+   Matching Export values survive rebind;
    private script state is reset. After adding/removing/changing Export members, use the undoable
    Update Export Schema action in edit mode to reconcile saved fields with new metadata.
 
-The full build updates native/host binaries, so close the editor before running a full build.
+The full build updates the entire package, so close the editor before running a full build.
 GameplayOnly updates only the reloadable sample assembly in `out/managed`; it does not rebuild
-the engine/API or run the full verification suite. The current full build runs 30 CTest registrations (8 native then 22 managed/combinations, including both image fixtures), including
-animation runtime/ABI, FBX import/reference skinning, C# host and hidden editor tests,
+the engine/API or run the full verification suite. The current full build runs 24 CTest registrations (8 native then 16 managed/combinations, including kernel image and deployment fixtures), including
+animation runtime/ABI, FBX import/reference skinning, direct C# service and hidden editor tests,
 including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases)
 and NcmaSceneDocumentTests (complete components/Behaviour snapshots and failure guards),
-plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v11 checks. Python gameplay
+plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v12 checks. Python gameplay
 removal is covered by rejecting language-tagged old scenes without modifying source
 files or destination Worlds. Passing this suite does not imply independent module transports exist.
 
@@ -101,13 +110,13 @@ See [FBX_IMPORT.md](FBX_IMPORT.md) for import constraints and the read-only Pyth
 
 ## Project inspection manifest
 
-`python -m ncma_tools.cli inspect .` emits project-manifest schema v11.
-Target and implemented ownership remain separate: the EXE/ImGui shell remains native, while World/components and gameplay
+`python -m ncma_tools.cli inspect .` emits project-manifest schema v12.
+Target and implemented ownership remain separate: the EXE is the C# apphost with a native ImGui presentation plugin, while World/components and gameplay
 is actually C# only (`gameplay.csharp_only_runtime_enforced=true`). Python gameplay backend and
 object language selection are removed; `python_modules` preserves specialized-module/plugin options,
 with pythonnet/gRPC/ZeroMQ explicitly NOT implemented. Scene assets use only .ncmascene SceneDocument JSON v1,
 including all registered components and script configuration. Old .ncscene v1-v6 compatibility and migration are removed;
-unsupported input is rejected without rewriting it or mutating the live document. Native plugin ABI is v2; World/GameObject exports are removed. Scene host v6 and Gameplay host v5 use opaque managed tokens. Rebuild old consumers.
+unsupported input is rejected without rewriting it or mutating the live document. Native resource ABI is v2; World/GameObject exports and old Scene/Gameplay host bridges are removed. Current performance modules use versioned C ABIs. Rebuild old consumers; do not restore compatibility bridges.
 The MCP protocol version and animation-state JSON schema are unchanged.
 
 ## Authoritative C# World and headless foundation
@@ -118,16 +127,21 @@ Ncma.Runtime itself references no NcmaNative, graphics or Python dependency. Tre
 C# SceneDocument JSON v1 (.ncmascene) is the only supported scene asset format, with complete component/binding persistence and atomic saves. The old .ncscene v1-v6 codec and migration paths have been removed. Ncma.Gameplay.PlaySession now owns the live editor WorldRunner and dispatches OnFixedUpdate; OnUpdate has read-only World access. Pause/Resume/Step and bounded strict/interactive timing are implemented. Input snapshots, render interpolation, runtime structural commands and reload preflight are implemented; real manual UI/MCP acceptance remains pending.
 Ncma.Editor.Core owns the active ImGui scene commands and complete-document history. The native scene command stack was removed. Draft previews do not write World, and Play freezes the edit document. The shared v2 API has a default-off scoped local stdio/IPC server; see EDITOR_MCP.md. See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
 
-The editor now requires the deployed managed host, Ncma.Managed.dll, Ncma.Runtime.dll, Ncma.Scene.dll, Ncma.Gameplay.dll and Ncma.Editor.Core.dll in out/managed.
-Do not use -SkipManaged for a fresh editor build: it only skips deployment and runs the native-only test subset.
-The full Build.bat builds NcmaCore/NcmaNative/NcmaArchitectureTests first, deploys the C# host,
-then runs all managed-dependent editor tests. Missing hosts fail with an actionable startup error.
+The editor requires the complete checked package in out/bin, not an embedded host in out/managed.
+Do not use Skip flags for a fresh editor build: they do not deploy a new entry.
+The full Build.bat builds NcmaCore/NcmaNative/NcmaArchitectureTests first, runs both CTest subsets,
+managed/native smoke, Python tests/inspect and audit, then stages and deploys the selected C# package
+and verifies the formal path. Unrecognized user files or locked installation files stop deployment.
 
-## M1.1 implemented document boundary
+## Historical M1 migration records
+
+The following M1 entry/host references describe earlier evidence, not current build wiring.
+
+### M1.1 implemented document boundary
 
 Complete Ncma.Scene document snapshots v1 cover all registered components and Behaviour/Export metadata. The retained C++/ImGui shell submits UUID commands to Editor.Core and uses opaque snapshots for Play; C# .ncmascene JSON v1 files persist complete documents with atomic saves. Old .ncscene compatibility is removed. M1.2 shared managed commands/history are implemented; M1.3 runtime/input/interpolation/commands/reload and M1.4 scoped live MCP are implemented; asset references/pipeline remain pending. See [M1.1 implementation](M1_1_SCENE_DOCUMENT.md).
 
-## Historical M1.3-A/B verification
+### Historical M1.3-A/B verification
 
 Build.bat now builds Ncma.Gameplay.Tests and includes NcmaGameplayTests in CTest.
 The independent gameplay tests cover fixed-frame-rate invariance, pending writes, read-only
@@ -139,7 +153,7 @@ OnFixedUpdate is the simulation mutation callback; move gameplay writes out of O
 Faulted sessions require Stop followed by Play; component rollback does not undo private
 script fields or external IO. This records the earlier A/B gate only. Current full runtime/MCP evidence is in M1_DELIVERY_REPORT.md.
 
-## Current M1 verification
+### Historical M1 final verification
 
 Build.bat -Configuration Debug and Build.bat -Configuration Release run the complete matrix (no Skip flags), including Gameplay.Tests, collectible catalog checks, real IPC/stdio tests and actual ImGui MCP smoke. All source projects are in NcmaEngine.sln; the canonical build initializes VS itself. Outputs remain out/bin/NcmaEngine.exe and out/managed/editor-mcp/. See [M1 report](M1_DELIVERY_REPORT.md) for actual results and outstanding manual acceptance.
 
@@ -151,10 +165,11 @@ Full Build.bat (without SkipTests/SkipManaged/SkipPython) records a read-only so
 under out/verification/m2-8/<configuration>/<uuid>. Full builds also run three rounds of the retained
 Gameplay benchmark/pressure fixtures (8 warmups, 32 samples per case), writing profiles-<configuration>/.
 Historical measurements are tracked JSON fixtures, so fresh builds do not require ignored M1 logs.
-Legacy/kernel/managed image comparisons and resource validation remain enabled.
+Frozen legacy/kernel/managed image comparisons and resource validation remain enabled.
 These profiles compare historical runtime measurements, not simultaneous old/new entry performance.
 audit_passed only means preflight succeeded;
-h8_accepted/production_promoted/cleanup_authorized_by_this_report remain false.
+h8_accepted/cleanup_authorized_by_this_report remain false; production_promoted reflects
+the actual checked installed C# apphost, independently of manual acceptance.
 There is no deletion/promotion action in this tool. The copied LastTest.log covers the final CTest invocation
 only; use the complete canonical build log for both native and managed rounds.
 For a standalone audit after the matching full build (PowerShell):

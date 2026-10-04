@@ -1,7 +1,11 @@
 # 框架迁移：C# 主运行时 + 独立 Python 模块 + C++ 性能插件
 
-状态：C++ SceneWorld 与原生 World ABI 已移除；现有编辑器和 Play 已使用 C# Runtime.World。
-保留 C++/ImGui 外壳和过渡命令栈；场景文件读写由 C# 负责，旧 .ncscene 兼容 codec 已删除；未完成 C# 主入口/编辑器业务迁移。主架构见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+2026-10-05 状态：C# apphost 已成为正式默认入口，编辑器业务、场景、Play 与唯一命令历史由 C# 拥有。
+C++ SceneWorld、旧 Editor 外壳、hostfxr/ManagedSceneClient/Gameplay 桥与专属消费者已移除；
+Dear ImGui/GLFW/渲染/物理/数值资源仍为原生插件。旧 .ncscene 兼容 codec 已删除。
+用户调整门槛仅允许本次自动回归后的切换/精确清理，未完成 UI/MCP、自包含、性能/长稳验收；
+剩余旧策略原型仍待审查。下文迁移顺序和旧桥描述为历史方案，当前状态以
+[ARCHITECTURE.md](ARCHITECTURE.md) 和 [M2.8 交付记录](M2_8_DELIVERY_REPORT.md) 为准。
 
 ## 1. 新职责
 

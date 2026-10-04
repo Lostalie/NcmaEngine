@@ -19,7 +19,6 @@ endif()
 
 option(NCMA_BUILD_TESTS "Build Ncma architecture tests" ON)
 option(NCMA_BUILD_MANAGED "Expose the managed build target when dotnet is available" ON)
-option(NCMA_BUILD_EDITOR "Build the NcmaEditor executable" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -108,9 +107,6 @@ add_library(NcmaCore STATIC
 if(WIN32)
     target_sources(NcmaCore PRIVATE
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
-        engine/source/runtime/script/runtime/ManagedHost.cpp
-        engine/source/runtime/scene/ManagedSceneClient.cpp
-        engine/source/runtime/script/runtime/DotNetGameplayRuntime.cpp
     )
     target_link_libraries(NcmaCore PUBLIC d3d11 dxgi d3dcompiler advapi32)
 endif()
@@ -253,10 +249,6 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
-                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Managed.Host/Ncma.Managed.Host.csproj"
-                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
-                    --nologo
-            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
@@ -266,9 +258,6 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/Ncma.Gameplay.Tests.csproj"
-                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
-            COMMAND "${DOTNET_EXECUTABLE}" build
-                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Managed.Host.Tests/Ncma.Managed.Host.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Transport.Tests/Ncma.Editor.Transport.Tests.csproj"
@@ -334,8 +323,8 @@ if(NCMA_BUILD_TESTS)
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
                 "${CMAKE_BINARY_DIR}/m2/plugins" "${CMAKE_SOURCE_DIR}/out/verification/m2-8/kernel-$<IF:$<CONFIG:Debug>,Debug,Release>/reference.rgba"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/render-$<IF:$<CONFIG:Debug>,Debug,Release>"
-                "${CMAKE_SOURCE_DIR}/out/verification/m2/reference-$<IF:$<CONFIG:Debug>,Debug,Release>.rgba")
-            set_tests_properties(NcmaRenderingTests PROPERTIES TIMEOUT 240 FIXTURES_REQUIRED "reference_image;kernel_reference_image")
+                "${CMAKE_SOURCE_DIR}/tests/assets/m2/render-legacy-reference.json")
+            set_tests_properties(NcmaRenderingTests PROPERTIES TIMEOUT 240 FIXTURES_REQUIRED kernel_reference_image)
             add_test(NAME NcmaCandidateGraphicsSmoke COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.App/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaEngine.dll"
                 --smoke-test --plugins "${CMAKE_BINARY_DIR}/m2/plugins")
@@ -361,6 +350,11 @@ if(NCMA_BUILD_TESTS)
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Player.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Player.Tests.dll"
             "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins")
         set_tests_properties(NcmaPlayerTests PROPERTIES TIMEOUT 120)
+        if(WIN32)
+            add_test(NAME NcmaEditorDeploymentTests COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-EditorDeployment.ps1" -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaEditorDeploymentTests PROPERTIES TIMEOUT 120)
+        endif()
         add_test(NAME NcmaManagedHeadlessTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Runtime.Tests.dll")
         set_tests_properties(NcmaManagedHeadlessTests PROPERTIES TIMEOUT 30)
@@ -373,10 +367,6 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaGameplayTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Gameplay.Tests.dll")
         set_tests_properties(NcmaGameplayTests PROPERTIES TIMEOUT 30)
-        add_test(NAME NcmaManagedCatalogTests COMMAND "${DOTNET_EXECUTABLE}"
-            "${CMAKE_SOURCE_DIR}/managed/Ncma.Managed.Host.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Managed.Host.Tests.dll"
-            "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Gameplay.Sample.dll")
-        set_tests_properties(NcmaManagedCatalogTests PROPERTIES TIMEOUT 30)
         add_test(NAME NcmaEditorTransportTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Transport.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Transport.Tests.dll")
         set_tests_properties(NcmaEditorTransportTests PROPERTIES TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
@@ -394,92 +384,4 @@ if(NCMA_BUILD_TESTS)
     endif()
     add_test(NAME NcmaFbxImportTests COMMAND NcmaFbxImportTests
         "${CMAKE_SOURCE_DIR}/tests/assets/fbx" "${CMAKE_SOURCE_DIR}/out/tests/fbx")
-    if(WIN32)
-        add_executable(NcmaManagedHostTests tests/ManagedHostTests.cpp tests/SceneFlatTests.cpp tests/ManagedSceneBridgeTests.cpp)
-        target_link_libraries(NcmaManagedHostTests PRIVATE NcmaCore)
-        if(MSVC)
-            target_compile_options(NcmaManagedHostTests PRIVATE "/FI${CMAKE_CURRENT_SOURCE_DIR}/tests/TestAssertions.h" /W4 /permissive- /utf-8)
-        endif()
-    endif()
-endif()
-
-if(WIN32 AND NCMA_BUILD_EDITOR)
-    add_library(NcmaImGui STATIC
-        engine/sdk/imgui/imgui.cpp
-        engine/sdk/imgui/imgui_draw.cpp
-        engine/sdk/imgui/imgui_tables.cpp
-        engine/sdk/imgui/imgui_widgets.cpp
-        engine/sdk/imgui/backends/imgui_impl_glfw.cpp
-        engine/sdk/imgui/backends/imgui_impl_dx11.cpp
-    )
-    target_include_directories(NcmaImGui PUBLIC
-        engine/sdk/imgui
-        engine/sdk/imgui/backends
-    )
-    target_compile_definitions(NcmaImGui PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(NcmaImGui PUBLIC glfw d3d11 dxgi d3dcompiler)
-
-    add_executable(NcmaEditor WIN32
-        engine/source/editor/EditorMain.cpp
-        engine/source/editor/EditorApplication.cpp
-        engine/source/editor/EditorAnimation.cpp
-        engine/source/editor/EditorFbxCharacter.cpp
-        engine/source/editor/EditorApplication.h
-        engine/source/editor/NcmaEditor.rc
-    )
-    target_include_directories(NcmaEditor PRIVATE
-        engine/source/editor
-        engine/sdk/imgui
-        engine/sdk/imgui/backends
-    )
-    target_compile_definitions(NcmaEditor PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(NcmaEditor PRIVATE NcmaCore NcmaImGui glfw user32 gdi32 shell32 comdlg32)
-    add_dependencies(NcmaEditor NcmaNative)
-    add_custom_command(TARGET NcmaEditor POST_BUILD COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-        "$<TARGET_FILE:glfw>" "${CMAKE_BINARY_DIR}/bin/$<TARGET_FILE_NAME:glfw>")
-    set_target_properties(NcmaEditor PROPERTIES
-        OUTPUT_NAME "NcmaEngine"
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/bin"
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/bin"
-        PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/symbols"
-        PDB_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/symbols"
-        PDB_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/symbols"
-    )
-    if(MSVC)
-        target_compile_options(NcmaEditor PRIVATE /W4 /permissive- /utf-8)
-        target_link_options(NcmaEditor PRIVATE /INCREMENTAL:NO)
-        set_property(TARGET NcmaEditor PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-    endif()
-    if(NCMA_BUILD_TESTS)
-        add_executable(NcmaLegacySceneReference tests/plugins/LegacySceneReference.cpp)
-        target_link_libraries(NcmaLegacySceneReference PRIVATE NcmaCore)
-        target_compile_options(NcmaLegacySceneReference PRIVATE /W4 /WX /permissive- /utf-8)
-        add_executable(NcmaLegacyReferenceCapture tests/plugins/LegacyReferenceCapture.cpp engine/source/editor/NcmaEditor.rc
-            engine/source/editor/EditorApplication.cpp engine/source/editor/EditorAnimation.cpp engine/source/editor/EditorFbxCharacter.cpp)
-        target_include_directories(NcmaLegacyReferenceCapture PRIVATE engine/source/editor engine/sdk/imgui engine/sdk/imgui/backends)
-        target_link_libraries(NcmaLegacyReferenceCapture PRIVATE NcmaCore NcmaImGui glfw user32 gdi32 shell32 comdlg32)
-        target_compile_definitions(NcmaLegacyReferenceCapture PRIVATE UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
-        target_compile_options(NcmaLegacyReferenceCapture PRIVATE /W4 /WX /permissive- /utf-8)
-        set_target_properties(NcmaLegacyReferenceCapture PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-        add_test(NAME NcmaLegacyReferenceCapture COMMAND NcmaLegacyReferenceCapture "${CMAKE_SOURCE_DIR}/out/verification/m2/reference-$<IF:$<CONFIG:Debug>,Debug,Release>.rgba")
-        set_tests_properties(NcmaLegacyReferenceCapture PROPERTIES FIXTURES_SETUP reference_image TIMEOUT 30)
-        add_test(NAME NcmaEditorSmokeTest COMMAND NcmaEditor --smoke-test)
-        add_test(NAME NcmaEditorFbxSmokeTest COMMAND NcmaEditor --fbx-smoke-test)
-        set_tests_properties(NcmaEditorFbxSmokeTest PROPERTIES TIMEOUT 30)
-        set_tests_properties(NcmaEditorSmokeTest PROPERTIES TIMEOUT 20
-            FAIL_REGULAR_EXPRESSION "Render pass .* failed")
-        add_test(
-            NAME NcmaManagedHostSmokeTest
-            COMMAND NcmaManagedHostTests
-                "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Managed.Host.runtimeconfig.json"
-                "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Managed.Host.dll"
-                "${CMAKE_SOURCE_DIR}/out/managed/Ncma.Gameplay.Sample.dll")
-        set_tests_properties(NcmaManagedHostSmokeTest PROPERTIES TIMEOUT 20)
-        add_test(NAME NcmaEditorMcpSmokeTest COMMAND NcmaEditor --mcp-smoke-test)
-        set_tests_properties(NcmaEditorMcpSmokeTest PROPERTIES TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-        add_test(NAME NcmaEditorGameplaySmokeTest COMMAND NcmaEditor --gameplay-smoke-test)
-        set_tests_properties(NcmaEditorGameplaySmokeTest PROPERTIES TIMEOUT 30
-            FAIL_REGULAR_EXPRESSION "Render pass .* failed")
-    endif()
 endif()

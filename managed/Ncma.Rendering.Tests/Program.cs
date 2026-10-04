@@ -123,7 +123,7 @@ internal static unsafe class Program
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");
             int legacyMax=0;double legacyMean=0;
             if(args.Length==4) {
-                byte[] legacy=File.ReadAllBytes(Path.GetFullPath(args[3]));
+                byte[] legacy=FrozenReference.Load(Path.GetFullPath(args[3]));
                 Check(legacy.Length==baseline.Length,"Legacy comparison fixture dimension");
                 long sum=0;
                 for(int i=0;i<baseline.Length;i++){int delta=Math.Abs(baseline[i]-legacy[i]);legacyMax=Math.Max(legacyMax,delta);sum+=delta;}

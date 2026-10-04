@@ -45,13 +45,9 @@
     <NMakePreprocessorDefinitions>NDEBUG;UNICODE;_UNICODE;NOMINMAX;WIN32_LEAN_AND_MEAN</NMakePreprocessorDefinitions>
   </PropertyGroup>
   <PropertyGroup>
-    <NMakeIncludeSearchPath>$(ProjectDir)engine\source\runtime;$(ProjectDir)engine\source\editor;$(ProjectDir)engine\sdk\eigen;$(ProjectDir)engine\sdk\glfw\include;$(ProjectDir)engine\sdk\imgui;$(ProjectDir)engine\sdk\imgui\backends;$(ProjectDir)engine\sdk\spdlog\include;$(ProjectDir)engine\sdk\box2d\include;$(ProjectDir)engine\sdk\JoltPhysics;$(ProjectDir)engine\sdk\ufbx</NMakeIncludeSearchPath>
+    <NMakeIncludeSearchPath>$(ProjectDir)engine\source\runtime;$(ProjectDir)engine\sdk\eigen;$(ProjectDir)engine\sdk\glfw\include;$(ProjectDir)engine\sdk\imgui;$(ProjectDir)engine\sdk\imgui\backends;$(ProjectDir)engine\sdk\spdlog\include;$(ProjectDir)engine\sdk\box2d\include;$(ProjectDir)engine\sdk\JoltPhysics;$(ProjectDir)engine\sdk\ufbx</NMakeIncludeSearchPath>
   </PropertyGroup>
   <ItemGroup>
-    <ClCompile Include="engine\source\editor\EditorMain.cpp" />
-    <ClCompile Include="engine\source\editor\EditorApplication.cpp" />
-    <ClCompile Include="engine\source\editor\EditorAnimation.cpp" />
-    <ClCompile Include="engine\source\editor\EditorFbxCharacter.cpp" />
     <ClCompile Include="engine\source\runtime\assets\FbxCharacterImporter.cpp" />
     <ClCompile Include="engine\source\runtime\ai\AgentCapabilityRegistry.cpp" />
     <ClCompile Include="engine\source\runtime\animation\AnimationGraph.cpp" />
@@ -69,20 +65,12 @@
     <ClCompile Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.cpp" />
     <ClCompile Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.cpp" />
     <ClCompile Include="engine\source\runtime\scene\SceneUuid.cpp" />
-    <ClCompile Include="engine\source\runtime\scene\ManagedSceneClient.cpp" />
-    <ClCompile Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.cpp" />
     <ClCompile Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.cpp" />
     <ClCompile Include="tests\ArchitectureTests.cpp" />
     <ClCompile Include="tests\AnimationTests.cpp" />
     <ClCompile Include="tests\FbxImportTests.cpp" />
-    <ClCompile Include="engine\source\runtime\script\runtime\ManagedHost.cpp" />
-    <ClCompile Include="tests\SceneFlatTests.cpp" />
-    <ClCompile Include="tests\ManagedSceneBridgeTests.cpp" />
-    <ClCompile Include="tests\ManagedHostTests.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="engine\source\editor\EditorApplication.h" />
-    <ClInclude Include="engine\source\editor\EditorResources.h" />
     <ClInclude Include="engine\source\runtime\assets\FbxCharacterImporter.h" />
     <ClInclude Include="engine\source\runtime\ai\AgentCapabilityRegistry.h" />
     <ClInclude Include="engine\source\runtime\animation\AnimationGraph.h" />
@@ -93,7 +81,6 @@
     <ClInclude Include="engine\source\runtime\interop\NcmaNativeApi.h" />
     <ClInclude Include="engine\source\runtime\interop\NcmaAnimationApi.h" />
     <ClInclude Include="engine\source\runtime\interop\NcmaCharacterApi.h" />
-    <ClInclude Include="engine\source\runtime\interop\NcmaGameplayBridge.h" />
     <ClInclude Include="engine\source\runtime\scene\BehaviourBinding.h" />
     <ClInclude Include="engine\source\runtime\physics\runtime\PhysicsWorld2D.h" />
     <ClInclude Include="engine\source\runtime\physics\runtime\PhysicsWorld3D.h" />
@@ -105,10 +92,7 @@
     <ClInclude Include="engine\source\runtime\renderer\rhi\d3d11\D3D11RenderBackend.h" />
     <ClInclude Include="engine\source\runtime\renderer\rhi\vulkan\VulkanRuntimeProbe.h" />
     <ClInclude Include="engine\source\runtime\scene\SceneView.h" />
-    <ClInclude Include="engine\source\runtime\script\runtime\ManagedHost.h" />
     <ClInclude Include="engine\source\runtime\scene\SceneUuid.h" />
-    <ClInclude Include="engine\source\runtime\scene\ManagedSceneClient.h" />
-    <ClInclude Include="engine\source\runtime\script\runtime\DotNetGameplayRuntime.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\GameplayTypes.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntime.h" />
     <ClInclude Include="engine\source\runtime\script\runtime\ScriptRuntimeRegistry.h" />
@@ -123,7 +107,6 @@
     <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="engine\source\editor\NcmaEditor.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

@@ -1,5 +1,10 @@
 # NcmaEngine
 
+2026-10-05 入口调整：完整 `Build.bat` 自动回归通过后部署 C# apphost 到
+`out/bin/NcmaEngine.exe`，C++ ImGui 保留为原生插件，不再使用旧 C++ EXE/CLR 桥。
+`LaunchEditor.cmd` 是统一启动路由；失败部署通过 `scripts/Recover-Editor.bat` 恢复。
+人工 UI/MCP、自包含目标环境和长稳验收仍待完成，未因本次切换标记通过。
+
 ## 当前目标：C# 主运行时、独立 Python 模块、C++ 性能插件
 
 游戏方向仍是模型/动画驱动的动作游戏，场景仍采用扁平 GameObject + 行为组件，
@@ -13,16 +18,16 @@
 - 网络继续是独立服务，目标由 C# 组装，不添加组件 RPC、复制标记或网络角色。
 
 A 方案已确认：C# 主引擎 + C++ 性能插件，AI 深度参与场景、动画、UI、工具与引擎扩展。
-Python 游戏脚本特性已移除；C# World、Editor.Core 场景事务/唯一 Undo 和 M1.3 固定步/输入/插值/运行命令/安全重载及 M1.4 活动场景 MCP已接入当前编辑器。C++ SceneWorld 已移除，C# 主入口、剩余面板业务和独立插件迁移尚未完成。
-目前 out/bin/NcmaEngine.exe 仍是 C++/ImGui 外壳，场景权威存储已迁为 C# Runtime.World。
-C++ SceneWorld、对象/组件索引和原生 World 导出已删除；编辑器通过 hostfxr 和不透明场景令牌访问 C#。Python 游戏宿主、SDK、示例、编辑器挂载与重载入口已删除。
-Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/Step 与故障状态；C++ 不再拥有 Begin/Commit 阶段。输入快照/插值/运行命令、事务信号、安全重载与本地 scoped MCP 已实现基础。托管主入口、独立 Renderer/Physics plugins 与 Python AI worker 未实现；M1 人工客户端/UI 验收待完成。
+Python 游戏脚本特性已移除；C# World、Editor.Core 场景事务/唯一 Undo 和 M1.3 固定步/输入/插值/运行命令/安全重载及 M1.4 活动场景 MCP已接入当前编辑器。C++ SceneWorld 已移除，C# 主入口及 M2 编辑器业务迁移已落地，人工验收尚未完成。
+目前 out/bin/NcmaEngine.exe 是 C# apphost，场景权威存储由 C# Runtime.World 拥有，C++ ImGui 仅作原生表现插件。
+C++ SceneWorld、对象/组件索引、原生 World 导出和旧 hostfxr/场景桥源码已删除。Python 游戏宿主、SDK、示例、编辑器挂载与重载入口已删除。
+Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/Step 与故障状态；C++ 不再拥有 Begin/Commit 阶段。输入快照/插值/运行命令、事务信号、安全重载与本地 scoped MCP 已实现基础。独立 Renderer/Physics 插件已实现有限切片；Python AI worker 未实现，人工客户端/UI 验收待完成。
 新的 Ncma.Runtime 已接管编辑器/隔离 Play，不维护两份 live 权威 World；M1.2 的 Ncma.Editor.Core 已接管 ImGui 的场景命令与唯一 Undo/Redo；原生命令栈已删除，交互草稿不修改已提交场景。Ncma.Scene 完整组件/脚本快照用于托管历史与隔离 Play；C# `.ncmascene` JSON v1 保存全部注册组件与脚本配置，并原子替换文件。
 旧 `.ncscene` v1-v6 格式及其兼容/迁移入口已删除，不再可读。默认场景为 `assets/scenes/EditorScene.ncmascene`；新格式支持空容器与可选 Transform，加载失败保留原文件和当前场景。
 
-已实现基线：D3D11 PBR/阴影预览（Vulkan 仅探测）、FBX 导入/CPU 蒙皮线框、
+已实现基线：D3D11 PBR/阴影预览（Vulkan 绘制未实现）、FBX 导入/CPU 蒙皮线框、
 独立动作动画实验室与 stdio MCP、C# Behaviour/Exports/隔离 Play/手动重载、
-旧 World Access 批量 Transform/安全引用/信号邮箱。以上不是完整场景角色或新架构已完成的证明。
+托管 World Access 批量 Transform/安全引用/信号邮箱。以上不是完整场景角色或整个 M2 验收已完成的证明。
 
 构建仍使用 Build.bat，输出 out/bin/NcmaEngine.exe；迁移采用独立可验证切片。
 

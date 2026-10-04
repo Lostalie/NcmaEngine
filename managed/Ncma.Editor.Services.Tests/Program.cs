@@ -220,24 +220,6 @@ var cases = new (string, Action)[] {
         using var animation=new Ncma.ActionAnimationSession(Path.Combine(root,"out/managed/NcmaNative.dll"));
         AssertActionSequence(reference.RootElement,animation);
     }),
-    ("Old bridge/new application independent-process scene command parity", () => {
-        Guid id=Guid.Parse("11111111-1111-1111-1111-111111111111");
-        string baseline=Path.Combine(output,"parity.ncmascene");
-        { var document=new SceneDocument("Baseline");
-            var obj=document.World.CreateObject("Original",id);obj.Set(TransformData.Identity);
-            SceneDocumentFiles.Save(document,baseline);
-        }
-        string nativeBuild=Path.GetFullPath(Path.Combine(args[1],"../.."));
-        var start=new ProcessStartInfo(Path.Combine(nativeBuild,"NcmaLegacySceneReference.exe")) {RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false,CreateNoWindow=true};
-        start.ArgumentList.Add(baseline);
-        using var process=Process.Start(start)!;
-        string reference=process.StandardOutput.ReadToEnd(),error=process.StandardError.ReadToEnd();
-        Check(process.WaitForExit(15000) && process.ExitCode==0);
-        int begin=reference.IndexOf("NCMA_REFERENCE:",StringComparison.Ordinal);Check(begin>=0);
-        using var expected=JsonDocument.Parse(reference[(begin+15)..]);
-        AssertSceneSequence(expected.RootElement,baseline,Path.Combine(output,"new.saved.ncmascene"));
-        Check(error.Length==0);
-    }),
     ("Local preferences strict atomic persistence, independent Undo and failed-write preservation", () => {
         string path=Path.Combine(output,"preferences.json");var store=new EditorPreferencesStore(path);var initial=store.Current;
         store.Save(0,initial with {Theme="Light",SideWidth=350});Check(store.Revision==1 && new EditorPreferencesStore(path).Current.Theme=="Light");

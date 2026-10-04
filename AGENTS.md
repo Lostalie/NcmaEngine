@@ -33,6 +33,12 @@
 
 ## Current implementation and migration safeguards
 
+- Latest authorization (2026-10-05): the user explicitly adjusted the acceptance threshold to permit the C# default-entry switch and consolidated old-entry/bridge cleanup after automatic regression, while manual UI/MCP, self-contained environment and long-run acceptance remain pending. This supersedes the older no-promotion/no-deletion clauses below for this migration only. Implement checked staging, recoverable backup/journal and failure recovery, retain numerical kernels/SDK/user data and unrelated .vs/.user changes, and run full Debug/Release regression. Never mark pending manual gates passed.
+
+- Current entry: C# Ncma.Editor.App apphost at out/bin/NcmaEngine.exe, assembled with native Platform/Gui/Renderer/Physics/resource plugins. The old C++ Editor, custom ManagedHost/ManagedSceneClient/DotNetGameplayRuntime, Ncma.Managed.Host and their dedicated consumers are removed. Do not reintroduce a hostfxr bridge or compatibility stubs. Full regression deploys the entire checked package only after tests; Skip flags never deploy. Keep explicit backup/journal recovery and all pending manual gates. ActionAnimationWorkspace/AgentCapabilityRegistry/ScriptRuntimeRegistry and native UI/render-graph policy prototypes still have independent tests; their broader cleanup is NOT complete. Statements below about retaining the old production entry/bridges are historical and superseded.
+
+- The subsequent explicit user request authorizes committing and pushing this tested default-entry/old-bridge cleanup change. Exclude generated deployments, backups and unrelated .vs/.user settings. This does not close any pending manual, self-contained, performance or long-run acceptance gate.
+
 - On 2026-10-04 the user authorized a source checkpoint through M2.7/H7, with verification after committing. This changes the commit timing only: H5/manual and H7-Ready/Production remain pending; H8 implementation stays outside that checkpoint, and old-entry cleanup is still gated. Preserve uncommitted H8 work and unrelated local settings.
 
 - The subsequent user request authorizes committing/pushing the H8/M2.8 candidate implementation and rebuilding the executable. This supersedes the checkpoint's H8 exclusion, not the acceptance gates: keep H5/manual, H7 production and H8 acceptance pending; do not promote or delete the old entry. Verify the committed candidate with full Debug/Release Build.bat and preserve unrelated local settings.

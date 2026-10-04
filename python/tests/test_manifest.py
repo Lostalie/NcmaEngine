@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class ProjectManifestTests(unittest.TestCase):
     def test_csharp_gameplay_direction_and_legacy_runtime_status(self) -> None:
         manifest = inspect_project(ROOT)
-        self.assertEqual(manifest["schema_version"], 11)
+        self.assertEqual(manifest["schema_version"], 12)
         self.assertEqual(manifest["languages"]["scope"], "target_architecture")
         self.assertEqual(manifest["languages"]["core"], "C#/.NET 8")
         self.assertEqual(manifest["languages"]["gameplay"], ["C#/.NET 8"])
@@ -29,12 +29,12 @@ class ProjectManifestTests(unittest.TestCase):
             self.assertEqual(target[owner], "C#")
         current = manifest["architecture"]["implemented"]
         self.assertEqual(current["scope"], "production_default_entry")
-        self.assertEqual(current["application_host"], "C++")
+        self.assertEqual(current["application_host"], "C#")
         self.assertEqual(current["world_and_components"], "C#_Runtime.World")
         self.assertFalse(current["managed_world_is_native_wrapper"])
         self.assertTrue(current["managed_authoritative_world"])
-        self.assertFalse(current["managed_application_host"])
-        self.assertFalse(current["independent_renderer_physics_plugins"])
+        self.assertTrue(current["managed_application_host"])
+        self.assertTrue(current["independent_renderer_physics_plugins"])
         candidate = manifest["architecture"]["candidate"]
         self.assertEqual(candidate["application_host"], "C#")
         self.assertTrue(candidate["managed_application_host"])
@@ -51,7 +51,7 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertTrue(candidate["automated_gate_passed"])
         for pending in ("physics_scene_integration", "vulkan_renderer_implemented",
                         "h5_accepted", "visible_third_party_client_acceptance_passed",
-                        "manual_acceptance_passed", "default_entry_switched"):
+                        "manual_acceptance_passed"):
             self.assertFalse(candidate[pending])
         self.assertTrue((ROOT / candidate["entry_project"] / "Ncma.Editor.App.csproj").is_file())
         self.assertTrue((ROOT / candidate["report"]).is_file())
@@ -99,7 +99,7 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertEqual(manifest["scene"]["legacy_scene_versions_readable"], [])
         self.assertEqual(manifest["scene"]["file_extension"], ".ncmascene")
         self.assertTrue(manifest["scene"]["atomic_file_save"])
-        self.assertEqual(manifest["gameplay"]["world_access"]["scene_host_bridge_version"], 6)
+        self.assertEqual(manifest["gameplay"]["world_access"]["scene_host_bridge_version"], None)
         self.assertEqual(manifest["gameplay"]["world_access"]["scope"], "csharp_managed_world")
 
     def test_m2_8_preflight_does_not_promote_or_authorize_cleanup(self) -> None:
@@ -108,7 +108,7 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertTrue(candidate["m2_8_frozen_semantic_references"])
         self.assertTrue(candidate["m2_8_kernel_reference_fixture"])
         self.assertEqual(candidate["m2_8_kernel_reference_scope"], "shared_numerical_shaders_not_independent_algorithm_oracle")
-        for gate in ("h8_accepted", "consolidated_cleanup_completed", "default_entry_switched", "player_h7_complete"):
+        for gate in ("h8_accepted", "player_h7_complete"):
             self.assertFalse(candidate[gate])
         self.assertTrue((ROOT / candidate["m2_8_report"]).is_file())
         for configuration in ("Debug", "Release"):
@@ -138,7 +138,7 @@ class ProjectManifestTests(unittest.TestCase):
                                 capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         manifest = json.loads(result.stdout)
-        self.assertEqual(manifest["schema_version"], 11)
+        self.assertEqual(manifest["schema_version"], 12)
         self.assertEqual(set(manifest["gameplay"]["backends"]), {"csharp"})
 
     def test_independent_python_transport_targets_are_not_implemented(self) -> None:
@@ -170,7 +170,7 @@ class ProjectManifestTests(unittest.TestCase):
         self.assertEqual(runtime["editor_history_owner"], "C#")
         self.assertFalse(runtime["native_scene_command_stack"])
         self.assertTrue(runtime["world_runner_editor_integrated"])
-        self.assertEqual(manifest["scene"]["gameplay_host_bridge_version"], 5)
+        self.assertEqual(manifest["scene"]["gameplay_host_bridge_version"], None)
         self.assertTrue(manifest["gameplay"]["backends"]["csharp"]["fixed_update_scheduler"])
         play = manifest["gameplay"]["play_session"]
         self.assertEqual(play["owner"], "C#")

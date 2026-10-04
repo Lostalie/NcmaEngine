@@ -1,5 +1,15 @@
 # M2.8 frozen semantic references
 
+2026-10-05 entry cleanup: the old scene/GPU capture executables and bridges are retired.
+Direct managed scene tests retain the 12 frozen checkpoints. Rendering tests now also consume
+render-legacy-reference.json, captured from the pre-removal Release renderer at source revision
+35bc6aca39bca3f3fca1f73ee09680d130540841. It stores bounded gzip/base64 RGBA8, 256x256,
+pixel SHA256 9a4127ca4d39677096ec52db0a571ce279c4cc0edfc0948ca6e249ad31bd48a7.
+Do not regenerate it from the new renderer. Both frozen→kernel and kernel→managed retain
+max <= 4 / mean <= 0.1 tolerances and zero API warnings/errors. These fixtures are not an
+independent algorithm oracle or full cross-GPU guarantee. Older live-comparison descriptions
+below are provenance history, not current build dependencies.
+
 Captured 2026-10-04 from the already built **Release legacy comparison** targets on this workspace.
 These are reviewable expected data, not a compatibility format or production API.
 Do not regenerate them from the implementation being tested to make a failing comparison pass.

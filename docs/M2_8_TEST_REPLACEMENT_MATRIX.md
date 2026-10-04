@@ -1,5 +1,13 @@
 # M2.8 旧桥测试替代矩阵
 
+2026-10-05 已执行处置（用户调整清理门槛后）：ManagedHost/ManagedSceneBridge/SceneFlat 与 Host.Tests
+专属机制测试退出；直接 C# Runtime/Scene/Core/Gameplay/catalog/Play/IPC/stdio 业务测试继续保留。
+旧实时场景比较退出，12 个旧版本冻结快照保留；旧 GPU capture 退出，旧 Release 冻结图像成为第三方输入，
+与 kernel/managed 比较容差不变。新增部署失败恢复/锁/未知文件/正式路径/首次安装/重复部署证据。
+此处仅退休已不存在的 ABI5/6/hostfxr 机制，不新增兼容 stubs，也不删除原生资源/模块 ABI 负例。
+原生 ActionAnimationWorkspace/Agent/Script/UI/render-graph 策略测试尚未全量迁移，因此不标记统一旧代码清理完成。
+下文为处置前的逐项覆盖依据；其中“保留旧比较/尚未删除”是历史状态。
+
 更新：2026-10-04。用途：将业务断言与即将退出的桥机制分开，供最终清单评审。
 状态：自动替代覆盖继续补齐，**不是测试删除或 H8 关闭授权**。
 

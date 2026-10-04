@@ -231,7 +231,11 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
     extra = actual - seen - {"deployment-manifest.json"}
     runtime_data = []
     allowed = {"out/user/logs/editor-candidate.jsonl": 1048576,
-               "out/user/logs/editor-candidate.jsonl.1": 1048576}
+               "out/user/logs/editor-candidate.jsonl.1": 1048576,
+               "out/user/editor/preferences.json": 1048576,
+               "sample/out/user/logs/editor-candidate.jsonl": 1048576,
+               "sample/out/user/logs/editor-candidate.jsonl.1": 1048576,
+               "sample/out/user/editor/preferences.json": 1048576}
     if product.startswith("NcmaEngine"):
         for relative in sorted(extra):
             path = safe_path(root, directory + "/" + relative)
@@ -345,18 +349,24 @@ def audit(root: Path, configuration: str) -> dict:
     evidence.extend(kernel_fixture_evidence(root, configuration))
     runtime_profiles, runtime_evidence = runtime_profile_evidence(root, configuration)
     evidence.extend(runtime_evidence)
-    old_entry = safe_path(root, f"out/build/windows-ninja-{configuration.lower()}/bin/NcmaEngine.exe")
-    default_entry = safe_path(root, "out/bin/NcmaEngine.exe")
-    entry_identity = {"path": "out/bin/NcmaEngine.exe", "sha256": digest(default_entry),
-                      "legacy_build_sha256": digest(old_entry), "matches_legacy_build": digest(default_entry) == digest(old_entry)}
+    entry_identity = {"path": "out/bin/NcmaEngine.exe", "kind": "not_installed", "retired_entry_built": False}
+    if (root / "out/bin/NcmaEngine.exe").exists():
+        default_entry = safe_path(root, "out/bin/NcmaEngine.exe")
+        entry_identity.update(sha256=digest(default_entry), kind="previous_installation")
+        if (root / "out/bin/deployment-manifest.json").exists():
+            installed = read_json(safe_path(root, "out/bin/deployment-manifest.json"))
+            validate_package(root, "out/bin", "NcmaEngine-editor", installed["configuration"])
+            entry_identity.update(kind="managed_apphost", configuration=installed["configuration"], production=installed["production"])
     source_hash = hashlib.sha256(json.dumps(inventory, sort_keys=True).encode("utf-8")).hexdigest()
     return {"schemaVersion": 1, "kind": "M2.8_read_only_preflight", "configuration": configuration,
             "source_revision": commit.stdout.strip() if commit.returncode == 0 else None,
             "source_dirty": bool(dirty.stdout.strip()) if dirty.returncode == 0 else None,
             "source_content_sha256": source_hash, "environment": {"os": platform.platform(), "python": platform.python_version()},
             "default_entry_identity": entry_identity, "findings": findings, "audit_passed": not findings, "h8_accepted": False,
-            "production_promoted": False, "cleanup_authorized_by_this_report": False,
-            "pending_gates": PENDING, "applications": applications, "packages": packages,
+            "production_promoted": entry_identity.get("kind") == "managed_apphost" and entry_identity.get("production") is True,
+            "cleanup_authorized_by_this_report": False,
+            "pending_gates": [gate for gate in PENDING if gate != "H7_production_promotion_and_recovery" or entry_identity.get("kind") != "managed_apphost"],
+            "applications": applications, "packages": packages,
             "source_inventory": inventory, "legacy_consumers": consumers, "non_utf8_source_paths": encoding_warnings,
             "inventory_scope": "lexical_ASCII_identifiers_not_semantic_dead_code_proof",
             "ctest_raw_bytes_preserved": True, "runtime_profiles": runtime_profiles, "evidence": evidence}
@@ -384,7 +394,7 @@ def main(argv=None) -> int:
             with (directory / source.name).open("xb") as stream:
                 stream.write(source.read_bytes())
         print(json.dumps({"schemaVersion": 1, "audit_passed": result["audit_passed"], "h8_accepted": False,
-                          "report": (directory / "audit.json").as_posix(), "pending_gates": PENDING}))
+                          "report": (directory / "audit.json").as_posix(), "pending_gates": result["pending_gates"]}))
         return 0 if result["audit_passed"] else 2
     except (OSError, ValueError, KeyError, ET.ParseError, subprocess.SubprocessError) as error:
         print(json.dumps({"schemaVersion": 1, "audit_passed": False, "h8_accepted": False,
