@@ -21,6 +21,16 @@ CTest、Ncma.Managed/native smoke、Python inspect/unittest。
 当前尚未执行这次提交后的验证；实际提交号、日志、计数及结果在完成后追加。
 通过后推送 origin 的 main；若失败，先保留证据并修复相关问题，再重测。
 
+## 提交后发现与修复
+
+首个候选提交 e10466371589aae71defad5fba15ed91e1c4f577 的独立冷构建未通过：
+MSVC C1083，缺少 Eigen/Core。原因是 vendored Eigen 的 core 忽略规则在
+Windows 忽略大小写匹配下同时排除了公开 Core 入口和 src/Core 的 165 个 .h 文件。
+原工作区这些文件存在，因此以往本地构建未暴露仓库检出缺失。
+保留失败日志 out/verification/h7-postcommit-debug.log。
+修复仅添加精确 Eigen/Core、Eigen/src/Core/ 和其内容的忽略例外，
+将既有 166 个必需头文件纳入版本控制；不更新 Eigen 版本、不下载依赖。
+
 ## 仍未完成
 
 真实输入法/跨屏 DPI/可见第三方 MCP、无预装 .NET 的 self-contained 目标环境、
