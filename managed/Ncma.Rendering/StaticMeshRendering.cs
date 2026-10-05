@@ -54,11 +54,12 @@ public sealed class GpuMesh : IDisposable
     internal GpuMeshKey Key { get { _ = Owner.Handle; ObjectDisposedException.ThrowIf(_key.Value == 0, this); return _key; } }
     public MeshBounds Bounds { get; }
     public uint IndexCount { get; }
+    public bool CanUseNormalMap { get; }
     private BindPoseMeshUploadData? _bindPoseSource;
     public bool IsBindPose { get; }
     public BindPoseMeshUploadData? BindPoseSource { get { _ = Key; return _bindPoseSource; } }
     internal GpuMesh(RendererSession owner, GpuMeshKey key, MeshUploadData data)
-    { Owner = owner; _key = key; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; }
+    { Owner = owner; _key = key; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; CanUseNormalMap = data.CanUseNormalMap; }
     internal GpuMesh(RendererSession owner, BindPoseMeshUploadData data)
     { Owner = owner; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; _bindPoseSource = data; IsBindPose = true; }
     internal void Publish(GpuMeshKey key) => _key = key;

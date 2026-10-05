@@ -54,6 +54,7 @@ namespace NcmaEngine::Rhi
         }
         bool ResizeChecked(uint32_t width, uint32_t height, std::string& error);
         void SetClearColor(float red, float green, float blue, float alpha) noexcept;
+        bool CaptureRgba8(TextureHandle texture,void* output,uint32_t capacity,std::string& error);
 
     private:
         struct TextureResource final

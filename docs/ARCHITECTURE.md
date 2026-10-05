@@ -86,10 +86,12 @@ M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpda
 
 目标为可按需装载的 Renderer、Physics 和必要数值内核。当前 C# 默认入口使用版本化 PluginLoader、Platform/GUI/DX11 Renderer 模块与独立 NcmaPhysics/Ncma.Physics；NcmaNative 仅保留动画/角色等数值资源，不再承担旧场景/游戏宿主桥。正式入口切换不等于完整图形或人工验收完成。
 
-M3.3-A：Renderer ABI 1.2 additive query → scene-render v1（static-unlit-v1）/v2（cpu-bind-pose-v2），
-C# 负责帧外 typed mesh/绑定姿态准备、原始 skin/palette 保留、lease 与 batch，native 按需共享 GPU pipeline/驻留 buffers。
-旧 1.0/1.1 reference 不变；场景 UUID cache、纹理/PBR 作者材质、离屏视口、动画 GPU 蒙皮和通用 Graph 接入未实现，G3 未关闭。
-契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [交付记录](M3_3_DELIVERY_REPORT.md)。
+M3.3：Renderer ABI 1.2 additive query → scene-render v1（static-unlit-v1）/v2（cpu-bind-pose-v2）/独立v3（resource-pbr-v3）。
+C# 负责帧外 typed mesh/绑定姿态、原始skin/palette保留、工具侧PNG/JPEG/mips、UUID/generation/hash cache/lease、
+作者MaterialDefinition/MaterialSet与统一可逆命令、公共Graph受限typed stage/Feature/Stage/pipeline替换；native执行驻留mesh/texture/material/离屏target与最小GGX PBR/AlphaMask/normal。
+旧1.0/1.1 reference不变，最终完整Debug/Release与实际DX11图像/Debug Layer通过，G3资源切片关闭。
+正式Scene/Editor/Player多对象渲染、GUI离屏展示、动画GPU蒙皮、shadow/IBL整合和通用多阶段资源图仍未实现，分别留M3.4–M3.6等后续，不称完整后端。
+契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [B/C/D交付记录](M3_3_BCD_DELIVERY_REPORT.md)。
 
 统一边界：
 

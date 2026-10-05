@@ -1,6 +1,15 @@
 #include "NcmaPlugin.h"
 #include "NcmaPhysics.h"
 #include "NcmaRenderer.h"
+#include "NcmaResourceRender.h"
+#include "NcmaImage.h"
+_Static_assert(sizeof(NcmaImageInfoV1) == 32, "image info");
+_Static_assert(sizeof(NcmaTextureDescriptionV3) == 48, "texture description");
+_Static_assert(sizeof(NcmaMaterialDescriptionV3) == 160, "material description");
+_Static_assert(sizeof(NcmaResourceDrawV3) == 240, "typed draw");
+_Static_assert(sizeof(NcmaResourceFrameV3) == 136, "typed frame");
+_Static_assert(sizeof(NcmaResourceStatsV3) == 72, "resource counters");
+_Static_assert(sizeof(NcmaResourceRenderApiV3) == 72, "resource table");
 _Static_assert(sizeof(NcmaRendererApiV1) == 136, "renderer original table");
 _Static_assert(sizeof(NcmaRendererApiV1_1) == 144, "renderer reference 1.1 table");
 _Static_assert(sizeof(NcmaRendererApiV1_2) == 152, "renderer additive 1.2 table");

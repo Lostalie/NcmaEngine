@@ -1,6 +1,6 @@
 # M3.3 网格纹理材质与渲染资源方案
 
-日期：2026-10-05。状态：M3.3-A 静态/显式绑定姿态实现已补齐，最终完整 Debug/Release 门禁均通过，以独立 A checkpoint 提交；推送核对后才进入 B。B/C/D 与 G3 未完成。G2 已通过，M3.1/M3.2 提交 e7eea5a007e3c3bea2b89fe2f04835c54b6002ef 已推送并核对 origin/main。目标是 DX11 原生资源执行能力，不在 native 内保存场景。
+日期：2026-10-05。A 已通过并推送 e745f9f80f0ffa371d215711a6e840253bd0a633。最新用户授权将 B/C/D 合并为一个批次；实现及最终顺序完整 Debug/Release 回归均通过，G3资源绘制门禁关闭，按授权统一提交推送并核对远端。G2 已通过，M3.1/M3.2 提交 e7eea5a007e3c3bea2b89fe2f04835c54b6002ef 已推送并核对 origin/main。目标是 DX11 原生资源执行能力，不在 native 内保存场景，不称完整场景后端。
 已有 reference ABI 1.1 与图像测试保留；新服务必须绘制实际导入数据而非再次画固定 cube。
 
 ## 1 契约与资源类型
@@ -74,9 +74,10 @@ CPU DTO 已由新增 Renderer ABI 1.2 查询的 scene-render v1 静态服务采�
 旧 Renderer 1.0/1.1 表、reference 112-byte Frame 和 shaders 不变。
 静态资源驻留/lease/释放等待已实现；scene-render v2 独立协商 80-byte skin 布局与创建时 bind palette。
 C# 在帧外显式计算绑定姿态，保留原始 MSH1/权重/palette，GPU 只绘制一次烘焙后的不可变几何。
-不是动画 GPU 蒙皮；后者属于 G5。纹理/材质/view-target、UUID cache、WIC、PBR、
-Graph 的 typed mesh stage 与正式场景/Editor 接入仍未实现。版本 1 固定表不偷偷扩展语义。
-最新用户要求替代先前“不提交/推送”安排：按 A → B → C → D 逐阶段完成与测试，
-每阶段完整 Debug/Release 通过后单独提交、推送并核对远端 SHA，然后才开始下一阶段。
-测试或推送失败不得推进；保留其他人的本地设置和 ignored 验证证据。不能提前关闭 G3 或开始 M3.4。
+不是动画 GPU 蒙皮；后者属于 G5。B/C/D 新增独立 service v3：纹理/作者材质/view-target、
+UUID/generation cache、工具侧 WIC、最小 GGX PBR/AlphaMask/normal 与公共 Graph typed stage。
+版本 1/2 固定表不偷偷扩展语义。正式 Scene/Editor 接入属于 M3.4/M3.6，仍未实现。
+最新用户要求：B/C/D 统一补齐、测试失败修复并复测，最终完整 Debug/Release 通过后统一提交推送 M3.3。
+保留其他人的本地设置和 ignored 验证证据。不在当前请求中开始 M3.4。
 A 的完整双配置结果和未完成边界见 [M3.3-A 交付记录](M3_3_DELIVERY_REPORT.md)。
+当前 B/C/D 实现、最终测试与边界见 [B/C/D 交付记录](M3_3_BCD_DELIVERY_REPORT.md)。

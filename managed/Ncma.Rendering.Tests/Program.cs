@@ -14,11 +14,12 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Ncma.Asset.Import;
 using Ncma.Assets.Authoring;
-internal static unsafe class Program
+internal static unsafe partial class Program
 {
     private static long _cachedThreadBytes, _cachedProcessBytes;
     private static double _cachedElapsedMs;
     private static StaticMeshDraw _oldDeviceDraw;
+    private static ResourceDraw _oldResourceDraw;
     static void Check(bool value,string message) { if(!value) throw new Exception(message); }
     static void Reject(Action action,string? code=null)
     {
@@ -315,7 +316,7 @@ internal static unsafe class Program
     public static int Main(string[] args)
     {
         try {
-            TestMeshUpload(); TestBindPoseUpload(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
+            TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
             if(args.Length is not (3 or 4 or 6))return 2;
             string root=Path.GetFullPath(args[0]),baselinePath=Path.GetFullPath(args[1]),output=Path.GetFullPath(args[2]);Directory.CreateDirectory(output);
             Check(Marshal.SizeOf<RenderFrame>()==112 && Marshal.SizeOf<RendererStats>()==88 && Marshal.SizeOf<RenderPass>()==32,"Renderer layout");
@@ -368,6 +369,7 @@ internal static unsafe class Program
                 using var renderer=new RendererSession(native,window,256,256);
                 if(cycleIndex>0 && args.Length==6) {
                     Reject(()=>renderer.SubmitStaticMeshes(1,[_oldDeviceDraw],new(0,0,256,256),Vector4.UnitW));
+                    Reject(()=>renderer.SubmitResources(1,[_oldResourceDraw],new(0,0,256,256),Vector4.UnitW,new(new(0,0,2),Vector3.UnitZ,Vector4.One)));
                     Check(renderer.Stats.SubmittedFrames==0 && renderer.SceneStats.LiveMeshes==0,"Stale device generation mutated new renderer");
                 }
                 using var resources=renderer.CreateReferenceResources();
@@ -393,7 +395,7 @@ internal static unsafe class Program
                 Reject(()=>renderer.Dispose());Reject(()=>window.Dispose());
 
                 if(cycleIndex==0) {
-                    if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);}
+                    if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestResourceDrawing(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);}
                     TestConfiguration(renderer,ref frame,baseline,image);
                     var variations=new RenderPipeline[]{
                         new ReferencePreviewPipeline(toneExposureOverride:2),

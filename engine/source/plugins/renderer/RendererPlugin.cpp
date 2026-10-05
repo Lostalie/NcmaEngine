@@ -4,6 +4,7 @@
 #include "RendererPrivate.h"
 #include "ReferenceKernel.h"
 #include "StaticMeshKernel.h"
+#include "ResourceKernel.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -21,6 +22,12 @@ namespace {
 const auto loadingThread=std::this_thread::get_id();
 uint64_t module=0,nextModule=1,nextRenderer=1,nextGroup=1,nextMesh=1;
 bool busy=false;
+struct TextureGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle texture;uint32_t format=0;uint64_t bytes=0;
+    explicit TextureGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TextureGpu(){backend.DestroyTexture(texture);}};
+struct MaterialGpu {NcmaMaterialDescriptionV3 description{};std::array<Rhi::TextureHandle,6> textures{};};
+struct TargetGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle color,depth;uint32_t width=0,height=0;
+    explicit TargetGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TargetGpu(){backend.DestroyTexture(color);backend.DestroyTexture(depth);}};
+uint64_t nextResource=1;
 struct Renderer {
     uint64_t handle=0,platform=0,window=0,borrows=0,lastFrame=0;
     bool active=false,failed=false,vsync=false;
@@ -30,6 +37,11 @@ struct Renderer {
     std::unique_ptr<Rendering::StaticMeshKernel> meshKernel;
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::StaticMesh>> meshes;
     NcmaSceneRenderStatsV1 meshStats{sizeof(NcmaSceneRenderStatsV1)};
+    std::unique_ptr<Rendering::ResourceKernel> resourceKernel;
+    std::unordered_map<uint64_t,std::unique_ptr<TextureGpu>> textures;
+    std::unordered_map<uint64_t,std::unique_ptr<MaterialGpu>> materials;
+    std::unordered_map<uint64_t,std::unique_ptr<TargetGpu>> targets;
+    NcmaResourceStatsV3 resourceStats{sizeof(NcmaResourceStatsV3)};
     ComPtr<ID3D11InfoQueue> validation;
     ComPtr<ID3D11Query> gpuDisjoint,gpuBegin,gpuEnd;
     bool measuring=false,timingPending=false;
@@ -133,7 +145,7 @@ uint32_t NCMA_CALL Shutdown(uint64_t context,NcmaErrorV1* error) noexcept {
 uint32_t NCMA_CALL Status(uint64_t context,NcmaModuleStatusV1* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->meshes.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
+        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
 }
 uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
@@ -483,19 +495,21 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
         renderer->meshStats.generation=handle;renderer->meshStats.live_meshes=renderer->meshes.size();*output=renderer->meshStats;return NCMA_OK;
     });
 }
+#include "ResourceServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version!=1&&version!=2)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>3)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):sizeof(NcmaSceneRenderApiV2);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):sizeof(NcmaResourceRenderApiV3);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
         const NcmaSceneRenderApiV1 table{sizeof(table),1,1,CreateMesh,DestroyMesh,SubmitMeshes,MeshStats};
         if(version==1)std::memcpy(output,&table,sizeof(table));
-        else {NcmaSceneRenderApiV2 extended{table,CreateBindPoseMesh};extended.base.struct_size=sizeof(extended);extended.base.version=2;extended.base.capabilities=3;
+        else if(version==2) {NcmaSceneRenderApiV2 extended{table,CreateBindPoseMesh};extended.base.struct_size=sizeof(extended);extended.base.version=2;extended.base.capabilities=3;
             std::memcpy(output,&extended,sizeof(extended));}
+        else {const NcmaResourceRenderApiV3 resources{sizeof(resources),3,0x3c,CreateTexture,CreateMaterial,CreateTarget,DestroyResource,SubmitResources,ResourceStats,CaptureTarget};std::memcpy(output,&resources,sizeof(resources));}
         return NCMA_OK;
     });
 }

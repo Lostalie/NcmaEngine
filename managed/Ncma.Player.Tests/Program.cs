@@ -34,7 +34,15 @@ string projectPath = Path.Combine(projectRoot, "sample.ncmaproject"), scenePath 
 var config = new ProjectConfiguration(1, Guid.Parse("33333333-3333-3333-3333-333333333333"), "Player fixture", "start.ncmascene", "gameplay.dll", "Direct3D11", []);
 var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 void Project(bool enabled = false) => File.WriteAllBytes(projectPath, JsonSerializer.SerializeToUtf8Bytes(config with { PhysicsEnabled = enabled }, json));
-void Scene(int fail = 0, bool updatesFail = false) => SceneDocumentFiles.Save(Fixture(fail, updatesFail), scenePath);
+// Player lifecycle tests consume immutable scenario assets, not another case's mutable file.
+// Atomic replacement/locked-save preservation belongs to SceneDocumentTests and stays unchanged.
+void SaveScene(SceneDocument document)
+{
+    string candidate = Path.Combine(projectRoot, "start-" + Guid.NewGuid().ToString("N") + ".ncmascene");
+    SceneDocumentFiles.Save(document, candidate);
+    scenePath = candidate; config = config with { StartupScene = Path.GetFileName(candidate) }; Project();
+}
+void Scene(int fail = 0, bool updatesFail = false) => SaveScene(Fixture(fail, updatesFail));
 PlayerOptions Options(ulong ticks = 120) => PlayerOptions.Parse(["--project", projectPath, "--headless", "--ticks", ticks.ToString(),
     "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + ".json")]);
 Project(); Scene();
@@ -109,9 +117,9 @@ var cases = new (string Name, Action Run)[] {
         Check(!File.ReadAllText(options.Report).Contains("private-secret")); Scene();
     }),
     ("Startup lifecycle fault evidence and shutdown failure have explicit exits", () => {
-        SceneDocumentFiles.Save(Fixture(createFails: true), scenePath); var startup = PlayerRunner.Run(Options());
+        SaveScene(Fixture(createFails: true)); var startup = PlayerRunner.Run(Options());
         Check(startup.ExitCode == 5 && startup.Tick == 0 && startup.Fault is not null && startup.State == PlayState.Faulted);
-        SceneDocumentFiles.Save(Fixture(closeFails: true), scenePath); var close = PlayerRunner.Run(Options(1));
+        SaveScene(Fixture(closeFails: true)); var close = PlayerRunner.Run(Options(1));
         Check(close.ExitCode == 6 && close.Tick == 1 && close.ShutdownErrors.SequenceEqual(new[] { "runtime_shutdown_failed" })); Scene();
     }),
     ("Wall-clock budget stops at safe boundary, not by changing simulated delta", () => {
@@ -128,7 +136,7 @@ var cases = new (string Name, Action Run)[] {
     }),
     ("Unknown bindings/schema reject without losing source assets", () => {
         var doc = Fixture(); var item = doc.World.GetObjects()[0]; doc.SetBindings(item.PersistentId, [new(Guid.NewGuid(), "Missing.Behaviour", true, [])]);
-        SceneDocumentFiles.Save(doc, scenePath); byte[] source = File.ReadAllBytes(scenePath);
+        SaveScene(doc); byte[] source = File.ReadAllBytes(scenePath);
         Check(PlayerRunner.Run(Options()).ExitCode != 0 && source.SequenceEqual(File.ReadAllBytes(scenePath))); Scene();
         Reject(() => { using var owner = new RuntimeSessionOwner(Fixture()); owner.LoadGameplay(Path.Combine(output, "missing.dll")); });
     }),

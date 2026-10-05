@@ -415,6 +415,19 @@ namespace NcmaEngine::Rhi
         return true;
     }
 
+    bool D3D11RenderBackend::CaptureRgba8(TextureHandle texture,void* output,uint32_t capacity,std::string& error)
+    {
+        const auto it=m_Textures.find(texture.Value);if(it==m_Textures.end()||!output){error="Invalid capture texture";return false;}
+        D3D11_TEXTURE2D_DESC d{};it->second.Texture->GetDesc(&d);
+        if(d.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||capacity!=static_cast<uint64_t>(d.Width)*d.Height*4){error="Capture dimensions/format";return false;}
+        d.BindFlags=0;d.MiscFlags=0;d.Usage=D3D11_USAGE_STAGING;d.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        if(FAILED(m_Device->CreateTexture2D(&d,nullptr,&staging))){error="Capture staging allocation";return false;}
+        m_DeviceContext->CopyResource(staging.Get(),it->second.Texture.Get());D3D11_MAPPED_SUBRESOURCE mapped{};
+        if(FAILED(m_DeviceContext->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped))){error="Capture map";return false;}
+        for(uint32_t y=0;y<d.Height;++y)std::memcpy(static_cast<uint8_t*>(output)+static_cast<size_t>(y)*d.Width*4,static_cast<const uint8_t*>(mapped.pData)+static_cast<size_t>(y)*mapped.RowPitch,d.Width*4);
+        m_DeviceContext->Unmap(staging.Get(),0);return true;
+    }
     TextureHandle D3D11RenderBackend::CreateTexture(
         const TextureDescription& description, std::string& error)
     {
@@ -454,8 +467,11 @@ namespace NcmaEngine::Rhi
         if (HasTextureUsage(description.Usage, TextureUsage::Storage))
             nativeDescription.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
 
+        std::vector<D3D11_SUBRESOURCE_DATA> initial;
+        for(const auto& mip:description.InitialMips)initial.push_back({mip.Pixels,mip.RowPitch,mip.Bytes});
+        if(!initial.empty())nativeDescription.Usage=D3D11_USAGE_IMMUTABLE;
         TextureResource resource;
-        HRESULT result = m_Device->CreateTexture2D(&nativeDescription, nullptr, &resource.Texture);
+        HRESULT result = m_Device->CreateTexture2D(&nativeDescription, initial.empty()?nullptr:initial.data(), &resource.Texture);
         if (FAILED(result))
         {
             error = HResultError("ID3D11Device::CreateTexture2D", result);

@@ -1,11 +1,12 @@
 namespace Ncma.Rendering;
 [Flags] public enum RenderUsage { None = 0, Sampled = 1, ColorTarget = 2, DepthTarget = 4 }
 public enum RenderFormat { Rgba8, Rgba16Float, Depth32 }
-public enum RenderRole { Shadow, Hdr, Depth, Output }
-public enum RenderOperation : uint { Shadow = 1, Geometry, ToneMap, Clear }
-public readonly record struct RenderCapabilities(uint MaxDimension, int MaxPasses, int MaxResources, bool ReferencePbr, bool Arrays)
+public enum RenderRole { Shadow, Hdr, Depth, Output, ResourceOutput }
+public enum RenderOperation : uint { Shadow = 1, Geometry, ToneMap, Clear, ResourceGeometry }
+public readonly record struct RenderCapabilities(uint MaxDimension, int MaxPasses, int MaxResources, bool ReferencePbr, bool Arrays, bool ResourcePbr = false)
 {
     public static RenderCapabilities ReferenceDx11 => new(4096, 64, 32, true, true);
+    public static RenderCapabilities ResourceDx11 => new(4096, 64, 32, false, false, true);
 }
 public readonly record struct RenderResourceId(int Index);
 public sealed record RenderResource(string Name, RenderRole Role, RenderFormat Format, RenderUsage Usage, uint Width, uint Height, uint Layers = 1, bool Imported = false);
@@ -50,7 +51,7 @@ public sealed class RenderGraph
                 RenderRole.Shadow => r.Format == RenderFormat.Depth32 && r.Usage == (RenderUsage.Sampled | RenderUsage.DepthTarget) && r.Width == 2048 && r.Height == 2048 && r.Layers == 4 && !r.Imported,
                 RenderRole.Hdr => r.Format == RenderFormat.Rgba16Float && r.Usage == (RenderUsage.Sampled | RenderUsage.ColorTarget) && r.Layers == 1 && !r.Imported,
                 RenderRole.Depth => r.Format == RenderFormat.Depth32 && r.Usage == (RenderUsage.Sampled | RenderUsage.DepthTarget) && r.Layers == 1 && !r.Imported,
-                RenderRole.Output => r.Format == RenderFormat.Rgba8 && r.Usage == RenderUsage.ColorTarget && r.Layers == 1 && r.Imported, _ => false };
+                RenderRole.Output or RenderRole.ResourceOutput => r.Format == RenderFormat.Rgba8 && r.Usage == RenderUsage.ColorTarget && r.Layers == 1 && r.Imported, _ => false };
             if (!valid) Fail("resource_format", "Resource incompatible with supported operation set.");
         }
         foreach(var role in new[]{RenderRole.Shadow,RenderRole.Hdr,RenderRole.Depth})
@@ -61,7 +62,8 @@ public sealed class RenderGraph
             writer[id.Index] = i;
         }
         ValidateId(_output!.Value);
-        if (_resources[_output.Value.Index].Role != RenderRole.Output || writer[_output.Value.Index] < 0) Fail("missing_output", "Output is not written.");
+        if (_resources[_output.Value.Index].Role is not (RenderRole.Output or RenderRole.ResourceOutput) || writer[_output.Value.Index] < 0) Fail("missing_output", "Output is not written.");
+        if (_passes.Any(p => p.Operation == RenderOperation.ResourceGeometry) && (_passes.Count != 1 || _resources.Count != 1)) Fail("resource_contract", "v3 supports one typed geometry stage, without reference-stage mixing.");
         var edges = new List<int>[_passes.Count];
         for (int i = 0; i < _passes.Count; i++) {
             var p = _passes[i]; edges[i] = [..p.Dependencies];
@@ -96,9 +98,12 @@ public sealed class RenderGraph
             RenderOperation.Geometry => p.Shader == 1 && Roles(reads, RenderRole.Shadow) && Roles(writes, RenderRole.Hdr, RenderRole.Depth),
             RenderOperation.ToneMap => p.Shader == 2 && Roles(reads, RenderRole.Hdr, RenderRole.Depth) && Roles(writes, RenderRole.Output),
             RenderOperation.Clear => p.Shader == 0 && (reads.Length == 0 || Roles(reads, RenderRole.Output)) && Roles(writes, RenderRole.Output),
+            RenderOperation.ResourceGeometry => p.Shader == 3 && reads.Length == 0 && Roles(writes, RenderRole.ResourceOutput),
             _ => false };
         if (!valid) Fail("shader_contract", "Operation/shader/input/output contract mismatch.");
-        if (p.Operation != RenderOperation.Clear && !caps.ReferencePbr) Fail("capability", "Reference shaders unavailable.");
+        if (p.Operation is not (RenderOperation.Clear or RenderOperation.ResourceGeometry) && !caps.ReferencePbr) Fail("capability", "Reference shaders unavailable.");
+        if (p.Operation == RenderOperation.ResourceGeometry && !caps.ResourcePbr) Fail("capability", "Typed resource shaders unavailable.");
+        if (p.Operation == RenderOperation.ResourceGeometry && (p.Parameters[0] is < .01f or > 16 || p.Parameters[1] is < 0 or > 1 || p.Parameters[2] is < 0 or > 2 || p.Parameters[2] != MathF.Truncate(p.Parameters[2]) || p.Parameters[3] != 0)) Fail("parameter", "Typed resource exposure/ambient/mode contract.");
         if (p.Operation == RenderOperation.Clear && p.Parameters.Any(v => v < 0 || v > 1)) Fail("parameter", "Clear RGBA outside [0,1].");
         if (p.Operation == RenderOperation.ToneMap && (p.Parameters[0] != 0 && p.Parameters[0] is < .01f or > 16)) Fail("parameter", "Tone exposure override outside [.01,16].");
         var spatial = reads.Concat(writes).Where(r => r.Role != RenderRole.Shadow).ToArray();
@@ -116,12 +121,15 @@ public sealed class CompiledRenderGraph
     public uint Width { get; }
     public uint Height { get; }
     public bool RequiresReferenceResources { get; }
+    public bool RequiresResourceService { get; }
+    internal ReadOnlySpan<float> ResourceParameters => _operations[0].Parameters;
     public IReadOnlyList<string> PassNames { get; }
     public IReadOnlyList<RenderResource> Resources { get; }
     internal CompiledRenderGraph(ulong revision, RenderCapabilities capabilities, Operation[] operations, RenderResource[] resources)
     {
-        var output=resources.First(r=>r.Role==RenderRole.Output);Width=output.Width;Height=output.Height;
-        RequiresReferenceResources=operations.Any(p=>p.Code!=RenderOperation.Clear);
+        var output=resources.First(r=>r.Role is RenderRole.Output or RenderRole.ResourceOutput);Width=output.Width;Height=output.Height;
+        RequiresReferenceResources=operations.Any(p=>p.Code is RenderOperation.Shadow or RenderOperation.Geometry or RenderOperation.ToneMap);
+        RequiresResourceService=operations.Any(p=>p.Code==RenderOperation.ResourceGeometry);
         Revision = revision; Capabilities = capabilities; _operations = operations;
         PassNames = Array.AsReadOnly(operations.Select(p => p.Name).ToArray()); Resources = Array.AsReadOnly(resources);
     }

@@ -133,12 +133,17 @@ add_library(NcmaNative SHARED
 # Independent numerical import context: no NcmaCore, physics, renderer, GUI or global Character ABI registry.
 add_library(NcmaImportKernel SHARED
     engine/source/plugins/import/ImportKernel.cpp
+    engine/source/plugins/import/ImageDecode.cpp
     engine/source/runtime/assets/FbxCharacterImporter.cpp
     engine/source/runtime/animation/AnimationRuntime.cpp
     engine/source/runtime/scene/SceneUuid.cpp)
 target_include_directories(NcmaImportKernel PRIVATE engine/source/plugins engine/source/runtime)
 target_compile_definitions(NcmaImportKernel PRIVATE NCMA_IMPORT_EXPORTS)
 target_link_libraries(NcmaImportKernel PRIVATE Ncma::Eigen NcmaUfbx)
+if(WIN32)
+    target_compile_definitions(NcmaImportKernel PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(NcmaImportKernel PRIVATE windowscodecs ole32)
+endif()
 if(MSVC)
     target_compile_options(NcmaImportKernel PRIVATE /W4 /WX /permissive- /utf-8)
 else()
@@ -162,6 +167,7 @@ if(WIN32)
     add_library(NcmaRenderer SHARED
         engine/source/plugins/renderer/RendererPlugin.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
+        engine/source/plugins/renderer/ResourceKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
         engine/source/runtime/renderer/rhi/RhiResources.cpp)
@@ -203,6 +209,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     set_target_properties(NcmaPhysicsNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_executable(NcmaRendererNativeTests tests/plugins/RendererNativeTests.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
+        engine/source/plugins/renderer/ResourceKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp engine/source/runtime/renderer/rhi/RhiResources.cpp)
     target_include_directories(NcmaRendererNativeTests PRIVATE engine/source/runtime engine/source/plugins)
     target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)

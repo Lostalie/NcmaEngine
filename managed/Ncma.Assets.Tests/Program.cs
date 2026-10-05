@@ -58,6 +58,42 @@ JsonElement FileCommand(AssetRevisionClock clock, Guid? copy = null, ulong gener
 
 var tests = new (string Name, Action Run)[]
 {
+    ("Material authoring uses exact path/UUID/dependency grants and shared Undo/Redo", () => {
+        string root=TestRoot();Guid id=Guid.NewGuid(),texture=Guid.NewGuid(),setId=Guid.NewGuid();bool current=true;
+        var clock=new AssetRevisionClock();var scope=new MaterialWriteScope(new Dictionary<string,Guid>{{"assets/Hero.ncmaterial",id},{"assets/Hero.ncmatset",setId}},(dep,kind)=>dep==texture&&kind==AssetKind.Texture||dep==id&&kind==AssetKind.Material,()=>current);
+        using var commands=new MaterialCommands(new(root),scope,clock);var edit=new EditSession(new SceneDocument());edit.RegisterCommandParticipant(MaterialCommands.Descriptor,commands);
+        var permission=new CapabilityPermissions([MaterialCommands.CapabilityName,"ncma.history.undo","ncma.history.redo"]);
+        var material=MaterialDefinition.Default(id) with{BaseTexture=texture};string path="assets/Hero.ncmaterial";
+        JsonElement Input(MaterialDefinition m,ulong? revision=null,string? target=null)=>Element(new{path=target??path,expectedAssetRevision=revision??clock.Revision,document=Encoding.UTF8.GetString(MaterialCodec.Encode(m))});
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(material))).Status=="denied");
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(material with{AssetId=Guid.NewGuid()})),permission).Status=="denied");
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(material with{NormalTexture=Guid.NewGuid()})),permission).Status=="denied");
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(material)),permission).Changed);
+        string full=Path.Combine(root,path);Check(MaterialCodec.Decode(File.ReadAllBytes(full))==material);
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(material with{Metallic=.7f},0)),permission).Status=="conflict");
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(material with{Metallic=.7f})),permission).Changed);
+        Check(edit.Invoke(Request(edit,"ncma.history.undo",Element(new{})),permission).Changed&&MaterialCodec.Decode(File.ReadAllBytes(full)).Metallic==0);
+        Check(edit.Invoke(Request(edit,"ncma.history.redo",Element(new{})),permission).Changed&&MaterialCodec.Decode(File.ReadAllBytes(full)).Metallic==.7f);
+        var set=new MaterialSetDefinition(1,setId,[id]);Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Element(new{path="assets/Hero.ncmatset",expectedAssetRevision=clock.Revision,document=Encoding.UTF8.GetString(MaterialCodec.Encode(set))})),permission).Changed);
+        current=false;Check(edit.Invoke(Request(edit,"ncma.history.undo",Element(new{})),permission).Status=="denied");current=true;
+        var prepared=commands.Prepare(Input(material));File.WriteAllBytes(full,MaterialCodec.Encode(material with{Metallic=.9f}));Reject(()=>commands.Validate(prepared,true));Check(MaterialCodec.Decode(File.ReadAllBytes(full)).Metallic==.9f);
+    }),
+    ("Material journal crash recovery is permission checked and project close revokes replay", () => {
+        foreach(string failure in new[]{"journal_created","backup:0","published:0"}) {
+            string root=TestRoot();Guid id=Guid.NewGuid();var definition=MaterialDefinition.Default(id);var scope=new MaterialWriteScope(new Dictionary<string,Guid>{{"assets/Hero.ncmaterial",id}},(_,_)=>false,()=>true);
+            var clock=new AssetRevisionClock();ParticipantMemento prepared;
+            using(var command=new MaterialCommands(new(root),scope,clock,stage=>{if(stage==failure)throw new IOException("crash");})) {
+                prepared=command.Prepare(Element(new{path="assets/Hero.ncmaterial",expectedAssetRevision=clock.Revision,document=Encoding.UTF8.GetString(MaterialCodec.Encode(definition))}));Reject(()=>command.Publish(prepared,true));
+            }
+            using(var denied=new MaterialCommands(new(root),new MaterialWriteScope([],(_,_)=>false,()=>true),clock))Reject(()=>denied.Recover("assets/Hero.ncmaterial"));
+            using(var project=new AssetProjectAuthoring(root,Guid.NewGuid(),1,new EditSession(new SceneDocument()),new AssetWriteScope([],[],[],()=>true),materialScope:scope))Check(!File.Exists(Path.Combine(root,"assets/Hero.ncmaterial.journal")));
+        }
+        string other=TestRoot();Guid asset=Guid.NewGuid();var edit=new EditSession(new SceneDocument());var grant=new MaterialWriteScope(new Dictionary<string,Guid>{{"assets/Hero.ncmaterial",asset}},(_,_)=>false,()=>true);
+        var owner=new AssetProjectAuthoring(other,Guid.NewGuid(),1,edit,new AssetWriteScope([],[],[],()=>true),materialScope:grant);
+        var permissions=new CapabilityPermissions([MaterialCommands.CapabilityName,"ncma.history.undo"]);
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Element(new{path="assets/Hero.ncmaterial",expectedAssetRevision=owner.Clock.Revision,document=Encoding.UTF8.GetString(MaterialCodec.Encode(MaterialDefinition.Default(asset)))})),permissions).Changed);
+        owner.Dispose();Check(edit.Invoke(Request(edit,"ncma.history.undo",Element(new{})),permissions).Status!="ok");
+    }),
     ("Strict metadata is canonical, required, bounded, closed and duplicate-free", () => {
         var r = Record(); var bytes = AssetRecordCodec.Encode(r); var loaded = AssetRecordCodec.Decode(bytes);
         Check(loaded.AssetId == r.AssetId && AssetRecordCodec.Encode(loaded).SequenceEqual(bytes));

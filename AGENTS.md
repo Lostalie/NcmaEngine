@@ -64,7 +64,9 @@
 
 ## Agent-facing changes
 
-- M3.3 delivery order (user confirmed 2026-10-05): complete each A/B/C/D scope, pass its tests and full sequential Debug/Release Build.bat regression, commit only that tested stage, push and verify the remote SHA, then start the next stage. Failed tests or an unverified push block advancement. Preserve unrelated .vs/.user changes and ignored evidence/deployments; do not claim G3 closed until all stages and its acceptance gates pass.
+- Latest cleanup direction (2026-10-05): confirmed obsolete entries/types are removed before implementing their replacements; do not repair compatibility layers or introduce old-type aliases. Resolve the exact obsolete target and its consumers first, preserve numerical kernels/SDK/user data, and run full regression after removal. The user explicitly confirmed retaining the current C# Ncma.Player.App and removing only obsolete entries/types; do not equate a retained regression test with an obsolete runtime entry. No separate legacy Player source entry was found in the current source/build/package audit.
+
+- Latest M3.3 authorization (2026-10-05) supersedes the earlier per-slice commit order: A is already pushed; implement B/C/D as one batch, repair failing or missing tests until the complete sequential Debug/Release Build.bat regression passes, then commit/push M3.3 and verify the remote SHA. Do not advance to M3.4 or claim G3 closed before its complete gates pass. Preserve unrelated .vs/.user changes and ignored evidence/deployments.
 
 - Capabilities need stable names, concise descriptions, JSON input/output schemas, mutation-risk classification and deterministic structured results.
 - Prefer read-only inspection then reversible transactions. Destructive tools require explicit authorization and narrow project-relative targets.

@@ -20,19 +20,20 @@ public sealed class AssetProjectAuthoring : IDisposable
     public AssetMetadataCommands Metadata { get; }
     public AssetFileCommands Files { get; }
     public AssetImportCommands Imports { get; }
+    public MaterialCommands Materials { get; }
     private readonly List<ImportCoordinator> _coordinators = [];
     private AssetScanResult _snapshot = new(new AssetCatalog([]), []);
     public Task GenerationPreparation { get; private set; } = Task.CompletedTask;
     private ulong _snapshotRevision;
     public AssetScanResult Snapshot { get { Verify(); return new(_snapshot.Catalog, (AssetDiagnostic[])_snapshot.Diagnostics.Clone()); } }
     public AssetProjectAuthoring(string root, Guid projectId, ulong generation, EditSession edit, AssetWriteScope scope,
-        Action<string>? faultInjection = null)
+        Action<string>? faultInjection = null, MaterialWriteScope? materialScope = null)
     {
         ArgumentNullException.ThrowIfNull(edit); ArgumentNullException.ThrowIfNull(scope);
         if (projectId == Guid.Empty || generation == 0) throw new ArgumentException("Expected project identity/generation.");
         var state = edit.State;
         if (state.UndoCount != 0 || state.RedoCount != 0 || state.Frozen || state.EditBusy || state.HistoryInvalidated ||
-            edit.Describe().Any(d => d.Name is AssetMetadataCommands.CapabilityName or AssetFileCommands.CapabilityName or AssetImportCommands.CapabilityName))
+            edit.Describe().Any(d => d.Name is AssetMetadataCommands.CapabilityName or AssetFileCommands.CapabilityName or AssetImportCommands.CapabilityName or MaterialCommands.CapabilityName))
             throw new InvalidOperationException("Asset composition requires a fresh idle edit session.");
         _paths = new(root); ProjectId = projectId; Generation = generation;
         _paths.EnsureCacheDirectory("out/asset-authoring");
@@ -46,6 +47,7 @@ public sealed class AssetProjectAuthoring : IDisposable
         catch { _lockParents.Dispose(); throw; }
         var bound = scope.BindCurrent(() => !_disposed);
         Metadata = new(_paths, bound, faultInjection, Clock);
+        Materials = new(_paths, (materialScope ?? new MaterialWriteScope([], (_, _) => false, () => false)).Bind(() => !_disposed), Clock, faultInjection);
         _changes = new(projectId, generation);
         try
         {
@@ -56,6 +58,7 @@ public sealed class AssetProjectAuthoring : IDisposable
             edit.RegisterCommandParticipant(AssetMetadataCommands.Descriptor, Metadata);
             edit.RegisterCommandParticipant(AssetFileCommands.Descriptor, Files);
             edit.RegisterCommandParticipant(AssetImportCommands.Descriptor, Imports);
+            edit.RegisterCommandParticipant(MaterialCommands.Descriptor, Materials);
             _changes.Start(_paths);
             GenerationPreparation = Imports.PrepareStoredGenerationsAsync(Records());
         }
@@ -76,11 +79,13 @@ public sealed class AssetProjectAuthoring : IDisposable
                 _paths.Resolve(relative);
                 if (Directory.Exists(entry)) queue.Enqueue(relative + "/.probe");
                 else if (relative.EndsWith(".ncmeta.journal", StringComparison.Ordinal)) journals.Add(relative);
+                else if (relative.EndsWith(".ncmaterial.journal", StringComparison.Ordinal) || relative.EndsWith(".ncmatset.journal", StringComparison.Ordinal)) journals.Add(relative);
             }
         }
         foreach (string journal in journals.Order(StringComparer.Ordinal))
         {
             string metadata = journal[..^8];
+            if (MaterialCommands.IsPath(metadata)) { Materials.Recover(metadata); continue; }
             // The bounded journal's memento determines participant kind; authorize before touching any target.
             using var lease = new AssetDirectoryLease(_paths, [journal]);
             using var file = WindowsAssetFile.Open(_paths.Resolve(journal));
@@ -139,7 +144,7 @@ public sealed class AssetProjectAuthoring : IDisposable
     {
         if (_thread != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Asset project requires owner thread.");
         if (_disposed) return; _disposed = true;
-        _changes.Dispose(); foreach (var coordinator in _coordinators) coordinator.Dispose(); Imports?.Dispose(); Metadata.Dispose(); Files?.Dispose();
+        _changes.Dispose(); foreach (var coordinator in _coordinators) coordinator.Dispose(); Imports?.Dispose(); Metadata.Dispose(); Materials.Dispose(); Files?.Dispose();
         var completion = Task.WhenAll(_coordinators.Select(c => c.Completion).Append(Imports?.Completion ?? Task.CompletedTask));
         _completion = completion.ContinueWith(_ => { _lock.Dispose(); _lockParents.Dispose(); }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }

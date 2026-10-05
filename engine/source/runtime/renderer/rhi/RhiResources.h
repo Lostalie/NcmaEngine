@@ -10,7 +10,7 @@
 
 namespace NcmaEngine::Rhi
 {
-    inline constexpr std::size_t MaxPixelResources = 4;
+    inline constexpr std::size_t MaxPixelResources = 8;
 
     enum class BufferUsage : std::uint8_t { Vertex, Index, Constant, Storage };
     enum class MemoryUsage : std::uint8_t { GpuOnly, CpuToGpu, GpuToCpu };
@@ -88,6 +88,7 @@ namespace NcmaEngine::Rhi
         std::string DebugName;
     };
 
+    struct TextureMipData final { const void* Pixels=nullptr; std::uint32_t RowPitch=0, Bytes=0; };
     struct TextureDescription final
     {
         std::uint32_t Width = 1;
@@ -97,6 +98,8 @@ namespace NcmaEngine::Rhi
         TextureFormat Format = TextureFormat::Rgba8Unorm;
         TextureUsage Usage = TextureUsage::Sampled;
         std::string DebugName;
+        // Optional borrowed immutable initial data, valid synchronously during CreateTexture only.
+        std::vector<TextureMipData> InitialMips;
     };
 
     struct SamplerDescription final

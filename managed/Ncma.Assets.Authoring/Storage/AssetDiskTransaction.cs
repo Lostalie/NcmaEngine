@@ -209,7 +209,8 @@ internal sealed class AssetDiskTransaction(AssetProjectPaths paths, Action<strin
     private static void ValidateJournal(string path, Journal journal)
     {
         var (a, b) = States(journal.Memento, journal.Forward);
-        if (journal.Version != 1 || journal.Transaction == Guid.Empty || journal.Steps.Length != a.Length || !path.EndsWith(".ncmeta.journal", StringComparison.Ordinal) ||
+        bool supported = path.EndsWith(".ncmeta.journal", StringComparison.Ordinal) || path.EndsWith(".ncmaterial.journal", StringComparison.Ordinal) || path.EndsWith(".ncmatset.journal", StringComparison.Ordinal);
+        if (journal.Version != 1 || journal.Transaction == Guid.Empty || journal.Steps.Length != a.Length || !supported ||
             !a.Any(i => i.Path + ".journal" == path)) throw new ArgumentException("Journal target/version mismatch.");
         for (int i = 0; i < a.Length; i++)
         {
