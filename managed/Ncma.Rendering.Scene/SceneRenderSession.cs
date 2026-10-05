@@ -4,6 +4,7 @@ using Ncma.Runtime;
 using Ncma.Scene;
 using Ncma.Scene.Rendering;
 namespace Ncma.Rendering.Scene;
+using Vector3 = System.Numerics.Vector3;
 
 public readonly record struct SceneRenderCosts(double ExtractionMilliseconds, double EncodeMilliseconds, int GeometryDraws, int ShadowDraws, bool GpuSubmitted);
 // Application owns shared cache and independent Edit/Play sessions. No reference resources are created.
@@ -13,6 +14,13 @@ public sealed class SceneRenderSession : IDisposable
     private readonly RenderResourceCache _cache;
     private readonly RenderSceneExtractor _extractor;
     private readonly SceneGpuResources _resources;
+    private readonly SceneAnimationSession? _animation;
+    private readonly Ncma.Gameplay.PlaySession? _play;
+    public Guid WorldId { get; }
+    public ulong PreparedRevision { get; }
+    public SceneAnimationSession? Animation => _animation;
+    public ulong SkinBackpressureFrames { get; private set; }
+    public double SkinAbiMilliseconds { get; private set; }
     private readonly Func<float, float, bool, RenderPipeline> _pipelineFactory;
     private ScenePipelineSession? _pipeline;
     private readonly SceneGpuDraw[] _geometry = new SceneGpuDraw[4096], _casters = new SceneGpuDraw[4096];
@@ -26,20 +34,32 @@ public sealed class SceneRenderSession : IDisposable
     public SceneRenderCosts Costs { get; private set; }
     public RenderSceneView? View { get; private set; }
     public CompiledRenderGraph? Plan { get { Verify(); return _pipeline?.Plan; } }
+    // Trusted diagnostic only; no normal frame readback and no Agent capability grants this operation.
+    public void CaptureCharacterVertices(Guid objectId,Span<byte> output)
+    { Verify();_resources.CaptureCharacterVertices(_renderer,objectId,output); }
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
-        Func<float, float, bool, RenderPipeline>? pipelineFactory = null)
+        Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null)
     {
         _renderer = renderer; _cache = cache; _extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
-        _resources = SceneGpuResources.Prepare(cache, assets, startup);
+        WorldId = world.Identity; PreparedRevision = world.Revision; _play = play;
+        try {
+            if(startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId))) {
+                if(poseKernel is null)throw new ArgumentException("Skinned scenes require the trusted numerical pose plugin.");
+                _animation = new(world,assets,startup,poseKernel);
+            }
+            _resources = SceneGpuResources.Prepare(cache, assets, startup,renderer,_animation);
+            if(play is not null)_animation?.Attach(play);
+        } catch { _resources?.Dispose(); _animation?.Dispose(); cache.Trim(); throw; }
     }
     public bool Submit(ulong frame, uint width, uint height, Guid sceneCamera, SceneCameraView? browserCamera = null,
         float exposure = 1, float ambient = .03f, SceneShadowSettings? shadow = null, GpuViewTarget? target = null, Vector2 origin = default, Vector4 clear = default)
     {
-        Verify(); long time = Stopwatch.GetTimestamp(); var view = _extractor.Extract(_resources.Metadata, sceneCamera, width, height, browserCamera); View = view;
+        Verify(); long time = Stopwatch.GetTimestamp(); var view = _extractor.Extract(_resources.Metadata, sceneCamera, width, height, browserCamera,_animation is not null); View = view;
         double extraction = Stopwatch.GetElapsedTime(time).TotalMilliseconds; _diagnostics.Clear();
         for(int i=0;i<view.Diagnostics.Count;i++) _diagnostics.Add(view.Diagnostics[i]);
         for(int i=0;i<_resources.Diagnostics.Count;i++) _diagnostics.Add(_resources.Diagnostics[i]);
+        if(_animation is not null)for(int i=0;i<_animation.Diagnostics.Count;i++)_diagnostics.Add(_animation.Diagnostics[i]);
         if (view.Camera is not { } camera) { Costs = new(extraction, 0, 0, 0, false); return false; }
         // Pure empty/2D scenes have no pipeline/shadow/HDR initialization. Application may clear via its lightweight path.
         if (view.Geometry.Count == 0 && view.ShadowCasters.Count == 0) { Costs = new(extraction, 0, 0, 0, false); return false; }
@@ -62,10 +82,18 @@ public sealed class SceneRenderSession : IDisposable
         }
         Vector4 color = view.PrimaryLight is { } l ? new(l.Data.Red, l.Data.Green, l.Data.Blue, l.Data.Intensity) : new(1, 1, 1, 0);
         double encoding = Stopwatch.GetElapsedTime(time).TotalMilliseconds;
+        if(_animation is not null) {
+            _animation.Evaluate((float)(_play?.InterpolationAlpha ?? 1),_play is not { State:Ncma.Gameplay.PlayState.Running });
+            long skinStarted=Stopwatch.GetTimestamp();bool updated=_resources.UpdateAnimation(_renderer,_animation,frame);
+            SkinAbiMilliseconds=Stopwatch.GetElapsedTime(skinStarted).TotalMilliseconds;
+            if(!updated) {
+                SkinBackpressureFrames++; Costs = new(extraction,encoding,geo,casters,false);return false;
+            }
+        }
         _pipeline.Submit(frame, _geometry.AsSpan(0, geo), _casters.AsSpan(0, casters), new(camera.Position, toLight, color), lightVP,
             settings, target, new(origin.X + width * camera.Data.ViewportX, origin.Y + height * camera.Data.ViewportY, w, h), clear);
         Costs = new(extraction, encoding, geo, casters, true); return true;
     }
     private void Verify() { ObjectDisposedException.ThrowIf(_disposed, this); if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Scene render session requires owner thread."); }
-    public void Dispose() { if (_disposed) return; Verify(); _pipeline?.Dispose(); _pipeline = null; _resources.Dispose(); _cache.Trim(); _disposed = true; }
+    public void Dispose() { if (_disposed) return; Verify(); _pipeline?.Dispose(); _pipeline = null; _resources.Dispose(); _animation?.Dispose(); _cache.Trim(); _disposed = true; }
 }

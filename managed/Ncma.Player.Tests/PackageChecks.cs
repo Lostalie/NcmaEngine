@@ -37,6 +37,7 @@ internal static class PackageChecks
         string movedNull = Path.Combine(output, "搬迁 包 Null"); CopyPackage(sourceNull, movedNull); DeploymentManifest.Validate(movedNull);
         Check(!Directory.Exists(Path.Combine(movedNull, "plugins")), "Null bundle must not contain native plugins");
         Check(!File.Exists(Path.Combine(sourceDx11, "plugins/NcmaNative.dll")), "Player must not deploy Editor FBX kernel");
+        Check(File.Exists(Path.Combine(sourceDx11,"plugins/NcmaAnimationKernel.dll"))&&File.Exists(Path.Combine(editor,"plugins/NcmaAnimationKernel.dll")),"3D-capable packages must carry the lazy pose numerical plugin");
         var forbidden = Directory.GetFiles(movedNull, "*", SearchOption.AllDirectories).Where(p => Path.GetFileName(p).StartsWith("Ncma.Editor", StringComparison.Ordinal) ||
             Path.GetFileName(p).StartsWith("Ncma.Gui", StringComparison.Ordinal) || Path.GetFileName(p).StartsWith("Ncma.Managed.Host", StringComparison.Ordinal)).ToArray();
         Check(forbidden.Length == 0, "Player bundle leaked Editor/Gui/old bridge");

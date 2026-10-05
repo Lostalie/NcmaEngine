@@ -68,6 +68,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private RenderPipelineService? _renderService;
     private Ncma.Rendering.RenderResourceCache? _sceneCache;
     private Ncma.Rendering.Scene.SceneRenderSession? _editScene, _playScene;
+    private Ncma.Animation.Native.PoseKernel? _poseKernel;
     private Guid _editAssets, _playAssets, _playSession;
     private CompiledRenderGraph? _graph;
     private uint _viewWidth, _viewHeight;
@@ -193,18 +194,31 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private static RenderConfiguration ClearConfiguration(RenderConfiguration c) => c with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false};
     private void SynchronizeSceneResources() {
         if(_renderer is null || _sceneCache is null || _editor is null)return;
-        if(_editor.RenderAssets is { } edit && _editAssets!=edit.Assets.Identity) {
-            var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,_editor.Document.CaptureSnapshot());
+        if(_editor.RenderAssets is { } edit && (_editAssets!=edit.Assets.Identity || _editScene?.WorldId!=_editor.Document.World.Identity || _editScene.PreparedRevision!=_editor.Document.World.Revision)) {
+            var snapshot = _editor.Document.CaptureSnapshot();
+            var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,snapshot,poseKernel:PoseFor(snapshot));
             try { _editScene?.Dispose(); } catch { candidate.Dispose(); throw; }
             _editScene=candidate; _editAssets=edit.Assets.Identity;
         }
         if(_editor.Play is { } play && _editor.PlayRenderAssets is { } pins) {
-            if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity) {
-                var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,play.Document.CaptureSnapshot());
+            if(_playScene is not null && _playSession!=play.SessionId && _playAssets==pins.Assets.Identity && _playScene.WorldId==play.Document.World.Identity) {
+                _playScene.Animation?.ResynchronizeAfterReload(play);_playSession=play.SessionId;
+            }
+            if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity || _playScene?.WorldId!=play.Document.World.Identity) {
+                var snapshot = play.Document.CaptureSnapshot();
+                var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play);
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }
         } else { _playScene?.Dispose(); _playScene=null; _playAssets=_playSession=Guid.Empty; }
+    }
+    private Ncma.Animation.Native.PoseKernel? PoseFor(Ncma.Scene.SceneDocumentSnapshot snapshot) {
+        if(!snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId)))return null;
+        if(_poseKernel is null) {
+            string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
+            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
+        }
+        return _poseKernel;
     }
     public void BeginPresentation(FrameContext frame) {
         _capture = _gui!.Begin(_state, frame.DeltaSeconds);
@@ -226,6 +240,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     }
     public void AdvancePlay(FrameContext frame) {
         if (_editor!.Play is { State: Ncma.Gameplay.PlayState.Running } play) play.AdvanceFrame(frame.DeltaSeconds);
+        if(_editor.Play is null)_editScene?.Animation?.AdvancePreview(Math.Clamp(frame.DeltaSeconds,0,.25));
         _fbxPreview?.Tick(Math.Min(frame.DeltaSeconds, 1));
         _animationPreview?.Tick(Math.Min(frame.DeltaSeconds,1));
     }
@@ -314,7 +329,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         try { _nativeDiagnostics?.Dispose(); _nativeDiagnostics = null; } catch (Exception e) { failures.Add(e); }
         try { _animationPreview?.Dispose(); _animationPreview = null; } catch (Exception e) { failures.Add(e); }
         try { _fbxPreview?.Dispose(); _fbxPreview = null; } catch (Exception e) { failures.Add(e); }
-        try { _playScene?.Dispose(); _playScene=null; _editScene?.Dispose(); _editScene=null; _sceneCache?.Dispose(); _sceneCache=null; } catch(Exception e) { failures.Add(e); }
+        try { _playScene?.Dispose(); _playScene=null; _editScene?.Dispose(); _editScene=null; _sceneCache?.Dispose(); _sceneCache=null; _poseKernel?.Dispose(); _poseKernel=null; } catch(Exception e) { failures.Add(e); }
         try { _editor?.Dispose(); _editor = null; } catch (Exception e) { failures.Add(e); }
         try { _gui?.Dispose(); _gui = null; } catch (Exception e) { failures.Add(e); }
         try { _renderService?.Dispose(); _renderService = null; } catch (Exception e) { failures.Add(e); }

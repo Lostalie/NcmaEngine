@@ -57,7 +57,10 @@ public sealed class RuntimeTextureAsset : RuntimeAsset
 public sealed class RuntimeDataAsset : RuntimeAsset
 {
     private readonly byte[] _data;
-    internal RuntimeDataAsset(Guid id, AssetKind kind, ulong generation, string hash, byte[] data) : base(id, kind, generation, hash) => _data = data;
+    public Guid ModelId { get; }
+    public Guid SkeletonId { get; }
+    internal RuntimeDataAsset(Guid id, AssetKind kind, ulong generation, string hash, byte[] data, Guid model = default, Guid rig = default) : base(id, kind, generation, hash)
+    { _data = data; ModelId = model; SkeletonId = rig; }
     public byte[] CopyData() => (byte[])_data.Clone();
 }
 public sealed record RuntimeAssetDiagnostic(string Code, Guid AssetId);

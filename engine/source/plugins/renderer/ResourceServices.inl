@@ -99,6 +99,7 @@ uint32_t NCMA_CALL SubmitResources(uint64_t context,uint64_t handle,const NcmaRe
         std::vector<NcmaResourceDrawV3> batch;if(f.draw_count)batch.assign(draws,draws+f.draw_count);
         for(const auto& d:batch){
             if(d.mesh.generation!=handle||!renderer->meshes.contains(d.mesh.value)||d.material.generation!=handle||!renderer->materials.contains(d.material.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+            if(renderer->skins.contains(d.mesh.value))return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"GPU skin requires query-4 scene draws.");
             const uint32_t count=renderer->meshes.at(d.mesh.value)->indexCount;
             if(d.reserved[0]||d.reserved[1]||!d.index_count||d.index_count%3||d.first_index%3||d.first_index>count||d.index_count>count-d.first_index)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
             for(float x:d.model)if(!std::isfinite(x))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);

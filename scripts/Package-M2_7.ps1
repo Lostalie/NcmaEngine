@@ -61,7 +61,14 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
         publishMode = 'framework-dependent'; production = $false; modules = $modules; files = $files;
         sourceRevision = $packageRevision; sourceDirty = $packageDirty; environment = $requirements;
         selfContainedVerified = $false; manualAcceptance = $false;
-        resourceKernels = $(if ($product -eq 'NcmaEngine-editor-candidate') { @(@{ id = 'ncma.character'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }, @{ id = 'ncma.animation'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }) } else { @() }) }
+        # Keep zero/one/many kernels a JSON array; $() unwraps the single Player entry.
+        resourceKernels = @(if ($product -eq 'NcmaEngine-editor-candidate') {
+            @{ id = 'ncma.character'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }
+            @{ id = 'ncma.animation'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }
+            @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
+        } elseif ($product -eq 'NcmaPlayer-dx11-candidate') {
+            @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
+        }) }
     [IO.File]::WriteAllText((Join-Path $destination 'deployment-manifest.json'), ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 }
 $editor = Join-Path $packageBase 'editor'
@@ -83,6 +90,10 @@ foreach ($file in @('NcmaGui.dll', 'NcmaPhysics.dll')) { Copy-Exact (Join-Path $
 # FBX numerical resource kernel is only in Editor, never a Player/Gameplay dependency.
 $characterKernel = Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaNative.dll'
 Copy-Exact $characterKernel (Join-Path $editor 'plugins\NcmaNative.dll')
+# Runtime pose numerics are independent of the Editor-only FBX import/preview kernel.
+foreach ($target in @($editor, $playerDx11)) {
+    Copy-Exact (Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaAnimationKernel.dll') (Join-Path $target 'plugins\NcmaAnimationKernel.dll')
+}
 # Physics stays optional; neither Player variant contains it by default. Python and legacy bridges are absent.
 foreach ($target in @($editor, $playerDx11)) {
     foreach ($name in @('glfw', 'spdlog', 'eigen')) {

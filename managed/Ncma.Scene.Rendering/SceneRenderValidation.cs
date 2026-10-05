@@ -45,6 +45,8 @@ public static class SceneRenderValidation
             bool mesh = components.ContainsKey(StaticMeshData.TypeId), skin = components.ContainsKey(SkinnedMeshData.TypeId);
             bool spatial = mesh || skin || components.ContainsKey(CameraData.TypeId) || components.ContainsKey(DirectionalLightData.TypeId);
             if (mesh && skin) throw new ArgumentException("An object cannot contain both static and skinned geometry.");
+            if (components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) && !skin)
+                throw new ArgumentException("Clip playback requires a skinned mesh on the same object.");
             if (components.ContainsKey(MaterialOverrideData.TypeId) && !mesh && !skin)
                 throw new ArgumentException("Material override requires a mesh component.");
             if (spatial)
@@ -64,10 +66,20 @@ public static class SceneRenderValidation
             if (skin)
             {
                 var data = Registry.Decode<SkinnedMeshData>(components[SkinnedMeshData.TypeId]);
-                _ = Resolve(obj.Id, data.CharacterId, AssetKind.Character); _ = Resolve(obj.Id, data.SkeletonId, AssetKind.Skeleton);
+                var character = Resolve(obj.Id, data.CharacterId, AssetKind.Character); var skeleton = Resolve(obj.Id, data.SkeletonId, AssetKind.Skeleton);
                 geometry = Resolve(obj.Id, data.MeshId, AssetKind.SkinnedMesh); materials = Resolve(obj.Id, data.MaterialSetId, AssetKind.MaterialSet);
                 if (geometry is not null && (geometry.SkeletonId != data.SkeletonId || geometry.CharacterId != data.CharacterId))
                     throw new ArgumentException("Skinned mesh/character/skeleton identity mismatch.");
+                if (skeleton is not null && (skeleton.CharacterId != data.CharacterId || skeleton.SkeletonId != data.SkeletonId) ||
+                    character is not null && skeleton is not null && character.Generation != skeleton.Generation ||
+                    geometry is not null && skeleton is not null && geometry.Generation != skeleton.Generation)
+                    throw new ArgumentException("Character/skeleton/mesh immutable generation mismatch.");
+                if (components.TryGetValue(Ncma.Animation.ClipPlaybackData.TypeId, out var playback)) {
+                    var clip = Resolve(obj.Id, Registry.Decode<Ncma.Animation.ClipPlaybackData>(playback).ClipId, AssetKind.Clip);
+                    if (clip is not null && (clip.CharacterId != data.CharacterId || clip.SkeletonId != data.SkeletonId ||
+                        skeleton is not null && clip.Generation != skeleton.Generation))
+                        throw new ArgumentException("Clip must belong to the exact character/skeleton generation.");
+                }
             }
             if (geometry is not null && materials is not null && materials.MaterialSlots < Math.Max(1, geometry.MaterialSlots))
                 throw new ArgumentException("Material set does not cover all mesh slots.");

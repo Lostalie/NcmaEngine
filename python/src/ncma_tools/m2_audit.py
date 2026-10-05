@@ -252,14 +252,33 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
     if any(key.startswith(bad) for key in libraries):
         raise ValueError("Legacy/editor dependency in package.")
     kernels = data.get("resourceKernels", [])
+    if not isinstance(kernels, list) or any(not isinstance(k, dict) for k in kernels):
+        raise ValueError("Resource-kernel metadata must be an array of records.")
+    expected_pose = ("ncma.pose", 1, "plugins/NcmaAnimationKernel.dll")
+    if product == "NcmaPlayer-null-candidate" and any("ncmaanimationkernel" in p for p in seen):
+        raise ValueError("Pose kernel deployed in Null Player.")
+    kernel_ids = [(k["id"], k["abiVersion"], k["path"]) for k in kernels]
+    if len(kernel_ids) != len(set(kernel_ids)):
+        raise ValueError("Duplicate resource-kernel metadata.")
+    if expected_pose in kernel_ids and (expected_pose[2].casefold() not in seen or
+            next(k for k in kernels if k["id"] == "ncma.pose").get("lazy") is not True):
+        raise ValueError("Pose kernel must be listed and lazily initialized.")
     if product.startswith("NcmaEngine"):
-        if {(k["id"], k["abiVersion"], k["path"]) for k in kernels} != {
-                ("ncma.animation", 2, "plugins/NcmaNative.dll"), ("ncma.character", 2, "plugins/NcmaNative.dll")}:
+        required_kernels = {("ncma.animation", 2, "plugins/NcmaNative.dll"),
+                            ("ncma.character", 2, "plugins/NcmaNative.dll")}
+        # Read-only preflight verifies the PREVIOUS installation before checked replacement.
+        # A current candidate always requires pose; an installed prior package may lack that
+        # additive capability, but cannot carry an undeclared pose DLL. No runtime fallback.
+        previous_without_pose = (directory == "out/bin" and product == "NcmaEngine-editor" and
+                                 expected_pose[2].casefold() not in seen)
+        if not previous_without_pose:
+            required_kernels.add(expected_pose)
+        if set(kernel_ids) != required_kernels:
             raise ValueError("Resource-kernel ABI metadata mismatch.")
         modules = {m["id"]: (m["abiMajor"], m["abiMinor"]) for m in data["modules"]}
         if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, 2), "ncma.physics": (1, 1)}:
             raise ValueError("Editor module ABI metadata mismatch.")
-    elif kernels or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):
+    elif set(kernel_ids) != ({expected_pose} if product == "NcmaPlayer-dx11-candidate" else set()) or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):
         raise ValueError("Editor resource/GUI deployed in Player.")
     return {"product": product, "directory": directory, "files_verified": len(seen),
             "manifest_sha256": digest(manifest_path), "publish_mode": data["publishMode"],

@@ -86,6 +86,7 @@ namespace NcmaEngine::Rhi
         BufferUsage Usage = BufferUsage::Vertex;
         MemoryUsage Memory = MemoryUsage::GpuOnly;
         std::string DebugName;
+        bool RawGpuWritable = false;
     };
 
     struct TextureMipData final { const void* Pixels=nullptr; std::uint32_t RowPitch=0, Bytes=0; };

@@ -4,6 +4,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Ncma.Animation/Ncma.Animation.csproj" />
     <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />
     <ProjectReference Include="../Ncma.Assets/Ncma.Assets.csproj" />
     <ProjectReference Include="../Ncma.Assets.Runtime/Ncma.Assets.Runtime.csproj" />

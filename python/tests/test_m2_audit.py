@@ -107,6 +107,13 @@ class M2AuditTests(unittest.TestCase):
         data["product"] = "NcmaEngine-editor-candidate"
         data["resourceKernels"] = [{"id": name, "abiVersion": 2, "path": "plugins/NcmaNative.dll"}
                                   for name in ("ncma.animation", "ncma.character")]
+        pose = base / "plugins/NcmaAnimationKernel.dll"
+        pose.parent.mkdir()
+        pose.write_bytes(b"test-owned pose kernel")
+        data["files"].append({"path": "plugins/NcmaAnimationKernel.dll", "size": pose.stat().st_size,
+                              "sha256": hashlib.sha256(pose.read_bytes()).hexdigest()})
+        data["resourceKernels"].append({"id": "ncma.pose", "abiVersion": 1,
+                                       "path": "plugins/NcmaAnimationKernel.dll", "lazy": True})
         data["modules"] = [{"id": name, "abiMajor": 1, "abiMinor": minor}
                            for name, minor in (("ncma.platform", 0), ("ncma.renderer", 1), ("ncma.gui", 2), ("ncma.physics", 1))]
         (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
@@ -116,6 +123,58 @@ class M2AuditTests(unittest.TestCase):
         validate = lambda: validate_package(self.root, "package", data["product"], "Debug")
         self.assertEqual(validate()["runtime_data"][0]["path"], "out/user/logs/editor-candidate.jsonl")
         log.write_bytes(b" " * (1048576 + 1))
+        with self.assertRaises(ValueError):
+            validate()
+        log.write_bytes(b"test-owned runtime data")
+        data["resourceKernels"] = data["resourceKernels"][:-1]
+        (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
+        with self.assertRaises(ValueError):
+            validate()  # A new candidate cannot omit pose metadata.
+        installed = self.root / "out/bin"
+        installed.parent.mkdir(exist_ok=True)
+        base.rename(installed)  # Exact test-owned package, not a workspace deployment.
+        data["product"] = "NcmaEngine-editor"
+        def validate_installed():
+            (installed / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
+            return validate_package(self.root, "out/bin", data["product"], "Debug")
+        with self.assertRaises(ValueError):
+            validate_installed()  # A present pose DLL must still be declared.
+        (installed / "plugins/NcmaAnimationKernel.dll").unlink()  # Exact test-owned file.
+        data["files"] = [f for f in data["files"] if f["path"] != "plugins/NcmaAnimationKernel.dll"]
+        self.assertEqual(validate_installed()["product"], "NcmaEngine-editor")
+
+    def test_dx11_pose_kernel_is_lazy_versioned_and_not_in_null_player(self):
+        base, data = self.package()
+        pose = base / "plugins/NcmaAnimationKernel.dll"
+        pose.parent.mkdir()
+        pose.write_bytes(b"test-owned pose kernel")
+        data["files"].append({"path": "plugins/NcmaAnimationKernel.dll", "size": pose.stat().st_size,
+                              "sha256": hashlib.sha256(pose.read_bytes()).hexdigest()})
+        data["resourceKernels"] = [{"id": "ncma.pose", "abiVersion": 1,
+                                   "path": "plugins/NcmaAnimationKernel.dll", "lazy": True}]
+        def validate():
+            (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
+            return validate_package(self.root, "package", data["product"], "Debug")
+        with self.assertRaises(ValueError):
+            validate()  # Null cannot deploy a 3D pose contract.
+        pose_metadata = data["resourceKernels"]
+        data["resourceKernels"] = []
+        with self.assertRaises(ValueError):
+            validate()  # Omitting metadata cannot hide an unnecessary DLL.
+        data["resourceKernels"] = pose_metadata
+        data["product"] = "NcmaPlayer-dx11-candidate"
+        self.assertEqual(validate()["files_verified"], 3)
+        data["resourceKernels"] = pose_metadata[0]
+        with self.assertRaises(ValueError):
+            validate()  # Reject a singleton record instead of an array.
+        data["resourceKernels"] = pose_metadata
+        for field, wrong in (("abiVersion", 2), ("lazy", False), ("path", "plugins/other.dll")):
+            original = data["resourceKernels"][0][field]
+            data["resourceKernels"][0][field] = wrong
+            with self.assertRaises(ValueError):
+                validate()
+            data["resourceKernels"][0][field] = original
+        data["resourceKernels"].append(dict(data["resourceKernels"][0]))
         with self.assertRaises(ValueError):
             validate()
 

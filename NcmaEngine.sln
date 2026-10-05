@@ -91,6 +91,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Assets.Runtime", "mana
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Rendering.Scene", "managed\Ncma.Rendering.Scene\Ncma.Rendering.Scene.csproj", "{FB202904-2026-4029-8029-000000000004}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Animation", "managed\Ncma.Animation\Ncma.Animation.csproj", "{FB202905-2026-4029-8029-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Animation.Native", "managed\Ncma.Animation.Native\Ncma.Animation.Native.csproj", "{FB202905-2026-4029-8029-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Animation.Tests", "managed\Ncma.Animation.Tests\Ncma.Animation.Tests.csproj", "{FB202905-2026-4029-8029-000000000003}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -187,6 +193,12 @@ Global
 		{FB202400-2026-4024-8024-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
 		{FB202400-2026-4024-8024-000000000002}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{FB202400-2026-4024-8024-000000000002}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB202905-2026-4029-8029-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB202905-2026-4029-8029-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB202905-2026-4029-8029-000000000002}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB202905-2026-4029-8029-000000000002}.Release|x64.ActiveCfg = Release|Any CPU
+		{FB202905-2026-4029-8029-000000000003}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FB202905-2026-4029-8029-000000000003}.Release|x64.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

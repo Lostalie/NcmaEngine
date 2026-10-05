@@ -51,6 +51,7 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
   }if(!hasGeometry||!tones||operations.back().operation!=8||(!shadows&&f.caster_count)||(shadows&&!pipeline.resolution))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
   auto validateDraw=[&](const NcmaSceneDrawV4& item)->bool{const auto& d=item.draw;
    if(d.mesh.generation!=handle||!renderer->meshes.contains(d.mesh.value)||d.material.generation!=handle||!renderer->materials.contains(d.material.value))return false;
+   if(renderer->skins.contains(d.mesh.value)&&renderer->skins.at(d.mesh.value)->frame!=b.frame)return false;
    auto count=renderer->meshes.at(d.mesh.value)->indexCount;if(d.reserved[0]||d.reserved[1]||!d.index_count||d.index_count%3||d.first_index%3||d.first_index>count||d.index_count>count-d.first_index)return false;
    for(float x:d.model)if(!std::isfinite(x))return false;for(float x:d.model_view_projection)if(!std::isfinite(x))return false;for(float x:d.normal_matrix)if(!std::isfinite(x))return false;
    const double projectionDeterminant=Eigen::Map<const Eigen::Matrix4f>(d.model_view_projection).cast<double>().determinant();

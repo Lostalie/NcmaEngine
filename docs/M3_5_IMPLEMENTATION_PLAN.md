@@ -1,6 +1,6 @@
 # M3.5 GPU 蒙皮与 FBX 片段播放方案
 
-日期：2026-10-05。状态：未实现。依赖 G4。目标是场景中的真实 FBX 角色可播放片段并投射一致阴影。
+日期：2026-10-05，进度更新：2026-10-06。状态：A/B/C/D 最小切片已实现，最终顺序 Debug/Release 完整回归通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。[首轮候选记录](M3_5_POSE_CLOCK_CANDIDATE.md) 保留当时 foundation 范围。依赖已关闭的静态切片 G4。以下保留原实施方案；最终采用 compute prepass、共享 GPU output，关闭未经验证的 animated bind-AABB 裁剪。
 本阶段仅最小 ClipPlayer，不提前实现 M4 动作控制/物理根运动或 M5 Animator 图。
 
 ## 1 所有权与数据
@@ -41,6 +41,7 @@ root motion 可读取/报告但不写对象位置；in-place/含根位移片段�
 能力查询返回可支持的 palette/字符数/上传预算，超限显式拒绝；不悄悄 CPU fallback。
 main geometry 和 shadow pass 使用相同 palette generation 与 skin function，避免影子停在 bind pose。
 前后 frame resources/上传 buffer 有明确 GPU 使用边界，不覆盖仍在 GPU 使用的版本。
+蒙皮裁剪不得继续使用只描述原始/bind pose 的 AABB。需准备每 binding 的正权重源顶点 bounds，按当前 palette 变换后取保守 union（非负归一化权重的点位于该包围盒内），或显式关闭未经验证的蒙皮裁剪；main/shadow 的集合仍独立。pose generation/bounds 必须使相关提取缓存失效，不靠 World 文档序列化驱动更新。
 
 ### D 数值诊断和资源回收
 

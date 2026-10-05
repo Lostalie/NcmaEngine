@@ -7,6 +7,9 @@ namespace NcmaEngine::Rhi
 {
     bool Validate(const BufferDescription& description, std::string& error)
     {
+        if(description.RawGpuWritable && (description.Usage!=BufferUsage::Vertex || description.Memory!=MemoryUsage::GpuOnly || description.Size%4)) {
+            error="GPU writable vertex buffers require GPU-only, raw-aligned vertex storage";return false;
+        }
         if (description.Size == 0)
         {
             error = "Buffer size must be greater than zero";

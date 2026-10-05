@@ -45,6 +45,9 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     private readonly RenderBuffer _render = new();
     private InputState? _stepInput;
     public ulong Tick { get { Verify(); return _document.World.Tick; } }
+    // Scalar presentation reads avoid allocating a complete diagnostic status for every character frame.
+    public double FixedDeltaSeconds { get { Verify(); return _runner.FixedDeltaSeconds; } }
+    public double InterpolationAlpha { get { Verify(); return State==PlayState.Running ? Math.Clamp(_runner.Accumulator/_runner.FixedDeltaSeconds,0,1) : 0; } }
     public InputState Input { get { Verify(); return _stepInput ?? _input.Read(); } }
     public RenderFrameView RenderView { get { Verify(); return _render.Read(Status); } }
     public void SubmitInput(InputFrame frame)
@@ -99,6 +102,10 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         if (State != PlayState.Stopped) throw new InvalidOperationException("Register Systems before Start.");
         _runner.AddSystem(system);
     }
+    public void AddCommittedObserver(ICommittedStepObserver observer)
+    { Control();if(State==PlayState.Faulted)throw new InvalidOperationException("Recover Play before attaching an observer.");_runner.AddCommittedObserver(observer); }
+    public void RemoveCommittedObserver(ICommittedStepObserver observer)
+    { _document.VerifyAccess();if(_disposed)return;Control();_runner.RemoveCommittedObserver(observer); }
     public void Start(Func<BehaviourBindingData, Behaviour> createBehaviour)
     {
         Control(); ArgumentNullException.ThrowIfNull(createBehaviour);
@@ -194,7 +201,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
             throw new InvalidOperationException("Running fixed-step session required.");
         _busy = true; _steps = 0; _dropped = 0; _phase = "fixed_update"; _current = null; _attemptTick = Tick;
         try { _runner.ClearAccumulator(); _steps = _runner.Advance(_runner.FixedDeltaSeconds); _phase = "control"; }
-        catch (Exception error) { SetFault(error); }
+        catch (Exception error) { _steps = _runner.LastStepsExecuted; SetFault(error); }
         finally { _busy = false; }
         return Status;
     }
@@ -218,7 +225,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         if (State != PlayState.Paused) throw new InvalidOperationException("Step requires Paused.");
         _busy = true; _phase = "fixed_update"; _current = null; _steps = 0; _dropped = 0;
         try { _runner.ClearAccumulator(); _steps = _runner.Advance(_runner.FixedDeltaSeconds); }
-        catch (Exception error) { SetFault(error); }
+        catch (Exception error) { _steps = _runner.LastStepsExecuted; SetFault(error); }
         finally { _busy = false; }
         return Status;
     }

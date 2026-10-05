@@ -90,10 +90,10 @@ M3.3：Renderer ABI 1.2 additive query → scene-render v1（static-unlit-v1）/
 C# 负责帧外 typed mesh/绑定姿态、原始skin/palette保留、工具侧PNG/JPEG/mips、UUID/generation/hash cache/lease、
 作者MaterialDefinition/MaterialSet与统一可逆命令、公共Graph受限typed stage/Feature/Stage/pipeline替换；native执行驻留mesh/texture/material/离屏target与最小GGX PBR/AlphaMask/normal。
 旧1.0/1.1 reference不变，最终完整Debug/Release与实际DX11图像/Debug Layer通过，G3资源切片关闭。
-后续 M3.4 已补正式 Scene/Editor/Player 静态多对象、单方向光阴影/HDR；GUI 离屏展示、动画 GPU 蒙皮、IBL 和通用多阶段资源图仍未实现，不称完整后端。
+后续 M3.4 已补正式 Scene/Editor/Player 静态多对象、单方向光阴影/HDR；M3.5 增加最小片段播放与 DX11 GPU 蒙皮（见下文）。GUI 离屏展示、IBL 和通用多阶段资源图仍未实现，不称完整后端。
 契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [B/C/D交付记录](M3_3_BCD_DELIVERY_REPORT.md)。
 
-M3.4：独立 `Ncma.Scene.Rendering` 注册五类 UUID/值组件、完整文档组合校验与 committed World 提取/缓存；普通对象不强制 Transform，不逐帧序列化。`Ncma.Assets.Runtime` 帧外严格解析 typed UUID/NCA/hash/材质闭包并 pin 文件，Play 保留旧代。新增 `Ncma.Rendering.Scene` 适配层拥有 CPU/GPU 租约，Renderer ABI 1.2 独立 query v4 执行静态数值批次：单方向光 PCF/近似 PCSS、alpha-mask shadow → GGX HDR → ACES/sRGB；默认及注册 Feature/stage/pipeline 替换共用 typed graph。Editor/Player 实际项目走真实场景，Player 必须显式 `sceneCamera`；空/Headless 不创建 3D 资源。只读检查、light-space 独立裁剪、Edit/Play/Stop/reimport/resize 与图像验证见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md) 和 [v4 契约](M3_4_RENDER_ABI.md)。GPU 蒙皮、CSM/contact、IBL、透明、多光、Vulkan 和 GUI 离屏视口仍未实现；不称完整后端。
+M3.4：独立 `Ncma.Scene.Rendering` 注册 UUID/值组件、完整文档组合校验与 committed World 提取/缓存；普通对象不强制 Transform，不逐帧序列化。`Ncma.Assets.Runtime` 帧外严格解析 typed UUID/NCA/hash/材质闭包并 pin 文件，Play 保留旧代。新增 `Ncma.Rendering.Scene` 适配层拥有 CPU/GPU 租约，Renderer ABI 1.2 独立 query v4 执行静态数值批次：单方向光 PCF/近似 PCSS、alpha-mask shadow → GGX HDR → ACES/sRGB；默认及注册 Feature/stage/pipeline 替换共用 typed graph。Editor/Player 实际项目走真实场景，Player 必须显式 `sceneCamera`；空/Headless 不创建 3D 资源。只读检查、light-space 独立裁剪、Edit/Play/Stop/reimport/resize 与图像验证见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md) 和 [v4 契约](M3_4_RENDER_ABI.md)。后续 M3.5 additive query 5 的蒙皮见下文；CSM/contact、IBL、透明、多光、Vulkan 和 GUI 离屏视口仍未实现；不称完整后端。
 
 统一边界：
 
@@ -121,7 +121,7 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 | Vulkan loader/runtime 探测 | 已实现 |
 | Vulkan 设备/交换链/绘制和双 API 参考场景一致性 | 未实现 |
 | 完整材质/贴图资产、IBL、延迟/聚类渲染 | 未实现 |
-| 场景渲染提取与静态多对象 | M3.4 已实现；GPU 蒙皮角色、GUI 可合成视口纹理未实现 |
+| 场景渲染提取与静态多对象 | M3.4 已实现，M3.5 增加 DX11 蒙皮；GUI 可合成视口纹理未实现 |
 | 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
 当前 D3D11 使用 HLSL shader model 5 编译；共享着色器反射/SPIR-V 管线未实现。
@@ -156,8 +156,11 @@ C# 场景组件同步、碰撞事件、raycast、CharacterMotor、Root Motion �
 | 动画图类型/引脚/连线及基础合法性检查 | 已实现数据模型 |
 | 通用图编译/执行、完整可视化节点编辑器 | 未实现；节点枚举不代表对应求值器存在 |
 | BlendSpace、Montage、IK、重定向、动画压缩 | 未实现完整功能 |
-| 场景 SkinnedMesh/Animator/CharacterMotor 与 GPU 蒙皮 | 未实现 |
+| 场景 SkinnedMesh/ClipPlayback 与 DX11 GPU 蒙皮 | M3.5 已实现；验收范围见交付记录 |
+| Animator 图 / CharacterMotor | 未实现，分别留 M5 / M4 |
 | 正式动作/连击/命中规则及 C# 通知到游戏事件链路 | 未实现 |
+
+2026-10-06：M3.5 使用独立 `ncma_pose_get_api`/pose ABI 1.0，仅不可变数值，不是已删除的旧 Animation ABI 1，也不恢复 gameplay host；原有 animation/character ABI 2 保持原语义。纯 C# ClipClock/提交后只读观察器、正式 NCA/Scene/Edit/Play 生命周期与 query 5 compute-prepass 已接线；原始 GPU source 常驻，每帧 bounded palette，主画面与阴影共享 GPU output，未验证的 animated bind-AABB 裁剪关闭。根位移只报告不写 World/Physics。资源/GPU/GC 证据与最终 G5 状态见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)，布局/线程/预算/释放见 [契约](M3_5_RENDER_ANIMATION_ABI.md)。没有 skin 不初始化 pose/rig/palette ring，Null 不部署 pose DLL；通用 3D-capable DX11 包含 lazy DLL，专用纯 2D 裁剪包未实现。
 
 FBX 窗口与动作实验室是独立会话，尚未与场景角色或实时 MCP 贯通。
 详见 [ANIMATION.md](ANIMATION.md)、[FBX_IMPORT.md](FBX_IMPORT.md)。

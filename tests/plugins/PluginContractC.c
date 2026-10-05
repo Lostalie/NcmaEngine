@@ -3,6 +3,12 @@
 #include "NcmaRenderer.h"
 #include "NcmaResourceRender.h"
 #include "NcmaScenePipeline.h"
+#include "NcmaSkin.h"
+_Static_assert(sizeof(NcmaSkinMeshV5)==56 && sizeof(NcmaSkinPaletteV5)==128 && sizeof(NcmaSkinRequestV5)==24, "skin numerical layout");
+_Static_assert(sizeof(NcmaSkinBatchV5)==32 && sizeof(NcmaSkinStatsV5)==96 && sizeof(NcmaSkinApiV5)==56, "skin table/counters");
+#include "NcmaPose.h"
+_Static_assert(sizeof(NcmaPoseTrsV1)==40 && sizeof(NcmaPoseKeyV1)==48 && sizeof(NcmaPoseBoneV1)==44,"pose TRS/key/bone layout");
+_Static_assert(sizeof(NcmaPoseRequestV1)==40 && sizeof(NcmaPoseMatrixV1)==64 && sizeof(NcmaPoseApiV1)==72,"pose batch/table layout");
 _Static_assert(sizeof(NcmaScenePipelineDescriptionV4) == 16, "scene pipeline description");
 _Static_assert(sizeof(NcmaScenePassV4) == 16, "scene stage POD");
 _Static_assert(sizeof(NcmaSceneDrawV4) == 256, "scene draw POD");

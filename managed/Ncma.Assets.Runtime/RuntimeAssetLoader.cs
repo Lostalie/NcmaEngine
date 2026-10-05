@@ -93,11 +93,11 @@ public static class RuntimeAssetLoader
                         foreach (var block in blocks)
                         {
                             string hash = Hash(block.Data); RuntimeAsset value;
-                            if (block.AssetId == record.AssetId) value = new RuntimeDataAsset(block.AssetId, block.Kind, generation.Number, hash, block.Data);
+                            if (block.AssetId == record.AssetId) value = new RuntimeDataAsset(block.AssetId, block.Kind, generation.Number, hash, block.Data, record.AssetId, manifest.Skeleton ?? Guid.Empty);
                             else value = block.Kind switch {
                                 AssetKind.StaticMesh or AssetKind.SkinnedMesh => new RuntimeMeshAsset(block.AssetId, block.Kind, generation.Number, hash, block.Data, record.AssetId, manifest.Skeleton ?? Guid.Empty),
                                 AssetKind.MaterialSet => new RuntimeMaterialSetAsset(block.AssetId, generation.Number, hash, null, ModelPayloadCodec.DecodeMaterials(block.Data).Names),
-                                _ => new RuntimeDataAsset(block.AssetId, block.Kind, generation.Number, hash, block.Data) };
+                                _ => new RuntimeDataAsset(block.AssetId, block.Kind, generation.Number, hash, block.Data, record.AssetId, manifest.Skeleton ?? Guid.Empty) };
                             if (!assets.TryAdd(value.Id, value)) throw new ArgumentException("Duplicate runtime block identity.");
                             if (value is RuntimeMaterialSetAsset { ImportedSlotsOnly: true }) diagnostics.Add(new("imported_material_slots_only", value.Id));
                         }

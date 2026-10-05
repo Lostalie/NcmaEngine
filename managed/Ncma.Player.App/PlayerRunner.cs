@@ -40,8 +40,6 @@ public static class PlayerRunner
                     phase = "dependencies";
                     var startup = document.CaptureSnapshot();
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true);
-                    if (startup.Objects.Any(o => o.Components.Any(c => c.TypeId == Ncma.Scene.Rendering.SkinnedMeshData.TypeId)))
-                        throw new NotSupportedException("scene_gpu_skinning_requires_g5");
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
                         phase = "configuration";

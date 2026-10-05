@@ -10,7 +10,7 @@ public readonly record struct StaticMeshData(Guid MeshId, Guid MaterialSetId, bo
     public static StaticMeshData Validate(StaticMeshData v)
     { RenderComponentRegistry.RequireIds(v.MeshId, v.MaterialSetId); return v; }
 }
-// Schema reserved for G5; the static extractor explicitly diagnoses unsupported skinning.
+// Persistent references only; clocks, numerical leases and GPU instances remain derived session state.
 public readonly record struct SkinnedMeshData(Guid CharacterId, Guid MeshId, Guid SkeletonId, Guid MaterialSetId,
     bool Visible, bool CastShadow, uint LayerMask) : IComponent
 {
@@ -65,6 +65,7 @@ public static class RenderComponentRegistry
     public static ComponentRegistry Register(ComponentRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);
+        Ncma.Animation.ClipPlaybackData.Register(registry);
         registry.Register<StaticMeshData>(StaticMeshData.TypeId, 1, Schema(("meshId", "string"), ("materialSetId", "string"),
             ("visible", "boolean"), ("castShadow", "boolean"), ("layerMask", "integer")), StaticMeshData.Validate);
         registry.Register<SkinnedMeshData>(SkinnedMeshData.TypeId, 1, Schema(("characterId", "string"), ("meshId", "string"),

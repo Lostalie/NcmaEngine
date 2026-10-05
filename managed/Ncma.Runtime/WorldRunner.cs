@@ -4,11 +4,15 @@ public interface IWorldSystem
 {
     void FixedUpdate(World world, double fixedDeltaSeconds);
 }
+// Derived-state observers run only after a successful commit, under a read-only World guard.
+// They must not perform IO/IPC or claim their private state is rollbackable.
+public interface ICommittedStepObserver { void StepCommitted(World world, double fixedDeltaSeconds); }
 
 // Serial deterministic registration order. No native/AI/IPC dependency.
 public sealed class WorldRunner
 {
     private List<IWorldSystem> _systems = new();
+    private readonly List<ICommittedStepObserver> _observers = [];
     private readonly Action<Action> _executeStep;
     private double _accumulator;
     private bool _advancing;
@@ -42,6 +46,16 @@ public sealed class WorldRunner
         if (_systems.Contains(system)) throw new ArgumentException("System already registered.");
         _systems.Add(system);
     }
+    public void AddCommittedObserver(ICommittedStepObserver observer)
+    {
+        World.VerifyAccess();ArgumentNullException.ThrowIfNull(observer);
+        if(_advancing || World.IsUpdating || _observers.Count>=128 || _observers.Contains(observer))throw new InvalidOperationException("Cannot register a duplicate/overbudget observer or change scheduling during a step.");
+        _observers.Add(observer);
+    }
+    public void RemoveCommittedObserver(ICommittedStepObserver observer)
+    {
+        World.VerifyAccess();if(_advancing || World.IsUpdating)throw new InvalidOperationException("Cannot change observers during a step.");_observers.Remove(observer);
+    }
     internal Action PrepareSystems(IEnumerable<IWorldSystem> systems)
     {
         World.VerifyAccess();
@@ -72,6 +86,9 @@ public sealed class WorldRunner
                 _executeStep(() => { foreach (var system in _systems) system.FixedUpdate(World, FixedDeltaSeconds); });
                 _accumulator = Math.Max(0, _accumulator - FixedDeltaSeconds);
                 ++LastStepsExecuted;
+                // The tick is already committed. Observer failure faults the runner, never undoes that tick.
+                if(_observers.Count!=0)
+                    using(World.ReadOnly()) foreach(var observer in _observers)observer.StepCommitted(World,FixedDeltaSeconds);
             }
             if (interactive && _accumulator + 1e-12 >= FixedDeltaSeconds)
             {

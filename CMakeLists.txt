@@ -131,6 +131,16 @@ add_library(NcmaNative SHARED
 )
 
 # Independent numerical import context: no NcmaCore, physics, renderer, GUI or global Character ABI registry.
+add_library(NcmaAnimationKernel SHARED engine/source/plugins/animation/PoseKernel.cpp)
+target_include_directories(NcmaAnimationKernel PRIVATE engine/source/plugins)
+target_compile_definitions(NcmaAnimationKernel PRIVATE NCMA_POSE_EXPORTS)
+target_link_libraries(NcmaAnimationKernel PRIVATE Ncma::Eigen)
+if(MSVC)
+    target_compile_options(NcmaAnimationKernel PRIVATE /W4 /WX /permissive- /utf-8)
+else()
+    target_compile_options(NcmaAnimationKernel PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
+
 add_library(NcmaImportKernel SHARED
     engine/source/plugins/import/ImportKernel.cpp
     engine/source/plugins/import/ImageDecode.cpp
@@ -169,6 +179,7 @@ if(WIN32)
         engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ResourceKernel.cpp
         engine/source/plugins/renderer/ScenePipelineKernel.cpp
+        engine/source/plugins/renderer/SkinKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
         engine/source/runtime/renderer/rhi/RhiResources.cpp)
@@ -209,6 +220,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     target_compile_options(NcmaPhysicsNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
     set_target_properties(NcmaPhysicsNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_executable(NcmaRendererNativeTests tests/plugins/RendererNativeTests.cpp
+        engine/source/plugins/renderer/SkinKernel.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ResourceKernel.cpp
         engine/source/plugins/renderer/ScenePipelineKernel.cpp
@@ -263,6 +275,9 @@ if(NCMA_BUILD_MANAGED)
     find_program(DOTNET_EXECUTABLE dotnet)
     if(DOTNET_EXECUTABLE)
         add_custom_target(NcmaManaged
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Animation.Tests/Ncma.Animation.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Asset.Import.Tests/Ncma.Asset.Import.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
@@ -327,6 +342,15 @@ endif()
 if(NCMA_BUILD_TESTS)
     enable_testing()
     add_executable(NcmaImportKernelTests tests/plugins/ImportKernelTests.cpp)
+    add_executable(NcmaPoseKernelTests tests/plugins/PoseKernelTests.cpp)
+    target_include_directories(NcmaPoseKernelTests PRIVATE engine/source/plugins)
+    target_link_libraries(NcmaPoseKernelTests PRIVATE NcmaAnimationKernel Ncma::Eigen)
+    if(MSVC)
+        target_compile_options(NcmaPoseKernelTests PRIVATE /W4 /WX /permissive- /utf-8 "/FI${CMAKE_CURRENT_SOURCE_DIR}/tests/TestAssertions.h")
+    else()
+        target_compile_options(NcmaPoseKernelTests PRIVATE -Wall -Wextra -Wpedantic -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestAssertions.h")
+    endif()
+    add_test(NAME NcmaPoseKernelTests COMMAND NcmaPoseKernelTests)
     target_include_directories(NcmaImportKernelTests PRIVATE engine/source/plugins)
     target_link_libraries(NcmaImportKernelTests PRIVATE NcmaImportKernel NcmaCore)
     add_test(NAME NcmaImportKernelTests COMMAND NcmaImportKernelTests "${CMAKE_SOURCE_DIR}")
@@ -394,6 +418,9 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaApplicationServiceTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Application.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Application.Tests.dll" "${CMAKE_SOURCE_DIR}")
         set_tests_properties(NcmaApplicationServiceTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaPoseManagedTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Animation.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Animation.Tests.dll" "$<TARGET_FILE:NcmaAnimationKernel>" "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>")
+        set_tests_properties(NcmaPoseManagedTests PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaEditorServiceTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins")
         set_tests_properties(NcmaEditorServiceTests PROPERTIES TIMEOUT 60)

@@ -25,6 +25,7 @@ public sealed class PreparedSceneAssetLease : IDisposable
             RuntimeMaterialSetAsset set => new SceneAssetInfo(set.Id, set.Kind, set.Generation, set.ContentHash, set.SlotCount),
             // A StaticMesh root is a model manifest, never implicitly its first mesh.
             RuntimeDataAsset model when model.Kind == AssetKind.StaticMesh => null,
+            RuntimeDataAsset data => new SceneAssetInfo(data.Id, data.Kind, data.Generation, data.ContentHash, SkeletonId: data.SkeletonId, CharacterId: data.ModelId),
             _ => new SceneAssetInfo(asset.Id, asset.Kind, asset.Generation, asset.ContentHash) }).Where(v => v is not null).Select(v => v!);
         Metadata = new(info); _lease = assets;
     }
@@ -46,6 +47,8 @@ public static class SceneAssetPreparation
                         var skin = Registry.Decode<SkinnedMeshData>(component); Add(skin.CharacterId, AssetKind.Character); Add(skin.MeshId, AssetKind.SkinnedMesh); Add(skin.SkeletonId, AssetKind.Skeleton); Add(skin.MaterialSetId, AssetKind.MaterialSet); break;
                     case MaterialOverrideData.TypeId:
                         var material = Registry.Decode<MaterialOverrideData>(component); if (material.MaterialId != Guid.Empty) Add(material.MaterialId, AssetKind.Material); break;
+                    case Ncma.Animation.ClipPlaybackData.TypeId:
+                        Add(Registry.Decode<Ncma.Animation.ClipPlaybackData>(component).ClipId, AssetKind.Clip); break;
                 }
         return refs.OrderBy(r => r.Id.Value).ThenBy(r => r.ExpectedKind).ToArray();
         void Add(Guid id, AssetKind kind) { if (refs.Count >= RuntimeAssetLoader.MaxRequired && !refs.Contains(new(new(id), kind))) throw new ArgumentException("Scene asset reference budget."); refs.Add(new(new(id), kind)); }

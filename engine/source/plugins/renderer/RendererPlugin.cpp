@@ -6,6 +6,7 @@
 #include "StaticMeshKernel.h"
 #include "ResourceKernel.h"
 #include "ScenePipelineKernel.h"
+#include "SkinKernel.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -17,6 +18,8 @@
 #include <cmath>
 #include <memory>
 #include <unordered_map>
+#include <span>
+#include <algorithm>
 #include <Eigen/LU>
 using namespace NcmaEngine;
 using Microsoft::WRL::ComPtr;
@@ -46,6 +49,10 @@ struct Renderer {
     NcmaResourceStatsV3 resourceStats{sizeof(NcmaResourceStatsV3)};
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::ScenePipelineKernel>> scenePipelines;
     NcmaScenePipelineStatsV4 sceneStats{sizeof(NcmaScenePipelineStatsV4),4096};
+    std::unique_ptr<Rendering::SkinKernel> skinKernel;
+    std::unordered_map<uint64_t,std::unique_ptr<Rendering::SkinInstance>> skins;
+    NcmaSkinStatsV5 skinStats{sizeof(NcmaSkinStatsV5),32};
+    uint64_t lastSkinFrame=0;
     ComPtr<ID3D11InfoQueue> validation;
     ComPtr<ID3D11Query> gpuDisjoint,gpuBegin,gpuEnd;
     bool measuring=false,timingPending=false;
@@ -444,6 +451,7 @@ uint32_t NCMA_CALL DestroyMesh(uint64_t context,uint64_t handle,NcmaGpuMeshV1 me
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Instance(context,handle,error);if(valid)return valid;
         if(mesh.generation!=handle||!renderer->meshes.contains(mesh.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(renderer->skins.contains(mesh.value))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"GPU skin requires query-5 release.");
         if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
         if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
@@ -470,6 +478,7 @@ uint32_t NCMA_CALL SubmitMeshes(uint64_t context,uint64_t handle,const NcmaMeshF
         if(f.draw_count)copied.assign(draws,draws+f.draw_count);
         for(const auto& d:copied) {
             if(d.mesh.generation!=handle||!renderer->meshes.contains(d.mesh.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+            if(renderer->skins.contains(d.mesh.value))return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"GPU skin requires query-4 scene draws.");
             const uint32_t count=renderer->meshes.at(d.mesh.value)->indexCount;
             if(d.reserved[0]||d.reserved[1]||!d.index_count||d.index_count%3||d.first_index%3||d.first_index>count||d.index_count>count-d.first_index)
                 return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid mesh triangle range.");
@@ -500,13 +509,14 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
     });
 }
 #include "ResourceServices.inl"
+#include "SkinServices.inl"
 #include "ScenePipelineServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>4)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>5)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):sizeof(NcmaScenePipelineApiV4);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):sizeof(NcmaSkinApiV5);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -515,7 +525,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==2) {NcmaSceneRenderApiV2 extended{table,CreateBindPoseMesh};extended.base.struct_size=sizeof(extended);extended.base.version=2;extended.base.capabilities=3;
             std::memcpy(output,&extended,sizeof(extended));}
         else if(version==3) {const NcmaResourceRenderApiV3 resources{sizeof(resources),3,0x3c,CreateTexture,CreateMaterial,CreateTarget,DestroyResource,SubmitResources,ResourceStats,CaptureTarget};std::memcpy(output,&resources,sizeof(resources));}
-        else {const NcmaScenePipelineApiV4 scene{sizeof(scene),4,0x7,CreateScenePipeline,DestroyScenePipeline,SubmitScenePipeline,ScenePipelineStats};std::memcpy(output,&scene,sizeof(scene));}
+        else if(version==4) {const NcmaScenePipelineApiV4 scene{sizeof(scene),4,0x7,CreateScenePipeline,DestroyScenePipeline,SubmitScenePipeline,ScenePipelineStats};std::memcpy(output,&scene,sizeof(scene));}
+        else {const NcmaSkinApiV5 skin{sizeof(skin),5,3,CreateSkin,DestroySkin,UpdateSkin,CaptureSkin,SkinStats};std::memcpy(output,&skin,sizeof(skin));}
         return NCMA_OK;
     });
 }

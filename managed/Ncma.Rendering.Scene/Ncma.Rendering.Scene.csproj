@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" /><ProjectReference Include="../Ncma.Scene.Rendering/Ncma.Scene.Rendering.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" /><ProjectReference Include="../Ncma.Scene.Rendering/Ncma.Scene.Rendering.csproj" /><ProjectReference Include="../Ncma.Animation.Native/Ncma.Animation.Native.csproj" /><ProjectReference Include="../Ncma.Gameplay/Ncma.Gameplay.csproj" /></ItemGroup>
 </Project>

@@ -353,6 +353,11 @@ namespace NcmaEngine::Rhi
             break;
         }
 
+        if(description.RawGpuWritable) {
+            nativeDescription.BindFlags|=D3D11_BIND_UNORDERED_ACCESS;
+            nativeDescription.MiscFlags|=D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+        }
+
         D3D11_SUBRESOURCE_DATA data{};
         data.pSysMem = initialData;
         Microsoft::WRL::ComPtr<ID3D11Buffer> nativeBuffer;

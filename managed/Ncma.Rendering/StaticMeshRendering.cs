@@ -54,14 +54,17 @@ public sealed class GpuMesh : IDisposable
     internal GpuMeshKey Key { get { _ = Owner.Handle; ObjectDisposedException.ThrowIf(_key.Value == 0, this); return _key; } }
     public MeshBounds Bounds { get; }
     public uint IndexCount { get; }
+    public int VertexCount { get; }
+    internal int SkinBindings { get; }
+    public bool IsAnimated => SkinBindings!=0;
     public bool CanUseNormalMap { get; }
     private BindPoseMeshUploadData? _bindPoseSource;
     public bool IsBindPose { get; }
     public BindPoseMeshUploadData? BindPoseSource { get { _ = Key; return _bindPoseSource; } }
-    internal GpuMesh(RendererSession owner, GpuMeshKey key, MeshUploadData data)
-    { Owner = owner; _key = key; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; CanUseNormalMap = data.CanUseNormalMap; }
+    internal GpuMesh(RendererSession owner, GpuMeshKey key, MeshUploadData data, int skinBindings=0)
+    { Owner = owner; _key = key; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; CanUseNormalMap = data.CanUseNormalMap;VertexCount=data.VertexCount;SkinBindings=skinBindings; }
     internal GpuMesh(RendererSession owner, BindPoseMeshUploadData data)
-    { Owner = owner; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; _bindPoseSource = data; IsBindPose = true; }
+    { Owner = owner; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; _bindPoseSource = data; IsBindPose = true;VertexCount=data.VertexCount; }
     internal void Publish(GpuMeshKey key) => _key = key;
     public void Dispose() { if (_key.Value == 0) return; Owner.ReleaseMesh(this, _key); _key = default; _bindPoseSource = null; }
 }
@@ -138,7 +141,7 @@ public sealed unsafe partial class RendererSession
     {
         Verify(); if (mesh.Owner != this) throw new ArgumentException("Foreign renderer resource.");
         PluginError error = default;
-        PluginModule.Check(Module.Id, "destroy_mesh", _destroyMesh!(Module.Context, Handle, key, &error), error);
+        PluginModule.Check(Module.Id, "destroy_mesh", (mesh.IsAnimated?_destroySkin:_destroyMesh)!(Module.Context, Handle, key, &error), error);
         _gpuMeshes.Remove(mesh);
     }
     public SceneRenderStats SceneStats

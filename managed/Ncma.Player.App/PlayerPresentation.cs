@@ -12,6 +12,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     private RenderPipelineService? _pipeline;
     private RenderResourceCache? _cache;
     private Ncma.Rendering.Scene.SceneRenderSession? _scene;
+    private Ncma.Animation.Native.PoseKernel? _poseKernel;
     private Guid _camera;
     private readonly WindowInputAccumulator _input = new();
     private WindowState _state;
@@ -35,7 +36,12 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera)
     {
         if (_scene is not null) throw new InvalidOperationException("Scene already bound.");
-        _scene = new(_renderer!, _cache!, play.Document.World, assets, play.Document.CaptureSnapshot()); _camera = camera ?? Guid.Empty;
+        var snapshot=play.Document.CaptureSnapshot();
+        if(snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
+            string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
+            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
+        }
+        _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play); _camera = camera ?? Guid.Empty;
     }
     public bool Pump(PlaySession play)
     {
@@ -66,6 +72,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         if (_disposed) return;
         // Stop at the first failed release: never unload dependencies while a live native lease remains.
         _scene?.Dispose(); _scene = null; _cache?.Dispose(); _cache = null;
+        _poseKernel?.Dispose(); _poseKernel=null;
         _pipeline?.Dispose(); _pipeline = null; _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null; _loader.Dispose(); _disposed = true;
     }

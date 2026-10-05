@@ -1,4 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
   <ItemGroup><ProjectReference Include="../Ncma.Assets/Ncma.Assets.csproj" /><ProjectReference Include="../Ncma.Runtime/Ncma.Runtime.csproj" /><ProjectReference Include="../Ncma.Interop/Ncma.Interop.csproj" /><ProjectReference Include="../Ncma.Platform/Ncma.Platform.csproj" /><InternalsVisibleTo Include="Ncma.Gui" /><InternalsVisibleTo Include="Ncma.Rendering.Tests" /></ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="Ncma.Rendering.Scene" /></ItemGroup>
 </Project>

@@ -6,6 +6,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Ncma.Animation" />
     <InternalsVisibleTo Include="Ncma.Application.Runtime" />
     <InternalsVisibleTo Include="Ncma.Managed" />
     <InternalsVisibleTo Include="Ncma.Gameplay" />

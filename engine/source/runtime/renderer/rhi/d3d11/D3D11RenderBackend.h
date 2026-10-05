@@ -55,6 +55,8 @@ namespace NcmaEngine::Rhi
         bool ResizeChecked(uint32_t width, uint32_t height, std::string& error);
         void SetClearColor(float red, float green, float blue, float alpha) noexcept;
         bool CaptureRgba8(TextureHandle texture,void* output,uint32_t capacity,std::string& error);
+        // Native plugin-only borrow; never part of managed/module ABI. Owner thread, no ownership transfer.
+        ID3D11Buffer* BorrowBuffer(BufferHandle h) noexcept {auto i=m_Buffers.find(h.Value);return i==m_Buffers.end()?nullptr:i->second.Buffer.Get();}
 
     private:
         struct TextureResource final

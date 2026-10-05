@@ -24,8 +24,9 @@ internal static class SceneRenderInspections
         Add("ncma.render.inspect_graph","Inspect copied scene-v4 typed resources and ordered public passes; empty before first 3D draw.",
             ()=>new{version=4,passes=current()?.Plan?.PassNames??[],resources=current()?.Plan?.Resources??[]},
             """{"type":"object","required":["version","passes","resources"],"properties":{"version":{"const":4},"passes":{"type":"array","maxItems":16,"items":{"type":"string"}},"resources":{"type":"array","maxItems":16,"items":{"type":"object"}}}}""");
-        Add("ncma.render.get_profile","Inspect bounded extraction/encode/ABI/constant-upload/GPU timings and DX11 validation; no device mutation.",
-            ()=>new{version=4,renderer=renderer.Stats,pipeline=renderer.PipelineStats,costs=current()?.Costs,submitCalls=renderer.SubmitCalls,copiedBytes=renderer.CopiedBytes},
-            """{"type":"object","required":["version","renderer","pipeline","costs","submitCalls","copiedBytes"],"properties":{"version":{"const":4},"renderer":{"type":"object"},"pipeline":{"type":"object"},"costs":{"type":["object","null"]},"submitCalls":{"type":"integer"},"copiedBytes":{"type":"integer"}}}""");
+        Add("ncma.render.get_profile","Inspect bounded scene/pose/palette ABI/GPU costs and DX11 validation; no World/GPU mutation or animation control.",
+            ()=>new{version=4,renderer=renderer.Stats,pipeline=renderer.PipelineStats,costs=current()?.Costs,submitCalls=renderer.SubmitCalls,copiedBytes=renderer.CopiedBytes,
+                animation=current()?.Animation?.Costs,skinAbiMilliseconds=current()?.SkinAbiMilliseconds,skinBackpressureFrames=current()?.SkinBackpressureFrames},
+            """{"type":"object","required":["version","renderer","pipeline","costs","submitCalls","copiedBytes","animation","skinAbiMilliseconds","skinBackpressureFrames"],"properties":{"version":{"const":4},"renderer":{"type":"object"},"pipeline":{"type":"object"},"costs":{"type":["object","null"]},"submitCalls":{"type":"integer"},"copiedBytes":{"type":"integer"},"animation":{"type":["object","null"]},"skinAbiMilliseconds":{"type":["number","null"]},"skinBackpressureFrames":{"type":["integer","null"]}}}""");
     }
 }

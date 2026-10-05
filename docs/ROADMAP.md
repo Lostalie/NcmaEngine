@@ -5,7 +5,7 @@
 人工 UI/MCP、自包含、完整性能/一小时长稳和剩余旧策略审查仍待完成；M2/H8 不标记完成。
 本更新覆盖下文旧“必须保留 C++ 默认入口”的阶段限制，证据见 [最新交付](M2_8_DELIVERY_REPORT.md)。
 
-更新日期：2026-10-04。依据当前代码与已确认的架构决策整理；不以预览、接口声明或模型骨架代替完整功能。
+更新日期：2026-10-06（M3.5）。依据当前代码与已确认的架构决策整理；不以预览、接口声明或模型骨架代替完整功能。
 
 状态说明：“已实现基础”表示有代码与对应测试；“部分实现”表示尚未形成可用于游戏制作的完整流程；“未实现”表示仍是计划。下列阶段是推荐开发顺序，不是工期承诺。
 
@@ -30,22 +30,22 @@
 | 构建与验证 | 已实现基础：`Build.bat`、CMake/C++20、.NET、CTest、托管/原生 smoke、Python 工具测试；主程序输出 `out/bin/NcmaEngine.exe` | 完整 C# Editor/Player 发布、安装与持续集成矩阵 |
 | World / GameObject / 组件 | 已实现基础：`Ncma.Runtime.World` 是唯一场景权威；扁平对象、可选值组件、UUID、引用校验、快照；C++ SceneWorld 与原生 World 导出已移除 | 通用查询/类型池、完整组件编辑与资产引用；性能优化尚未完成 |
 | C# 游戏脚本 | 部分实现：生命周期/Export/隔离 Play、M1.3 PlaySession 固定步/输入/插值/运行命令/信号原子性/重载预检、只读 OnUpdate、暂停/单步/故障 | 动作角色/完整属性类型、低分配优化；私有状态迁移未实现 |
-| 场景文档与 Undo | M1.1/M1.2 已实现：完整 SceneDocument、Editor.Core 唯一历史、交互草稿、内容指纹、文件关联撤销、Play 隔离/冻结；唯一 .ncmascene JSON v1 | 资产引用与完整资产流水线尚未实现 |
-| 编辑器与命令服务 | M1.2 已实现场景命令：C++/ImGui 提交 UUID 意图，Editor.Core 持有完整文档事务/历史；10 项 v2 能力、权限/版本/幂等与草稿 | C# 主入口与剩余面板业务未实现；第三方客户端人工验收待执行 |
+| 场景文档与 Undo | M1.1/M1.2 完整 SceneDocument/唯一历史/事务/Play 隔离；M3 typed UUID 引用与文件事务；唯一 .ncmascene JSON v1 | 完整资产面板/Prefab/cook |
+| 编辑器与命令服务 | C# 主入口/业务与原生 ImGui 呈现插件；Editor.Core 事务/权限/版本/幂等/草稿；原生旧入口/桥已移除 | 完整资产/材质/动画 Inspector 与第三方客户端人工验收 |
 | 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC | 资产面板、完整资产 MCP、Prefab、cook |
-| D3D11 / PBR / 软阴影 | 部分实现：固定参考 GGX/HDR/方向光四级联/PCF/PCSS/接触阴影；M3.3静态/显式绑定网格、PNG/JPEG/mip纹理、作者材质/AlphaMask/normal/最小GGX、UUID cache/lease与受限公共typed Graph、离屏target；完整双配置及实际GPU/API验证，G3资源门禁关闭 | 完整Scene/Editor/Player多对象与阴影整合、GUI离屏展示、通用多阶段资源图、IBL、FBX GPU动画蒙皮、生产级联合验收 |
+| D3D11 / PBR / 软阴影 | 部分实现：reference GGX/HDR/CSM/PCF/PCSS/contact；G3 资源/纹理/材质/typed Graph，G4 正式静态 Scene/Editor/Player 主画面/单方向光 shadow/HDR，G5 DX11 GPU 动画蒙皮共享主画面/阴影；双配置及实际 GPU/API 验证 | GUI离屏展示、通用多阶段资源图、IBL/透明/多光、场景 CSM/contact、生产级联合验收 |
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
-| 物理 | 已实现基础：Box2D/Jolt 独立测试世界与原生求解 | 独立插件边界、C# 场景同步/碰撞事件、角色控制器、Root Motion 与碰撞协同 |
-| FBX 角色 | M3.2 持久导入 G2 已关闭：独立数值内核/ABI 1.1、隔离 Worker、严格角色/静态模式、切线、UUID/冲突与派生文件、正式 Editor 工具部署和可撤销发布 | PBR 纹理/材质、场景绑定与 GPU 蒙皮、真实用户模型/所有 DCC 兼容验收 |
-| 动画 | 部分实现：采样、混合/骨骼遮罩、姿态矩阵、根运动、Notify；独立动作实验室、动画 ABI 与 C# 调用；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
+| 物理 | M2.6 薄 Box2D/Jolt 求解插件与独立 C# PhysicsService/Simulation、快照/诊断 | M4 场景同步/跨域提交策略/碰撞事件/角色控制器/Root Motion；Play 未派发 Physics Step |
+| FBX 角色 | G2 持久导入/异步 Worker/UUID/generation；G5 NCA 保存重启 → 场景骨架片段 → GPU/Player，不在 Player 解析 FBX | 完整源材质/纹理、真实用户模型/所有 DCC 骨骼缩放/skin mode 覆盖 |
+| 动画 | 独立动作实验室/数值 ABI 2；M3.5 纯 C# ClipPlayback/committed 时钟/独立 Edit 预览与 pose ABI 1.0/GPU 蒙皮，根位移只报告；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
 | UI | 仅模型骨架：当前 C++ UiDocument 有节点、样式、布局字段和 Token | C# 文档、持久化、布局求解、Figma 式画布、运行时 UI 渲染/输入、组件实例/变体均未实现 |
 | AI / MCP / Python | 部分实现：项目只读 CLI；独立程序化动画预览有 8 项 stdio MCP 工具；C# 活动场景本地 scoped MCP 已接入 | 资产/动画图/UI/源码扩展的统一 MCP 未实现；活动场景已接入；Python AI 通信与推理模块未实现 |
 | 网络与引擎扩展 | 独立网络系统未实现；组件 Schema 注册已有基础 | 网络传输/会话/同步服务、完整托管插件生命周期、编辑器扩展、发布与沙箱边界未实现 |
 
 补充说明：
 
-- 当前原生插件聚合 ABI 为 2，动画/角色子接口仍各自为 1；Gameplay Host Bridge 为 5，Scene Host Bridge 为 6。版本独立，不表示所有原生插件边界已经完成。
-- `Ncma.Managed.SceneWorld` 是兼容玩法 API 的纯托管外观，不是被删除的 C++ SceneWorld。原生 ManagedSceneClient 只保留令牌与复制的 DTO。
+- Character/独立 demo Animation ABI 均为 2；新 pose-only ABI 1.0 与 Renderer query 5 独立，不恢复旧 Animation ABI 1。旧 Gameplay/Scene host 桥已经删除，不是当前入口。
+- World 是 C# 唯一权威；现役 `Ncma.Managed.SceneWorld` 是 SDK 对该 World 的纯托管外观，不是旧 C++ SceneWorld 或兼容别名。native 仅拿 opaque 数值/GPU 资源与 bounded POD，不保留 ManagedSceneClient 或 native World。
 - 当前编辑器入口和业务在 C#，原生 ImGui/GLFW/GPU 为插件，旧 hostfxr 桥已删除。整个 M2 人工/性能验收尚未完成。
 - 完整快照恢复会使运行时引用失效；后续命令、选择和调试接口必须按 UUID 重新解析。外部直接修改也不能与 EditSession 历史混用。
 
@@ -127,7 +127,7 @@ H7 前候选程序不覆盖 out/bin 默认入口；H8 前不把 M2 标为完成�
 
 验收：导入 → 保存 → 重启 → 场景实例 → 动画播放完整打通；重新导入身份稳定；CPU/GPU 蒙皮误差有证据；材质缺失有诊断；失败/取消不破坏原资产和场景。
 
-2026-10-05：M3.1–M3.3 已实现且最终双配置回归通过，G1/G2/G3 关闭并已推送。M3.4 已补静态多对象 shadow/GGX HDR/tone、独立 CPU/GPU 租约、Edit/Play pin 与实际 Editor/Player；最终双配置/G4 结论见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。GPU 蒙皮和 M3.5–M3.9 未实现。详见 [M3 总体方案](M3_IMPLEMENTATION_PLAN.md)、[M3.4 方案](M3_4_IMPLEMENTATION_PLAN.md) 与 [v4 契约](M3_4_RENDER_ABI.md)；M2 人工/自包含/长稳门禁不因此关闭。
+2026-10-06：M3.1–M3.3 完整双配置通过，G1/G2/G3 关闭；M3.4 静态 Scene/Editor/Player 与阴影/HDR、G4 关闭，见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 正式 NCA 场景角色、最小 ClipPlayback/committed 时钟、DX11 compute 蒙皮与共享阴影完整双配置通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。M3.6–M3.9 未实现；不是整个 M3、Animator 或完整后端完成，M2 人工/自包含/长稳门禁不因此关闭。
 
 | 小阶段 | 详细方案 |
 | --- | --- |

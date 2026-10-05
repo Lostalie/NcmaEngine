@@ -20,7 +20,7 @@ internal static unsafe partial class Program
     private static double _cachedElapsedMs;
     private static StaticMeshDraw _oldDeviceDraw;
     private static ResourceDraw _oldResourceDraw;
-    static void Check(bool value,string message) { if(!value) throw new Exception(message); }
+    static void Check(bool value,string message) { if(!value) { Console.Error.WriteLine("FAIL assertion: "+message);throw new Exception(message); } }
     static void Reject(Action action,string? code=null)
     {
         try {action();} catch(RenderGraphException e) { Check(code is null || e.Code==code,"Unexpected diagnostic "+e.Code);return; }
@@ -395,7 +395,7 @@ internal static unsafe partial class Program
                 Reject(()=>renderer.Dispose());Reject(()=>window.Dispose());
 
                 if(cycleIndex==0) {
-                    if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestResourceDrawing(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestScenePipeline(renderer,ref frame,output);TestSceneResources(renderer,ref frame,output);TestSceneProfiles(renderer,ref frame,output);}
+                    if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestResourceDrawing(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestScenePipeline(renderer,ref frame,output);TestSceneResources(renderer,ref frame,output);TestSceneProfiles(renderer,ref frame,output);TestSkinnedScenes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);}
                     TestConfiguration(renderer,ref frame,baseline,image);
                     var variations=new RenderPipeline[]{
                         new ReferencePreviewPipeline(toneExposureOverride:2),

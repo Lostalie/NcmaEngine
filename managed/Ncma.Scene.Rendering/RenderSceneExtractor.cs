@@ -37,9 +37,10 @@ public sealed class RenderSceneExtractor
     private Guid _assets, _camera;
     private SceneCameraView? _browser;
     private uint _width, _height;
+    private bool _skin;
     private readonly int _owner = Environment.CurrentManagedThreadId;
     public RenderSceneExtractor(World world) { ArgumentNullException.ThrowIfNull(world); _ = world.Identity; _world = world; }
-    public RenderSceneView Extract(PreparedSceneAssets assets, Guid cameraObject, uint width, uint height, SceneCameraView? browserCamera = null)
+    public RenderSceneView Extract(PreparedSceneAssets assets, Guid cameraObject, uint width, uint height, SceneCameraView? browserCamera = null, bool gpuSkin = false)
     {
         if (Environment.CurrentManagedThreadId != _owner) throw new InvalidOperationException("Extraction requires the World owner thread.");
         ArgumentNullException.ThrowIfNull(assets);
@@ -48,7 +49,7 @@ public sealed class RenderSceneExtractor
         if (_world.IsUpdating) throw new InvalidOperationException("Extraction requires a committed safe boundary.");
         Guid worldId = _world.Identity; ulong revision = _world.Revision;
         if (_cached is not null && _cached.WorldId == worldId && _cached.Revision == revision && _assets == assets.Identity &&
-            _camera == cameraObject && _browser == browserCamera && _width == width && _height == height) return _cached;
+            _camera == cameraObject && _browser == browserCamera && _width == width && _height == height && _skin == gpuSkin) return _cached;
         using var read = _world.ReadOnly();
         var objects = _world.GetObjects(); var diagnostics = new List<SceneRenderDiagnostic>();
         SceneCameraView? camera = browserCamera;
@@ -86,16 +87,18 @@ public sealed class RenderSceneExtractor
         {
             Guid id = obj.PersistentId;
             if (obj.Has<StaticMeshData>() && obj.Has<SkinnedMeshData>()) { diagnostics.Add(new(id, "geometry_conflict")); continue; }
-            if (obj.Has<SkinnedMeshData>()) { diagnostics.Add(new(id, "skinning_unimplemented")); continue; }
-            if (!obj.Has<StaticMeshData>()) continue;
-            var mesh = obj.Get<StaticMeshData>(); if (!mesh.Visible) continue;
+            bool skin = obj.Has<SkinnedMeshData>();
+            if (skin && !gpuSkin) { diagnostics.Add(new(id, "skinning_unprepared")); continue; }
+            if (!skin && !obj.Has<StaticMeshData>()) continue;
+            var s = skin ? SkinnedMeshData.Validate(obj.Get<SkinnedMeshData>()) : default;
+            var mesh = skin ? new StaticMeshData(s.MeshId,s.MaterialSetId,s.Visible,s.CastShadow,s.LayerMask) : obj.Get<StaticMeshData>(); if (!mesh.Visible) continue;
             try
             {
                 _ = StaticMeshData.Validate(mesh);
                 if (!obj.Has<TransformData>()) { diagnostics.Add(new(id, "transform_missing")); continue; }
                 var model = SceneRenderValidation.Model(obj.Get<TransformData>());
                 if (!assets.TryFind(mesh.MeshId, out var info)) { diagnostics.Add(new(id, "asset_missing", mesh.MeshId)); continue; }
-                if (info!.Kind != AssetKind.StaticMesh) { diagnostics.Add(new(id, "asset_kind_mismatch", mesh.MeshId)); continue; }
+                if (info!.Kind != (skin ? AssetKind.SkinnedMesh : AssetKind.StaticMesh)) { diagnostics.Add(new(id, "asset_kind_mismatch", mesh.MeshId)); continue; }
                 if (!assets.TryFind(mesh.MaterialSetId, out var material)) diagnostics.Add(new(id, "asset_missing", mesh.MaterialSetId));
                 else if (material!.Kind != AssetKind.MaterialSet || material.MaterialSlots < Math.Max(1, info.MaterialSlots))
                 { diagnostics.Add(new(id, "material_set_invalid", mesh.MaterialSetId)); continue; }
@@ -106,7 +109,7 @@ public sealed class RenderSceneExtractor
                     else if (overrideInfo!.Kind != AssetKind.Material) { diagnostics.Add(new(id, "asset_kind_mismatch", materialId)); continue; }
                 }
                 // Indices cover resolved visible geometry before camera culling, not just the camera's survivors.
-                bool cameraVisible = camera is { } c && (mesh.LayerMask & c.Data.LayerMask) != 0 && IntersectsClip(info.BoundsMin, info.BoundsMax, model * c.ViewProjection);
+                bool cameraVisible = camera is { } c && (mesh.LayerMask & c.Data.LayerMask) != 0 && (skin || IntersectsClip(info.BoundsMin, info.BoundsMax, model * c.ViewProjection));
                 int index = indices.Count; indices.Add(id, index);
                 var draw = new SceneDrawItem(index, id, info, mesh.MaterialSetId, model, overridden, mesh.LayerMask);
                 if (cameraVisible) geometry.Add(draw);
@@ -116,7 +119,7 @@ public sealed class RenderSceneExtractor
             catch (ArgumentException) { diagnostics.Add(new(id, "render_data_invalid")); }
         }
         var view = new RenderSceneView(worldId, revision, camera, light, geometry, casters, indices, diagnostics);
-        _cached = view; _assets = assets.Identity; _camera = cameraObject; _browser = browserCamera; _width = width; _height = height;
+        _cached = view; _assets = assets.Identity; _camera = cameraObject; _browser = browserCamera; _width = width; _height = height; _skin = gpuSkin;
         return view;
     }
     public static SceneCameraView CreateCamera(Guid id, TransformData transform, CameraData camera, uint width, uint height)
