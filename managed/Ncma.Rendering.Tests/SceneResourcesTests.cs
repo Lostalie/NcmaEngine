@@ -54,9 +54,13 @@ internal static unsafe partial class Program
         try {
             Check(edit.Submit(frame++,256,256,camera,target:target),"Production scene submitted no GPU geometry");renderer.CaptureTarget(target,original);renderer.Present();
             Check(edit.Costs.GeometryDraws==1&&edit.Costs.ShadowDraws==2&&edit.View!.Geometry.All(d=>d.ObjectId!=caster),"Camera culling incorrectly removed off-camera shadow caster");
+            Check(edit.Pick(frame-1,edit.View!.FrameIdentity,.5f,.5f)==ground,"Exact-frame viewport bounds picking");
+            ulong pickFrame=frame-1;Guid pickView=edit.View.FrameIdentity;
+            Reject(()=>edit.Pick(pickFrame+1,pickView,.5f,.5f));Reject(()=>edit.Pick(pickFrame,Guid.NewGuid(),.5f,.5f));
             ulong resources=renderer.ResourceStats.Creates,plans=renderer.PipelineStats.Creates;
             var cameraData=editor.Document.World.FindObject(camera).Get<CameraData>();
             editor.Document.World.FindObject(camera).Set(cameraData with{ViewportX=.5f,ViewportWidth=.5f});
+            Reject(()=>edit.Pick(pickFrame,pickView,.5f,.5f)); // Old pixels/Undo-like revision cannot select a current World.
             edit.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();
             Check(changed[(128*256+64)*4]==0&&changed[(64*256+192)*4]>0,"Normalized camera viewport/offscreen letterbox not deterministic");
             editor.Document.World.FindObject(camera).Set(cameraData);edit.Submit(frame++,256,256,camera,target:target);renderer.Present();

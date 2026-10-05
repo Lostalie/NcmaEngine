@@ -72,6 +72,7 @@ uint32_t NCMA_CALL DestroyResource(uint64_t context,uint64_t handle,NcmaGpuResou
         auto valid=Instance(context,handle,error);if(valid)return valid;
         if(resource.generation!=handle||(!renderer->textures.contains(resource.value)&&!renderer->materials.contains(resource.value)&&!renderer->targets.contains(resource.value)))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
         if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
+        if(renderer->targets.contains(resource.value)&&renderer->targets.at(resource.value)->guiPins)return NcmaPlugin::Error(error,NCMA_BUSY,"Target pinned by GUI draw data.");
         if(renderer->textures.contains(resource.value))for(const auto& pair:renderer->materials)for(const auto& t:pair.second->description.textures)if(t.value==resource.value)return NcmaPlugin::Error(error,NCMA_BUSY,"Texture pinned by material.");
         BusyScope scope;std::string message;if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
         renderer->backend->GetDeviceContext()->ClearState();
@@ -119,7 +120,7 @@ uint32_t NCMA_CALL SubmitResources(uint64_t context,uint64_t handle,const NcmaRe
             for(int i=0;i<4;++i)p.ClearColorValue[i]=i==3?f.clear[i]:encode(f.clear[i]);if(!renderer->backend->BeginRenderPass(p,message))return Failure(error,message);}
         for(const auto& d:batch){const auto& material=*renderer->materials.at(d.material.value);
             if(!renderer->resourceKernel->Draw(*renderer->meshes.at(d.mesh.value),d,material.description,material.textures,f,message))return Failure(error,message);}
-        renderer->backend->EndRenderPass();renderer->active=true;renderer->lastFrame=f.frame;renderer->stats.submitted_frames++;renderer->resourceStats.draws+=f.draw_count;
+        renderer->backend->EndRenderPass();if(target)target->lastFrame=f.frame;renderer->active=true;renderer->lastFrame=f.frame;renderer->stats.submitted_frames++;renderer->resourceStats.draws+=f.draw_count;
         renderer->stats.submit_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();Validation(*renderer);execution.success=true;return NCMA_OK;
     });
 }

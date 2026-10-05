@@ -4,7 +4,7 @@ using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Rendering;
 namespace Ncma.Gui;
-public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme }
+public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton }
 [StructLayout(LayoutKind.Sequential)]
 public struct GuiFrame { public uint StructSize, ItemCount, TextBytes, Reserved; public ulong Frame, ViewGeneration, DocumentGeneration, Revision; }
 [StructLayout(LayoutKind.Sequential)]
@@ -15,6 +15,13 @@ public unsafe struct GuiItem
     public double Value, Minimum, Maximum;
     public fixed float Rect[4];
     public fixed uint Reserved[4];
+    public static GuiItem Image(ulong high,ulong low,GuiImageToken token,float x,float y,float width,float height,bool enabled=false)
+    {
+        if((high|low)==0||token.Value==0||token.Generation==0||!float.IsFinite(x)||!float.IsFinite(y)||!float.IsFinite(width)||!float.IsFinite(height)||width<=0||height<=0||width>16384||height>16384)throw new ArgumentException("Invalid GUI Image.");
+        GuiItem item=new(){Kind=(uint)GuiItemKind.Image,Enabled=enabled?1u:0u,WidgetHigh=high,WidgetLow=low};
+        item.Rect[0]=x;item.Rect[1]=y;item.Rect[2]=width;item.Rect[3]=height;
+        item.Reserved[0]=(uint)token.Value;item.Reserved[1]=(uint)(token.Value>>32);item.Reserved[2]=(uint)token.Generation;item.Reserved[3]=(uint)(token.Generation>>32);return item;
+    }
 }
 [StructLayout(LayoutKind.Sequential)]
 public struct GuiEvent
@@ -112,6 +119,7 @@ public sealed unsafe class GuiSession : IDisposable
     public GuiStats Draw(GuiFrame frame, ReadOnlySpan<GuiItem> items, ReadOnlySpan<byte> text)
     {
         Verify(); long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        if(Module.AbiMinor<3)foreach(var item in items)if(item.Kind>12)throw new NotSupportedException("GUI Image/AssetButton requires ABI 1.3.");
         if (frame.ItemCount != items.Length || frame.TextBytes != text.Length) throw new ArgumentException("GUI view length mismatch.");
         PluginError error = default; GuiStats stats = default; uint count = 0;
         fixed (GuiItem* input = items) fixed (byte* source = text) fixed (GuiEvent* events = _events) fixed (byte* outputText = _text)

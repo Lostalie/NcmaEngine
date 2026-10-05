@@ -12,8 +12,11 @@ public sealed class DerivedGenerationStore : IDisposable
     private readonly Guid _project;
     private readonly object _gate = new();
     private readonly Dictionary<string, Pin> _pins = new(StringComparer.Ordinal);
+    // Immutable index published only after preparation completes. Owner reads never wait on
+    // the background lock that protects disk IO, parsing, publication and file lease disposal.
+    private Dictionary<string,Pin> _publishedPins=new(StringComparer.Ordinal);
     private bool _closed;
-    private sealed record Pin(WindowsAssetFile File, AssetDirectoryLease Parents, string Hash, long Bytes);
+    private sealed record Pin(WindowsAssetFile File, AssetDirectoryLease Parents, string Hash, long Bytes,ModelAssetManifest Manifest,Dictionary<Guid,int> Slots);
     public const int MaxGenerations = 128;
     public const long MaxBytes = 1024L * 1024 * 1024;
     public DerivedGenerationStore(AssetProjectPaths paths, Guid project) { if (project == Guid.Empty) throw new ArgumentException("Empty project."); _paths = paths; _project = project; }
@@ -47,8 +50,16 @@ public sealed class DerivedGenerationStore : IDisposable
                 file = WindowsAssetFile.OpenReadLease(full);
                 if (file.Hash(DerivedAssetCodec.MaxBytes, cancellation) != generation.ContentHash) throw new EditCommandRejectedException("asset_generation_conflict");
                 if (_pins.Values.Sum(p => p.Bytes) + file.Length > MaxBytes) throw new EditCommandRejectedException("asset_generation_budget");
-                ModelAssetManifestCodec.ValidateBundle(file.Read(DerivedAssetCodec.MaxBytes), record); cancellation.ThrowIfCancellationRequested();
-                _pins.Add(relative, new(file, parents, generation.ContentHash, file.Length)); file = null;
+                byte[] validated=file.Read(DerivedAssetCodec.MaxBytes);
+                var manifest=ModelAssetManifestCodec.ValidateBundle(validated, record); cancellation.ThrowIfCancellationRequested();
+                // Small role counts are prepared off the owner thread; assignment never reopens NCA.
+                var slots=new Dictionary<Guid,int>();
+                foreach(var block in DerivedAssetCodec.Decode(validated)) {
+                    if(block.Kind==AssetKind.MaterialSet)slots.Add(block.AssetId,Math.Max(1,ModelPayloadCodec.DecodeMaterials(block.Data).Names.Length));
+                    else if(block.AssetId!=record.AssetId&&block.Kind is AssetKind.StaticMesh or AssetKind.SkinnedMesh)slots.Add(block.AssetId,Math.Max(1,ModelPayloadCodec.DecodeMesh(block.Data).MaterialSlots));
+                }
+                _pins.Add(relative, new(file, parents, generation.ContentHash, file.Length,manifest,slots)); file = null;
+                Volatile.Write(ref _publishedPins,new Dictionary<string,Pin>(_pins,StringComparer.Ordinal));
             }
             catch { parents.Dispose(); throw; }
             finally { file?.Dispose(); }
@@ -58,9 +69,21 @@ public sealed class DerivedGenerationStore : IDisposable
     public void RequirePinned(AssetRecord record)
     {
         if (record.Generation is null) return; ValidatePath(record);
-        lock (_gate) if (_closed || !_pins.TryGetValue(record.Generation.RelativePath, out var pin) || pin.Hash != record.Generation.ContentHash)
+        if (Volatile.Read(ref _closed) || !Volatile.Read(ref _publishedPins).TryGetValue(record.Generation.RelativePath, out var pin) || pin.Hash != record.Generation.ContentHash)
             throw new EditCommandRejectedException("asset_generation_not_prepared");
     }
+    // Copied small model roles from an already validated/pinned generation. No disk IO.
+    public ModelAssetManifest CopyManifest(AssetRecord record)
+    {
+        RequirePinned(record);if(record.Generation is null)throw new ArgumentException("Missing model generation.");
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed),this);return ModelAssetManifestCodec.Decode(ModelAssetManifestCodec.Encode(Volatile.Read(ref _publishedPins)[record.Generation.RelativePath].Manifest));
+    }
+    public int MaterialSlots(AssetRecord record,Guid asset)
+    {
+        RequirePinned(record);if(record.Generation is null)throw new EditCommandRejectedException("asset_generation_not_prepared");
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed),this);return Volatile.Read(ref _publishedPins)[record.Generation.RelativePath].Slots.TryGetValue(asset,out int count)?count:throw new EditCommandRejectedException("asset_material_slots_unknown");
+    }
+    public (int Count,long Bytes) RetainedUsage {get{ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed),this);var pins=Volatile.Read(ref _publishedPins);return(pins.Count,pins.Values.Sum(p=>p.Bytes));}}
     public IDisposable PinForPlay(IEnumerable<AssetRecord> records)
     {
         // Separate actual read leases keep old generations alive even after the editor store closes.
@@ -133,5 +156,5 @@ public sealed class DerivedGenerationStore : IDisposable
         AssetRecordCodec.ValidateHash(name[1]);
     }
     private sealed class Group(List<IDisposable> leases) : IDisposable { public void Dispose() { foreach (var lease in leases) lease.Dispose(); leases.Clear(); } }
-    public void Dispose() { lock (_gate) { if (_closed) return; _closed = true; foreach (var pin in _pins.Values) { pin.File.Dispose(); pin.Parents.Dispose(); } _pins.Clear(); } }
+    public void Dispose() { lock (_gate) { if (_closed) return; Volatile.Write(ref _closed,true); foreach (var pin in _pins.Values) { pin.File.Dispose(); pin.Parents.Dispose(); } _pins.Clear(); Volatile.Write(ref _publishedPins,new Dictionary<string,Pin>(StringComparer.Ordinal)); } }
 }

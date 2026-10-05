@@ -741,6 +741,8 @@ var cases = new (string, Action)[] {
         }
         Check(renderer.PipelineStats.Pipelines==0&&renderer.PipelineStats.ResidentBytes==0&&renderer.ResourceStats.Creates==0);
     }),
+    ("M3.6 asset UI plan/grant/import/history/flat placement/frozen/cancel/stale/restart",()=>M36WorkflowTests.Run(root,args[1],output)),
+    ("M3.6 independent Orbit/Pan/Zoom and right-handed bounded CPU picking",M36WorkflowTests.CameraAndPicking),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);
         File.WriteAllBytes(Path.Combine(dir,"Main.ncmascene"),new SceneDocument().CaptureBytes());

@@ -1,6 +1,6 @@
 namespace Ncma.Assets.Authoring;
 
-public sealed record AssetScanResult(AssetCatalog Catalog, AssetDiagnostic[] Diagnostics)
+public sealed record AssetScanResult(AssetCatalog Catalog, AssetDiagnostic[] Diagnostics, IReadOnlyDictionary<Guid,string>? MetadataFiles=null)
 {
     public bool Valid => Diagnostics.All(d => d.Code is "source_missing" or "source_orphan" or "staging_orphan" or "asset_missing" or "asset_tombstone");
 }
@@ -49,6 +49,7 @@ public sealed class AssetCatalogScanner
         if (files.Count > AssetCatalog.MaxRecords) throw new ArgumentException("Too many asset descriptors.");
         int totalBytes = 0;
         var records = new List<AssetRecord>();
+        var metadataFiles=new Dictionary<Guid,string>();
         var diagnostics = new List<AssetDiagnostic>();
         foreach (string file in files)
         {
@@ -58,7 +59,7 @@ public sealed class AssetCatalogScanner
             if (stream.Length is < 2 or > AssetRecordCodec.MaxBytes || stream.Length > MaxTotalDescriptorBytes - totalBytes)
                 throw new ArgumentException("Asset descriptors exceed scan byte budget.");
             byte[] bytes = stream.Read(AssetRecordCodec.MaxBytes); totalBytes += bytes.Length;
-            var record = AssetRecordCodec.Decode(bytes); records.Add(record);
+            var record = AssetRecordCodec.Decode(bytes); records.Add(record);if(!metadataFiles.TryAdd(record.AssetId,file))throw new ArgumentException("Duplicate asset UUID.");
             try { _paths.Resolve(record.SourcePath, requireFile: true); }
             catch (FileNotFoundException) { diagnostics.Add(new("source_missing", record.AssetId, record.SourcePath, "Source identity retained; source file is missing.")); }
             catch (DirectoryNotFoundException) { diagnostics.Add(new("source_missing", record.AssetId, record.SourcePath, "Source identity retained; source directory is missing.")); }
@@ -68,6 +69,6 @@ public sealed class AssetCatalogScanner
             diagnostics.Add(new(source.EndsWith(".before", StringComparison.Ordinal) || source.EndsWith(".after", StringComparison.Ordinal)
                 ? "staging_orphan" : "source_orphan", Guid.Empty, source, "Unregistered file retained; no identity or write approval inferred."));
         var catalog = new AssetCatalog(records); diagnostics.AddRange(catalog.Diagnostics);
-        return new(catalog, diagnostics.OrderBy(d => d.Path, StringComparer.Ordinal).ThenBy(d => d.AssetId).ToArray());
+        return new(catalog, diagnostics.OrderBy(d => d.Path, StringComparer.Ordinal).ThenBy(d => d.AssetId).ToArray(),new System.Collections.ObjectModel.ReadOnlyDictionary<Guid,string>(metadataFiles));
     }
 }

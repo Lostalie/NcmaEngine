@@ -76,6 +76,11 @@ public sealed class AssetImportCommands : IEditCommandParticipant, IDisposable
         _tickets.Add(ticketId, new(jobId, coordinator, revision, task)); return ticketId;
     }
     public bool IsPrepared(Guid ticket) { Verify(); return Find(ticket).Task.IsCompleted; }
+    public void DiscardPrepared(Guid ticket)
+    {
+        Verify();var found=Find(ticket);found.Coordinator.Cancel(found.JobId);_tickets.Remove(ticket);
+        _=found.Task.ContinueWith(t=>{_=t.Exception;},CancellationToken.None,TaskContinuationOptions.OnlyOnFaulted,TaskScheduler.Default);
+    }
     public PreparedImportInfo InspectPrepared(Guid ticket)
     {
         Verify(); var t = Find(ticket); if (!t.Task.IsCompleted) throw new EditCommandRejectedException("asset_import_preparing");

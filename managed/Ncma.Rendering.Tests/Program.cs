@@ -395,6 +395,7 @@ internal static unsafe partial class Program
                 Reject(()=>renderer.Dispose());Reject(()=>window.Dispose());
 
                 if(cycleIndex==0) {
+                    TestGuiImages(renderer,gui,window,ref frame,output);
                     if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestResourceDrawing(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestScenePipeline(renderer,ref frame,output);TestSceneResources(renderer,ref frame,output);TestSceneProfiles(renderer,ref frame,output);TestSkinnedScenes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);}
                     TestConfiguration(renderer,ref frame,baseline,image);
                     var variations=new RenderPipeline[]{
@@ -424,7 +425,7 @@ internal static unsafe partial class Program
                     items[0].Rect[2]=150;items[0].Rect[3]=80;
                     items[1]=new(){Kind=3,Enabled=1,WidgetHigh=1,WidgetLow=2,LabelLength=(uint)text.Length};
                     items[2].Kind=2;
-                    gui.Draw(new(){StructSize=48,Frame=(ulong)scaleIndex,ViewGeneration=1,DocumentGeneration=1,Revision=0,ItemCount=3,TextBytes=(uint)text.Length},items,text);
+                    gui.Draw(new(){StructSize=48,Frame=frame,ViewGeneration=1,DocumentGeneration=1,Revision=0,ItemCount=3,TextBytes=(uint)text.Length},items,text);
                     Reject(gui.RenderGpu); // GUI cannot draw before renderer submit.
                     renderer.Submit(compiled,resources,RenderFrame.Reference(frame++,256,256));gui.RenderGpu();
                     if(cycleIndex==0 && scaleIndex==1){renderer.Capture(image);ExportBmp(Path.Combine(output,"gui-composited.bmp"),image,256,256);Check(!image.SequenceEqual(baseline),"No GUI pixels.");}

@@ -30,7 +30,7 @@ bool busy=false;
 struct TextureGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle texture;uint32_t format=0;uint64_t bytes=0;
     explicit TextureGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TextureGpu(){backend.DestroyTexture(texture);}};
 struct MaterialGpu {NcmaMaterialDescriptionV3 description{};std::array<Rhi::TextureHandle,6> textures{};};
-struct TargetGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle color,depth;uint32_t width=0,height=0;
+struct TargetGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle color,depth;uint32_t width=0,height=0;uint64_t guiPins=0,lastFrame=0;
     explicit TargetGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TargetGpu(){backend.DestroyTexture(color);backend.DestroyTexture(depth);}};
 uint64_t nextResource=1;
 struct Renderer {
@@ -546,7 +546,28 @@ extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_validate_gui_
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
         if(!renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
-        return NCMA_OK;});
+        renderer->backend->BindGuiBackbuffer();return NCMA_OK;});
+}
+extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_gui_image_v1(uint64_t context,uint64_t handle,NcmaGpuResourceV3 token,uint64_t frame,uint32_t retain,ID3D11ShaderResourceView** output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!output||retain>1||(retain&&frame))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(token.generation!=handle||!renderer->targets.contains(token.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
+        auto& target=*renderer->targets.at(token.value);
+        if(frame&&(!renderer->active||renderer->lastFrame!=frame||target.lastFrame!=frame))return NcmaPlugin::Error(error,NCMA_BUSY,"GUI image requires exact submitted target frame.");
+        auto* view=renderer->backend->BorrowTextureView(target.color);
+        if(!view)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(retain){if(target.guiPins>=64)return NcmaPlugin::Error(error,NCMA_BUSY,"GUI image pin budget.");target.guiPins++;}
+        *output=view;return NCMA_OK;
+    });
+}
+extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_release_gui_image_v1(uint64_t context,uint64_t handle,NcmaGpuResourceV3 token,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(token.generation!=handle||!renderer->targets.contains(token.value)||!renderer->targets.at(token.value)->guiPins)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        renderer->targets.at(token.value)->guiPins--;return NCMA_OK;
+    });
 }
 extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major,uint32_t minor,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     const NcmaRendererApiV1 table{{sizeof(NcmaRendererApiV1),1,0,NCMA_RENDERER,15,Initialize,Shutdown,Status,Diagnostic},

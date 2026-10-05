@@ -37,6 +37,8 @@ internal static unsafe partial class Program
                 n=Vector3.Normalize(n);t=Vector3.Normalize(t-n*Vector3.Dot(n,t));cpuVertices[i]=v with{Position=p,Normal=n,Joints=default,Weights=default};tangents[i]=new(t,sourceT.W);
                 void Add(ushort j,float w){if(w==0)return;p+=Vector3.Transform(v.Position,matrices[j])*w;Matrix4x4.Invert(matrices[j],out var inverse);n+=Vector3.TransformNormal(v.Normal,Matrix4x4.Transpose(inverse))*w;t+=Vector3.TransformNormal(new(sourceT.X,sourceT.Y,sourceT.Z),matrices[j])*w;}
             }
+            var bounds=new SkinInfluenceBounds(payload).Evaluate(matrices,mainModel);
+            foreach(var vertex in cpuVertices){var position=Vector3.Transform(vertex.Position,mainModel);Check(position.X>=bounds.Min.X-1e-5&&position.Y>=bounds.Min.Y-1e-5&&position.Z>=bounds.Min.Z-1e-5&&position.X<=bounds.Max.X+1e-5&&position.Y<=bounds.Max.Y+1e-5&&position.Z<=bounds.Max.Z+1e-5,"Conservative posed influence bounds did not cover CPU skin oracle");}
             using var cpu=renderer.CreateStaticMesh(MeshUploadData.PrepareStatic(new(false,0,cpuVertices,tangents,payload.Indices,payload.TriangleMaterials,[],1)));
             SceneGpuDraw Draw(GpuMesh mesh,Matrix4x4 model)=>SceneGpuDraw.Create(mesh,material.Resource,upload.Ranges[0],model,camera.ViewProjection);
             SceneGpuDraw groundDraw=SceneGpuDraw.Create(ground,material.Resource,Quad().Ranges[0],groundModel,camera.ViewProjection);

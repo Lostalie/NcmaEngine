@@ -8,8 +8,12 @@ extern "C" {
 #define NCMA_GUI_MAX_TEXT_BYTES 2097152u
 #define NCMA_GUI_MAX_EVENTS 256u
 #define NCMA_GUI_OUTPUT_TEXT_BYTES 65536u
-/* GUI module ABI 1.2 adds bounded presentation-only canvases; these emit no events. */
-typedef enum NcmaGuiItemKind { NCMA_GUI_PANEL_BEGIN = 1, NCMA_GUI_PANEL_END = 2, NCMA_GUI_LABEL = 3, NCMA_GUI_BUTTON = 4, NCMA_GUI_NUMBER = 5, NCMA_GUI_CHECKBOX = 6, NCMA_GUI_TEXT = 7, NCMA_GUI_SAME_LINE = 8, NCMA_GUI_CANVAS_BEGIN = 9, NCMA_GUI_CANVAS_LINES = 10, NCMA_GUI_CANVAS_END = 11, NCMA_GUI_THEME = 12 } NcmaGuiItemKind;
+/* GUI module ABI 1.3 adds Image. Its reserved words hold a renderer-owned target token
+   (value low/high, generation low/high), NOT ImTextureID/SRV. Other reserved words remain zero.
+   Rect is a logical screen rectangle; native GUI pins at most 64 images until render/discard. */
+typedef enum NcmaGuiItemKind { NCMA_GUI_PANEL_BEGIN = 1, NCMA_GUI_PANEL_END = 2, NCMA_GUI_LABEL = 3, NCMA_GUI_BUTTON = 4, NCMA_GUI_NUMBER = 5, NCMA_GUI_CHECKBOX = 6, NCMA_GUI_TEXT = 7, NCMA_GUI_SAME_LINE = 8, NCMA_GUI_CANVAS_BEGIN = 9, NCMA_GUI_CANVAS_LINES = 10, NCMA_GUI_CANVAS_END = 11, NCMA_GUI_THEME = 12, NCMA_GUI_IMAGE = 13, NCMA_GUI_ASSET_BUTTON = 14 } NcmaGuiItemKind;
+/* AssetButton text is one canonical UUID (36 bytes). A drop on enabled Image emits commit
+   value=1/text=UUID; click emits value=0/text="u v". No file path or native command payload. */
 typedef struct NcmaGuiDescriptionV1 {
     uint32_t struct_size, reserved;
     uint64_t platform_module, window;

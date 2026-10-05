@@ -423,7 +423,8 @@ if(NCMA_BUILD_TESTS)
         set_tests_properties(NcmaPoseManagedTests PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaEditorServiceTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins")
-        set_tests_properties(NcmaEditorServiceTests PROPERTIES TIMEOUT 60)
+        # Includes bounded real-worker import + normal Editor offscreen/restart workflow.
+        set_tests_properties(NcmaEditorServiceTests PROPERTIES TIMEOUT 180)
         add_test(NAME NcmaPlayerTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Player.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Player.Tests.dll"
             "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins")

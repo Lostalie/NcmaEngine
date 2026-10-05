@@ -131,6 +131,16 @@ int main(int argc,char** argv) {
         Check(typed.destroy_resource(renderModule,handle,texture,&error)==NCMA_BUSY,"Material pins texture");
         NcmaTargetDescriptionV3 targetDesc{16,256,256,0};auto badTarget=targetDesc;badTarget.width=UINT32_MAX;Check(typed.create_target(renderModule,handle,&badTarget,&target,&error)==NCMA_INVALID_ARGUMENT,"Target integer overflow preflight");
         Check(typed.create_target(renderModule,handle,&targetDesc,&target,&error)==NCMA_OK,"Target create");
+        ID3D11ShaderResourceView* imageView=nullptr;
+        Check(ncma_renderer_gui_image_v1(renderModule,handle,texture,0,0,&imageView,&error)==NCMA_INVALID_HANDLE,"GUI accepts target tokens only");
+        auto foreignTarget=target;foreignTarget.generation++;
+        Check(ncma_renderer_gui_image_v1(renderModule,handle,foreignTarget,0,0,&imageView,&error)==NCMA_INVALID_HANDLE,"GUI image foreign generation");
+        Check(ncma_renderer_gui_image_v1(renderModule,handle,target,1,0,&imageView,&error)==NCMA_BUSY,"Unsubmitted target cannot masquerade as current image");
+        for(int i=0;i<64;i++)Check(ncma_renderer_gui_image_v1(renderModule,handle,target,0,1,&imageView,&error)==NCMA_OK&&imageView,"Bounded GUI image pin");
+        Check(ncma_renderer_gui_image_v1(renderModule,handle,target,0,1,&imageView,&error)==NCMA_BUSY,"GUI pin overflow");
+        Check(typed.destroy_resource(renderModule,handle,target,&error)==NCMA_BUSY,"CPU GUI data pins target before GPU submit");
+        for(int i=0;i<64;i++)Check(ncma_renderer_release_gui_image_v1(renderModule,handle,target,&error)==NCMA_OK,"GUI image unpin");
+        Check(ncma_renderer_release_gui_image_v1(renderModule,handle,target,&error)==NCMA_INVALID_HANDLE,"GUI image double unpin");
         NcmaGpuMeshV1 typedMesh{};Check(scene.create_mesh(renderModule,handle,&meshDesc,&typedMesh,&error)==NCMA_OK,"Typed negative mesh");
         NcmaResourceDrawV3 resourceDraw{};resourceDraw.mesh=typedMesh;resourceDraw.material=material;resourceDraw.index_count=3;
         for(int i=0;i<16;++i)resourceDraw.model[i]=resourceDraw.model_view_projection[i]=resourceDraw.normal_matrix[i]=i%5==0?1.f:0.f;

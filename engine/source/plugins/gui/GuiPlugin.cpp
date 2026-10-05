@@ -30,6 +30,8 @@ struct Gui {
     int theme = 0;
     bool frameActive = false, cancel = false, gpuDrawReady = false;
     uint64_t rendererModule = 0, rendererHandle = 0;
+    std::array<NcmaGpuResourceV3,64> images{};
+    uint32_t imageCount=0;
     std::unordered_map<Id, std::array<char, 1024>, Hash> textDrafts;
     std::unordered_map<Id, double, Hash> numberDrafts;
     std::unordered_set<Id, Hash> textPending;
@@ -49,6 +51,13 @@ uint32_t ValidateGui(uint64_t context, uint64_t handle, NcmaErrorV1* error)
     ImGui::SetCurrentContext(gui->context); return NCMA_OK;
 }
 struct BusyScope { BusyScope() { busy = true; } ~BusyScope() { busy = false; } };
+uint32_t ReleaseImages(Gui& g,NcmaErrorV1* error) {
+    while(g.imageCount){auto result=ncma_renderer_release_gui_image_v1(g.rendererModule,g.rendererHandle,g.images[g.imageCount-1],error);if(result)return result;g.imageCount--;}
+    return NCMA_OK;
+}
+NcmaGpuResourceV3 ImageToken(const NcmaGuiItemV1& item) {
+    return {item.reserved[0]|(static_cast<uint64_t>(item.reserved[1])<<32),item.reserved[2]|(static_cast<uint64_t>(item.reserved[3])<<32)};
+}
 uint32_t NCMA_CALL Initialize(const uint8_t* input, uint32_t length, uint64_t* output, NcmaErrorV1* error) noexcept
 {
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
@@ -139,6 +148,7 @@ uint32_t NCMA_CALL Begin(uint64_t context, uint64_t handle, const NcmaWindowStat
         if (gui->frameActive) return NcmaPlugin::Error(error, NCMA_BUSY);
         if (state->scale_x > 8 || state->scale_y > 8) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
         BusyScope scope;
+        valid=ReleaseImages(*gui,error);if(valid)return valid;
         gui->gpuDrawReady = false;
         float scale = std::max(state->scale_x, state->scale_y);
         if (std::abs(scale - gui->rasterScale) > 0.01f) {
@@ -182,6 +192,7 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
         auto valid = ValidateGui(context, handle, error); if (valid) return valid;
         if (!gui->frameActive) return NcmaPlugin::Error(error, NCMA_BUSY);
+        if(gui->imageCount)return NcmaPlugin::Error(error,NCMA_BUSY,"Previous failed image draw requires discard/shutdown.");
         if (!events || capacity < NCMA_GUI_MAX_EVENTS || !count || !stats || !outputText || textCapacity < NCMA_GUI_OUTPUT_TEXT_BYTES)
             return NcmaPlugin::Error(error, NCMA_BUFFER_TOO_SMALL);
         if (!frame || frame->struct_size != sizeof(*frame) || frame->reserved || frame->item_count > NCMA_GUI_MAX_ITEMS ||
@@ -194,13 +205,15 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
         std::unordered_set<Id, Hash> ids;
         int panels = 0, canvases = 0; uint64_t expandedText = 0;
         std::vector<std::vector<float>> lines(frame->item_count);
+        std::vector<ID3D11ShaderResourceView*> imageViews(frame->item_count,nullptr);
+        uint32_t imageCount=0;
         uint32_t segments = 0;
         for (uint32_t i = 0; i < frame->item_count; i++) {
             const auto& item = items[i]; std::string label, value;
             expandedText += static_cast<uint64_t>(item.label_length) + item.text_length;
             if (expandedText + frame->item_count * sizeof(NcmaGuiItemV1) > NCMA_GUI_MAX_TEXT_BYTES) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
-            if (item.kind < NCMA_GUI_PANEL_BEGIN || item.kind > NCMA_GUI_THEME || item.enabled > 1 ||
-                item.reserved[0] || item.reserved[1] || item.reserved[2] || item.reserved[3] ||
+            if (item.kind < NCMA_GUI_PANEL_BEGIN || item.kind > NCMA_GUI_ASSET_BUTTON || item.enabled > 1 ||
+                (item.kind!=NCMA_GUI_IMAGE&&(item.reserved[0] || item.reserved[1] || item.reserved[2] || item.reserved[3])) ||
                 !std::isfinite(item.value) || !std::isfinite(item.minimum) || !std::isfinite(item.maximum) || item.minimum > item.maximum ||
                 !Text(text, frame->text_bytes, item.label_offset, item.label_length, label, 4096) ||
                 !Text(text, frame->text_bytes, item.text_offset, item.text_length, value, 1023))
@@ -235,12 +248,28 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
                 if (lines[i].empty() || lines[i].size() % 4 || (segments += static_cast<uint32_t>(lines[i].size() / 4)) > 32768)
                     return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
             } else if (canvases && item.kind != NCMA_GUI_CANVAS_BEGIN) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
+            if(item.kind==NCMA_GUI_IMAGE) {
+                if(++imageCount>64||item.rect[2]<=0||item.rect[3]<=0||item.rect[2]>16384||item.rect[3]>16384||!label.empty()||!value.empty()||!gui->rendererHandle)
+                    return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+                valid=ncma_renderer_gui_image_v1(gui->rendererModule,gui->rendererHandle,ImageToken(item),0,0,&imageViews[i],error);if(valid)return valid;
+            }
+            if(item.kind==NCMA_GUI_ASSET_BUTTON) {
+                if(value.size()!=36)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+                for(size_t j=0;j<36;j++)if(j==8||j==13||j==18||j==23){if(value[j]!='-')return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);}
+                    else if(!((value[j]>='0'&&value[j]<='9')||(value[j]>='a'&&value[j]<='f')))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+            }
             if (item.kind != NCMA_GUI_PANEL_END && (!ids.insert({item.widget_high, item.widget_low}).second || (!item.widget_high && !item.widget_low)))
                 return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
             labels.push_back(std::move(label)); values.push_back(std::move(value));
         }
         if (panels || canvases) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
         BusyScope scope;
+        // Complete preflight above precedes all resource retention and ImGui mutation.
+        for(uint32_t i=0;i<frame->item_count;i++)if(items[i].kind==NCMA_GUI_IMAGE) {
+            valid=ncma_renderer_gui_image_v1(gui->rendererModule,gui->rendererHandle,ImageToken(items[i]),0,1,&imageViews[i],error);
+            if(valid){NcmaErrorV1 ignored{};ReleaseImages(*gui,&ignored);return valid;}
+            gui->images[gui->imageCount++]=ImageToken(items[i]);
+        }
         if (gui->generation != frame->document_generation || gui->viewGeneration != frame->view_generation) {
             ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); gui->cancel = true;
         }
@@ -299,16 +328,37 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
                 continue;
             }
             ImGui::PushID(reinterpret_cast<const char*>(&item.widget_high), reinterpret_cast<const char*>(&item.widget_high) + 16);
-            ImGui::BeginDisabled(!item.enabled);
+            ImGui::BeginDisabled(!item.enabled&&item.kind!=NCMA_GUI_IMAGE);
             std::string label = labels[i] + "###value";
             const Id widget{item.widget_high, item.widget_low};
             double value = item.value;
             if (auto draft = gui->numberDrafts.find(widget); draft != gui->numberDrafts.end()) value = draft->second;
             const char* input = nullptr; bool changed = false;
             switch (item.kind) {
+                case NCMA_GUI_IMAGE: {
+                    ImGui::SetCursorScreenPos({item.rect[0],item.rect[1]});
+                    ImGui::Image(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(imageViews[i])),{item.rect[2],item.rect[3]});
+                    if(item.enabled&&ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+                        const auto pointer=ImGui::GetIO().MousePos;
+                        std::array<char,96> coordinates{};
+                        auto u=std::to_chars(coordinates.data(),coordinates.data()+40,std::clamp((pointer.x-item.rect[0])/item.rect[2],0.0f,1.0f));
+                        if(u.ec==std::errc{}){*u.ptr++=' ';auto v=std::to_chars(u.ptr,coordinates.data()+95,std::clamp((pointer.y-item.rect[1])/item.rect[3],0.0f,1.0f));if(v.ec==std::errc{})emit(item,3,0,coordinates.data());}
+                    }
+                    if(item.enabled&&ImGui::BeginDragDropTarget()) {
+                        if(const auto* payload=ImGui::AcceptDragDropPayload("NCMA_MODEL_UUID_V1"))if(payload->DataSize==37)emit(item,3,1,static_cast<const char*>(payload->Data));
+                        ImGui::EndDragDropTarget();
+                    }
+                    break;
+                }
                 case NCMA_GUI_LABEL: ImGui::TextUnformatted(labels[i].c_str()); break;
                 case NCMA_GUI_BUTTON:
                     if (ImGui::Button(label.c_str())) emit(item, 3, value);
+                    break;
+                case NCMA_GUI_ASSET_BUTTON:
+                    if(ImGui::Button(label.c_str()))emit(item,3,value);
+                    if(item.enabled&&ImGui::BeginDragDropSource()) {
+                        ImGui::SetDragDropPayload("NCMA_MODEL_UUID_V1",values[i].c_str(),37);ImGui::TextUnformatted(labels[i].c_str());ImGui::EndDragDropSource();
+                    }
                     break;
                 case NCMA_GUI_NUMBER:
                     changed = ImGui::SliderScalar(label.c_str(), ImGuiDataType_Double, &value, &item.minimum, &item.maximum);
@@ -366,8 +416,10 @@ uint32_t NCMA_CALL RenderGpu(uint64_t context,uint64_t handle,NcmaErrorV1* error
         auto valid=ValidateGui(context,handle,error);if(valid)return valid;
         if(!gui->rendererHandle)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE);
         if(!gui->gpuDrawReady||gui->frameActive)return NcmaPlugin::Error(error,NCMA_BUSY);
+        for(uint32_t i=0;i<gui->imageCount;i++) {ID3D11ShaderResourceView* ignored=nullptr;
+            valid=ncma_renderer_gui_image_v1(gui->rendererModule,gui->rendererHandle,gui->images[i],gui->lastFrame,0,&ignored,error);if(valid)return valid;}
         valid=ncma_renderer_validate_gui_frame_v1(gui->rendererModule,gui->rendererHandle,error);if(valid)return valid;
-        BusyScope scope; ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());gui->gpuDrawReady=false;return NCMA_OK;
+        BusyScope scope; ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());gui->gpuDrawReady=false;return ReleaseImages(*gui,error);
     });
 }
 uint32_t NCMA_CALL Destroy(uint64_t context, uint64_t handle, NcmaErrorV1* error) noexcept
@@ -377,6 +429,7 @@ uint32_t NCMA_CALL Destroy(uint64_t context, uint64_t handle, NcmaErrorV1* error
         BusyScope scope;
         if (gui->frameActive) ImGui::EndFrame();
         if (gui->rendererHandle) {
+            valid=ReleaseImages(*gui,error);if(valid)return valid;
             ImGui_ImplDX11_Shutdown(); NcmaErrorV1 releaseError{};
             auto released = ncma_renderer_release_dx11_v1(gui->rendererModule,gui->rendererHandle,&releaseError);
             if (released) { *error=releaseError; return released; }
@@ -390,7 +443,7 @@ uint32_t NCMA_CALL Destroy(uint64_t context, uint64_t handle, NcmaErrorV1* error
 }
 extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major, uint32_t minor, void* output, uint32_t capacity, NcmaErrorV1* error) noexcept
 {
-    const NcmaGuiApiV1 api{{sizeof(NcmaGuiApiV1), 1, 2, NCMA_GUI, 0, Initialize, Shutdown, Status, Diagnostic},
+    const NcmaGuiApiV1 api{{sizeof(NcmaGuiApiV1), 1, 3, NCMA_GUI, 0, Initialize, Shutdown, Status, Diagnostic},
         Create, Begin, Draw, Destroy, AttachRenderer, RenderGpu};
-    return NcmaPlugin::CopyApi(major, minor, output, capacity, error, api, 2);
+    return NcmaPlugin::CopyApi(major, minor, output, capacity, error, api, 3);
 }

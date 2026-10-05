@@ -36,10 +36,11 @@ int main(int argc, char** argv)
     assert(getPlatform);
     NcmaErrorV1 error{}; NcmaPlatformApiV1 api{};
     NcmaGuiApiV1 guiApi{};
-    assert(ncma_plugin_get_api(1, 0, &guiApi, sizeof(guiApi), &error) == NCMA_OK && guiApi.module.minor == 2);
+    assert(ncma_plugin_get_api(1, 0, &guiApi, sizeof(guiApi), &error) == NCMA_OK && guiApi.module.minor == 3);
     assert(ncma_plugin_get_api(1, 1, &guiApi, sizeof(guiApi), &error) == NCMA_OK);
     assert(ncma_plugin_get_api(1, 2, &guiApi, sizeof(guiApi), &error) == NCMA_OK);
-    assert(ncma_plugin_get_api(1, 3, &guiApi, sizeof(guiApi), &error) == NCMA_ABI_MISMATCH);
+    assert(ncma_plugin_get_api(1, 3, &guiApi, sizeof(guiApi), &error) == NCMA_OK);
+    assert(ncma_plugin_get_api(1, 4, &guiApi, sizeof(guiApi), &error) == NCMA_ABI_MISMATCH);
     assert(getPlatform(1, 0, &api, sizeof(api), &error) == NCMA_OK);
     uint64_t platform = 0, w = 0;
     assert(api.module.initialize(nullptr, 0, &platform, &error) == NCMA_OK);

@@ -65,6 +65,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private PlatformWindow? _window;
     private GuiSession? _gui;
     private RendererSession? _renderer;
+    private GpuViewTarget? _viewportTarget;
     private RenderPipelineService? _renderService;
     private Ncma.Rendering.RenderResourceCache? _sceneCache;
     private Ncma.Rendering.Scene.SceneRenderSession? _editScene, _playScene;
@@ -76,6 +77,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private Guid _configurationWorld;
     private RenderConfiguration _configuration;
     private EditorSessionOwner? _editor;
+    private EditorAssetWorkflow? _assetWorkflow;
     private EditorPresenter? _presenter;
     private FbxPreviewSession? _fbxPreview;
     private ActionPreviewSession? _animationPreview;
@@ -103,7 +105,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
             new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]),
-            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 2, ["ncma.platform", "ncma.renderer"]) ]);
+            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 3, ["ncma.platform", "ncma.renderer"]) ]);
         // Independent optional module only; no scene rigid bodies or Play Step dispatch.
         _physics = new(plugins, project?.Configuration.PhysicsEnabled == true);
         var physics = _physics.Inspect();
@@ -128,9 +130,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _editor.Edit!.Resynchronize(); // Startup is the saved baseline, not a user Open command.
             if (Directory.Exists(Path.Combine(project.Root, "assets")))
             {
-                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1); // Read-only by default; UI/Agent cannot manufacture grants.
+                _assetWorkflow=new(workspace,project.Root,project.Configuration.ProjectId,1);
+                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope); // Exact human approvals only; Agent cannot manufacture grants.
                 if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
-                    _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _ => false);
+                    _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _assetWorkflow.IsSourceApproved);
             }
             _editor.LoadGameplay(project.GameplayAssemblyPath);
             _editor.PrepareRenderAssets(project.Root, project.Configuration.ProjectId);
@@ -141,7 +144,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _fbxPreview = new(Path.Combine(plugins, "NcmaNative.dll")); // lazy immutable kernel loading on trusted local import only
             _animationPreview = new(Path.Combine(plugins,"NcmaNative.dll"));
             _filePicker=new();
-            _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log);
+            _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
         }
         if (_renderer is not null) {
@@ -183,7 +186,8 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _presentationText=Encoding.UTF8.GetString(_gui.OutputText.Slice((int)input.TextOffset,(int)input.TextLength));
     }
     public void PumpAgent(FrameContext frame) {
-        _editor!.RefreshAssets(); _editor.Endpoint?.Pump();
+        _editor!.RefreshAssets();_assetWorkflow?.Pump(); _editor.Endpoint?.Pump();
+        if(_presenter?.ConsumeScrub() is { } scrub)_editScene?.Animation?.SetPreviewTime(scrub);
         if (_presenter?.ConsumeRenderAssetRefresh()==true) {
             try { _editor.RefreshRenderAssets(); }
             catch(Exception e) when(e is ArgumentException or IOException or UnauthorizedAccessException) { _log!.Write("error","render.asset_refresh",e.Message,_correlation); }
@@ -240,7 +244,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     }
     public void AdvancePlay(FrameContext frame) {
         if (_editor!.Play is { State: Ncma.Gameplay.PlayState.Running } play) play.AdvanceFrame(frame.DeltaSeconds);
-        if(_editor.Play is null)_editScene?.Animation?.AdvancePreview(Math.Clamp(frame.DeltaSeconds,0,.25));
+        if(_editor.Play is null&&_presenter?.EditPreviewPaused!=true)_editScene?.Animation?.AdvancePreview(Math.Clamp(frame.DeltaSeconds,0,.25));
         _fbxPreview?.Tick(Math.Min(frame.DeltaSeconds, 1));
         _animationPreview?.Tick(Math.Min(frame.DeltaSeconds,1));
     }
@@ -255,6 +259,19 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         GuiStats stats;
         if (_presenter is not null) {
             description = _presenter.Build(frame.FrameId,_state.Width,_state.Height);
+            if(!ReferencePreview&&_renderer is not null) {
+                if(_state.Minimized==0&&_state.FramebufferWidth>0&&_state.FramebufferHeight>0) {
+                    var area=_presenter.Viewport;
+                    uint targetWidth=Math.Clamp((uint)Math.Ceiling(area.Width*_state.FramebufferWidth/Math.Max(_state.Width,1)),1,4096);
+                    uint targetHeight=Math.Clamp((uint)Math.Ceiling(area.Height*_state.FramebufferHeight/Math.Max(_state.Height,1)),1,4096);
+                    if(_viewportTarget is null||_viewportTarget.Width!=targetWidth||_viewportTarget.Height!=targetHeight) {
+                        var candidate=_renderer.CreateViewTarget(targetWidth,targetHeight);
+                        try{_viewportTarget?.Dispose();}catch{candidate.Dispose();throw;}
+                        _viewportTarget=candidate;
+                    }
+                    description=_presenter.AttachViewport(_viewportTarget.ImageToken);
+                } else {_viewportTarget?.Dispose();_viewportTarget=null;}
+            }
             stats = _gui!.Draw(description,_presenter.Items,_presenter.Text);
             if (stats.EventOverflow != 0) _presenter.CancelInteraction();
         } else stats = _gui!.Draw(description, _items, _text.AsSpan(0,_labels.Length+inputBytes));
@@ -266,6 +283,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if(x>=_state.FramebufferWidth || y>=_state.FramebufferHeight)return;
             uint width=Math.Clamp((uint)Math.Ceiling(logical.Item3*_state.FramebufferWidth/Math.Max(_state.Width,1)),1,_state.FramebufferWidth-x);
             uint height=Math.Clamp((uint)Math.Ceiling(logical.Item4*_state.FramebufferHeight/Math.Max(_state.Height,1)),1,_state.FramebufferHeight-y);
+            if(_viewportTarget is not null){x=0;y=0;width=_viewportTarget.Width;height=_viewportTarget.Height;}
             var configurationWorld=_editor.Play?.Document.World??_editor.Document.World;
             if (_configurationRevision != configurationWorld.Revision || _configurationWorld != configurationWorld.Identity) {
                 var configurations=configurationWorld.GetObjects().Where(item=>item.Has<RenderConfiguration>()).Take(2).ToArray();
@@ -278,14 +296,14 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                 Guid camera=_presenter?.SceneCamera??project?.Configuration.SceneCamera??Guid.Empty;
                 Ncma.Scene.Rendering.SceneCameraView? browser=null;
                 if(camera==Guid.Empty) {
-                    var position=new System.Numerics.Vector3(6,4,8);
-                    var view=System.Numerics.Matrix4x4.CreateLookAt(position,new(0,0,-3),System.Numerics.Vector3.UnitY);
-                    browser=new(Guid.Empty,view*System.Numerics.Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI/3,width/(float)height,.1f,1000),position,Ncma.Scene.Rendering.CameraData.Default);
+                    browser=_presenter?.BrowserCamera(width,height)??new EditorOrbitCamera().View(width,height);
                 }
-                if(scene?.Submit(frame.FrameId,width,height,camera,browser,_configuration.Exposure,_configuration.Ambient,origin:new(x,y))!=true) {
-                    _renderService!.Configure(ClearConfiguration(_configuration),width,height);_renderService.Submit(frame.FrameId,x,y);
+                if(scene?.Submit(frame.FrameId,width,height,camera,browser,_configuration.Exposure,_configuration.Ambient,target:_viewportTarget,origin:new(x,y))!=true) {
+                    if(_viewportTarget is not null)_renderer.SubmitResources(frame.FrameId,[],new(0,0,width,height),new(.015f,.02f,.03f,1),new(System.Numerics.Vector3.Zero,System.Numerics.Vector3.UnitY,System.Numerics.Vector4.One),_viewportTarget);
+                    else {_renderService!.Configure(ClearConfiguration(_configuration),width,height);_renderService.Submit(frame.FrameId,x,y);}
                 }
                 _presenter?.ShowRenderDiagnostics(scene?.Diagnostics);
+                _presenter?.SetViewportFrame(_editor.Play is null?scene:null,frame.FrameId);
             } else {
             if (_graph is null || width != _viewWidth || height != _viewHeight) {
                 _renderService!.Configure(_configuration,width,height);
@@ -330,8 +348,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         try { _animationPreview?.Dispose(); _animationPreview = null; } catch (Exception e) { failures.Add(e); }
         try { _fbxPreview?.Dispose(); _fbxPreview = null; } catch (Exception e) { failures.Add(e); }
         try { _playScene?.Dispose(); _playScene=null; _editScene?.Dispose(); _editScene=null; _sceneCache?.Dispose(); _sceneCache=null; _poseKernel?.Dispose(); _poseKernel=null; } catch(Exception e) { failures.Add(e); }
+        try {_assetWorkflow?.Dispose();_assetWorkflow=null;}catch(Exception e){failures.Add(e);}
         try { _editor?.Dispose(); _editor = null; } catch (Exception e) { failures.Add(e); }
         try { _gui?.Dispose(); _gui = null; } catch (Exception e) { failures.Add(e); }
+        try { _viewportTarget?.Dispose();_viewportTarget=null; } catch(Exception e) {failures.Add(e);}
         try { _renderService?.Dispose(); _renderService = null; } catch (Exception e) { failures.Add(e); }
         try { _renderer?.Dispose(); _renderer = null; } catch (Exception e) { failures.Add(e); }
         try { _window?.Dispose(); _window = null; } catch (Exception e) { failures.Add(e); }

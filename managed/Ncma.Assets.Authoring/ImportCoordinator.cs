@@ -107,6 +107,8 @@ public sealed class ImportCoordinator : IDisposable
         }
     }
     public void Cancel(Guid jobId) { Verify(); CancelCore(Find(jobId)); }
+    // Cancellation changes the visible state immediately; cleanup may still own leases/process IO.
+    public bool CanForget(Guid jobId) { Verify(); return Find(jobId).Work.IsCompleted; }
     internal Task<T> PrepareAsync<T>(Guid jobId, Func<ImportedModel, ImportCandidateInfo, CancellationToken, T> prepare)
     {
         Verify(); var job = Find(jobId); RequireReady(jobId, _clock.Revision, _generation);

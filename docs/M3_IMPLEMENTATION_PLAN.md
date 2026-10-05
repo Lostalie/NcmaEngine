@@ -1,7 +1,7 @@
 # M3 资产系统与 FBX 场景角色实施方案
 
 日期：2026-10-05。基线：165c50b5a77e9ab7b81ce6ff19147f9a1eb27e3b。
-性质：实施方案。M3.1–M3.3 最终完整 Debug/Release 回归通过，G1/G2/G3 资源门禁关闭；M3.4 已补真实静态 DX11 场景、CPU/GPU 租约与 Editor/Player 消费，最终回归/G4 结论见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 已补正式 NCA/场景角色/最小片段播放与 DX11 GPU 蒙皮，最终双配置通过、G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)；M3.6–M3.9 未实现。历史范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将当前切片视为完整后端完成。
+性质：实施方案。M3.1–M3.3 最终完整 Debug/Release 回归通过，G1/G2/G3 资源门禁关闭；M3.4 已补真实静态 DX11 场景、CPU/GPU 租约与 Editor/Player 消费，最终回归/G4 结论见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 已补正式 NCA/场景角色/最小片段播放与 DX11 GPU 蒙皮，最终双配置通过、G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)；M3.6 候选资产工作流/离屏视口已接线，缩略图/独立材质浏览/人工项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)；M3.7–M3.9 未实现。历史范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将当前切片视为完整后端完成。
 
 M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启后可实例化到扁平场景，
 在 Editor 和 DX11 Player 中播放动画、显示 PBR 材质和阴影；重新导入、编辑和获批 Agent 修改可恢复。
@@ -14,7 +14,7 @@ M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启
 | 应用与编辑 | C# apphost 已成为 out/bin 默认入口，原生 ImGui 为展示插件；旧宿主/场景桥已删除 | 增加资产业务，不恢复原生 World/hostfxr |
 | 场景与玩法 | C# World、SceneDocument JSON v1、唯一编辑历史、隔离 Play、固定步和本地 scoped MCP；M3.4 typed 资产/网格/相机/灯光，M3.5 ClipPlayback | 完整 Inspector、Prefab、动画动作/物理调度 |
 | FBX | G2 持久导入/异步 Worker/取消/原始流；M3.5 骨架/片段 NCA → 场景 GPU，Character ABI 2 仅诊断 | 完整源材质/纹理和用户 DCC 覆盖 |
-| Renderer | M3.3 资源/v1/v2/v3；M3.4 additive v4 Scene/Editor/Player、单方向光 shadow/HDR/tone、CPU/GPU lease、typed Graph；M3.5 query 5 GPU 蒙皮共享主画面/阴影 | 离屏 GUI、CSM/contact、IBL 与通用多阶段资源图未实现 |
+| Renderer | M3.3 资源/v1/v2/v3；M3.4 additive v4 Scene/Editor/Player、单方向光 shadow/HDR/tone、CPU/GPU lease、typed Graph；M3.5 query 5 GPU 蒙皮共享主画面/阴影；M3.6 GUI1.3 opaque离屏合成候选 | 缩略图、CSM/contact、IBL 与通用多阶段资源图未实现 |
 | 组件注册 | 值类型组件、Guid/标量/嵌套值字段；现有 schema 检查支持闭合对象，不支持通用数组 | 不能把材质数组、骨骼数组、资源对象塞入组件 |
 | 验证 | M3.5 最终双配置各 31 CTest、43 Python；真实 GPU/API 数值/图像与 Player、部署恢复均验证 | 不代替用户真实 FBX、人工/长稳/生产性能覆盖 |
 

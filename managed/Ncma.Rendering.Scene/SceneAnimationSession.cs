@@ -20,10 +20,11 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     {
         internal readonly Guid Id;internal readonly GameObject Object;internal readonly SkinnedMeshData Source;
         internal readonly PoseRig Rig;internal readonly MeshBindingPalette Bindings;internal readonly SkinUploadData Upload;
+        internal readonly SkinInfluenceBounds InfluenceBounds;
         internal readonly int BoneOffset;internal readonly Vector3 BindRoot;
         internal ClipClock? Clock;internal bool Active;internal Vector3 RootDisplacement;
         internal Character(GameObject obj,SkinnedMeshData source,PoseRig rig,SkeletonPayload skeleton,MeshPayload mesh,int offset)
-        {Id=obj.PersistentId;Object=obj;Source=source;Rig=rig;Bindings=new(mesh,rig.BoneCount);Upload=SkinUploadData.Prepare(mesh);BoneOffset=offset;BindRoot=skeleton.Bones[0].BindLocal.Position;}
+        {Id=obj.PersistentId;Object=obj;Source=source;Rig=rig;Bindings=new(mesh,rig.BoneCount);Upload=SkinUploadData.Prepare(mesh);InfluenceBounds=new(mesh);BoneOffset=offset;BindRoot=skeleton.Bones[0].BindLocal.Position;}
     }
     private readonly int _owner=Environment.CurrentManagedThreadId;
     private readonly World _world;private readonly PoseKernel _kernel;private readonly List<IDisposable> _leases=new(192);
@@ -127,6 +128,12 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         Costs=new(active,_models.Length,offset,sampled,Stopwatch.GetElapsedTime(start).TotalMilliseconds,checked(Costs.PoseGeneration+1));
     }
     internal ReadOnlySpan<GpuSkinPalette> Palette=>_palette.AsSpan(0,Costs.PaletteEntries);
+    internal bool TryBounds(Guid objectId,ulong pose,Matrix4x4 model,out MeshBounds bounds)
+    {
+        Verify();if(Costs.PoseGeneration!=pose)throw new InvalidOperationException("stale_pick_pose");int offset=0;
+        foreach(var c in _characters)if(c.Active){if(c.Id==objectId){bounds=c.InfluenceBounds.Evaluate(_bindingMatrices.AsSpan(offset,c.Bindings.BindingCount),model);return true;}offset+=c.Bindings.BindingCount;}
+        bounds=default;return false;
+    }
     public Vector3 RootDisplacement(Guid objectId)
     {Verify();foreach(var c in _characters)if(c.Id==objectId)return c.RootDisplacement;throw new ArgumentException("Unknown prepared character.");}
     private void Verify(){ObjectDisposedException.ThrowIf(_disposed,this);if(_owner!=Environment.CurrentManagedThreadId||_world.Identity!=WorldId)throw new InvalidOperationException("Animation session owner/World identity invalidated; prepare a new session.");}

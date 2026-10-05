@@ -57,6 +57,9 @@ namespace NcmaEngine::Rhi
         bool CaptureRgba8(TextureHandle texture,void* output,uint32_t capacity,std::string& error);
         // Native plugin-only borrow; never part of managed/module ABI. Owner thread, no ownership transfer.
         ID3D11Buffer* BorrowBuffer(BufferHandle h) noexcept {auto i=m_Buffers.find(h.Value);return i==m_Buffers.end()?nullptr:i->second.Buffer.Get();}
+        ID3D11ShaderResourceView* BorrowTextureView(TextureHandle h) noexcept {auto i=m_Textures.find(h.Value);return i==m_Textures.end()?nullptr:i->second.ShaderResourceView.Get();}
+        // Native GUI composition only: bind swapchain without clearing a second time.
+        void BindGuiBackbuffer() noexcept {ID3D11RenderTargetView* view=m_RenderTargetView.Get();m_DeviceContext->OMSetRenderTargets(1,&view,nullptr);}
 
     private:
         struct TextureResource final

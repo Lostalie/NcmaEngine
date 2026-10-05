@@ -16,8 +16,8 @@ using Ncma.Application;
 namespace Ncma.Editor.App;
 
 // Only this presentation layer knows GuiItem. Business routing and the document stay managed.
-internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? gameplayAssembly, string? projectRoot = null, FbxPreviewSession? fbxPreview = null, ActionPreviewSession? animationPreview = null,
-    EditorPreferencesStore? preferences = null, Func<LocalFileKind,string?>? filePicker = null, ApplicationLog? log = null)
+internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, string? gameplayAssembly, string? projectRoot = null, FbxPreviewSession? fbxPreview = null, ActionPreviewSession? animationPreview = null,
+    EditorPreferencesStore? preferences = null, Func<LocalFileKind,string?>? filePicker = null, ApplicationLog? log = null, EditorAssetWorkflow? assetWorkflow=null)
 {
     private static readonly JsonSerializerOptions DataJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, IncludeFields = true, IgnoreReadOnlyProperties = true };
     private readonly Dictionary<Guid, ulong> _rowIds = [];
@@ -175,6 +175,7 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
             Add(GuiItemKind.Button, 4, low, (_page.State.Selection == row.Id ? "> " : "") + row.Name,
                 new("select", row.Id));
         }
+        BuildAssets(ref labelId,writable);
         End();
         Panel(3, "Inspector / 检查器", w - side, toolbar, side, h - toolbar);
         if (_page.Selected is { } selected)
@@ -289,7 +290,7 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
         }
         End();
         float center = Math.Max(1, w - 2 * side);
-        Viewport = (side, toolbar + Math.Min(220, h - toolbar), center, Math.Max(1, h - toolbar - 220));
+        Viewport = (side+8, toolbar + Math.Min(220, h - toolbar)+28, Math.Max(1,center-16), Math.Max(1, h - toolbar - 256));
         Panel(4, "Play / Status / Console", side, toolbar, center, Math.Min(220, h - toolbar));
         Button(14, "Play", "start", _page.Play is null && !_page.State.HistoryInvalidated);
         Line();
@@ -306,6 +307,7 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
         Add(GuiItemKind.Button,14,1,"Browser camera",new("browser_camera")); Line();
         Add(GuiItemKind.Button,14,2,"Use selected scene camera",new("scene_camera",_page.Selected?.Id??Guid.Empty),enabled:_page.Selected?.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.CameraData.TypeId)==true);
         if(projectRoot is not null) { Line(); Add(GuiItemKind.Button,14,3,"Refresh render assets",new("render_refresh")); }
+        BuildBrowserControls();
         Add(GuiItemKind.Label,3,labelId++,SceneCamera==Guid.Empty?"Independent browser camera / scene static PBR":"Scene camera: "+SceneCamera.ToString("D"));
         foreach(string diagnostic in _renderDiagnostics) Add(GuiItemKind.Label,3,labelId++,diagnostic);
         if (_page.Play is { } play)
@@ -452,6 +454,14 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
         return _frame;
     }
+    // Adds the renderer's opaque target identity to a copied view, never a native pointer.
+    public GuiFrame AttachViewport(GuiImageToken token)
+    {
+        Panel(5,"Scene Viewport",Viewport.X-8,Viewport.Y-28,Viewport.Width+16,Viewport.Height+36);
+        _items.Add(GuiItem.Image(15,1,token,Viewport.X,Viewport.Y,Viewport.Width,Viewport.Height,enabled:_page is {State.Frozen:false,State.HistoryInvalidated:false}));
+        _actions.Add((15,1),new("viewport"));
+        End();_frame.ItemCount=(uint)_items.Count;_frame.TextBytes=(uint)_text.Count;return _frame;
+    }
     private void ChooseFile(string operation)
     {
         CancelInteraction();
@@ -510,6 +520,8 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
                     continue;
                 }
                 if (e.Phase != 3) continue;
+                if(ApplyAssetAction(action,e.Value,text,stamp))continue;
+                if(ApplyViewportAction(action,e.Value,text,stamp))continue;
                 switch (action.Kind)
                 {
                     case "browser_camera": SceneCamera=Guid.Empty; break;

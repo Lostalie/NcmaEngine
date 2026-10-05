@@ -63,6 +63,11 @@ public sealed class EditorWorkspace(EditorSessionOwner owner)
     }
     public CapabilityResult Transaction(EditorViewStamp stamp, string label, object[] operations, Guid? selection = null) =>
         Invoke("ncma.scene.transaction", JsonSerializer.SerializeToElement(new { label, operations, selection }), stamp);
+    public CapabilityResult AssetCommand(EditorViewStamp stamp,string capability,object input)
+    {
+        if(!LocalCapabilities.Contains(capability)||!capability.StartsWith("ncma.assets.",StringComparison.Ordinal))throw new ArgumentException("Unsupported local asset command.");
+        return Invoke(capability,JsonSerializer.SerializeToElement(input),stamp);
+    }
     public Guid CreateObject(EditorViewStamp stamp)
     {
         Guid id = Guid.NewGuid(); Transaction(stamp, "Create GameObject", [new { op = "create", objectId = id, name = "GameObject" }], id); return id;

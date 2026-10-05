@@ -28,7 +28,9 @@ public abstract class GpuResource : IDisposable
 }
 public sealed class GpuTexture : GpuResource {public TextureSemantic Semantic {get;}public bool NormalYDown {get;}internal GpuTexture(RendererSession owner,TextureData data):base(owner){Semantic=data.Semantic;NormalYDown=data.NormalYDown;}}
 public sealed class GpuMaterial : GpuResource {public bool UsesNormalMap {get;}internal GpuMaterial(RendererSession owner,bool normal):base(owner){UsesNormalMap=normal;}}
-public sealed class GpuViewTarget : GpuResource {public uint Width{get;}public uint Height{get;}internal GpuViewTarget(RendererSession owner,uint width,uint height):base(owner){Width=width;Height=height;}}
+// Opaque renderer-owned identity. It is never an ImTextureID, COM pointer or serialized asset.
+[StructLayout(LayoutKind.Sequential)] public readonly record struct GuiImageToken(ulong Value,ulong Generation);
+public sealed class GpuViewTarget : GpuResource {public uint Width{get;}public uint Height{get;}public GuiImageToken ImageToken {get{var key=Key;return new(key.Value,key.Generation);}}internal GpuViewTarget(RendererSession owner,uint width,uint height):base(owner){Width=width;Height=height;}}
 [StructLayout(LayoutKind.Sequential)] public unsafe struct ResourceDraw
 {
     internal GpuMeshKey Mesh,Material;

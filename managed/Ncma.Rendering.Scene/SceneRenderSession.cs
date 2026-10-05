@@ -16,6 +16,8 @@ public sealed class SceneRenderSession : IDisposable
     private readonly SceneGpuResources _resources;
     private readonly SceneAnimationSession? _animation;
     private readonly Ncma.Gameplay.PlaySession? _play;
+    private readonly World _world;
+    private ulong _submittedFrame,_submittedPose;
     public Guid WorldId { get; }
     public ulong PreparedRevision { get; }
     public SceneAnimationSession? Animation => _animation;
@@ -40,7 +42,7 @@ public sealed class SceneRenderSession : IDisposable
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null)
     {
-        _renderer = renderer; _cache = cache; _extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
+        _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
         WorldId = world.Identity; PreparedRevision = world.Revision; _play = play;
         try {
@@ -92,7 +94,24 @@ public sealed class SceneRenderSession : IDisposable
         }
         _pipeline.Submit(frame, _geometry.AsSpan(0, geo), _casters.AsSpan(0, casters), new(camera.Position, toLight, color), lightVP,
             settings, target, new(origin.X + width * camera.Data.ViewportX, origin.Y + height * camera.Data.ViewportY, w, h), clear);
+        _submittedFrame=frame;_submittedPose=_animation?.Costs.PoseGeneration??0;
         Costs = new(extraction, encoding, geo, casters, true); return true;
+    }
+    // User click only. No GPU readback or per-frame CPU skinning. Animated bounds use the
+    // exact submitted pose's conservative influence union, never stale bind-pose bounds.
+    public Guid? Pick(ulong frame,Guid viewIdentity,float u,float v)
+    {
+        Verify();var view=View??throw new InvalidOperationException("pick_view_missing");
+        if(_submittedFrame!=frame||view.FrameIdentity!=viewIdentity||_world.Identity!=view.WorldId||_world.Revision!=view.Revision||!Costs.GpuSubmitted)throw new InvalidOperationException("stale_pick_frame");
+        var camera=view.Camera??throw new InvalidOperationException("pick_camera_missing");
+        if(!float.IsFinite(u)||!float.IsFinite(v)||u is <0 or >1||v is <0 or >1)throw new ArgumentException("Pick range.");
+        if(u<camera.Data.ViewportX||u>camera.Data.ViewportX+camera.Data.ViewportWidth||v<camera.Data.ViewportY||v>camera.Data.ViewportY+camera.Data.ViewportHeight)return null;
+        var ray=BoundsPicking.Ray(camera,u,v);Guid? best=null;float nearest=float.PositiveInfinity;
+        foreach(var item in view.Geometry){MeshBounds bounds;Matrix4x4 model=item.Model;
+            if(item.Mesh.Kind==Ncma.Assets.AssetKind.SkinnedMesh){if(_animation is null||!_animation.TryBounds(item.ObjectId,_submittedPose,model,out bounds))continue;model=Matrix4x4.Identity;}
+            else bounds=new(item.Mesh.BoundsMin,item.Mesh.BoundsMax);
+            if(BoundsPicking.Hit(bounds.Min,bounds.Max,model,ray.Origin,ray.Direction,out float distance)&&(distance<nearest||distance==nearest&&(best is null||item.ObjectId.CompareTo(best.Value)<0))){best=item.ObjectId;nearest=distance;}}
+        return best;
     }
     private void Verify() { ObjectDisposedException.ThrowIf(_disposed, this); if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Scene render session requires owner thread."); }
     public void Dispose() { if (_disposed) return; Verify(); _pipeline?.Dispose(); _pipeline = null; _resources.Dispose(); _animation?.Dispose(); _cache.Trim(); _disposed = true; }

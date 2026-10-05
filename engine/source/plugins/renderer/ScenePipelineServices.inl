@@ -72,6 +72,7 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
    else if(p.operation==7){if(!pipeline.BeginGeometry(f,message))return Failure(error,message);for(const auto& d:geo){const auto& m=*renderer->materials.at(d.draw.material.value);if(!pipeline.Draw(*renderer->meshes.at(d.draw.mesh.value),d,m.description,m.textures,f,false,shadows,p.parameters[0],message))return Failure(error,message);}renderer->backend->EndRenderPass();}
    else if(!pipeline.Tone(f,target,p.parameters[0],message))return Failure(error,message);
   }
+  if(b.target.value)renderer->targets.at(b.target.value)->lastFrame=b.frame;
   renderer->active=true;renderer->lastFrame=b.frame;renderer->stats.submitted_frames++;renderer->sceneStats.geometry_draws+=b.draw_count;renderer->sceneStats.shadow_draws+=f.caster_count;
   renderer->sceneStats.copied_bytes+=240+(static_cast<uint64_t>(b.draw_count)+f.caster_count)*256+static_cast<uint64_t>(f.pass_count)*16;
   renderer->sceneStats.constant_upload_bytes+=(static_cast<uint64_t>(b.draw_count)+f.caster_count+tones)*400;
