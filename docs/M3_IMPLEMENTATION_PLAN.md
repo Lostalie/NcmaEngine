@@ -1,7 +1,7 @@
 # M3 资产系统与 FBX 场景角色实施方案
 
 日期：2026-10-05。基线：165c50b5a77e9ab7b81ce6ff19147f9a1eb27e3b。
-性质：实施方案。M3.1–M3.3最终完整 Debug/Release 回归通过，G1/G2/G3资源门禁关闭；M3.3-B/C/D按最新授权合并提交推送，M3.4–M3.9尚未完成，本次不启动M3.4。范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md) 和 [M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)，不将规划/局部测试或资源切片视为完整后端完成。
+性质：实施方案。M3.1–M3.3最终完整 Debug/Release 回归通过，G1/G2/G3资源门禁关闭；M3.3-B/C/D已合并提交推送。M3.4 的组件/文档校验、CPU 提取和生产只读资产/CPU 租约及启动预检已实现；GPU 协调器/真实场景管线/G4 尚未完成，M3.5–M3.9未启动。范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将规划/局部测试或资源切片视为完整后端完成。
 
 M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启后可实例化到扁平场景，
 在 Editor 和 DX11 Player 中播放动画、显示 PBR 材质和阴影；重新导入、编辑和获批 Agent 修改可恢复。

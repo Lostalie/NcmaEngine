@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../Ncma.Application.Runtime/Ncma.Application.Runtime.csproj" />
     <ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" />
+    <ProjectReference Include="../Ncma.Scene.Rendering/Ncma.Scene.Rendering.csproj" />
     <ProjectReference Include="../Ncma.Physics/Ncma.Physics.csproj" />
     <None Include="../../engine/build/resources/NcmaEngine.ico" Link="NcmaEngine.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

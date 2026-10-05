@@ -302,6 +302,9 @@ if(NCMA_BUILD_MANAGED)
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/Ncma.Rendering.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Rendering.Tests/Ncma.Scene.Rendering.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Presentation.Tests/Ncma.Presentation.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
@@ -407,12 +410,16 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaSceneDocumentTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Scene.Tests.dll")
         set_tests_properties(NcmaSceneDocumentTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaSceneRenderingTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Scene.Rendering.Tests.dll")
+        set_tests_properties(NcmaSceneRenderingTests PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaEditorCoreTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Core.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Core.Tests.dll")
         set_tests_properties(NcmaEditorCoreTests PROPERTIES TIMEOUT 30)
         add_test(NAME NcmaAssetTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Assets.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Assets.Tests.dll")
-        set_tests_properties(NcmaAssetTests PROPERTIES TIMEOUT 60)
+        # Includes 64 MiB descriptor parsing and 16384 real file creations; keep all boundary assertions.
+        set_tests_properties(NcmaAssetTests PROPERTIES TIMEOUT 180)
         if(WIN32)
             add_test(NAME NcmaAssetImportTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Asset.Import.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Asset.Import.Tests.dll"

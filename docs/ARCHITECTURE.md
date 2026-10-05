@@ -93,6 +93,8 @@ C# 负责帧外 typed mesh/绑定姿态、原始skin/palette保留、工具侧PN
 正式Scene/Editor/Player多对象渲染、GUI离屏展示、动画GPU蒙皮、shadow/IBL整合和通用多阶段资源图仍未实现，分别留M3.4–M3.6等后续，不称完整后端。
 契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [B/C/D交付记录](M3_3_BCD_DELIVERY_REPORT.md)。
 
+M3.4 开发中：独立 `Ncma.Scene.Rendering` 注册五类 UUID/值组件；Editor/Player 共用组合校验，完整候选安装/保存前验证，普通对象不强制 Transform。CPU extractor 直接读已提交 World，提供明确相机、矩阵/bounds 裁剪、保守独立 caster 集合与 identity/revision 缓存，不逐帧序列化。独立 `Ncma.Assets.Runtime`（仅 Assets 依赖，当前 Windows 文件 pin）在启动/显式刷新校验 typed UUID、NCA 文件/block/hash/model 与作者材质纹理闭包，Scene 接入 prepared metadata/CPU 租约；Play 保留自己的旧版本，Player 图形启动严格预检，Headless 不装载 3D。没有 Editor/Renderer 插件依赖。GPU 上传/租约协调器、真实 shadow/HDR/tonemap、多阶段 graph 和 scene 展示未完成；带 mesh 的图形 Player 明确拒绝，不冒充参考立方体。G4 未关闭。见 [启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)。
+
 统一边界：
 
 - 使用版本化 C ABI、固定布局 POD、opaque 资源句柄、有界批量输入/输出。

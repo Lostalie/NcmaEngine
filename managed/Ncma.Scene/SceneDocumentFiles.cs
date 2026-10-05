@@ -43,6 +43,7 @@ public static class SceneDocumentFiles
     public static void Save(SceneDocument document, string path)
     {
         ArgumentNullException.ThrowIfNull(document);
+        document.ValidateAuthoring(); // Shared composition policy, before creating or replacing a file.
         byte[] bytes = document.CaptureBytes(); // Validate the complete payload before touching disk.
         string full = ResolvePath(path);
         if (File.Exists(full)) _ = SceneDocumentCodec.Decode(Read(full)); // Never overwrite an unsupported format.

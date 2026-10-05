@@ -144,6 +144,14 @@ var cases = new (string Name, Action Run)[] {
         var options = PlayerOptions.Parse(["--project", projectPath, "--renderer", "vulkan", "--ticks", "1", "--report", Path.Combine(output, "vulkan.json")]);
         var report = PlayerRunner.Run(options); Check(report.ExitCode == 7 && report.Modules.Length == 0 && report.Tick == 0);
     }),
+    ("Headless scene accepts render metadata without resolving or loading 3D assets", () => {
+        var doc = new SceneDocument("Null scene", Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(), Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
+        var obj = doc.World.CreateObject("Missing mesh"); obj.Set(TransformData.Identity);
+        obj.Set(new Ncma.Scene.Rendering.StaticMeshData(Guid.NewGuid(), Guid.NewGuid(), true, true, uint.MaxValue));
+        SaveScene(doc); var report = PlayerRunner.Run(Options(1), pluginRoot: Path.Combine(output, "no-native"));
+        Check(report.ExitCode == 0 && report.Tick == 1 && report.Modules.Length == 0 && report.RenderedFrames == 0);
+        Scene();
+    }),
     ("Existing report never overwritten and report failure is non-success", () => {
         var options = Options(); File.WriteAllText(options.Report, "keep"); var report = PlayerRunner.Run(options);
         Check(report.ExitCode != 0 && File.ReadAllText(options.Report) == "keep" && report.ReportError is not null);

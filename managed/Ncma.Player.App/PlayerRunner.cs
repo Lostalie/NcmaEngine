@@ -18,6 +18,7 @@ public static class PlayerRunner
         ArgumentNullException.ThrowIfNull(options);
         var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
         PhysicsService? physics = null; PlayerPresentation? presentation = null; PlayStatus? status = null;
+        Ncma.Scene.Rendering.PreparedSceneAssetLease? renderAssets = null;
         int exit = 0, count = 0; string reason = "completed", renderer = options.Headless ? "null" : "unknown";
         string? digest = null; string phase = "configuration"; var errors = new List<string>(); PlayerModule[] modules = [];
         ulong rendered = 0, validationErrors = 0, validationWarnings = 0; bool running = false;
@@ -30,8 +31,19 @@ public static class PlayerRunner
             else
             {
                 if (project.Configuration.Plugins.Length != 0) throw new NotSupportedException("project_plugin_overrides_unimplemented");
-                var document = new SceneDocument(project.Configuration.Name, RenderConfiguration.CreateRegistry());
+                var document = new SceneDocument(project.Configuration.Name,
+                    Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),
+                    Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
+                if (!options.Headless)
+                {
+                    phase = "dependencies";
+                    var startup = document.CaptureSnapshot();
+                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true);
+                    // The fixed reference view must never masquerade as actual imported scene rendering.
+                    if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
+                        throw new NotSupportedException("scene_3d_pipeline_unimplemented");
+                }
                 owner = new(document); owner.LoadGameplay(project.GameplayAssemblyPath);
                 string plugins = Path.GetFullPath(pluginRoot ?? Path.Combine(AppContext.BaseDirectory, "plugins"));
                 phase = "dependencies"; physics = new(plugins, project.Configuration.PhysicsEnabled);
@@ -75,14 +87,14 @@ public static class PlayerRunner
             status = owner?.Play?.Status ?? owner?.LastStartFailure ?? status;
             exit = status?.State == PlayState.Faulted || running ? 5 : e switch
             { FileNotFoundException or BadImageFormatException or DllNotFoundException or PluginException => 3,
-                NotSupportedException => 7, ArgumentException when phase == "dependencies" => 3,
+                NotSupportedException => 7, ArgumentException or IOException or System.Text.Json.JsonException when phase == "dependencies" => 3,
                 ArgumentException or System.Text.Json.JsonException => 2, _ => 4 };
             reason = exit switch { 2 => "invalid_configuration", 3 => "dependency_failed", 5 => "gameplay_fault", 7 => "feature_unimplemented", _ => "initialize_failed" };
         }
         finally
         {
             void Close(IDisposable? service, string id) { if (service is null) return; try { service.Dispose(); } catch { errors.Add(id); } }
-            Close(owner, "runtime_shutdown_failed"); Close(physics, "physics_shutdown_failed"); Close(presentation, "presentation_shutdown_failed");
+            Close(owner, "runtime_shutdown_failed"); Close(physics, "physics_shutdown_failed"); Close(presentation, "presentation_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed");
         }
         if (exit == 0 && errors.Count != 0) { exit = 6; reason = "shutdown_failed"; }
         var fault = status?.Fault is { } f ? f with { Message = "Gameplay callback failed." } : null;

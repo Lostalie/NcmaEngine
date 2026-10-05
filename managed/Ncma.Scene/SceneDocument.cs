@@ -7,9 +7,13 @@ public sealed class SceneDocument
     private Dictionary<Guid, BehaviourBindingData[]> _bindings = [];
     private ulong _revision, _knownWorldRevision;
     private bool _preparing;
-    public SceneDocument(string name = "Untitled", ComponentRegistry? components = null)
+    private readonly Action<SceneDocumentSnapshot>? _validateComposition;
+    // Trusted authoring policy only, not a gameplay step validator or an Agent-supplied callback.
+    public SceneDocument(string name = "Untitled", ComponentRegistry? components = null,
+        Action<SceneDocumentSnapshot>? validateComposition = null)
     {
         World = new World(name, components);
+        _validateComposition = validateComposition;
         _knownWorldRevision = World.Revision;
     }
     public World World { get; }
@@ -41,6 +45,24 @@ public sealed class SceneDocument
             o.PersistentId, o.Name, o.Components, _bindings.GetValueOrDefault(o.PersistentId, []))).ToArray());
         return SceneDocumentCodec.Copy(snapshot);
     }
+    private void ValidateComposition(SceneDocumentSnapshot snapshot)
+    {
+        // A validator cannot rewrite the install candidate through its mutable DTO arrays.
+        if (_validateComposition is not null) _validateComposition(SceneDocumentCodec.Copy(snapshot));
+    }
+    public SceneDocument CreateIsolatedCopy(Action<SceneDocumentSnapshot>? validateCompositionOverride = null)
+    {
+        byte[] bytes = CaptureBytes();
+        using var read = World.ReadOnly(); // Shared trusted validators must not write the source through a closure.
+        var copy = new SceneDocument(World.Name, World.Components, validateCompositionOverride ?? _validateComposition);
+        copy.RestoreBytes(bytes);
+        return copy;
+    }
+    public void ValidateAuthoring()
+    {
+        // Prepare only: no World install, revision increment or handle invalidation.
+        _ = PrepareRestore(CaptureSnapshot());
+    }
     public byte[] CaptureBytes() => SceneDocumentCodec.Encode(CaptureSnapshot());
     public void RestoreBytes(ReadOnlySpan<byte> bytes, ulong? expectedRevision = null)
     {
@@ -70,6 +92,7 @@ public sealed class SceneDocument
                 var candidate = new SceneDocumentSnapshot(1, normalized.Name, normalized.Objects.Select(o => new SceneObjectData(
                     o.PersistentId, o.Name, o.Components, bindings[o.PersistentId])).ToArray());
                 _ = SceneDocumentCodec.Encode(candidate);
+                ValidateComposition(candidate);
                 prepared?.Invoke(candidate);
             });
             return () =>

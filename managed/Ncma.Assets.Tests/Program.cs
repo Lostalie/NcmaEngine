@@ -510,12 +510,14 @@ var tests = new (string Name, Action Run)[]
     })
 };
 int failed = 0;
+var suiteClock = Stopwatch.StartNew();
 foreach (var test in tests)
 {
-    try { test.Run(); Console.WriteLine("PASS " + test.Name); }
+    var caseClock = Stopwatch.StartNew();
+    try { test.Run(); Console.WriteLine($"PASS {test.Name} ({caseClock.Elapsed.TotalMilliseconds:F1} ms)"); }
     catch (Exception error) { failed++; Console.Error.WriteLine("FAIL " + test.Name + ": " + error); }
 }
-Console.WriteLine($"Assets: {tests.Length - failed}/{tests.Length} passed. Fixtures: {suiteRoot}");
+Console.WriteLine($"Assets: {tests.Length - failed}/{tests.Length} passed in {suiteClock.Elapsed.TotalSeconds:F3}s. Fixtures: {suiteRoot}");
 return failed == 0 ? 0 : 1;
 
 sealed class ProbeParticipant(Action? prepare = null, int bytes = 1) : IEditCommandParticipant

@@ -73,6 +73,12 @@ public sealed class ComponentRegistry
         .OrderBy(d => d.TypeId, StringComparer.Ordinal).ToArray();
 
     public JsonElement Encode<T>(T value) where T : struct, IComponent => EncodeObject(Validate(value));
+    public T Decode<T>(ComponentSnapshot component) where T : struct, IComponent
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        return Decode(component) is T value ? value :
+            throw new ArgumentException("Component does not match the requested registered value type.");
+    }
 
     internal void Freeze() => _frozen = true;
     internal ComponentDescriptor Describe(Type type) => Require(type).Descriptor;

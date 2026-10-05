@@ -113,7 +113,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _renderService = new(_renderer); _gui.AttachRenderer(_renderer);
         }
         _log.Write("info", cpuOnly ? "presentation.cpu_only" : "presentation.dx11_reference", "Managed candidate presentation initialized.", _correlation);
-        _editor = new(project?.Configuration.Name ?? "Presentation smoke", components: RenderConfiguration.CreateRegistry());
+        _editor = new(project?.Configuration.Name ?? "Presentation smoke",
+            components: Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),
+            validateComposition: Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
         if (project is not null) {
             var workspace = new EditorWorkspace(_editor);
             workspace.Open(workspace.Stamp, project.StartupScenePath, true);
@@ -125,6 +127,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                     _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _ => false);
             }
             _editor.LoadGameplay(project.GameplayAssemblyPath);
+            _editor.PrepareRenderAssets(project.Root, project.Configuration.ProjectId);
+            foreach (var diagnostic in _editor.RenderAssets!.Diagnostics.Take(64))
+                _log.Write("warning", "render.asset." + diagnostic.Code, diagnostic.AssetId.ToString("D"), _correlation);
         }
         if (!preview) {
             _fbxPreview = new(Path.Combine(plugins, "NcmaNative.dll")); // lazy immutable kernel loading on trusted local import only

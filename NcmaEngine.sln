@@ -83,12 +83,24 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Asset.ImportWorker", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Asset.Import.Tests", "managed\Ncma.Asset.Import.Tests\Ncma.Asset.Import.Tests.csproj", "{FB202902-2026-4029-8029-000000000003}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Scene.Rendering", "managed\Ncma.Scene.Rendering\Ncma.Scene.Rendering.csproj", "{FB202904-2026-4029-8029-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Scene.Rendering.Tests", "managed\Ncma.Scene.Rendering.Tests\Ncma.Scene.Rendering.Tests.csproj", "{FB202904-2026-4029-8029-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Assets.Runtime", "managed\Ncma.Assets.Runtime\Ncma.Assets.Runtime.csproj", "{FB202904-2026-4029-8029-000000000003}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Release|x64 = Release|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+        {FB202904-2026-4029-8029-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU
+        {FB202904-2026-4029-8029-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
+        {FB202904-2026-4029-8029-000000000002}.Debug|x64.ActiveCfg = Debug|Any CPU
+        {FB202904-2026-4029-8029-000000000002}.Release|x64.ActiveCfg = Release|Any CPU
+        {FB202904-2026-4029-8029-000000000003}.Debug|x64.ActiveCfg = Debug|Any CPU
+        {FB202904-2026-4029-8029-000000000003}.Release|x64.ActiveCfg = Release|Any CPU
 		{FB202902-2026-4029-8029-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{FB202902-2026-4029-8029-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
 		{FB202902-2026-4029-8029-000000000002}.Debug|x64.ActiveCfg = Debug|Any CPU
