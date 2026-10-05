@@ -61,4 +61,12 @@ if ($nextJournal.generation -eq $freshJournal.generation -or $nextJournal.phase 
 Restore-EditorDeployment $deploymentTestWorkspace $fresh $freshJournalPath
 if (-not (Read-DeploymentManifest $fresh).production) { throw 'Redeployment recovery failed.' }
 Write-Host 'PASS redeployment preserves previous journal and recoverable apphost'
-Write-Host '[Ncma] Deployment regression: 7/7 passed.'
+foreach ($toolFile in @('Ncma.Asset.ImportWorker.dll','Ncma.Asset.ImportWorker.deps.json','Ncma.Asset.ImportWorker.runtimeconfig.json','Ncma.Asset.Import.dll','Ncma.Assets.dll','NcmaImportKernel.dll')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $fresh "tools\import-worker\$toolFile") -PathType Leaf)) { throw "Missing Editor import tool: $toolFile" }
+}
+foreach ($player in @($deploymentTestIndex.playerNull, $deploymentTestIndex.playerDx11)) {
+    $files = @(Get-DeploymentFiles $deploymentTestWorkspace $player)
+    if (@($files | Where-Object { $_.path -match 'NcmaImportKernel|Ncma.Asset.Import|^tools/import-worker/' }).Count) { throw 'Import authoring leaked into Player.' }
+}
+Write-Host 'PASS Editor-only hashed import tools; both Players exclude authoring/parser'
+Write-Host '[Ncma] Deployment regression: 8/8 passed.'

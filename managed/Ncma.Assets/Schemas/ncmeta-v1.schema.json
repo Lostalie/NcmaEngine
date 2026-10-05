@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ncma:assets:ncmeta:v1",
+  "title": "Ncma asset metadata v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "assetId", "kind", "sourcePath", "sourceHash", "importer", "importerVersion", "settings", "subassets", "dependencies", "generation"],
+  "properties": {
+    "version": {"const": 1},
+    "assetId": {"$ref": "#/$defs/uuid"},
+    "kind": {"$ref": "#/$defs/kind"},
+    "sourcePath": {"type": "string", "maxLength": 1024, "pattern": "^assets/"},
+    "sourceHash": {"$ref": "#/$defs/hash"},
+    "importer": {"type": "string", "minLength": 1, "maxLength": 128},
+    "importerVersion": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+    "settings": {"type": "object", "additionalProperties": false, "required": ["version", "sampleRate", "generateTangents"],
+      "properties": {"version": {"const": 1}, "sampleRate": {"type": "integer", "minimum": 1, "maximum": 120}, "generateTangents": {"type": "boolean"}}},
+    "subassets": {"type": "array", "maxItems": 4096, "items": {"type": "object", "additionalProperties": false,
+      "required": ["assetId", "kind", "sourceKey", "name", "tombstone"],
+      "properties": {"assetId": {"$ref": "#/$defs/uuid"}, "kind": {"$ref": "#/$defs/kind"},
+        "sourceKey": {"type": "string", "minLength": 1, "maxLength": 512}, "name": {"type": "string", "minLength": 1, "maxLength": 256}, "tombstone": {"type": "boolean"}}}},
+    "dependencies": {"type": "array", "maxItems": 4096, "items": {"type": "object", "additionalProperties": false,
+      "required": ["assetId", "expectedKind"], "properties": {"assetId": {"$ref": "#/$defs/uuid"}, "expectedKind": {"$ref": "#/$defs/kind"}}}},
+    "generation": {"oneOf": [{"type": "null"}, {"type": "object", "additionalProperties": false,
+      "required": ["number", "contentHash", "relativePath"], "properties": {"number": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+        "contentHash": {"$ref": "#/$defs/hash"}, "relativePath": {"type": "string", "maxLength": 1024, "pattern": "^out/assets/[0-9a-f]{32}/.+\\.nca$"}}}]}
+  },
+  "$defs": {
+    "uuid": {"type": "string", "format": "uuid", "not": {"const": "00000000-0000-0000-0000-000000000000"}},
+    "hash": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
+    "kind": {"enum": ["character", "staticMesh", "skinnedMesh", "skeleton", "clip", "texture", "material", "materialSet", "prefab", "overrideSet"]}
+  },
+  "$comment": "AssetRecordCodec additionally enforces duplicate-free JSON/UUIDs/source keys, portable paths, unique dependencies, nonblank/control-free text and the 4 MiB UTF-8 budget. JSON Schema alone is not the parser or a filesystem authorization."
+}

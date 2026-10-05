@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "magic": "NCA1",
+  "integerByteOrder": "little-endian",
+  "uuidByteOrder": "RFC4122-big-endian",
+  "headerBytes": 16,
+  "entryBytes": 72,
+  "header": {"magic": 0, "versionU32": 4, "blockCountU32": 8, "reservedZeroU32": 12},
+  "entry": {"assetUuid16": 0, "kindTagU32": 16, "reservedZeroU32": 20, "offsetU64": 24, "lengthU64": 32, "sha256Bytes32": 40},
+  "kindTags": {"character": 1, "staticMesh": 2, "skinnedMesh": 3, "skeleton": 4, "clip": 5, "texture": 6, "material": 7, "materialSet": 8, "prefab": 9, "overrideSet": 10},
+  "limits": {"containerBytes": 268435456, "blockBytes": 67108864, "blocks": 64},
+  "constraints": ["Nonempty block table sorted by .NET Guid.CompareTo; UUID encoding remains RFC byte order", "UUIDs unique/nonempty; tags known; reserved fields zero", "Payloads contiguous, nonempty, nonoverlapping, in bounds and consuming entire container", "SHA-256 of every payload verified before publication"],
+  "coordinates": {"handedness": "right", "up": "+Y", "forward": "-Z", "lengthUnit": "metre", "matrix": "column-major-column-vector", "uvOrigin": "top-left", "frontFace": "CCW"},
+  "contentCodecs": "Mesh/rig/clip payload formats are not defined by this container; M3.2 supplies separately versioned payload codecs."
+}

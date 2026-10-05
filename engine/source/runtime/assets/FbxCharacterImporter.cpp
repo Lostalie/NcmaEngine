@@ -19,6 +19,17 @@ namespace NcmaEngine::Assets
     namespace
     {
         using ScenePtr = std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)>;
+        void CheckCancelled(const FbxImportOptions& options)
+        {
+            if (options.Cancellation && options.Cancellation->load(std::memory_order_relaxed)) throw FbxImportCancelled();
+        }
+        ufbx_progress_result Progress(void* user, const ufbx_progress* progress) noexcept
+        {
+            const auto& options = *static_cast<const FbxImportOptions*>(user);
+            if (options.BytesTotal) options.BytesTotal->store(progress->bytes_total, std::memory_order_relaxed);
+            if (options.BytesRead) options.BytesRead->store(progress->bytes_read, std::memory_order_relaxed);
+            return options.Cancellation && options.Cancellation->load(std::memory_order_relaxed) ? UFBX_PROGRESS_CANCEL : UFBX_PROGRESS_CONTINUE;
+        }
         void Require(bool condition, const std::string& message)
         {
             if (!condition) throw std::runtime_error("FBX: " + message);
@@ -73,10 +84,11 @@ namespace NcmaEngine::Assets
             id.Low = (id.Low & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;
             return id;
         }
-        std::string UniqueName(std::string name, std::unordered_set<std::string>& used)
+        std::string UniqueName(std::string name, std::unordered_set<std::string>& used, bool rejectAmbiguous = false)
         {
             if (name.empty()) name = "Unnamed";
             const auto base = name;
+            Require(!rejectAmbiguous || !used.contains(name), "ambiguous source name: " + name);
             for (std::size_t suffix = 2; !used.insert(name).second; ++suffix) name = base + "#" + std::to_string(suffix);
             return name;
         }
@@ -103,6 +115,8 @@ namespace NcmaEngine::Assets
     std::shared_ptr<const ImportedCharacter> FbxCharacterImporter::Import(
         const std::filesystem::path& path, const FbxImportOptions& options)
     {
+        CheckCancelled(options);
+        if (options.Phase) options.Phase->store(1);
         Require(std::isfinite(options.SampleRate) && options.SampleRate >= 1 && options.SampleRate <= 120,
             "sample rate must be within 1..120 Hz");
         auto extension = path.extension().string();
@@ -113,7 +127,13 @@ namespace NcmaEngine::Assets
         Require(bytes > 0 && bytes <= options.MaxFileBytes, "source exceeds file budget or is empty");
         std::vector<char> data(static_cast<std::size_t>(bytes));
         std::ifstream input(path, std::ios::binary);
-        Require(input.read(data.data(), static_cast<std::streamsize>(data.size())).good(), "cannot read source file");
+        for (std::size_t offset = 0; offset < data.size();)
+        {
+            CheckCancelled(options);
+            const auto count = std::min<std::size_t>(1024 * 1024, data.size() - offset);
+            Require(input.read(data.data() + offset, static_cast<std::streamsize>(count)).good(), "cannot read source file");
+            offset += count;
+        }
         ufbx_load_opts load{};
         load.file_format = UFBX_FILE_FORMAT_FBX;
         load.target_axes = ufbx_axes_right_handed_y_up;
@@ -129,9 +149,14 @@ namespace NcmaEngine::Assets
         load.index_error_handling = UFBX_INDEX_ERROR_HANDLING_ABORT_LOADING;
         load.temp_allocator.memory_limit = 256ULL * 1024 * 1024;
         load.result_allocator.memory_limit = 512ULL * 1024 * 1024;
+        load.progress_cb.fn = &Progress;
+        load.progress_cb.user = const_cast<FbxImportOptions*>(&options);
+        load.progress_interval_hint = 64 * 1024;
         ufbx_error error{};
         ScenePtr scene(ufbx_load_memory(data.data(), data.size(), &load, &error), &ufbx_free_scene);
+        CheckCancelled(options);
         Require(scene != nullptr, ErrorText(error));
+        if (options.Phase) options.Phase->store(2);
         auto result = std::make_shared<ImportedCharacter>();
         result->Id = options.AssetId.IsValid() ? options.AssetId : SceneUuid::New();
         result->Source = std::filesystem::weakly_canonical(path);
@@ -148,6 +173,7 @@ namespace NcmaEngine::Assets
         bool hasSkin = false;
         for (const auto* node : scene->nodes)
         {
+            CheckCancelled(options);
             if (node->bone) includeParents(node);
             if (!node->mesh || node->mesh->num_triangles == 0) continue;
             includeParents(node);
@@ -158,7 +184,8 @@ namespace NcmaEngine::Assets
                     includeParents(cluster->bone_node); hasSkin = true;
                 }
         }
-        Require(hasSkin, "character has no skinned triangle mesh");
+        Require(options.StaticOnly ? !hasSkin : hasSkin,
+            options.StaticOnly ? "static import rejects skinned meshes" : "character has no skinned triangle mesh");
         Require(selected.size() <= 1024, "skeleton plus transform helpers exceeds 1024 nodes");
         std::vector<const ufbx_node*> nodes;
         std::unordered_map<const ufbx_node*, std::size_t> nodeIndices;
@@ -168,7 +195,7 @@ namespace NcmaEngine::Assets
             if (!selected.contains(node)) return;
             const int parent = node->parent ? static_cast<int>(nodeIndices.at(node->parent)) : -1;
             nodeIndices[node] = nodes.size(); nodes.push_back(node);
-            auto name = UniqueName(node->is_root ? "FBXRoot" : Text(node->name), boneNames);
+            auto name = UniqueName(node->is_root ? "FBXRoot" : Text(node->name), boneNames, options.RejectAmbiguousNames);
             const Matrix4 global = Matrix(node->node_to_world);
             const Matrix4 local = node->parent ? (Matrix(node->parent->node_to_world).inverse() * global).eval() : global;
             skeleton.Bones.push_back({name, parent, Decompose(local, name)});
@@ -180,6 +207,7 @@ namespace NcmaEngine::Assets
         bool truncatedWeights = false, rigidFallback = false;
         for (const auto* node : nodes)
         {
+            CheckCancelled(options);
             const auto* mesh = node->mesh;
             if (!mesh || !mesh->num_triangles) continue;
             Require(mesh->num_indices <= options.MaxVertices - vertexCount, "vertex budget exceeded");
@@ -204,6 +232,7 @@ namespace NcmaEngine::Assets
             output.Vertices.reserve(mesh->num_indices);
             for (std::size_t corner = 0; corner < mesh->num_indices; ++corner)
             {
+                if ((corner & 1023) == 0) CheckCancelled(options);
                 SkinnedVertex vertex;
                 vertex.Position = Vector(ufbx_get_vertex_vec3(&mesh->vertex_position, corner));
                 vertex.Normal = Vector(ufbx_get_vertex_vec3(&mesh->vertex_normal, corner));
@@ -244,6 +273,7 @@ namespace NcmaEngine::Assets
             std::vector<std::uint32_t> triangle(mesh->max_face_triangles * 3);
             for (std::size_t faceIndex = 0; faceIndex < mesh->faces.count; ++faceIndex)
             {
+                if ((faceIndex & 1023) == 0) CheckCancelled(options);
                 const auto count = ufbx_triangulate_face(triangle.data(), triangle.size(), mesh, mesh->faces[faceIndex]);
                 output.Indices.insert(output.Indices.end(), triangle.begin(), triangle.begin() + count * 3);
                 const auto material = mesh->face_material.count ? mesh->face_material[faceIndex] : 0;
@@ -259,8 +289,10 @@ namespace NcmaEngine::Assets
         std::unordered_set<std::string> clipNames{"BindPose"};
         clips.push_back({SubId(result->Id, "bindpose"), skeleton.Id, "BindPose", 1, true, false, {}, {}});
         std::size_t keyCount = 0;
+        if (options.Phase) options.Phase->store(3);
         for (const auto* stack : scene->anim_stacks)
         {
+            if (options.StaticOnly) break;
             const double duration = stack->time_end - stack->time_begin;
             Require(std::isfinite(duration) && duration >= 0 && duration <= 600 && std::isfinite(stack->time_begin),
                 "animation duration exceeds 600 seconds or has invalid time range");
@@ -269,7 +301,7 @@ namespace NcmaEngine::Assets
             const auto keys = (intervals + 1) * nodes.size();
             Require(keys <= options.MaxAnimationKeys - keyCount, "animation key budget exceeded; reduce sample rate");
             keyCount += keys;
-            auto name = UniqueName(Text(stack->name), clipNames);
+            auto name = UniqueName(Text(stack->name), clipNames, options.RejectAmbiguousNames);
             Animation::AnimationClip clip{SubId(result->Id, "clip/" + name), skeleton.Id, name, duration, true, false, {}, {}};
             for (std::size_t bone = 0; bone < nodes.size(); ++bone) clip.Tracks.push_back({bone, {}});
             for (auto& track : clip.Tracks) track.Keys.reserve(intervals + 1);
@@ -278,6 +310,7 @@ namespace NcmaEngine::Assets
             evaluate.result_allocator.memory_limit = 512ULL * 1024 * 1024;
             for (std::size_t frame = 0; frame <= intervals; ++frame)
             {
+                CheckCancelled(options);
                 const double time = frame == intervals ? duration : static_cast<double>(frame) / options.SampleRate;
                 ScenePtr sampled(ufbx_evaluate_scene(scene.get(), stack->anim, stack->time_begin + time, &evaluate, &error), &ufbx_free_scene);
                 Require(sampled != nullptr, "animation evaluation failed: " + ErrorText(error));
@@ -297,6 +330,7 @@ namespace NcmaEngine::Assets
         result->BoundsMax = Vector3::Constant(std::numeric_limits<float>::lowest());
         for (const auto& mesh : result->Meshes)
         {
+            CheckCancelled(options);
             std::vector<Vector3> positions(mesh.Vertices.size());
             SkinPositions(mesh, bind.ModelMatrices(), positions);
             for (const auto& position : positions)
@@ -305,6 +339,7 @@ namespace NcmaEngine::Assets
                 result->BoundsMax = result->BoundsMax.cwiseMax(position);
             }
         }
+        CheckCancelled(options);
         return result;
     }
 

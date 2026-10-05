@@ -36,6 +36,8 @@ Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/
 - [独立 Python 模块与通信选型](docs/PYTHON_MODULES.md)
 - [AI 深度开发契约与已实现 headless 能力](docs/AI_DEVELOPMENT.md)
 - [最新路线图](docs/ROADMAP.md)
+- [M3 资产与真实 FBX 场景角色分阶段方案](docs/M3_IMPLEMENTATION_PLAN.md)
+- [M3.2 持久 FBX 导入与 G2 验证记录](docs/M3_2_DELIVERY_REPORT.md)
 - [M1 自动交付与剩余人工验收](docs/M1_DELIVERY_REPORT.md)
 - [活动编辑器 MCP 使用与授权](docs/EDITOR_MCP.md)
 - [M1.1 完整托管场景文档与清理记录](docs/M1_1_SCENE_DOCUMENT.md)

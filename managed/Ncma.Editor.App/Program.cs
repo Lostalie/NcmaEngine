@@ -8,6 +8,7 @@ using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Physics;
 using Ncma.Rendering;
+using Ncma.Assets.Authoring;
 namespace Ncma.Editor.App;
 internal static class Program
 {
@@ -117,6 +118,12 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             var workspace = new EditorWorkspace(_editor);
             workspace.Open(workspace.Stamp, project.StartupScenePath, true);
             _editor.Edit!.Resynchronize(); // Startup is the saved baseline, not a user Open command.
+            if (Directory.Exists(Path.Combine(project.Root, "assets")))
+            {
+                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1); // Read-only by default; UI/Agent cannot manufacture grants.
+                if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
+                    _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _ => false);
+            }
             _editor.LoadGameplay(project.GameplayAssemblyPath);
         }
         if (!preview) {
@@ -161,7 +168,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             input.DocumentGeneration==_editor!.Edit!.DocumentGeneration && input.Revision==_editor.Document.Revision)
             _presentationText=Encoding.UTF8.GetString(_gui.OutputText.Slice((int)input.TextOffset,(int)input.TextLength));
     }
-    public void PumpAgent(FrameContext frame) { _editor!.Endpoint?.Pump(); }
+    public void PumpAgent(FrameContext frame) { _editor!.RefreshAssets(); _editor.Endpoint?.Pump(); }
     public void BeginPresentation(FrameContext frame) {
         _capture = _gui!.Begin(_state, frame.DeltaSeconds);
         if (_capture.CancelInteraction != 0) _presenter?.CancelInteraction();

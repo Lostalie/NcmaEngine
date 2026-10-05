@@ -129,6 +129,21 @@ add_library(NcmaNative SHARED
     engine/source/runtime/interop/NcmaAnimationApi.cpp
     engine/source/runtime/interop/NcmaCharacterApi.cpp
 )
+
+# Independent numerical import context: no NcmaCore, physics, renderer, GUI or global Character ABI registry.
+add_library(NcmaImportKernel SHARED
+    engine/source/plugins/import/ImportKernel.cpp
+    engine/source/runtime/assets/FbxCharacterImporter.cpp
+    engine/source/runtime/animation/AnimationRuntime.cpp
+    engine/source/runtime/scene/SceneUuid.cpp)
+target_include_directories(NcmaImportKernel PRIVATE engine/source/plugins engine/source/runtime)
+target_compile_definitions(NcmaImportKernel PRIVATE NCMA_IMPORT_EXPORTS)
+target_link_libraries(NcmaImportKernel PRIVATE Ncma::Eigen NcmaUfbx)
+if(MSVC)
+    target_compile_options(NcmaImportKernel PRIVATE /W4 /WX /permissive- /utf-8)
+else()
+    target_compile_options(NcmaImportKernel PRIVATE -Wall -Wextra -Wpedantic -Werror)
+endif()
 target_link_libraries(NcmaNative PRIVATE NcmaCore)
 target_include_directories(NcmaNative PUBLIC engine/source/runtime)
 target_compile_definitions(NcmaNative PRIVATE NCMA_NATIVE_EXPORTS)
@@ -238,6 +253,12 @@ if(NCMA_BUILD_MANAGED)
     if(DOTNET_EXECUTABLE)
         add_custom_target(NcmaManaged
             COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Asset.Import.Tests/Ncma.Asset.Import.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Assets.Tests/Ncma.Assets.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Tests/Ncma.Scene.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
@@ -291,6 +312,21 @@ endif()
 
 if(NCMA_BUILD_TESTS)
     enable_testing()
+    add_executable(NcmaImportKernelTests tests/plugins/ImportKernelTests.cpp)
+    target_include_directories(NcmaImportKernelTests PRIVATE engine/source/plugins)
+    target_link_libraries(NcmaImportKernelTests PRIVATE NcmaImportKernel NcmaCore)
+    add_test(NAME NcmaImportKernelTests COMMAND NcmaImportKernelTests "${CMAKE_SOURCE_DIR}")
+    set_tests_properties(NcmaImportKernelTests PROPERTIES TIMEOUT 60)
+    add_executable(NcmaImportContractC tests/plugins/ImportContractC.c)
+    target_include_directories(NcmaImportContractC PRIVATE engine/source/plugins)
+    set_target_properties(NcmaImportContractC PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    add_test(NAME NcmaImportContractC COMMAND NcmaImportContractC)
+    if(MSVC)
+        target_compile_options(NcmaImportKernelTests PRIVATE /W4 /WX /permissive- /utf-8 "/FI${CMAKE_CURRENT_SOURCE_DIR}/tests/TestAssertions.h")
+        target_compile_options(NcmaImportContractC PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(NcmaImportKernelTests PRIVATE -Wall -Wextra -Wpedantic -Werror -include "${CMAKE_CURRENT_SOURCE_DIR}/tests/TestAssertions.h")
+    endif()
     if(WIN32)
         add_test(NAME NcmaPhysicsNativeTests COMMAND NcmaPhysicsNativeTests)
         set_tests_properties(NcmaPhysicsNativeTests PROPERTIES TIMEOUT 120)
@@ -364,6 +400,15 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaEditorCoreTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Core.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Core.Tests.dll")
         set_tests_properties(NcmaEditorCoreTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaAssetTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Assets.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Assets.Tests.dll")
+        set_tests_properties(NcmaAssetTests PROPERTIES TIMEOUT 60)
+        if(WIN32)
+            add_test(NAME NcmaAssetImportTests COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Asset.Import.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Asset.Import.Tests.dll"
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release>)
+            set_tests_properties(NcmaAssetImportTests PROPERTIES TIMEOUT 120)
+        endif()
         add_test(NAME NcmaGameplayTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Gameplay.Tests.dll")
         set_tests_properties(NcmaGameplayTests PROPERTIES TIMEOUT 30)

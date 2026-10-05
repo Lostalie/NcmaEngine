@@ -14,9 +14,11 @@ public sealed partial class EditSession
     public const int MaxHistoryBytes = 16 * 1024 * 1024, MaxCachedRequests = 128;
     private sealed record FileContext(string? Path, string? SavedHash);
     private sealed record Entry(byte[] Before, byte[] After, string Label, string Capability, Guid? Target,
-        Guid? BeforeSelection, Guid? AfterSelection, FileContext? BeforeFile, FileContext? AfterFile, CommandImpact Impact)
-    { public int Bytes => Before.Length + After.Length; }
-    private sealed record Cached(string Fingerprint, CapabilityResult Result, string Permission, Guid? Target, CommandImpact Impact);
+        Guid? BeforeSelection, Guid? AfterSelection, FileContext? BeforeFile, FileContext? AfterFile, CommandImpact Impact,
+        ParticipantEntry? Participant = null)
+    { public int Bytes => checked(Before.Length + After.Length + (Participant?.Bytes ?? 0)); }
+    private sealed record Cached(string Fingerprint, CapabilityResult Result, string Permission, Guid? Target, CommandImpact Impact,
+        ParticipantEntry? Participant = null);
     private sealed record Draft(Guid Token, ulong Revision, Guid? Selection, string Label, JsonElement Input);
     private readonly SceneDocument _document;
     private readonly Dictionary<string, CapabilityDescriptor> _capabilities;
@@ -126,6 +128,8 @@ public sealed partial class EditSession
             {
                 if (cached.Fingerprint != fingerprint) return Result(request, "conflict", "request_id_reused", false, new { });
                 if (!permissions.Allows(cached.Permission, cached.Target) || !permissions.InScope(cached.Impact)) return Result(request, "denied", "permission_denied", false, new { });
+                if (cached.Participant is not null)
+                    using (_document.World.ReadOnly()) cached.Participant.Owner.Authorize(cached.Participant.Memento);
                 return cached.Result with { Revision = Revision, Replayed = true,
                     Data = JsonSerializer.SerializeToElement(new { history = State, execution = cached.Result.Data }, OutputJson) };
             }
@@ -133,9 +137,11 @@ public sealed partial class EditSession
                 return Result(request, "conflict", "revision_conflict", false, new { });
             return request.Capability is "ncma.history.undo" or "ncma.history.redo"
                 ? History(request, permissions, fingerprint)
+                : _participants.ContainsKey(request.Capability) ? ParticipantTransaction(request, permissions, fingerprint)
                 : Transaction(request, permissions, fingerprint);
         }
         catch (EditRejectedException e) { return Result(request, "denied", e.Code, false, new { }); }
+        catch (EditCommandRejectedException e) { return Result(request, e.Denied ? "denied" : "conflict", e.Code, false, new { }); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or JsonException or KeyNotFoundException or FormatException or OverflowException)
         { return Result(request, "error", "invalid_input", false, new { message = e.Message }); }
         catch (Exception e) when (e is not OutOfMemoryException)
@@ -179,19 +185,20 @@ public sealed partial class EditSession
     }
     private CapabilityResult Commit(CapabilityRequest request, string fingerprint, SceneDocumentSnapshot candidate,
         byte[] before, string label, string capability, Guid? target, Guid? selection,
-        FileContext? replacementFile = null, CapabilityPermissions? permissions = null)
+        FileContext? replacementFile = null, CapabilityPermissions? permissions = null, ParticipantEntry? participant = null)
     {
         byte[] after = [];
         Action install = _document.PrepareRestore(candidate, request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));
         permissions ??= CapabilityPermissions.ReadOnly;
         var impact = RequestedImpact(request, Impact(before, after, _selection, selection, replacementFile is not null));
         if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
-        if (before.AsSpan().SequenceEqual(after) && (replacementFile is null || replacementFile == _file))
-            return Remember(request, fingerprint, Result(request, "ok", "no_change", false, new { history = State }), capability, target, impact);
+        if (before.AsSpan().SequenceEqual(after) && (replacementFile is null || replacementFile == _file) &&
+            (participant is null || participant.Memento.Before.AsSpan().SequenceEqual(participant.Memento.After)))
+            return Remember(request, fingerprint, Result(request, "ok", "no_change", false, new { history = State }), capability, target, impact, participant);
         string hash = Hash(after);
         FileContext file = replacementFile ?? _file;
         var entry = new Entry(before, after, label, capability, target, _selection, selection,
-            replacementFile is null ? null : _file, replacementFile, impact);
+            replacementFile is null ? null : _file, replacementFile, impact, participant);
         if (entry.Bytes > MaxHistoryBytes) throw new ArgumentException("Command exceeds history budget.");
         var history = _history.Take(_cursor).Append(entry).ToArray();
         int bytes = history.Sum(e => e.Bytes);
@@ -201,10 +208,12 @@ public sealed partial class EditSession
         ulong next = checked(Revision + 1);
         var state = StateFor(next, history, history.Length, hash, file, selection) with { EditBusy = false };
         var result = Result(request, "ok", "ok", true, new { history = state }, next);
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, capability, target, impact));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, capability, target, impact, participant));
         ulong generation = impact.DocumentReplacement ? checked(DocumentGeneration + 1) : DocumentGeneration;
         if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
-        install(); // No validators, allocations, history preparation or user callbacks after this point.
+        InstallWithParticipant(participant, true, install, () => permissions.Allows(capability, target) && permissions.InScope(impact));
+        // History/results were prepared before installation. Only the trusted participant's durable
+        // completion ran afterward; failure freezes the session instead of reporting a rollback.
         _history = history; _cursor = history.Length; _knownRevision = next; _currentHash = hash;
         _selection = selection; _file = file; DocumentGeneration = generation; _cache = cache.Values; _cacheOrder = cache.Order;
         return result;
@@ -229,25 +238,31 @@ public sealed partial class EditSession
         var file = (undo ? entry.BeforeFile : entry.AfterFile) ?? _file;
         ulong next = checked(Revision + 1);
         var result = Result(request, "ok", "ok", true, new { history = StateFor(next, _history, cursor, hash, file, selection) }, next);
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, entry.Capability, entry.Target, entry.Impact));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, entry.Capability, entry.Target, entry.Impact, entry.Participant));
         ulong generation = entry.Impact.DocumentReplacement ? checked(DocumentGeneration + 1) : DocumentGeneration;
         if (!permissions.Allows(entry.Capability, entry.Target) || !permissions.InScope(entry.Impact)) throw new EditRejectedException("history_scope_denied");
-        install();
+        InstallWithParticipant(entry.Participant, !undo, install, () => permissions.Allows(entry.Capability, entry.Target) && permissions.InScope(entry.Impact));
         DocumentGeneration = generation;
         _cursor = cursor; _knownRevision = next; _currentHash = hash; _selection = selection; _file = file;
         _cache = cache.Values; _cacheOrder = cache.Order;
         return result;
     }
-    private CapabilityResult Remember(CapabilityRequest request, string fingerprint, CapabilityResult result, string permission, Guid? target, CommandImpact impact)
+    private CapabilityResult Remember(CapabilityRequest request, string fingerprint, CapabilityResult result, string permission, Guid? target, CommandImpact impact,
+        ParticipantEntry? participant = null)
     {
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, permission, target, impact));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, permission, target, impact, participant));
         _cache = cache.Values; _cacheOrder = cache.Order; return result;
     }
     private (Dictionary<Guid, Cached> Values, Queue<Guid> Order) PrepareCache(Guid id, Cached value)
     {
         var values = new Dictionary<Guid, Cached>(_cache); var order = new Queue<Guid>(_cacheOrder);
         values.Add(id, value); order.Enqueue(id);
-        if (order.Count > MaxCachedRequests) values.Remove(order.Dequeue());
+        long participantBytes = values.Values.Sum(c => (long)(c.Participant?.Bytes ?? 0));
+        while (order.Count > MaxCachedRequests || participantBytes > MaxHistoryBytes)
+        {
+            var removed = values[order.Peek()]; participantBytes -= removed.Participant?.Bytes ?? 0;
+            values.Remove(order.Dequeue());
+        }
         return (values, order);
     }
     private CapabilityResult Result(CapabilityRequest request, string status, string code, bool changed, object data, ulong? revision = null)

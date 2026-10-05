@@ -32,11 +32,11 @@
 | C# 游戏脚本 | 部分实现：生命周期/Export/隔离 Play、M1.3 PlaySession 固定步/输入/插值/运行命令/信号原子性/重载预检、只读 OnUpdate、暂停/单步/故障 | 动作角色/完整属性类型、低分配优化；私有状态迁移未实现 |
 | 场景文档与 Undo | M1.1/M1.2 已实现：完整 SceneDocument、Editor.Core 唯一历史、交互草稿、内容指纹、文件关联撤销、Play 隔离/冻结；唯一 .ncmascene JSON v1 | 资产引用与完整资产流水线尚未实现 |
 | 编辑器与命令服务 | M1.2 已实现场景命令：C++/ImGui 提交 UUID 意图，Editor.Core 持有完整文档事务/历史；10 项 v2 能力、权限/版本/幂等与草稿 | C# 主入口与剩余面板业务未实现；第三方客户端人工验收待执行 |
-| 资产系统 | 未实现完整系统：已有场景文件与导入数据 | 持久化资产数据库、导入元数据/缓存、依赖追踪、重新导入、Prefab、打包 |
+| 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC | 资产面板、完整资产 MCP、Prefab、cook |
 | D3D11 / PBR / 软阴影 | 部分实现：参考预览支持 GGX 金属粗糙度、HDR/色调映射、深度、方向光四级联、PCF/PCSS/接触阴影 | 完整场景渲染、资产材质/纹理、IBL、FBX GPU 蒙皮、离屏可组合视口、生产级验证 |
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
 | 物理 | 已实现基础：Box2D/Jolt 独立测试世界与原生求解 | 独立插件边界、C# 场景同步/碰撞事件、角色控制器、Root Motion 与碰撞协同 |
-| FBX 角色 | 部分实现：ASCII/二进制导入、轴/单位转换、骨骼/权重/动画、CPU 线框预览、Undo、参考蒙皮测试 | 持久化资产身份、异步导入、纹理/材质转换、场景绑定、GPU 蒙皮、真实角色覆盖 |
+| FBX 角色 | M3.2 持久导入 G2 已关闭：独立数值内核/ABI 1.1、隔离 Worker、严格角色/静态模式、切线、UUID/冲突与派生文件、正式 Editor 工具部署和可撤销发布 | PBR 纹理/材质、场景绑定与 GPU 蒙皮、真实用户模型/所有 DCC 兼容验收 |
 | 动画 | 部分实现：采样、混合/骨骼遮罩、姿态矩阵、根运动、Notify；独立动作实验室、动画 ABI 与 C# 调用；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
 | UI | 仅模型骨架：当前 C++ UiDocument 有节点、样式、布局字段和 Token | C# 文档、持久化、布局求解、Figma 式画布、运行时 UI 渲染/输入、组件实例/变体均未实现 |
 | AI / MCP / Python | 部分实现：项目只读 CLI；独立程序化动画预览有 8 项 stdio MCP 工具；C# 活动场景本地 scoped MCP 已接入 | 资产/动画图/UI/源码扩展的统一 MCP 未实现；活动场景已接入；Python AI 通信与推理模块未实现 |
@@ -126,6 +126,23 @@ H7 前候选程序不覆盖 out/bin 默认入口；H8 前不把 M2 标为完成�
 - 使用用户真实 FBX 做覆盖测试，不以两个测试模型推断所有 FBX 均兼容。
 
 验收：导入 → 保存 → 重启 → 场景实例 → 动画播放完整打通；重新导入身份稳定；CPU/GPU 蒙皮误差有证据；材质缺失有诊断；失败/取消不破坏原资产和场景。
+
+2026-10-05：M3.1/M3.2 已实现且最终双配置回归通过，G1/G2 关闭；提交推送确认后开始 M3.3，M3.3–M3.9 尚未完成。详见 [M3 总体方案](M3_IMPLEMENTATION_PLAN.md)、[M3.1 交付记录](M3_1_DELIVERY_REPORT.md) 与 [M3.2 交付记录](M3_2_DELIVERY_REPORT.md)。
+
+| 小阶段 | 详细方案 |
+| --- | --- |
+| M3.1 | [资产身份与数据库](M3_1_IMPLEMENTATION_PLAN.md) |
+| M3.2 | [异步 FBX 导入与派生数据](M3_2_IMPLEMENTATION_PLAN.md) |
+| M3.3 | [网格纹理材质与渲染资源](M3_3_IMPLEMENTATION_PLAN.md) |
+| M3.4 | [场景组件与 DX11 场景渲染](M3_4_IMPLEMENTATION_PLAN.md) |
+| M3.5 | [GPU 蒙皮与 FBX 片段播放](M3_5_IMPLEMENTATION_PLAN.md) |
+| M3.6 | [资产浏览与离屏编辑视口](M3_6_IMPLEMENTATION_PLAN.md) |
+| M3.7 | [扁平 Prefab 与实例覆盖](M3_7_IMPLEMENTATION_PLAN.md) |
+| M3.8 | [资产与 Prefab 的 MCP 能力](M3_8_IMPLEMENTATION_PLAN.md) |
+| M3.9 | [Player 资产包与联合验收](M3_9_IMPLEMENTATION_PLAN.md) |
+
+保留 C# 业务、原生数值/GPU 插件、Python 工具/AI边界；不恢复旧宿主/Scene桥。
+M2 未完成人工/性能项继续记录；执行授权不自动关闭前置人工验收。
 
 ### M4：动作游戏纵向切片
 

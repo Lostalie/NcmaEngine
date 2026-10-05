@@ -259,7 +259,7 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
         modules = {m["id"]: (m["abiMajor"], m["abiMinor"]) for m in data["modules"]}
         if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, 2), "ncma.physics": (1, 1)}:
             raise ValueError("Editor module ABI metadata mismatch.")
-    elif kernels or any("ncmanative" in p or "ncmagui" in p for p in seen):
+    elif kernels or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):
         raise ValueError("Editor resource/GUI deployed in Player.")
     return {"product": product, "directory": directory, "files_verified": len(seen),
             "manifest_sha256": digest(manifest_path), "publish_mode": data["publishMode"],

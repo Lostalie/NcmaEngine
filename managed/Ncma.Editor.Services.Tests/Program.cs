@@ -14,6 +14,8 @@ using Ncma.Platform;
 using Ncma.Rendering;
 using Ncma.Physics;
 using Ncma.Application;
+using Ncma.Assets;
+using Ncma.Assets.Authoring;
 
 static void Check(bool value) { if (!value) throw new Exception("Assertion failed."); }
 static void Reject(Action action) { try { action(); } catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException or JsonException) { return; } throw new Exception("Expected rejection."); }
@@ -687,6 +689,35 @@ var cases = new (string, Action)[] {
         bmp.Write((ushort)1);bmp.Write((ushort)32);bmp.Write(0);bmp.Write(pixels.Length);bmp.Write(2835);bmp.Write(2835);bmp.Write(0);bmp.Write(0);
         for(int i=0;i<pixels.Length;i+=4){bmp.Write(pixels[i+2]);bmp.Write(pixels[i+1]);bmp.Write(pixels[i]);bmp.Write(pixels[i+3]);}
         Console.WriteLine("Business image: "+Path.Combine(output,"business-composited.bmp"));
+    }),
+    ("Asset project service uses the same Editor history, defaults read-only and closes cleanly", () => {
+        string directory = Path.Combine(output, "asset-project"); Directory.CreateDirectory(Path.Combine(directory, "assets"));
+        byte[] source = Encoding.UTF8.GetBytes("asset source fixture"); File.WriteAllBytes(Path.Combine(directory, "assets/Hero.fbx"), source);
+        var record = new AssetRecord(1, Guid.NewGuid(), AssetKind.Character, "assets/Hero.fbx",
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(source)), "ufbx", 1, new(1, 60, true), [], [], null);
+        Guid project = Guid.NewGuid();
+        using (var owner = new EditorSessionOwner("Read-only assets"))
+        {
+            owner.ConfigureAssets(directory, project, 1); Check(owner.Assets!.Snapshot.Diagnostics.Single().Code == "source_orphan");
+            var input = JsonSerializer.SerializeToElement(new { operation = "create", path = "assets/Hero.ncmeta", expectedAssetRevision = owner.Assets.Clock.Revision,
+                record = JsonDocument.Parse(AssetRecordCodec.Encode(record)).RootElement.Clone() });
+            var result = owner.Edit!.Invoke(new(2, Guid.NewGuid(), owner.Edit.SessionId, owner.Edit.Revision, AssetMetadataCommands.CapabilityName, input),
+                new([AssetMetadataCommands.CapabilityName]));
+            Check(result.Status == "denied" && !File.Exists(Path.Combine(directory, "assets/Hero.ncmeta")));
+        }
+        using (var owner = new EditorSessionOwner("Granted assets"))
+        {
+            owner.ConfigureAssets(directory, project, 2, new(["assets/Hero.ncmeta"], [record.SourcePath], [record.AssetId], () => true));
+            var input = JsonSerializer.SerializeToElement(new { operation = "create", path = "assets/Hero.ncmeta", expectedAssetRevision = owner.Assets!.Clock.Revision,
+                record = JsonDocument.Parse(AssetRecordCodec.Encode(record)).RootElement.Clone() });
+            Check(owner.Edit!.Invoke(new(2, Guid.NewGuid(), owner.Edit.SessionId, owner.Edit.Revision, AssetMetadataCommands.CapabilityName, input),
+                new([AssetMetadataCommands.CapabilityName])).Changed);
+            var ui = new EditorWorkspace(owner); ui.History(ui.Stamp, false); Check(!File.Exists(Path.Combine(directory, "assets/Hero.ncmeta")));
+            ui.History(ui.Stamp, true); Check(owner.RefreshAssets(true) && owner.Assets.Snapshot.Catalog.Count == 1);
+            Check(owner.Document.World.GetObjects().Count() == 0 && owner.Edit.State.UndoCount == 1);
+        }
+        using var reopened = new EditorSessionOwner("Reopened assets"); reopened.ConfigureAssets(directory, project, 3);
+        Check(reopened.Assets!.Snapshot.Catalog.List()[0].AssetId == record.AssetId);
     }),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);

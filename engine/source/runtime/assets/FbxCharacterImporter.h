@@ -4,6 +4,8 @@
 
 #include <array>
 #include <filesystem>
+#include <atomic>
+#include <stdexcept>
 
 namespace NcmaEngine::Assets
 {
@@ -55,6 +57,19 @@ namespace NcmaEngine::Assets
         std::size_t MaxFileBytes = 256ULL * 1024 * 1024;
         std::size_t MaxVertices = 2'000'000;
         std::size_t MaxAnimationKeys = 2'000'000;
+        bool StaticOnly = false; // Separate tool mode; old character callers stay strict.
+        bool RejectAmbiguousNames = false; // Persistent import must not infer identity from duplicate-name suffix indices.
+        // Private numerical worker signals, never callbacks into CLR, GUI or World.
+        const std::atomic_bool* Cancellation = nullptr;
+        std::atomic<std::uint32_t>* Phase = nullptr;
+        std::atomic<std::uint64_t>* BytesRead = nullptr;
+        std::atomic<std::uint64_t>* BytesTotal = nullptr;
+    };
+
+    class FbxImportCancelled final : public std::runtime_error
+    {
+    public:
+        FbxImportCancelled() : std::runtime_error("FBX import cancelled") {}
     };
 
     class FbxCharacterImporter final

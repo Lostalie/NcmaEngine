@@ -4,6 +4,7 @@ using Ncma.Gameplay;
 using Ncma.Scene;
 using Ncma.Scripting;
 using Ncma.Application.Runtime;
+using Ncma.Assets.Authoring;
 namespace Ncma.Editor.Services;
 
 // Owns one edit document, endpoint and optional isolated Play; catalog can be explicitly borrowed
@@ -16,6 +17,9 @@ public sealed class EditorSessionOwner : IDisposable
     private bool _disposed, _busy;
     private EditSession? _edit;
     private EditorEndpoint? _endpoint;
+    private AssetProjectAuthoring? _assets;
+    private IDisposable? _playAssets;
+    private ImportCoordinator? _imports;
     private PlaySession? _play => _runtime.Play;
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null)
@@ -28,6 +32,23 @@ public sealed class EditorSessionOwner : IDisposable
     public EditSession? Edit { get { Verify(); return _edit; } }
     public EditorEndpoint? Endpoint { get { Verify(); return _endpoint; } }
     public PlaySession? Play { get { Verify(); return _play; } }
+    public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
+    public ImportCoordinator? Imports { get { Verify(); return _imports; } }
+    public void ConfigureImportTools(ImportWorkerLaunch trustedLaunch, Func<string, bool> approvedSource)
+    {
+        Verify(); if (_assets is null || _imports is not null || _play is not null) throw new InvalidOperationException("Import tools require idle configured Editor assets.");
+        _imports = _assets.CreateImportCoordinator(trustedLaunch, approvedSource);
+    }
+    public void ConfigureAssets(string projectRoot, Guid projectId, ulong generation, AssetWriteScope? scope = null)
+    {
+        Verify();
+        if (_edit is null || _assets is not null || _play is not null) throw new InvalidOperationException("Asset startup requires a fresh Editor.");
+        _assets = new(projectRoot, projectId, generation, _edit, scope ?? new([], [], [], () => true));
+    }
+    public bool RefreshAssets(bool force = false)
+    {
+        Verify(); return _assets?.Refresh(_assets.Generation, force) ?? false;
+    }
     internal Ncma.SceneWorld Facade { get { Verify(); return _facade; } }
     private void Verify()
     {
@@ -70,9 +91,11 @@ public sealed class EditorSessionOwner : IDisposable
             document = new(_document.World.Name, _document.World.Components);
             document.RestoreBytes(_document.CaptureBytes());
         }
+        var pins = _assets?.PinForPlay();
         _busy = true;
         try { var play = _runtime.StartPlay(document, d => _edit is null ? new PlaySession(d, _facade) : new PlaySession(d));
-            _edit?.SetFrozen(true); return play; }
+            _playAssets = pins; pins = null; _edit?.SetFrozen(true); return play; }
+        catch { pins?.Dispose(); throw; }
         finally { _busy = false; }
     }
     public int ReloadGameplay(string path)
@@ -89,7 +112,7 @@ public sealed class EditorSessionOwner : IDisposable
         try { _runtime.StopPlay(); }
         finally
         {
-            try { if (_runtime.Play is null) _edit?.SetFrozen(false); }
+            try { if (_runtime.Play is null) { _playAssets?.Dispose(); _playAssets = null; _edit?.SetFrozen(false); } }
             finally { _busy = false; }
         }
     }
@@ -102,6 +125,8 @@ public sealed class EditorSessionOwner : IDisposable
         try { StopPlay(); } catch (Exception e) { errors.Add(e); }
         if (_play is not null) throw new AggregateException(errors);
         _edit?.SetFrozen(true);
+        try { _assets?.Dispose(); } catch (Exception e) { errors.Add(e); }
+        _assets = null;
         try { _endpoint?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _endpoint = null; _facade.Dispose();
         _runtime.Dispose();

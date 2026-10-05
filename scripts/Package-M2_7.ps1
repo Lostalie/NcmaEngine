@@ -68,6 +68,8 @@ $editor = Join-Path $packageBase 'editor'
 $playerNull = Join-Path $packageBase 'player-null'
 $playerDx11 = Join-Path $packageBase 'player-dx11'
 Publish-Candidate 'managed\Ncma.Editor.App\Ncma.Editor.App.csproj' $editor
+Publish-Candidate 'managed\Ncma.Asset.ImportWorker\Ncma.Asset.ImportWorker.csproj' (Join-Path $editor 'tools\import-worker')
+Copy-Exact (Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaImportKernel.dll') (Join-Path $editor 'tools\import-worker\NcmaImportKernel.dll')
 Publish-Candidate 'managed\Ncma.Player.App\Ncma.Player.App.csproj' $playerNull
 New-Item -ItemType Directory -Path $playerDx11 | Out-Null
 # Publish outputs are a fresh immutable generation; never merge old bin directories.

@@ -13,7 +13,8 @@ public sealed record EditorPage(EditorViewStamp Stamp, EditState State, int Tota
 // Trusted human-UI routing only. No additional scene store or history; never registered as MCP tools.
 public sealed class EditorWorkspace(EditorSessionOwner owner)
 {
-    private static readonly string[] LocalCapabilities = ["ncma.scene.transaction", "ncma.scene.delete_object", "ncma.history.undo", "ncma.history.redo"];
+    private static readonly string[] LocalCapabilities = ["ncma.scene.transaction", "ncma.scene.delete_object", "ncma.history.undo", "ncma.history.redo",
+        "ncma.assets.metadata.edit", "ncma.assets.files.edit", "ncma.assets.import.commit"];
     private static readonly CapabilityPermissions Local = new(LocalCapabilities);
     private SceneDocumentSnapshot? _cache, _preview;
     private ulong _cachedRevision = ulong.MaxValue, _cachedGeneration;

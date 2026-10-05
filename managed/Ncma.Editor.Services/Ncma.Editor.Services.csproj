@@ -11,5 +11,6 @@
     <ProjectReference Include="../Ncma.Application.Runtime/Ncma.Application.Runtime.csproj" />
     <ProjectReference Include="../Ncma.Editor.Transport/Ncma.Editor.Transport.csproj" />
     <ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" />
+    <ProjectReference Include="../Ncma.Assets.Authoring/Ncma.Assets.Authoring.csproj" />
   </ItemGroup>
 </Project>
