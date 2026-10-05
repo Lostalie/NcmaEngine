@@ -6,7 +6,7 @@ namespace Ncma.Application;
 public sealed record ProjectPlugin(string Id, string Path);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProjectConfiguration(int SchemaVersion, Guid ProjectId, string Name,
-    string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false);
+    string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false, Guid? SceneCamera = null);
 public sealed class ProjectContext
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
@@ -23,7 +23,7 @@ public sealed class ProjectContext
         if (configuration.SchemaVersion != 1 || configuration.ProjectId == Guid.Empty ||
             string.IsNullOrWhiteSpace(configuration.Name) || configuration.Name.Length > 256 ||
             configuration.Renderer is not ("Direct3D11" or "Vulkan" or "Null") || configuration.Plugins is null ||
-            configuration.Plugins.Length > 64) throw new ArgumentException("Invalid project configuration.");
+            configuration.Plugins.Length > 64 || configuration.SceneCamera == Guid.Empty) throw new ArgumentException("Invalid project configuration.");
         _configuration = configuration with { Plugins = (ProjectPlugin[])configuration.Plugins.Clone() };
         StartupScenePath = Resolve(configuration.StartupScene, ".ncmascene");
         if (new FileInfo(StartupScenePath).Length > Ncma.Scene.SceneDocumentCodec.MaxBytes) throw new ArgumentException("Startup scene exceeds budget.");

@@ -127,7 +127,7 @@ H7 前候选程序不覆盖 out/bin 默认入口；H8 前不把 M2 标为完成�
 
 验收：导入 → 保存 → 重启 → 场景实例 → 动画播放完整打通；重新导入身份稳定；CPU/GPU 蒙皮误差有证据；材质缺失有诊断；失败/取消不破坏原资产和场景。
 
-2026-10-05：M3.1–M3.3已实现且最终完整双配置回归通过，G1/G2/G3资源门禁关闭，M3.3-B/C/D已推送。M3.4 已实现组件/文档组合校验、CPU 提取基础、生产只读资产解析与 CPU/文件租约及 Editor/Player 启动预检；GPU 协调器、真实多对象阴影/HDR管线与 G4 未完成，M3.5–M3.9未启动。详见 [M3总体方案](M3_IMPLEMENTATION_PLAN.md)、[M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 与 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)。
+2026-10-05：M3.1–M3.3 已实现且最终双配置回归通过，G1/G2/G3 关闭并已推送。M3.4 已补静态多对象 shadow/GGX HDR/tone、独立 CPU/GPU 租约、Edit/Play pin 与实际 Editor/Player；最终双配置/G4 结论见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。GPU 蒙皮和 M3.5–M3.9 未实现。详见 [M3 总体方案](M3_IMPLEMENTATION_PLAN.md)、[M3.4 方案](M3_4_IMPLEMENTATION_PLAN.md) 与 [v4 契约](M3_4_RENDER_ABI.md)；M2 人工/自包含/长稳门禁不因此关闭。
 
 | 小阶段 | 详细方案 |
 | --- | --- |

@@ -1,12 +1,13 @@
 namespace Ncma.Rendering;
 [Flags] public enum RenderUsage { None = 0, Sampled = 1, ColorTarget = 2, DepthTarget = 4 }
 public enum RenderFormat { Rgba8, Rgba16Float, Depth32 }
-public enum RenderRole { Shadow, Hdr, Depth, Output, ResourceOutput }
-public enum RenderOperation : uint { Shadow = 1, Geometry, ToneMap, Clear, ResourceGeometry }
-public readonly record struct RenderCapabilities(uint MaxDimension, int MaxPasses, int MaxResources, bool ReferencePbr, bool Arrays, bool ResourcePbr = false)
+public enum RenderRole { Shadow, Hdr, Depth, Output, ResourceOutput, SceneShadow, SceneHdr, SceneDepth, SceneOutput }
+public enum RenderOperation : uint { Shadow = 1, Geometry, ToneMap, Clear, ResourceGeometry, SceneShadow, SceneGeometry, SceneTone }
+public readonly record struct RenderCapabilities(uint MaxDimension, int MaxPasses, int MaxResources, bool ReferencePbr, bool Arrays, bool ResourcePbr = false, bool ScenePbr = false)
 {
     public static RenderCapabilities ReferenceDx11 => new(4096, 64, 32, true, true);
     public static RenderCapabilities ResourceDx11 => new(4096, 64, 32, false, false, true);
+    public static RenderCapabilities SceneDx11 => new(4096, 16, 16, false, false, false, true);
 }
 public readonly record struct RenderResourceId(int Index);
 public sealed record RenderResource(string Name, RenderRole Role, RenderFormat Format, RenderUsage Usage, uint Width, uint Height, uint Layers = 1, bool Imported = false);
@@ -51,10 +52,13 @@ public sealed class RenderGraph
                 RenderRole.Shadow => r.Format == RenderFormat.Depth32 && r.Usage == (RenderUsage.Sampled | RenderUsage.DepthTarget) && r.Width == 2048 && r.Height == 2048 && r.Layers == 4 && !r.Imported,
                 RenderRole.Hdr => r.Format == RenderFormat.Rgba16Float && r.Usage == (RenderUsage.Sampled | RenderUsage.ColorTarget) && r.Layers == 1 && !r.Imported,
                 RenderRole.Depth => r.Format == RenderFormat.Depth32 && r.Usage == (RenderUsage.Sampled | RenderUsage.DepthTarget) && r.Layers == 1 && !r.Imported,
-                RenderRole.Output or RenderRole.ResourceOutput => r.Format == RenderFormat.Rgba8 && r.Usage == RenderUsage.ColorTarget && r.Layers == 1 && r.Imported, _ => false };
+                RenderRole.SceneShadow => r.Format == RenderFormat.Depth32 && r.Usage == (RenderUsage.Sampled | RenderUsage.DepthTarget) && r.Width == r.Height && r.Width is 256 or 512 or 1024 or 2048 && r.Layers == 1 && !r.Imported,
+                RenderRole.SceneHdr => r.Format == RenderFormat.Rgba16Float && r.Usage == (RenderUsage.Sampled | RenderUsage.ColorTarget) && r.Layers == 1 && !r.Imported,
+                RenderRole.SceneDepth => r.Format == RenderFormat.Depth32 && r.Usage == (RenderUsage.Sampled | RenderUsage.DepthTarget) && r.Layers == 1 && !r.Imported,
+                RenderRole.Output or RenderRole.ResourceOutput or RenderRole.SceneOutput => r.Format == RenderFormat.Rgba8 && r.Usage == RenderUsage.ColorTarget && r.Layers == 1 && r.Imported, _ => false };
             if (!valid) Fail("resource_format", "Resource incompatible with supported operation set.");
         }
-        foreach(var role in new[]{RenderRole.Shadow,RenderRole.Hdr,RenderRole.Depth})
+        foreach(var role in new[]{RenderRole.Shadow,RenderRole.Hdr,RenderRole.Depth,RenderRole.SceneShadow,RenderRole.SceneHdr,RenderRole.SceneDepth})
             if(_resources.Count(r=>r.Role==role)>1) Fail("resource_contract","v1 reference group supports one resource per semantic role.");
         int[] writer = Enumerable.Repeat(-1, _resources.Count).ToArray();
         for (int i = 0; i < _passes.Count; i++) foreach (var id in _passes[i].Writes) {
@@ -62,7 +66,7 @@ public sealed class RenderGraph
             writer[id.Index] = i;
         }
         ValidateId(_output!.Value);
-        if (_resources[_output.Value.Index].Role is not (RenderRole.Output or RenderRole.ResourceOutput) || writer[_output.Value.Index] < 0) Fail("missing_output", "Output is not written.");
+        if (_resources[_output.Value.Index].Role is not (RenderRole.Output or RenderRole.ResourceOutput or RenderRole.SceneOutput) || writer[_output.Value.Index] < 0) Fail("missing_output", "Output is not written.");
         if (_passes.Any(p => p.Operation == RenderOperation.ResourceGeometry) && (_passes.Count != 1 || _resources.Count != 1)) Fail("resource_contract", "v3 supports one typed geometry stage, without reference-stage mixing.");
         var edges = new List<int>[_passes.Count];
         for (int i = 0; i < _passes.Count; i++) {
@@ -85,6 +89,21 @@ public sealed class RenderGraph
         // Compile all passes, including otherwise unused ones, so rejected input is deterministic.
         for (int i = 0; i < _passes.Count; i++) Visit(i);
         if (order[^1] != writer[_output.Value.Index]) Fail("output_order", "Final declared output must be the final pass.");
+        if (_passes.Any(p => p.Operation is RenderOperation.SceneShadow or RenderOperation.SceneGeometry or RenderOperation.SceneTone))
+        {
+            if (_passes.Any(p => p.Operation is not (RenderOperation.SceneShadow or RenderOperation.SceneGeometry or RenderOperation.SceneTone)) ||
+                _passes.Count(p => p.Operation == RenderOperation.SceneGeometry) != 1 || _passes.Count(p => p.Operation == RenderOperation.SceneShadow) > 1 ||
+                order.Count(i => _passes[i].Operation == RenderOperation.SceneTone) == 0 ||
+                order.FindIndex(i => _passes[i].Operation == RenderOperation.SceneTone) < order.FindIndex(i => _passes[i].Operation == RenderOperation.SceneGeometry))
+                Fail("scene_contract", "Independent v4 scene stage group required.");
+            if (_resources.Any(r => r.Role is not (RenderRole.SceneShadow or RenderRole.SceneHdr or RenderRole.SceneDepth or RenderRole.SceneOutput))) Fail("scene_contract", "No reference/v3 resources in scene group.");
+            var geometry=_passes.Single(p=>p.Operation==RenderOperation.SceneGeometry);
+            if (_passes.Any(p=>p.Operation==RenderOperation.SceneShadow) != (geometry.Reads.Length==1) ||
+                _resources.Any(r=>r.Role==RenderRole.SceneShadow) != (geometry.Reads.Length==1))
+                Fail("scene_contract","Scene shadow must be the geometry dependency, not an unused side pass.");
+            if(_resources.Any(r=>r.Role==RenderRole.SceneOutput && (r.Width!=_resources[_output.Value.Index].Width || r.Height!=_resources[_output.Value.Index].Height)))
+                Fail("resource_dimensions","Scene output versions share one physical target.");
+        }
         var operations = order.Select(i => new CompiledRenderGraph.Operation(_passes[i].Name, _passes[i].Operation, _passes[i].Shader, (float[])_passes[i].Parameters.Clone())).ToArray();
         _cache = new(_revision, capabilities, operations, _resources.ToArray()); return _cache;
     }
@@ -99,14 +118,22 @@ public sealed class RenderGraph
             RenderOperation.ToneMap => p.Shader == 2 && Roles(reads, RenderRole.Hdr, RenderRole.Depth) && Roles(writes, RenderRole.Output),
             RenderOperation.Clear => p.Shader == 0 && (reads.Length == 0 || Roles(reads, RenderRole.Output)) && Roles(writes, RenderRole.Output),
             RenderOperation.ResourceGeometry => p.Shader == 3 && reads.Length == 0 && Roles(writes, RenderRole.ResourceOutput),
+            RenderOperation.SceneShadow => p.Shader == 4 && reads.Length == 0 && Roles(writes, RenderRole.SceneShadow),
+            RenderOperation.SceneGeometry => p.Shader == 4 && (reads.Length == 0 || Roles(reads, RenderRole.SceneShadow)) && Roles(writes, RenderRole.SceneHdr, RenderRole.SceneDepth),
+            RenderOperation.SceneTone => p.Shader == 4 && Roles(reads, RenderRole.SceneHdr, RenderRole.SceneDepth) && Roles(writes, RenderRole.SceneOutput),
             _ => false };
         if (!valid) Fail("shader_contract", "Operation/shader/input/output contract mismatch.");
-        if (p.Operation is not (RenderOperation.Clear or RenderOperation.ResourceGeometry) && !caps.ReferencePbr) Fail("capability", "Reference shaders unavailable.");
+        bool scene = p.Operation is RenderOperation.SceneShadow or RenderOperation.SceneGeometry or RenderOperation.SceneTone;
+        if (scene && !caps.ScenePbr) Fail("capability", "Scene shaders unavailable.");
+        if (!scene && p.Operation is not (RenderOperation.Clear or RenderOperation.ResourceGeometry) && !caps.ReferencePbr) Fail("capability", "Reference shaders unavailable.");
+        if (p.Operation == RenderOperation.SceneShadow && p.Parameters.Any(v => v != 0) ||
+            p.Operation == RenderOperation.SceneGeometry && (p.Parameters[0] is < 0 or > 1 || p.Parameters.Skip(1).Any(v => v != 0)) ||
+            p.Operation == RenderOperation.SceneTone && (p.Parameters[0] is < .01f or > 16 || p.Parameters.Skip(1).Any(v => v != 0))) Fail("parameter", "Scene stage parameters.");
         if (p.Operation == RenderOperation.ResourceGeometry && !caps.ResourcePbr) Fail("capability", "Typed resource shaders unavailable.");
         if (p.Operation == RenderOperation.ResourceGeometry && (p.Parameters[0] is < .01f or > 16 || p.Parameters[1] is < 0 or > 1 || p.Parameters[2] is < 0 or > 2 || p.Parameters[2] != MathF.Truncate(p.Parameters[2]) || p.Parameters[3] != 0)) Fail("parameter", "Typed resource exposure/ambient/mode contract.");
         if (p.Operation == RenderOperation.Clear && p.Parameters.Any(v => v < 0 || v > 1)) Fail("parameter", "Clear RGBA outside [0,1].");
         if (p.Operation == RenderOperation.ToneMap && (p.Parameters[0] != 0 && p.Parameters[0] is < .01f or > 16)) Fail("parameter", "Tone exposure override outside [.01,16].");
-        var spatial = reads.Concat(writes).Where(r => r.Role != RenderRole.Shadow).ToArray();
+        var spatial = reads.Concat(writes).Where(r => r.Role is not (RenderRole.Shadow or RenderRole.SceneShadow)).ToArray();
         if (spatial.Length > 1 && spatial.Any(r => r.Width != spatial[0].Width || r.Height != spatial[0].Height)) Fail("resource_dimensions", "Mismatched viewport resource dimensions.");
     }
     private static void Fail(string code, string message) => throw new RenderGraphException(code, message);
@@ -122,14 +149,17 @@ public sealed class CompiledRenderGraph
     public uint Height { get; }
     public bool RequiresReferenceResources { get; }
     public bool RequiresResourceService { get; }
+    public bool RequiresSceneService { get; }
+    internal ScenePassV4[] SceneOperations => _operations.Select(p => new ScenePassV4 { Operation = (uint)p.Code, Parameter = p.Parameters[0] }).ToArray();
     internal ReadOnlySpan<float> ResourceParameters => _operations[0].Parameters;
     public IReadOnlyList<string> PassNames { get; }
     public IReadOnlyList<RenderResource> Resources { get; }
     internal CompiledRenderGraph(ulong revision, RenderCapabilities capabilities, Operation[] operations, RenderResource[] resources)
     {
-        var output=resources.First(r=>r.Role is RenderRole.Output or RenderRole.ResourceOutput);Width=output.Width;Height=output.Height;
+        var output=resources.First(r=>r.Role is RenderRole.Output or RenderRole.ResourceOutput or RenderRole.SceneOutput);Width=output.Width;Height=output.Height;
         RequiresReferenceResources=operations.Any(p=>p.Code is RenderOperation.Shadow or RenderOperation.Geometry or RenderOperation.ToneMap);
         RequiresResourceService=operations.Any(p=>p.Code==RenderOperation.ResourceGeometry);
+        RequiresSceneService=operations.Any(p=>p.Code is RenderOperation.SceneShadow or RenderOperation.SceneGeometry or RenderOperation.SceneTone);
         Revision = revision; Capabilities = capabilities; _operations = operations;
         PassNames = Array.AsReadOnly(operations.Select(p => p.Name).ToArray()); Resources = Array.AsReadOnly(resources);
     }

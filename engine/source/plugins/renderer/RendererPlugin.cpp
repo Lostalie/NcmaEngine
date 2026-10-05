@@ -5,6 +5,7 @@
 #include "ReferenceKernel.h"
 #include "StaticMeshKernel.h"
 #include "ResourceKernel.h"
+#include "ScenePipelineKernel.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -16,6 +17,7 @@
 #include <cmath>
 #include <memory>
 #include <unordered_map>
+#include <Eigen/LU>
 using namespace NcmaEngine;
 using Microsoft::WRL::ComPtr;
 namespace {
@@ -42,6 +44,8 @@ struct Renderer {
     std::unordered_map<uint64_t,std::unique_ptr<MaterialGpu>> materials;
     std::unordered_map<uint64_t,std::unique_ptr<TargetGpu>> targets;
     NcmaResourceStatsV3 resourceStats{sizeof(NcmaResourceStatsV3)};
+    std::unordered_map<uint64_t,std::unique_ptr<Rendering::ScenePipelineKernel>> scenePipelines;
+    NcmaScenePipelineStatsV4 sceneStats{sizeof(NcmaScenePipelineStatsV4),4096};
     ComPtr<ID3D11InfoQueue> validation;
     ComPtr<ID3D11Query> gpuDisjoint,gpuBegin,gpuEnd;
     bool measuring=false,timingPending=false;
@@ -145,7 +149,7 @@ uint32_t NCMA_CALL Shutdown(uint64_t context,NcmaErrorV1* error) noexcept {
 uint32_t NCMA_CALL Status(uint64_t context,NcmaModuleStatusV1* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
+        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
 }
 uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
@@ -327,7 +331,7 @@ uint32_t NCMA_CALL Resize(uint64_t context,uint64_t handle,uint32_t width,uint32
 uint32_t NCMA_CALL Stats(uint64_t context,uint64_t handle,NcmaRendererStatsV1* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        ResolveTiming(*renderer);Validation(*renderer);renderer->stats.live_groups=renderer->groups.size();*output=renderer->stats;return NCMA_OK;});
+        ResolveTiming(*renderer);Validation(*renderer);renderer->stats.live_groups=renderer->groups.size()+renderer->scenePipelines.size();*output=renderer->stats;return NCMA_OK;});
 }
 uint32_t NCMA_CALL WaitIdle(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
@@ -496,12 +500,13 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
     });
 }
 #include "ResourceServices.inl"
+#include "ScenePipelineServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>3)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>4)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):sizeof(NcmaResourceRenderApiV3);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):sizeof(NcmaScenePipelineApiV4);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -509,7 +514,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         if(version==1)std::memcpy(output,&table,sizeof(table));
         else if(version==2) {NcmaSceneRenderApiV2 extended{table,CreateBindPoseMesh};extended.base.struct_size=sizeof(extended);extended.base.version=2;extended.base.capabilities=3;
             std::memcpy(output,&extended,sizeof(extended));}
-        else {const NcmaResourceRenderApiV3 resources{sizeof(resources),3,0x3c,CreateTexture,CreateMaterial,CreateTarget,DestroyResource,SubmitResources,ResourceStats,CaptureTarget};std::memcpy(output,&resources,sizeof(resources));}
+        else if(version==3) {const NcmaResourceRenderApiV3 resources{sizeof(resources),3,0x3c,CreateTexture,CreateMaterial,CreateTarget,DestroyResource,SubmitResources,ResourceStats,CaptureTarget};std::memcpy(output,&resources,sizeof(resources));}
+        else {const NcmaScenePipelineApiV4 scene{sizeof(scene),4,0x7,CreateScenePipeline,DestroyScenePipeline,SubmitScenePipeline,ScenePipelineStats};std::memcpy(output,&scene,sizeof(scene));}
         return NCMA_OK;
     });
 }

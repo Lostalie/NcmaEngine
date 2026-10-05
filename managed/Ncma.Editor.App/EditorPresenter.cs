@@ -70,6 +70,14 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
     public string LastMessage => _messages.LastOrDefault() ?? "";
     public (float X, float Y, float Width, float Height) Viewport { get; private set; }
     public SceneObjectData? Selected => _page?.Selected;
+    public Guid SceneCamera { get; private set; }
+    private bool _refreshRenderAssets;
+    public bool ConsumeRenderAssetRefresh() { bool pending=_refreshRenderAssets; _refreshRenderAssets=false; return pending; }
+    public void SelectStartupCamera(Guid? camera) => SceneCamera=camera??Guid.Empty;
+    private string[] _renderDiagnostics=[];
+    public void ShowRenderDiagnostics(IReadOnlyList<Ncma.Scene.Rendering.SceneRenderDiagnostic>? diagnostics) {
+        _renderDiagnostics=diagnostics?.Take(4).Select(d=>$"Render: {d.Code}; object={d.ObjectId}; asset={d.AssetId}").ToArray()??[];
+    }
     public void CancelInteraction() { workspace.CancelDraft(); _jsonEdit = null; _generation = checked(_generation + 1); }
     private static string BoundMessage(string message, int limit) {
         if (message.Length <= limit) return message;
@@ -295,7 +303,11 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
         Line();
         Button(19, "Restart", "restart", _page.Play is not null);
         Button(20, "Reload configured gameplay", "reload", gameplayAssembly is not null);
-        Add(GuiItemKind.Label,3,labelId++,"Reference cube: selected Transform only; asset mesh rendering is not implemented.");
+        Add(GuiItemKind.Button,14,1,"Browser camera",new("browser_camera")); Line();
+        Add(GuiItemKind.Button,14,2,"Use selected scene camera",new("scene_camera",_page.Selected?.Id??Guid.Empty),enabled:_page.Selected?.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.CameraData.TypeId)==true);
+        if(projectRoot is not null) { Line(); Add(GuiItemKind.Button,14,3,"Refresh render assets",new("render_refresh")); }
+        Add(GuiItemKind.Label,3,labelId++,SceneCamera==Guid.Empty?"Independent browser camera / scene static PBR":"Scene camera: "+SceneCamera.ToString("D"));
+        foreach(string diagnostic in _renderDiagnostics) Add(GuiItemKind.Label,3,labelId++,diagnostic);
         if (_page.Play is { } play)
         {
             Add(GuiItemKind.Label, 3, labelId++, $"{play.State} tick={play.Tick} alpha={play.InterpolationAlpha:F3} dropped={play.TotalDroppedSeconds:F4}");
@@ -500,6 +512,9 @@ internal sealed unsafe class EditorPresenter(EditorWorkspace workspace, string? 
                 if (e.Phase != 3) continue;
                 switch (action.Kind)
                 {
+                    case "browser_camera": SceneCamera=Guid.Empty; break;
+                    case "scene_camera": SceneCamera=action.Object; break;
+                    case "render_refresh": _refreshRenderAssets=true; break;
                     case "browse_open": case "browse_save": case "fbx_browse": ChooseFile(action.Kind); break;
                     case "log_previous":_logOffset=Math.Max(0,_logOffset-8);break;
                     case "log_next":_logOffset+=8;break;

@@ -168,6 +168,7 @@ if(WIN32)
         engine/source/plugins/renderer/RendererPlugin.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ResourceKernel.cpp
+        engine/source/plugins/renderer/ScenePipelineKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
         engine/source/runtime/renderer/rhi/RhiResources.cpp)
@@ -210,6 +211,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     add_executable(NcmaRendererNativeTests tests/plugins/RendererNativeTests.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ResourceKernel.cpp
+        engine/source/plugins/renderer/ScenePipelineKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp engine/source/runtime/renderer/rhi/RhiResources.cpp)
     target_include_directories(NcmaRendererNativeTests PRIVATE engine/source/runtime engine/source/plugins)
     target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)

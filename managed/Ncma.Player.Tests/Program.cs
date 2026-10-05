@@ -175,6 +175,8 @@ foreach (var test in cases) { try { test.Run(); passed.Add(test.Name); Console.W
 if (args.Length > 2) {
     try { foreach (string test in PackageChecks.Run(root, args[1], output, Path.GetFullPath(args[2]))) { passed.Add(test); Console.WriteLine("PASS " + test); } }
     catch (Exception e) { Console.Error.WriteLine("FAIL Package: " + e); return 1; }
+    try { foreach(string test in SceneHostChecks.Run(output,Path.GetFullPath(args[2]))) { passed.Add(test);Console.WriteLine("PASS "+test); } }
+    catch(Exception e) { Console.Error.WriteLine("FAIL Scene Player: "+e);return 1; }
 }
 File.WriteAllBytes(Path.Combine(output, "results.json"), JsonSerializer.SerializeToUtf8Bytes(new { passed = passed.Count, tests = passed }, json));
 Console.WriteLine($"Player tests: {passed.Count} passed."); return 0;

@@ -1,7 +1,7 @@
 # M3 资产系统与 FBX 场景角色实施方案
 
 日期：2026-10-05。基线：165c50b5a77e9ab7b81ce6ff19147f9a1eb27e3b。
-性质：实施方案。M3.1–M3.3最终完整 Debug/Release 回归通过，G1/G2/G3资源门禁关闭；M3.3-B/C/D已合并提交推送。M3.4 的组件/文档校验、CPU 提取和生产只读资产/CPU 租约及启动预检已实现；GPU 协调器/真实场景管线/G4 尚未完成，M3.5–M3.9未启动。范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将规划/局部测试或资源切片视为完整后端完成。
+性质：实施方案。M3.1–M3.3 最终完整 Debug/Release 回归通过，G1/G2/G3 资源门禁关闭；M3.4 已补真实静态 DX11 场景、CPU/GPU 租约与 Editor/Player 消费，最终回归/G4 结论见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5–M3.9 未实现。历史范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将静态切片视为完整后端完成。
 
 M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启后可实例化到扁平场景，
 在 Editor 和 DX11 Player 中播放动画、显示 PBR 材质和阴影；重新导入、编辑和获批 Agent 修改可恢复。
@@ -14,7 +14,7 @@ M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启
 | 应用与编辑 | C# apphost 已成为 out/bin 默认入口，原生 ImGui 为展示插件；旧宿主/场景桥已删除 | 增加资产业务，不恢复原生 World/hostfxr |
 | 场景与玩法 | C# World、SceneDocument JSON v1、唯一编辑历史、隔离 Play、固定步和本地 scoped MCP | 没有正式资产引用、网格/相机/灯光组件 |
 | FBX | ufbx 0.23.0 导入蒙皮角色、四权重、骨架/辅助节点、采样片段和 CPU 线框；Character ABI 2 | 无持久数据库、异步取消、源材质/纹理、原始流导出和 GPU 蒙皮 |
-| Renderer | 固定DX11 reference；M3.3 additive ABI1.2/v1/v2/v3静态与显式绑定mesh、纹理/mips、作者材质与最小GGX、离屏target、UUID cache/lease和受限typed Graph/Feature/Stage；G3资源门禁关闭 | 正式Scene/Editor/Player多对象提取/阴影整合、离屏GUI、GPU动画蒙皮、IBL与通用多阶段资源图未实现 |
+| Renderer | M3.3 资源/v1/v2/v3；M3.4 additive v4 静态 Scene/Editor/Player、单方向光 shadow/HDR/tone、CPU/GPU lease、public typed Graph/Feature/Stage | 离屏 GUI、GPU 动画蒙皮、CSM/contact、IBL 与通用多阶段资源图未实现 |
 | 组件注册 | 值类型组件、Guid/标量/嵌套值字段；现有 schema 检查支持闭合对象，不支持通用数组 | 不能把材质数组、骨骼数组、资源对象塞入组件 |
 | 验证 | 最后双配置各 24 CTest、39 Editor Services、22 Player、42 Python；部署恢复已验证 | 不是 M3 证据，也不代替用户真实 FBX 覆盖 |
 

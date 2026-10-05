@@ -119,11 +119,8 @@ namespace NcmaEngine::Rhi
             error = "Graphics pipelines require vertex and pixel shader source and entry points";
             return false;
         }
-        if (description.VertexLayout.empty())
-        {
-            error = "Graphics pipelines require at least one vertex attribute";
-            return false;
-        }
+        // An empty layout is valid for a shader-generated full-screen triangle.
+        // The backend verifies that no non-system vertex inputs are required.
         for (const VertexAttribute& attribute : description.VertexLayout)
         {
             if (attribute.Semantic.empty())
@@ -178,7 +175,8 @@ namespace NcmaEngine::Rhi
 
     bool Validate(const DrawDescription& description, std::string& error)
     {
-        if (!description.Pipeline || !description.VertexBuffer || description.VertexStride == 0 ||
+        if (!description.Pipeline || (description.VertexBuffer ? description.VertexStride == 0 :
+            description.VertexStride != 0 || description.VertexOffset != 0 || description.IndexCount != 0) ||
             (description.VertexCount == 0 && description.IndexCount == 0))
         {
             error = "Draw commands require pipeline, vertex buffer, draw count, and vertex stride";

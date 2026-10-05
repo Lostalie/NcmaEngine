@@ -106,8 +106,8 @@ public sealed unsafe partial class RendererSession : IDisposable
     }
     public void Submit(CompiledRenderGraph graph, RenderResources? resources, RenderFrame frame)
     {
-        if (graph.RequiresResourceService) throw new ArgumentException("Typed resources require ResourcePipelineSession, not the v1 reference ABI.");
         Verify(); ArgumentNullException.ThrowIfNull(graph);
+        if (graph.RequiresResourceService || graph.RequiresSceneService) throw new ArgumentException("Typed resources require their independent scene/resource service, not the v1 reference ABI.");
         if (graph.RequiresReferenceResources && (resources is null || resources.Owner != this || !resources.IsAlive))
             throw new ArgumentException("Valid renderer-owned resources required.");
         if (graph.Capabilities != Capabilities) throw new ArgumentException("Graph compiled for another capability set.");
@@ -131,7 +131,7 @@ public sealed unsafe partial class RendererSession : IDisposable
     public void Dispose()
     {
         if (_handle == 0) return; Verify();
-        if (_groups.Count != 0 || _gpuMeshes.Count != 0 || _resources.Count != 0) throw new InvalidOperationException("Render resource leases remain.");
+        if (_groups.Count != 0 || _gpuMeshes.Count != 0 || _resources.Count != 0 || _scenePipelines.Count != 0) throw new InvalidOperationException("Render resource leases remain.");
         PluginError error = default; PluginModule.Check(Module.Id, "destroy_renderer", _destroy(Module.Context, _handle, &error), error);
         _handle = 0; _platformLease?.Dispose(); _lease.Dispose();
     }

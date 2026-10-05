@@ -395,7 +395,7 @@ internal static unsafe partial class Program
                 Reject(()=>renderer.Dispose());Reject(()=>window.Dispose());
 
                 if(cycleIndex==0) {
-                    if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestResourceDrawing(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);}
+                    if(args.Length==6){TestStaticMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestBindPoseMeshes(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestResourceDrawing(renderer,ref frame,Path.GetFullPath(args[4]),Path.GetFullPath(args[5]),output);TestScenePipeline(renderer,ref frame,output);TestSceneResources(renderer,ref frame,output);TestSceneProfiles(renderer,ref frame,output);}
                     TestConfiguration(renderer,ref frame,baseline,image);
                     var variations=new RenderPipeline[]{
                         new ReferencePreviewPipeline(toneExposureOverride:2),

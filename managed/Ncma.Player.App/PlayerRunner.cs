@@ -40,9 +40,15 @@ public static class PlayerRunner
                     phase = "dependencies";
                     var startup = document.CaptureSnapshot();
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true);
-                    // The fixed reference view must never masquerade as actual imported scene rendering.
+                    if (startup.Objects.Any(o => o.Components.Any(c => c.TypeId == Ncma.Scene.Rendering.SkinnedMeshData.TypeId)))
+                        throw new NotSupportedException("scene_gpu_skinning_requires_g5");
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
-                        throw new NotSupportedException("scene_3d_pipeline_unimplemented");
+                    {
+                        phase = "configuration";
+                        if (project.Configuration.SceneCamera is not { } camera ||
+                            !document.World.GetObjects().Any(o => o.PersistentId == camera && o.Has<Ncma.Scene.Rendering.CameraData>()))
+                            throw new ArgumentException("scene_camera_selection_required");
+                    }
                 }
                 owner = new(document); owner.LoadGameplay(project.GameplayAssemblyPath);
                 string plugins = Path.GetFullPath(pluginRoot ?? Path.Combine(AppContext.BaseDirectory, "plugins"));
@@ -56,6 +62,7 @@ public static class PlayerRunner
                 phase = "initialize"; var play = owner.StartPlay(factory: d => new PlaySession(d,
                     options.Headless ? FrameTimePolicy.Strict : FrameTimePolicy.Interactive, options.FixedDelta,
                     advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames));
+                if (presentation is not null) presentation.BindScene(play, renderAssets!, project.Configuration.SceneCamera);
                 running = true; double previous = clock.Elapsed.TotalSeconds;
                 while (options.Ticks is null || play.Tick < options.Ticks)
                 {

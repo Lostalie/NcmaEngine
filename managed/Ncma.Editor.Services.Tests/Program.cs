@@ -719,6 +719,28 @@ var cases = new (string, Action)[] {
         using var reopened = new EditorSessionOwner("Reopened assets"); reopened.ConfigureAssets(directory, project, 3);
         Check(reopened.Assets!.Snapshot.Catalog.List()[0].AssetId == record.AssetId);
     }),
+    ("Scene camera selection and resource refresh are explicit local presentation intents", () => {
+        using var owner=new EditorSessionOwner("Camera UI",components:Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(),validateComposition:Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
+        var camera=owner.Document.World.CreateObject("Camera");camera.Set(TransformData.Identity);camera.Set(Ncma.Scene.Rendering.CameraData.Default);
+        owner.Edit!.Resynchronize();var workspace=new EditorWorkspace(owner);workspace.Select(workspace.Stamp,camera.PersistentId);
+        var presenter=new EditorPresenter(workspace,null,root);presenter.Build(1,1280,720);byte[] before=owner.Document.CaptureBytes();ulong revision=owner.Document.Revision;
+        presenter.Apply([Event(presenter,2,domain:14)],[]);Check(presenter.SceneCamera==camera.PersistentId);
+        presenter.Build(2,1280,720);presenter.Apply([Event(presenter,1,domain:14)],[]);Check(presenter.SceneCamera==Guid.Empty);
+        presenter.Build(3,1280,720);presenter.Apply([Event(presenter,3,domain:14)],[]);Check(presenter.ConsumeRenderAssetRefresh()&&!presenter.ConsumeRenderAssetRefresh());
+        Check(revision==owner.Document.Revision&&before.SequenceEqual(owner.Document.CaptureBytes()));
+    }),
+    ("Scene render inspections are scoped read-only copied v4 results", () => {
+        using var loader=new PluginLoader();loader.Load(args[1],[new("platform",ModuleKind.Platform,"NcmaPlatform.dll","NcmaPlatform.dll",1,0,[]),new("renderer",ModuleKind.Renderer,"NcmaRenderer.dll","NcmaRenderer.dll",1,2,["platform"])]);
+        using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"Inspection test",256,256,false);
+        using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,256,256);
+        using var owner=new EditorSessionOwner("Scene inspection");SceneRenderInspections.Register(owner.Edit!,renderer,()=>null);
+        foreach(string name in new[]{"ncma.render.inspect_pipeline","ncma.render.inspect_graph","ncma.render.get_profile"}) {
+            var request=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),owner.Edit!.SessionId,owner.Edit.Revision,name,JsonSerializer.SerializeToElement(new{}));
+            var result=owner.Edit.Invoke(request);Check(result.Status=="ok"&&!result.Changed&&result.Data.GetProperty("version").GetInt32()==4);
+            Check(owner.Edit.Invoke(request with{RequestId=Guid.NewGuid(),Input=JsonSerializer.SerializeToElement(new{write=true})}).Status!="ok");
+        }
+        Check(renderer.PipelineStats.Pipelines==0&&renderer.PipelineStats.ResidentBytes==0&&renderer.ResourceStats.Creates==0);
+    }),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);
         File.WriteAllBytes(Path.Combine(dir,"Main.ncmascene"),new SceneDocument().CaptureBytes());

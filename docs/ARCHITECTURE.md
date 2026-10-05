@@ -90,10 +90,10 @@ M3.3：Renderer ABI 1.2 additive query → scene-render v1（static-unlit-v1）/
 C# 负责帧外 typed mesh/绑定姿态、原始skin/palette保留、工具侧PNG/JPEG/mips、UUID/generation/hash cache/lease、
 作者MaterialDefinition/MaterialSet与统一可逆命令、公共Graph受限typed stage/Feature/Stage/pipeline替换；native执行驻留mesh/texture/material/离屏target与最小GGX PBR/AlphaMask/normal。
 旧1.0/1.1 reference不变，最终完整Debug/Release与实际DX11图像/Debug Layer通过，G3资源切片关闭。
-正式Scene/Editor/Player多对象渲染、GUI离屏展示、动画GPU蒙皮、shadow/IBL整合和通用多阶段资源图仍未实现，分别留M3.4–M3.6等后续，不称完整后端。
+后续 M3.4 已补正式 Scene/Editor/Player 静态多对象、单方向光阴影/HDR；GUI 离屏展示、动画 GPU 蒙皮、IBL 和通用多阶段资源图仍未实现，不称完整后端。
 契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [B/C/D交付记录](M3_3_BCD_DELIVERY_REPORT.md)。
 
-M3.4 开发中：独立 `Ncma.Scene.Rendering` 注册五类 UUID/值组件；Editor/Player 共用组合校验，完整候选安装/保存前验证，普通对象不强制 Transform。CPU extractor 直接读已提交 World，提供明确相机、矩阵/bounds 裁剪、保守独立 caster 集合与 identity/revision 缓存，不逐帧序列化。独立 `Ncma.Assets.Runtime`（仅 Assets 依赖，当前 Windows 文件 pin）在启动/显式刷新校验 typed UUID、NCA 文件/block/hash/model 与作者材质纹理闭包，Scene 接入 prepared metadata/CPU 租约；Play 保留自己的旧版本，Player 图形启动严格预检，Headless 不装载 3D。没有 Editor/Renderer 插件依赖。GPU 上传/租约协调器、真实 shadow/HDR/tonemap、多阶段 graph 和 scene 展示未完成；带 mesh 的图形 Player 明确拒绝，不冒充参考立方体。G4 未关闭。见 [启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)。
+M3.4：独立 `Ncma.Scene.Rendering` 注册五类 UUID/值组件、完整文档组合校验与 committed World 提取/缓存；普通对象不强制 Transform，不逐帧序列化。`Ncma.Assets.Runtime` 帧外严格解析 typed UUID/NCA/hash/材质闭包并 pin 文件，Play 保留旧代。新增 `Ncma.Rendering.Scene` 适配层拥有 CPU/GPU 租约，Renderer ABI 1.2 独立 query v4 执行静态数值批次：单方向光 PCF/近似 PCSS、alpha-mask shadow → GGX HDR → ACES/sRGB；默认及注册 Feature/stage/pipeline 替换共用 typed graph。Editor/Player 实际项目走真实场景，Player 必须显式 `sceneCamera`；空/Headless 不创建 3D 资源。只读检查、light-space 独立裁剪、Edit/Play/Stop/reimport/resize 与图像验证见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md) 和 [v4 契约](M3_4_RENDER_ABI.md)。GPU 蒙皮、CSM/contact、IBL、透明、多光、Vulkan 和 GUI 离屏视口仍未实现；不称完整后端。
 
 统一边界：
 
@@ -116,12 +116,12 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 |---|---|
 | RHI 资源、管线、RenderPass/Draw 契约与校验 | 已实现基础 |
 | D3D11 设备、交换链、缓冲/纹理、深度、绘制与 resize | 已实现预览路径；不代表完整生产后端验收 |
-| Metallic-Roughness / GGX、HDR、色调映射 | 已实现参考场景预览 |
+| Metallic-Roughness / GGX、HDR、色调映射 | reference 与 M3.4 静态多对象 DX11 场景已实现 |
 | 方向光级联阴影、PCF 与接触硬化过滤 | 已实现预览；仍需真实动作场景质量/性能验证 |
 | Vulkan loader/runtime 探测 | 已实现 |
 | Vulkan 设备/交换链/绘制和双 API 参考场景一致性 | 未实现 |
 | 完整材质/贴图资产、IBL、延迟/聚类渲染 | 未实现 |
-| GPU 蒙皮角色、场景渲染提取和可合成视口纹理 | 未实现 |
+| 场景渲染提取与静态多对象 | M3.4 已实现；GPU 蒙皮角色、GUI 可合成视口纹理未实现 |
 | 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
 当前 D3D11 使用 HLSL shader model 5 编译；共享着色器反射/SPIR-V 管线未实现。

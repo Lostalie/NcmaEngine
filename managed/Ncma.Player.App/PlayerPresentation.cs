@@ -10,10 +10,12 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     private PlatformWindow? _window;
     private RendererSession? _renderer;
     private RenderPipelineService? _pipeline;
+    private RenderResourceCache? _cache;
+    private Ncma.Rendering.Scene.SceneRenderSession? _scene;
+    private Guid _camera;
     private readonly WindowInputAccumulator _input = new();
     private WindowState _state;
     private readonly ulong[] _held = new ulong[8], _pressed = new ulong[8], _released = new ulong[8];
-    private readonly float[] _model = new float[16];
     private ulong _frame;
     private double _x, _y;
     private bool _focused, _disposed;
@@ -23,11 +25,17 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     {
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
-            new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 1, ["ncma.platform"]) ]);
-        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaPlayer — DX11 reference", visible: visible);
+            new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]) ]);
+        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaPlayer — DX11 scene", visible: visible);
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory, "NcmaEngine.ico"));
         _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, 1280, 720);
         _pipeline = new(_renderer);
+        _cache = new(_renderer);
+    }
+    public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera)
+    {
+        if (_scene is not null) throw new InvalidOperationException("Scene already bound.");
+        _scene = new(_renderer!, _cache!, play.Document.World, assets, play.Document.CaptureSnapshot()); _camera = camera ?? Guid.Empty;
     }
     public bool Pump(PlaySession play)
     {
@@ -45,21 +53,19 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         if (configurations.Length > 1) throw new ArgumentException("ambiguous_render_configuration");
         var config = configurations.Length == 1 ? configurations[0].Get<RenderConfiguration>() : RenderConfiguration.Default(play.SessionId);
         _renderer!.Resize(_state.FramebufferWidth, _state.FramebufferHeight);
-        _pipeline!.Configure(config, _state.FramebufferWidth, _state.FramebufferHeight);
-        var objects = play.RenderView.Objects;
-        if (objects.Length != 0)
-        {
-            var item = objects[0];
-            new Ncma.Rendering.RenderFrameView(play.Document.World.Identity, play.Document.Revision, item.ObjectId, item.Transform).CopyColumnMajorModel(_model);
-            _pipeline.Submit(++_frame, model: _model);
+        ulong frame = ++_frame;
+        if (!_scene!.Submit(frame, _state.FramebufferWidth, _state.FramebufferHeight, _camera, exposure: config.Exposure, ambient: config.Ambient)) {
+            // Empty, culled or missing-camera views clear; never substitute a reference cube.
+            _pipeline!.Configure(config with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false},_state.FramebufferWidth,_state.FramebufferHeight);
+            _pipeline.Submit(frame);
         }
-        else _pipeline.Submit(++_frame);
         _renderer.Present();
     }
     public void Dispose()
     {
         if (_disposed) return;
         // Stop at the first failed release: never unload dependencies while a live native lease remains.
+        _scene?.Dispose(); _scene = null; _cache?.Dispose(); _cache = null;
         _pipeline?.Dispose(); _pipeline = null; _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null; _loader.Dispose(); _disposed = true;
     }

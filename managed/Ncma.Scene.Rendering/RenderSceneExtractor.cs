@@ -8,7 +8,7 @@ namespace Ncma.Scene.Rendering;
 public readonly record struct SceneCameraView(Guid ObjectId, Matrix4x4 ViewProjection, Vector3 Position, CameraData Data);
 public readonly record struct SceneLightView(Guid ObjectId, Vector3 Direction, DirectionalLightData Data);
 public readonly record struct SceneDrawItem(int FrameIndex, Guid ObjectId, SceneAssetInfo Mesh, Guid MaterialSetId,
-    Matrix4x4 Model, MaterialOverrideData? MaterialOverride);
+    Matrix4x4 Model, MaterialOverrideData? MaterialOverride, uint LayerMask = uint.MaxValue);
 public sealed class RenderSceneView
 {
     public Guid WorldId { get; }
@@ -108,7 +108,7 @@ public sealed class RenderSceneExtractor
                 // Indices cover resolved visible geometry before camera culling, not just the camera's survivors.
                 bool cameraVisible = camera is { } c && (mesh.LayerMask & c.Data.LayerMask) != 0 && IntersectsClip(info.BoundsMin, info.BoundsMax, model * c.ViewProjection);
                 int index = indices.Count; indices.Add(id, index);
-                var draw = new SceneDrawItem(index, id, info, mesh.MaterialSetId, model, overridden);
+                var draw = new SceneDrawItem(index, id, info, mesh.MaterialSetId, model, overridden, mesh.LayerMask);
                 if (cameraVisible) geometry.Add(draw);
                 // Conservative independent caster set. C will perform light-space culling; never use the camera set.
                 if (light is { } l && l.Data.CastShadow && mesh.CastShadow && (mesh.LayerMask & l.Data.LayerMask) != 0) casters.Add(draw);

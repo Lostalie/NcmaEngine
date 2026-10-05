@@ -2,6 +2,14 @@
 #include "NcmaPhysics.h"
 #include "NcmaRenderer.h"
 #include "NcmaResourceRender.h"
+#include "NcmaScenePipeline.h"
+_Static_assert(sizeof(NcmaScenePipelineDescriptionV4) == 16, "scene pipeline description");
+_Static_assert(sizeof(NcmaScenePassV4) == 16, "scene stage POD");
+_Static_assert(sizeof(NcmaSceneDrawV4) == 256, "scene draw POD");
+_Static_assert(sizeof(NcmaSceneFrameV4) == 240, "scene frame POD");
+_Static_assert(sizeof(NcmaScenePipelineStatsV4) == 72, "scene pipeline counters");
+_Static_assert(sizeof(NcmaScenePipelineApiV4) == 48, "scene pipeline table");
+_Static_assert(offsetof(NcmaSceneFrameV4, light_view_projection) == 160, "light projection offset");
 #include "NcmaImage.h"
 _Static_assert(sizeof(NcmaImageInfoV1) == 32, "image info");
 _Static_assert(sizeof(NcmaTextureDescriptionV3) == 48, "texture description");

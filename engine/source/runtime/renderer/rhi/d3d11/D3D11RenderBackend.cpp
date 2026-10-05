@@ -647,9 +647,20 @@ namespace NcmaEngine::Rhi
                 attribute.Semantic.c_str(), attribute.SemanticIndex, VertexAttributeFormat(attribute.Format),
                 0, attribute.Offset, D3D11_INPUT_PER_VERTEX_DATA, 0});
         }
-        result = m_Device->CreateInputLayout(
+        if (!nativeLayout.empty()) result = m_Device->CreateInputLayout(
             nativeLayout.data(), static_cast<UINT>(nativeLayout.size()),
             vertexBytecode->GetBufferPointer(), vertexBytecode->GetBufferSize(), &resource.InputLayout);
+        else {
+            Microsoft::WRL::ComPtr<ID3D11ShaderReflection> reflection;
+            result = D3DReflect(vertexBytecode->GetBufferPointer(), vertexBytecode->GetBufferSize(), __uuidof(ID3D11ShaderReflection), &reflection);
+            if (SUCCEEDED(result)) {
+                D3D11_SHADER_DESC reflected{}; result = reflection->GetDesc(&reflected);
+                for (UINT i = 0; SUCCEEDED(result) && i < reflected.InputParameters; ++i) {
+                    D3D11_SIGNATURE_PARAMETER_DESC parameter{}; result = reflection->GetInputParameterDesc(i, &parameter);
+                    if (SUCCEEDED(result) && parameter.SystemValueType != D3D_NAME_VERTEX_ID && parameter.SystemValueType != D3D_NAME_INSTANCE_ID) result = E_INVALIDARG;
+                }
+            }
+        }
         if (FAILED(result))
         {
             error = HResultError("ID3D11Device::CreateInputLayout", result);
@@ -718,7 +729,7 @@ namespace NcmaEngine::Rhi
         }
         const auto pipeline = m_Pipelines.find(description.Pipeline.Value);
         const auto vertexBuffer = m_Buffers.find(description.VertexBuffer.Value);
-        if (pipeline == m_Pipelines.end() || vertexBuffer == m_Buffers.end())
+        if (pipeline == m_Pipelines.end() || (pipeline->second.InputLayout ? vertexBuffer == m_Buffers.end() : static_cast<bool>(description.VertexBuffer)))
         {
             error = "Draw command references an unknown pipeline or vertex buffer";
             return false;
@@ -732,7 +743,7 @@ namespace NcmaEngine::Rhi
         m_DeviceContext->IASetPrimitiveTopology(pipeline->second.Topology);
         const UINT stride = description.VertexStride;
         const UINT offset = description.VertexOffset;
-        ID3D11Buffer* nativeVertexBuffer = vertexBuffer->second.Buffer.Get();
+        ID3D11Buffer* nativeVertexBuffer = vertexBuffer == m_Buffers.end() ? nullptr : vertexBuffer->second.Buffer.Get();
         m_DeviceContext->IASetVertexBuffers(0, 1, &nativeVertexBuffer, &stride, &offset);
         if (description.IndexCount > 0)
         {
