@@ -33,7 +33,7 @@
 | 场景文档与 Undo | M1.1/M1.2 已实现：完整 SceneDocument、Editor.Core 唯一历史、交互草稿、内容指纹、文件关联撤销、Play 隔离/冻结；唯一 .ncmascene JSON v1 | 资产引用与完整资产流水线尚未实现 |
 | 编辑器与命令服务 | M1.2 已实现场景命令：C++/ImGui 提交 UUID 意图，Editor.Core 持有完整文档事务/历史；10 项 v2 能力、权限/版本/幂等与草稿 | C# 主入口与剩余面板业务未实现；第三方客户端人工验收待执行 |
 | 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC | 资产面板、完整资产 MCP、Prefab、cook |
-| D3D11 / PBR / 软阴影 | 部分实现：参考预览支持 GGX 金属粗糙度、HDR/色调映射、深度、方向光四级联、PCF/PCSS/接触阴影 | 完整场景渲染、资产材质/纹理、IBL、FBX GPU 蒙皮、离屏可组合视口、生产级验证 |
+| D3D11 / PBR / 软阴影 | 部分实现：参考 GGX/HDR/方向光四级联/PCF/PCSS/接触阴影；M3.3-A 静态/显式 CPU 绑定姿态网格 GPU 资源、RH typed batch、generation/lease 与图像验证（G3 未关闭） | 完整场景渲染、资产 PBR 材质/纹理、UUID cache、通用 Graph 接入、IBL、FBX GPU 动画蒙皮、离屏视口、生产级验证 |
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
 | 物理 | 已实现基础：Box2D/Jolt 独立测试世界与原生求解 | 独立插件边界、C# 场景同步/碰撞事件、角色控制器、Root Motion 与碰撞协同 |
 | FBX 角色 | M3.2 持久导入 G2 已关闭：独立数值内核/ABI 1.1、隔离 Worker、严格角色/静态模式、切线、UUID/冲突与派生文件、正式 Editor 工具部署和可撤销发布 | PBR 纹理/材质、场景绑定与 GPU 蒙皮、真实用户模型/所有 DCC 兼容验收 |

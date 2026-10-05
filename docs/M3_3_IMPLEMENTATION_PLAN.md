@@ -1,11 +1,12 @@
 # M3.3 网格纹理材质与渲染资源方案
 
-日期：2026-10-05。状态：未实现。依赖 G2。目标是 DX11 原生资源执行能力，不在 native 内保存场景。
+日期：2026-10-05。状态：M3.3-A 静态/显式绑定姿态实现已补齐，最终完整 Debug/Release 门禁均通过，以独立 A checkpoint 提交；推送核对后才进入 B。B/C/D 与 G3 未完成。G2 已通过，M3.1/M3.2 提交 e7eea5a007e3c3bea2b89fe2f04835c54b6002ef 已推送并核对 origin/main。目标是 DX11 原生资源执行能力，不在 native 内保存场景。
 已有 reference ABI 1.1 与图像测试保留；新服务必须绘制实际导入数据而非再次画固定 cube。
 
 ## 1 契约与资源类型
 
-建议 additive Renderer ABI 1.2 扩展查询独立 scene-render v1 服务表，最终版本在 G3 前锁定。
+静态切片已采用 additive Renderer ABI 1.2 查询独立 scene-render v1 服务（仅 static-unlit-v1）。
+后续资源扩展在 G3 前通过独立新服务版本锁定，不变更已有 v1 布局/语义。
 旧 FrameV1 112 bytes 和 reference shader contract 不变；新表有 struct_size/version/capabilities。
 新增 mesh/texture/material/view-target 资源、固定布局描述与 caller-owned 初始数据。
 返回 opaque handle + device generation；UUID→handle 解析只在 C# RuntimeAsset/RenderResourceCache。
@@ -58,3 +59,24 @@ C# 拥有 lease/cache/预算和 typed batch，native 只编码执行；资产没
 资源用途依据 [Microsoft D3D11_USAGE](https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ne-d3d11-d3d11_usage)。
 G3 通过只表示资源绘制切片完成；多对象场景由 G4、角色动画由 G5 接入，不称完整渲染后端已验收。
 阶段测试后执行完整 Build.bat -Configuration Debug，再执行 Build.bat -Configuration Release，无 Skip。
+
+## 4 初始切片（非 G3 完成证明）
+
+MeshUploadData 在 C# 后台准备 typed 静态网格的独立不可变副本：48-byte position/normal/UV/tangent LE 上传布局、
+32-bit indices、局部非对称 bounds、opaque/alpha-mask 稳定材质分段，64MiB 上传预算和取消检查。
+缺切线、退化 UV、无材质均有具名 fallback 诊断；normal mapping 不在不安全输入上开启。
+错误拓扑/槽/切线、溢出法线和 skin 路径拒绝，绝不悄悄去掉蒙皮。
+读取此 CPU DTO 不依赖 native 调用，Null/2D 也不会因此创建 3D/GPU 资源。
+
+CPU DTO 已由新增 Renderer ABI 1.2 查询的 scene-render v1 静态服务采用，不修改持久格式。
+服务仅承诺 static-unlit-v1：48-byte vertices、uint32 indices、generation-scoped handles、RH MVP、
+线性颜色编码为 sRGB、双面深度绘制与有界帧批次；不是 PBR/完整 scene renderer。
+旧 Renderer 1.0/1.1 表、reference 112-byte Frame 和 shaders 不变。
+静态资源驻留/lease/释放等待已实现；scene-render v2 独立协商 80-byte skin 布局与创建时 bind palette。
+C# 在帧外显式计算绑定姿态，保留原始 MSH1/权重/palette，GPU 只绘制一次烘焙后的不可变几何。
+不是动画 GPU 蒙皮；后者属于 G5。纹理/材质/view-target、UUID cache、WIC、PBR、
+Graph 的 typed mesh stage 与正式场景/Editor 接入仍未实现。版本 1 固定表不偷偷扩展语义。
+最新用户要求替代先前“不提交/推送”安排：按 A → B → C → D 逐阶段完成与测试，
+每阶段完整 Debug/Release 通过后单独提交、推送并核对远端 SHA，然后才开始下一阶段。
+测试或推送失败不得推进；保留其他人的本地设置和 ignored 验证证据。不能提前关闭 G3 或开始 M3.4。
+A 的完整双配置结果和未完成边界见 [M3.3-A 交付记录](M3_3_DELIVERY_REPORT.md)。

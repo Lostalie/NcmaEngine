@@ -31,7 +31,7 @@ public struct RendererStats { public uint Size, State, Width, Height; public ulo
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal unsafe delegate uint ReadStats(ulong module, ulong renderer, RendererStats* stats, PluginError* error);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal unsafe delegate uint CaptureRenderer(ulong module, ulong renderer, byte* bytes, uint capacity, uint* required, PluginError* error);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal unsafe delegate uint ConfigureReference(ulong module,ulong renderer,ulong resources,ReferenceSettings* settings,PluginError* error);
-public sealed unsafe class RendererSession : IDisposable
+public sealed unsafe partial class RendererSession : IDisposable
 {
     private readonly PluginLease _lease;
     private readonly PluginLease? _platformLease;
@@ -130,7 +130,7 @@ public sealed unsafe class RendererSession : IDisposable
     public void Dispose()
     {
         if (_handle == 0) return; Verify();
-        if (_groups.Count != 0) throw new InvalidOperationException("Render resource leases remain.");
+        if (_groups.Count != 0 || _gpuMeshes.Count != 0) throw new InvalidOperationException("Render resource leases remain.");
         PluginError error = default; PluginModule.Check(Module.Id, "destroy_renderer", _destroy(Module.Context, _handle, &error), error);
         _handle = 0; _platformLease?.Dispose(); _lease.Dispose();
     }

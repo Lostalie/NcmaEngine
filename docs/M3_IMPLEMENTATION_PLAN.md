@@ -14,7 +14,7 @@ M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启
 | 应用与编辑 | C# apphost 已成为 out/bin 默认入口，原生 ImGui 为展示插件；旧宿主/场景桥已删除 | 增加资产业务，不恢复原生 World/hostfxr |
 | 场景与玩法 | C# World、SceneDocument JSON v1、唯一编辑历史、隔离 Play、固定步和本地 scoped MCP | 没有正式资产引用、网格/相机/灯光组件 |
 | FBX | ufbx 0.23.0 导入蒙皮角色、四权重、骨架/辅助节点、采样片段和 CPU 线框；Character ABI 2 | 无持久数据库、异步取消、源材质/纹理、原始流导出和 GPU 蒙皮 |
-| Renderer | ABI 1.1 的固定 DX11 reference 操作，C# 有限图/Feature/Stage 契约 | 不能直接提交任意场景网格、材质、相机或离屏 GUI 图像 |
+| Renderer | 固定 DX11 reference 与 C# 有限图/Feature/Stage；M3.3-A additive ABI 1.2 静态无光照与显式 CPU 绑定姿态 mesh 服务 | 纹理/PBR 作者材质、离屏 GUI、UUID cache、正式多对象提取、GPU 动画蒙皮与完整 Graph 接入尚未实现，G3 未关闭 |
 | 组件注册 | 值类型组件、Guid/标量/嵌套值字段；现有 schema 检查支持闭合对象，不支持通用数组 | 不能把材质数组、骨骼数组、资源对象塞入组件 |
 | 验证 | 最后双配置各 24 CTest、39 Editor Services、22 Player、42 Python；部署恢复已验证 | 不是 M3 证据，也不代替用户真实 FBX 覆盖 |
 

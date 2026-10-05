@@ -86,6 +86,11 @@ M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpda
 
 目标为可按需装载的 Renderer、Physics 和必要数值内核。当前 C# 默认入口使用版本化 PluginLoader、Platform/GUI/DX11 Renderer 模块与独立 NcmaPhysics/Ncma.Physics；NcmaNative 仅保留动画/角色等数值资源，不再承担旧场景/游戏宿主桥。正式入口切换不等于完整图形或人工验收完成。
 
+M3.3-A：Renderer ABI 1.2 additive query → scene-render v1（static-unlit-v1）/v2（cpu-bind-pose-v2），
+C# 负责帧外 typed mesh/绑定姿态准备、原始 skin/palette 保留、lease 与 batch，native 按需共享 GPU pipeline/驻留 buffers。
+旧 1.0/1.1 reference 不变；场景 UUID cache、纹理/PBR 作者材质、离屏视口、动画 GPU 蒙皮和通用 Graph 接入未实现，G3 未关闭。
+契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [交付记录](M3_3_DELIVERY_REPORT.md)。
+
 统一边界：
 
 - 使用版本化 C ABI、固定布局 POD、opaque 资源句柄、有界批量输入/输出。

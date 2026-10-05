@@ -161,6 +161,7 @@ if(WIN32)
 
     add_library(NcmaRenderer SHARED
         engine/source/plugins/renderer/RendererPlugin.cpp
+        engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
         engine/source/runtime/renderer/rhi/RhiResources.cpp)
@@ -201,6 +202,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     target_compile_options(NcmaPhysicsNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
     set_target_properties(NcmaPhysicsNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_executable(NcmaRendererNativeTests tests/plugins/RendererNativeTests.cpp
+        engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp engine/source/runtime/renderer/rhi/RhiResources.cpp)
     target_include_directories(NcmaRendererNativeTests PRIVATE engine/source/runtime engine/source/plugins)
     target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)
@@ -359,7 +361,8 @@ if(NCMA_BUILD_TESTS)
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
                 "${CMAKE_BINARY_DIR}/m2/plugins" "${CMAKE_SOURCE_DIR}/out/verification/m2-8/kernel-$<IF:$<CONFIG:Debug>,Debug,Release>/reference.rgba"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/render-$<IF:$<CONFIG:Debug>,Debug,Release>"
-                "${CMAKE_SOURCE_DIR}/tests/assets/m2/render-legacy-reference.json")
+                "${CMAKE_SOURCE_DIR}/tests/assets/m2/render-legacy-reference.json"
+                "${CMAKE_SOURCE_DIR}" "$<TARGET_FILE:NcmaImportKernel>")
             set_tests_properties(NcmaRenderingTests PROPERTIES TIMEOUT 240 FIXTURES_REQUIRED kernel_reference_image)
             add_test(NAME NcmaCandidateGraphicsSmoke COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.App/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaEngine.dll"

@@ -64,6 +64,8 @@
 
 ## Agent-facing changes
 
+- M3.3 delivery order (user confirmed 2026-10-05): complete each A/B/C/D scope, pass its tests and full sequential Debug/Release Build.bat regression, commit only that tested stage, push and verify the remote SHA, then start the next stage. Failed tests or an unverified push block advancement. Preserve unrelated .vs/.user changes and ignored evidence/deployments; do not claim G3 closed until all stages and its acceptance gates pass.
+
 - Capabilities need stable names, concise descriptions, JSON input/output schemas, mutation-risk classification and deterministic structured results.
 - Prefer read-only inspection then reversible transactions. Destructive tools require explicit authorization and narrow project-relative targets.
 - Do not expose arbitrary project Python execution through Agent/MCP. Existing animation MCP controls isolated preview sessions, not the live editor.

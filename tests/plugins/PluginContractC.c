@@ -1,5 +1,19 @@
 #include "NcmaPlugin.h"
 #include "NcmaPhysics.h"
+#include "NcmaRenderer.h"
+_Static_assert(sizeof(NcmaRendererApiV1) == 136, "renderer original table");
+_Static_assert(sizeof(NcmaRendererApiV1_1) == 144, "renderer reference 1.1 table");
+_Static_assert(sizeof(NcmaRendererApiV1_2) == 152, "renderer additive 1.2 table");
+_Static_assert(offsetof(NcmaRendererApiV1_2, query_scene_render) == 144, "renderer scene query offset");
+_Static_assert(sizeof(NcmaSceneRenderApiV1) == 48, "scene render service");
+_Static_assert(sizeof(NcmaSceneRenderApiV2) == 56, "bind-pose service");
+_Static_assert(offsetof(NcmaSceneRenderApiV2, create_bind_pose_mesh) == 48, "bind-pose operation offset");
+_Static_assert(sizeof(NcmaBindPoseMeshDescriptionV2) == 64, "bind-pose descriptor");
+_Static_assert(sizeof(NcmaMeshDescriptionV1) == 48, "static mesh description");
+_Static_assert(sizeof(NcmaGpuMeshV1) == 16, "GPU handle and generation");
+_Static_assert(sizeof(NcmaMeshDrawV1) == 112, "static draw");
+_Static_assert(sizeof(NcmaMeshFrameV1) == 64, "static frame");
+_Static_assert(sizeof(NcmaSceneRenderStatsV1) == 56, "static counters");
 _Static_assert(sizeof(NcmaPhysicsApiV1) == 144, "physics function table");
 _Static_assert(sizeof(NcmaPhysicsApiV1_1) == 152, "physics 1.1 table");
 _Static_assert(sizeof(NcmaPhysicsCountersV1) == 72, "physics counters");

@@ -3,6 +3,7 @@
 #include "../platform/PlatformPrivate.h"
 #include "RendererPrivate.h"
 #include "ReferenceKernel.h"
+#include "StaticMeshKernel.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -18,7 +19,7 @@ using namespace NcmaEngine;
 using Microsoft::WRL::ComPtr;
 namespace {
 const auto loadingThread=std::this_thread::get_id();
-uint64_t module=0,nextModule=1,nextRenderer=1,nextGroup=1;
+uint64_t module=0,nextModule=1,nextRenderer=1,nextGroup=1,nextMesh=1;
 bool busy=false;
 struct Renderer {
     uint64_t handle=0,platform=0,window=0,borrows=0,lastFrame=0;
@@ -26,6 +27,9 @@ struct Renderer {
     uint32_t faultResult=NCMA_INTERNAL_ERROR;
     std::unique_ptr<Rhi::D3D11RenderBackend> backend;
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::ReferenceKernel>> groups;
+    std::unique_ptr<Rendering::StaticMeshKernel> meshKernel;
+    std::unordered_map<uint64_t,std::unique_ptr<Rendering::StaticMesh>> meshes;
+    NcmaSceneRenderStatsV1 meshStats{sizeof(NcmaSceneRenderStatsV1)};
     ComPtr<ID3D11InfoQueue> validation;
     ComPtr<ID3D11Query> gpuDisjoint,gpuBegin,gpuEnd;
     bool measuring=false,timingPending=false;
@@ -46,7 +50,15 @@ uint32_t Instance(uint64_t context,uint64_t handle,NcmaErrorV1* error) {
     return NCMA_OK;
 }
 uint32_t Failure(NcmaErrorV1* error,const std::string& message) {
-    renderer->failed=true; renderer->stats.state=2;
+    renderer->failed=true; renderer->stats.state=2;renderer->active=false;
+    // A capture/present/device failure can occur after submit, outside ExecutionScope.
+    // Abort that frame so fail-stop still permits deterministic lease draining and shutdown.
+    auto* dc=renderer->backend->GetDeviceContext();
+    if(renderer->measuring) {
+        dc->End(renderer->gpuEnd.Get());dc->End(renderer->gpuDisjoint.Get());
+        renderer->measuring=false;renderer->timingPending=true;
+    }
+    dc->ClearState();
     const bool lost=FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason());
     renderer->faultResult=lost?NCMA_DEVICE_LOST:NCMA_INTERNAL_ERROR;
     return NcmaPlugin::Error(error,renderer->faultResult,message);
@@ -121,7 +133,7 @@ uint32_t NCMA_CALL Shutdown(uint64_t context,NcmaErrorV1* error) noexcept {
 uint32_t NCMA_CALL Status(uint64_t context,NcmaModuleStatusV1* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
+        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->meshes.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
 }
 uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
@@ -313,7 +325,7 @@ uint32_t NCMA_CALL WaitIdle(uint64_t context,uint64_t handle,NcmaErrorV1* error)
 }
 uint32_t NCMA_CALL Destroy(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
-        if(renderer->borrows||!renderer->groups.empty()||renderer->backend->GetLiveResourceCount()!=0)return NcmaPlugin::Error(error,NCMA_BUSY);
+        if(renderer->borrows||!renderer->groups.empty()||!renderer->meshes.empty()||renderer->backend->GetLiveResourceCount()!=0)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
         if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
         NcmaErrorV1 platformError{};
@@ -335,6 +347,157 @@ uint32_t NCMA_CALL Capture(uint64_t context,uint64_t handle,uint8_t* output,uint
         if(FAILED(dc->Map(target.Get(),0,D3D11_MAP_READ,0,&mapped)))return Failure(error,"Readback map failed.");
         for(uint32_t y=0;y<desc.Height;++y)std::memcpy(output+y*desc.Width*4,static_cast<const uint8_t*>(mapped.pData)+y*mapped.RowPitch,desc.Width*4);
         dc->Unmap(target.Get(),0);Validation(*renderer);return NCMA_OK;});
+}
+uint32_t CreateMeshImpl(uint64_t context,uint64_t handle,const NcmaMeshDescriptionV1* input,NcmaGpuMeshV1* output,NcmaErrorV1* error,bool bindPose) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        const auto d=*input;
+        const uint64_t bytes=static_cast<uint64_t>(d.vertex_bytes)+d.index_bytes;
+        if(d.struct_size!=sizeof(d)||d.layout!=(bindPose?2u:1u)||d.stride!=(bindPose?80u:48u)||d.reserved||!d.vertices||!d.indices||
+           !d.vertex_count||!d.index_count||d.index_count%3||
+           static_cast<uint64_t>(d.vertex_count)*d.stride!=d.vertex_bytes||static_cast<uint64_t>(d.index_count)*4!=d.index_bytes||
+           bytes>64ull*1024*1024)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid static mesh layout/count/budget.");
+        if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
+        if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
+        if(renderer->meshes.size()>=128||bytes>256ull*1024*1024-renderer->meshStats.resident_bytes)
+            return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Renderer mesh budget exceeded.");
+        // Unaligned byte input is legal; inspect by copy, never cast to float pointers.
+        for(uint32_t i=0;i<d.vertex_count;++i) {
+            float v[12];std::memcpy(v,d.vertices+static_cast<size_t>(i)*d.stride,48);
+            for(float x:v)if(!std::isfinite(x))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Nonfinite mesh vertex.");
+            const float n=v[3]*v[3]+v[4]*v[4]+v[5]*v[5],t=v[8]*v[8]+v[9]*v[9]+v[10]*v[10];
+            const float dot=v[3]*v[8]+v[4]*v[9]+v[5]*v[10];
+            if(!std::isfinite(n)||!std::isfinite(t)||std::abs(n-1)>0.002f||std::abs(t-1)>0.002f||std::abs(dot)>0.002f||std::abs(v[11])!=1)
+                return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid normal/tangent basis.");
+        }
+        for(uint32_t i=0;i<d.index_count;++i)if(d.indices[i]>=d.vertex_count)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Mesh index out of range.");
+        BusyScope scope;std::string message;
+        auto mesh=std::make_unique<Rendering::StaticMesh>(*renderer->backend);
+        std::unique_ptr<Rendering::StaticMeshKernel> kernel;
+        if(!renderer->meshKernel) {
+            kernel=std::make_unique<Rendering::StaticMeshKernel>(*renderer->backend);
+            if(!kernel->Initialize(message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
+        }
+        if(!mesh->Initialize(d,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
+        // Diagnostics may allocate: do this while candidate resources are still private/RAII-owned.
+        Validation(*renderer);
+        const uint64_t id=0x4D53000000000000ull|nextMesh++;
+        renderer->meshes.emplace(id,std::move(mesh));
+        if(kernel)renderer->meshKernel=std::move(kernel);
+        renderer->meshStats.resident_bytes+=bytes;renderer->meshStats.uploaded_bytes+=bytes;renderer->meshStats.mesh_creates++;
+        *output={id,handle};return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL CreateMesh(uint64_t context,uint64_t handle,const NcmaMeshDescriptionV1* input,NcmaGpuMeshV1* output,NcmaErrorV1* error) noexcept {
+    return CreateMeshImpl(context,handle,input,output,error,false);
+}
+uint32_t NCMA_CALL CreateBindPoseMesh(uint64_t context,uint64_t handle,const NcmaBindPoseMeshDescriptionV2* input,NcmaGpuMeshV1* output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        const auto d=*input;const auto& mesh=d.mesh;
+        if(mesh.struct_size!=sizeof(d)||mesh.layout!=2||mesh.stride!=80||!mesh.vertices||!mesh.vertex_count||
+           static_cast<uint64_t>(mesh.vertex_count)*80!=mesh.vertex_bytes||
+           static_cast<uint64_t>(mesh.vertex_bytes)+mesh.index_bytes>64ull*1024*1024||
+           !d.palette||!d.palette_count||d.palette_count>4096||d.palette_bytes!=d.palette_count*64)
+            return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid bind-pose layout/palette budget.");
+        if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
+        if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
+        for(uint32_t i=0;i<d.palette_count;++i) {
+            float m[16];std::memcpy(m,reinterpret_cast<const uint8_t*>(d.palette)+static_cast<size_t>(i)*64,64);
+            for(float x:m)if(!std::isfinite(x))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Nonfinite bind palette.");
+            if(m[3]!=0||m[7]!=0||m[11]!=0||m[15]!=1)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Nonaffine bind palette.");
+        }
+        for(uint32_t i=0;i<mesh.vertex_count;++i) {
+            const auto* row=mesh.vertices+static_cast<size_t>(i)*80;uint16_t joints[4];float weights[4];uint32_t padding[2];
+            std::memcpy(joints,row+48,8);std::memcpy(weights,row+56,16);std::memcpy(padding,row+72,8);
+            float total=0;
+            for(uint32_t k=0;k<4;++k) {
+                if(!std::isfinite(weights[k])||weights[k]<0||weights[k]>1||(weights[k]>0&&joints[k]>=d.palette_count))
+                    return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid bind-pose influence.");
+                total+=weights[k];
+            }
+            if(std::abs(total-1)>0.001f||padding[0]||padding[1])return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid bind-pose weights/padding.");
+        }
+        auto geometry=mesh;geometry.struct_size=sizeof(geometry);
+        return CreateMeshImpl(context,handle,&geometry,output,error,true);
+    });
+}
+uint32_t NCMA_CALL DestroyMesh(uint64_t context,uint64_t handle,NcmaGpuMeshV1 mesh,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(mesh.generation!=handle||!renderer->meshes.contains(mesh.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
+        BusyScope scope;std::string message;
+        if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        renderer->backend->GetDeviceContext()->ClearState();
+        renderer->meshStats.resident_bytes-=renderer->meshes.at(mesh.value)->bytes;
+        renderer->meshes.erase(mesh.value);if(renderer->meshes.empty())renderer->meshKernel.reset();
+        Validation(*renderer);return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL SubmitMeshes(uint64_t context,uint64_t handle,const NcmaMeshFrameV1* input,const NcmaMeshDrawV1* draws,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!input)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        const auto f=*input;
+        if(f.struct_size!=sizeof(f)||!f.frame||f.frame<=renderer->lastFrame||f.draw_count>4096||
+           (f.draw_count&&!draws)||f.generation!=handle||f.reserved[0]||f.reserved[1])return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
+        if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
+        for(float x:f.viewport)if(!std::isfinite(x))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(f.viewport[0]<0||f.viewport[1]<0||f.viewport[2]<=0||f.viewport[3]<=0||
+           f.viewport[0]+f.viewport[2]>renderer->stats.width||f.viewport[1]+f.viewport[3]>renderer->stats.height)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        for(float x:f.clear)if(!std::isfinite(x)||x<0||x>1)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        std::vector<NcmaMeshDrawV1> copied;
+        if(f.draw_count)copied.assign(draws,draws+f.draw_count);
+        for(const auto& d:copied) {
+            if(d.mesh.generation!=handle||!renderer->meshes.contains(d.mesh.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+            const uint32_t count=renderer->meshes.at(d.mesh.value)->indexCount;
+            if(d.reserved[0]||d.reserved[1]||!d.index_count||d.index_count%3||d.first_index%3||d.first_index>count||d.index_count>count-d.first_index)
+                return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Invalid mesh triangle range.");
+            for(float x:d.model_view_projection)if(!std::isfinite(x))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+            for(float x:d.color)if(!std::isfinite(x)||x<0||x>1)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        }
+        BusyScope scope;ExecutionScope execution;std::string message;const auto started=std::chrono::steady_clock::now();
+        ResolveTiming(*renderer);
+        if(!renderer->timingPending) {
+            auto* dc=renderer->backend->GetDeviceContext();dc->Begin(renderer->gpuDisjoint.Get());dc->End(renderer->gpuBegin.Get());renderer->measuring=true;
+        }
+        const auto encode=[](float x){return x<=0.0031308f?12.92f*x:1.055f*std::pow(x,1.0f/2.4f)-0.055f;};
+        renderer->backend->SetClearColor(encode(f.clear[0]),encode(f.clear[1]),encode(f.clear[2]),f.clear[3]);
+        const bool begun=renderer->backend->BeginFrame(message);
+        renderer->backend->SetClearColor(0.035f,0.039f,0.052f,1);
+        if(!begun)return Failure(error,message);
+        for(const auto& d:copied)if(!renderer->meshKernel->Draw(*renderer->meshes.at(d.mesh.value),d,f.viewport,message))return Failure(error,message);
+        renderer->active=true;renderer->lastFrame=f.frame;renderer->stats.submitted_frames++;renderer->meshStats.draws+=f.draw_count;
+        renderer->stats.submit_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+        Validation(*renderer);execution.success=true;return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderStatsV1* output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        renderer->meshStats.generation=handle;renderer->meshStats.live_meshes=renderer->meshes.size();*output=renderer->meshStats;return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Validate(context,error);if(valid)return valid;
+        if(version!=1&&version!=2)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):sizeof(NcmaSceneRenderApiV2);
+        if(capacity<required) {
+            NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
+        }
+        const NcmaSceneRenderApiV1 table{sizeof(table),1,1,CreateMesh,DestroyMesh,SubmitMeshes,MeshStats};
+        if(version==1)std::memcpy(output,&table,sizeof(table));
+        else {NcmaSceneRenderApiV2 extended{table,CreateBindPoseMesh};extended.base.struct_size=sizeof(extended);extended.base.version=2;extended.base.capabilities=3;
+            std::memcpy(output,&extended,sizeof(extended));}
+        return NCMA_OK;
+    });
 }
 }
 extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_borrow_dx11_v1(uint64_t context,uint64_t handle,ID3D11Device** device,ID3D11DeviceContext** dc,NcmaErrorV1* error) noexcept {
@@ -359,5 +522,7 @@ extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major,uin
         Create,CreateResources,DestroyResources,Submit,Present,Resize,Stats,WaitIdle,Destroy,Capture};
     if(minor==0)return NcmaPlugin::CopyApi(major,minor,output,capacity,error,table);
     NcmaRendererApiV1_1 modern{table,ConfigureReference}; modern.base.module.struct_size=sizeof(modern);modern.base.module.minor=1;
-    return NcmaPlugin::CopyApi(major,minor,output,capacity,error,modern,1);
+    if(minor==1)return NcmaPlugin::CopyApi(major,minor,output,capacity,error,modern,1);
+    NcmaRendererApiV1_2 latest{modern,QuerySceneRender};latest.base.base.module.struct_size=sizeof(latest);latest.base.base.module.minor=2;
+    return NcmaPlugin::CopyApi(major,minor,output,capacity,error,latest,2);
 }

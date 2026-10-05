@@ -1,6 +1,7 @@
 #ifndef NCMA_RENDERER_H
 #define NCMA_RENDERER_H
 #include "NcmaPlugin.h"
+#include "NcmaSceneRender.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -64,6 +65,8 @@ typedef struct NcmaReferenceSettingsV1 {
 } NcmaReferenceSettingsV1;
 typedef uint32_t (NCMA_CALL *NcmaConfigureReferenceV1)(uint64_t, uint64_t, uint64_t, const NcmaReferenceSettingsV1*, NcmaErrorV1*);
 typedef struct NcmaRendererApiV1_1 { NcmaRendererApiV1 base; NcmaConfigureReferenceV1 configure_reference; } NcmaRendererApiV1_1;
+/* Additive ABI 1.2: query an independent bounded static scene-render service. */
+typedef struct NcmaRendererApiV1_2 { NcmaRendererApiV1_1 base; NcmaQuerySceneRenderV1 query_scene_render; } NcmaRendererApiV1_2;
 /* Resource create is transactional. Full batch is validated BEFORE GPU mutation; synchronous
    input copying/encoding does NOT imply GPU completion. Failures after execution starts fail-stop.
    Destroy/resize wait for GPU completion (bounded 2s event query, timeout retains resources).
@@ -79,5 +82,6 @@ static_assert(sizeof(NcmaRendererStatsV1)==88);
 static_assert(sizeof(NcmaRendererApiV1)==136);
 static_assert(sizeof(NcmaReferenceSettingsV1)==76);
 static_assert(sizeof(NcmaRendererApiV1_1)==144);
+static_assert(sizeof(NcmaRendererApiV1_2)==152);
 #endif
 #endif
