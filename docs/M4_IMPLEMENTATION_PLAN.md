@@ -5,7 +5,7 @@
 按此后续执行指令确认第2节的C#运动权威/跨域fail-stop边界。M4.1已通过K1及顺序完整Debug/Release回归，
 见[M4.1交付](M4_1_DELIVERY_REPORT.md)。M4.2实际Jolt角色数值插件及C#客户端已通过K2与顺序完整
 Debug/Release回归，见[M4.2交付](M4_2_DELIVERY_REPORT.md)。M4.3已接线实际角色移动/跟随相机，
-验收状态见[M4.3交付](M4_3_DELIVERY_REPORT.md)；M4.4–M4.7尚未实现。每阶段通过后独立提交推送再推进。
+验收状态见[M4.3交付](M4_3_DELIVERY_REPORT.md)；M4.4根运动候选及门禁见[M4.4交付](M4_4_DELIVERY_REPORT.md)，M4.5–M4.7尚未实现。每阶段通过后独立提交推送再推进。
 仅“开始M4”未被当作当时未审方案的自动批准。真实Physics/角色与根运动仍按后续阶段分别验收。
 
 M3 G4/G5的静态/片段/蒙皮切片可作为基础；G6–G9、M2人工/目标环境/性能/长稳仍开放。
@@ -136,7 +136,7 @@ Locomotion使用输入水平速度；Attack/Dodge的root-motion模式**替换**�
 ### M4.5 动作状态、Notify与战斗
 
 - 新持久动作定义用UUID/clip引用/明确schema，C# Idle/Run/Attack/Dodge状态与输入buffer、
-  cancel/连击窗口、tick区间Notify、攻击/无敌窗口。不是M5节点图或旧Action实验室兼容别名。
+  cancel/连击窗口、tick区间Notify、攻击/无敌窗口。不是M6节点图或旧Action实验室兼容别名。
 - 命中使用K2有界query，按attack instance/target/tick去重；只暂存命中/伤害/信号到同一步。
   native callback/AI/网络不写World，旧步/重试/渲染不能重复产生伤害。
 - Notify采用明确半开区间与稳定事件ID；loop、开始/终点、中断/重新进入、catch-up和Pause边界专项测试。
@@ -170,6 +170,6 @@ Locomotion使用输入水平速度；Attack/Dodge的root-motion模式**替换**�
 
 先确认第2节 → M4.1 → M4.2 → M4.3 → M4.4 → M4.5 → M4.6 → M4.7。
 M4.1协调底座和M4.2独立真实数值接口已通过；M4.3应用接线已实现，完整K3门禁见交付记录。
-显式启用物理且具有绑定组件的Editor/Player Play派发实际数值步；根运动仍仅报告，
-未更改默认physicsEnabled=false，M4.4不在本次范围。
+显式启用物理且具有绑定组件的Editor/Player Play派发实际数值步；M4.4显式root组件候选接入
+碰撞约束运动/共享committed clock/视觉去重，未更改默认physicsEnabled=false，验收以交付记录为准。
 未删除数值内核/SDK、旧策略原型或用户数据，没有引入旧类型兼容层。

@@ -22,6 +22,14 @@ public readonly record struct ClipPlaybackData(Guid ClipId, bool Playing, bool L
     }
 }
 public readonly record struct ClipSampleTimes(double Previous, double Current, float Alpha);
+public readonly record struct ClipInterval(double Previous, double Current);
+// Trusted derived presentation contract. No World writes or numerical handles are exposed.
+public interface IRootMotionPresentation
+{
+    ClipPlaybackData Playback(Guid objectId);
+    ClipSampleTimes Sample(Guid objectId, float alpha, bool paused);
+    void RemoveRoot(Guid objectId, Span<System.Numerics.Matrix4x4> models);
+}
 // One clock per object, C# only. Invoked AFTER each successful fixed-step commit, not by OnUpdate/native.
 public sealed class ClipClock
 {
@@ -34,6 +42,17 @@ public sealed class ClipClock
     { ArgumentNullException.ThrowIfNull(world);if(world.IsUpdating)throw new InvalidOperationException("Prepare animation clocks at a committed boundary.");_world=world.Identity;_tick=world.Tick;Validate(settings,duration);_settings=settings;_duration=duration;_previous=_current=settings.StartTime; }
     public ulong CommittedTick { get{Verify();return _tick;} }
     public double UnwrappedTime { get{Verify();return _current;} }
+    public ClipInterval PrepareNext(World world, ClipPlaybackData settings, double duration, double fixedDelta)
+    {
+        Verify(); Validate(settings, duration);
+        if(world.Identity!=_world || world.Tick!=_tick || !double.IsFinite(fixedDelta) || fixedDelta is <.001 or >1)
+            throw new ArgumentException("Prepare one interval from the original committed clock.");
+        double previous=settings.ClipId!=_settings.ClipId || settings.StartTime!=_settings.StartTime || duration!=_duration ? settings.StartTime : _current;
+        double current=previous+(settings.Playing ? fixedDelta*settings.Speed : 0);
+        if(!settings.Loop){previous=Math.Min(duration,previous);current=Math.Min(duration,current);}
+        if(!double.IsFinite(current))throw new ArgumentException("Animation time overflow.");
+        return new(previous,current);
+    }
     public void ObserveCommitted(World world, ClipPlaybackData settings, double duration, double fixedDelta)
     {
         Verify();ArgumentNullException.ThrowIfNull(world);Validate(settings,duration);

@@ -57,6 +57,6 @@ foundation 的 `gpuSkinning=false/g5Accepted=false` 和 stdout 仅描述独立 p
 
 这是 LBS 四权重/最多32角色/1024骨骼的 DX11 最小片段播放器。骨骼非均匀、负/奇异缩放拒绝；没有 Animator 图、Montage/IK/重定向/压缩或动作/连击通知链路。root displacement 只读，M4 CharacterMotor/物理运动权未实现，未向 Play 添加 Physics Step。
 
-同源 GPU stream 当前按实例复制，palette ring 固定 12MiB+16 GPU bytes，另有 4MiB+768 CPU scratch；不称最优内存。animated conservative bounds/裁剪、增量资源准备与完整 Inspector/时间轴控件留后续。Headless 只推进既有 World 固定步，不创建本切片的呈现派生 rig/clock，玩法动作动画调度留 M4/M5。Debug 满容量 pose 数值验证较重，原生没有未经公平对照就被宣称快于 C#；完整相同契约比较与生产性能门禁仍待后续。
+同源 GPU stream 当前按实例复制，palette ring 固定 12MiB+16 GPU bytes，另有 4MiB+768 CPU scratch；不称最优内存。animated conservative bounds/裁剪、增量资源准备与完整 Inspector/时间轴控件留后续。Headless 只推进既有 World 固定步，不创建本切片的呈现派生 rig/clock，玩法动作动画调度留 M4/M6（编号按 2026-10-06 路线图调整，历史交付范围不变）。Debug 满容量 pose 数值验证较重，原生没有未经公平对照就被宣称快于 C#；完整相同契约比较与生产性能门禁仍待后续。
 
 Vulkan 绘制、GUI 合成离屏视口、IBL/透明/多光/场景 CSM/contact 尚未实现。M3.6–M3.9 未开始；M2 人工 UI/输入法/DPI/第三方 MCP、自包含目标环境、长稳/完整性能门禁继续 pending。

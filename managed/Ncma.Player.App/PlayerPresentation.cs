@@ -33,7 +33,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         _pipeline = new(_renderer);
         _cache = new(_renderer);
     }
-    public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera)
+    public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera,Ncma.Animation.IRootMotionPresentation? rootMotion=null)
     {
         if (_scene is not null) throw new InvalidOperationException("Scene already bound.");
         var snapshot=play.Document.CaptureSnapshot();
@@ -42,7 +42,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
             _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
         }
         _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play,
-            interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot)); _camera = camera ?? Guid.Empty;
+            interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion); _camera = camera ?? Guid.Empty;
     }
     public bool Pump(PlaySession play)
     {

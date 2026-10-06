@@ -1,7 +1,7 @@
 # M3.5 GPU 蒙皮与 FBX 片段播放方案
 
 日期：2026-10-05，进度更新：2026-10-06。状态：A/B/C/D 最小切片已实现，最终顺序 Debug/Release 完整回归通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。[首轮候选记录](M3_5_POSE_CLOCK_CANDIDATE.md) 保留当时 foundation 范围。依赖已关闭的静态切片 G4。以下保留原实施方案；最终采用 compute prepass、共享 GPU output，关闭未经验证的 animated bind-AABB 裁剪。
-本阶段仅最小 ClipPlayer，不提前实现 M4 动作控制/物理根运动或 M5 Animator 图。
+本阶段仅最小 ClipPlayer，不提前实现 M4 动作控制/物理根运动或 M6 Animator 图。
 
 ## 1 所有权与数据
 

@@ -46,6 +46,10 @@ void Scene(int fail = 0, bool updatesFail = false) => SaveScene(Fixture(fail, up
 PlayerOptions Options(ulong ticks = 120) => PlayerOptions.Parse(["--project", projectPath, "--headless", "--ticks", ticks.ToString(),
     "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + ".json")]);
 Project(); Scene();
+if(args.Length==4 && args[3]=="--root-motion-only") {
+    try {foreach(string test in RootMotionChecks.Run(root,output,Path.GetFullPath(args[2])))Console.WriteLine("PASS "+test);return 0;}
+    catch(Exception e){Console.Error.WriteLine("FAIL Root motion: "+e);return 1;}
+}
 var cases = new (string Name, Action Run)[] {
     ("CLI preflight rejects malformed/conflicting/bounded arguments", () => {
         foreach (string[] a in new[] { new[] { "--headless" }, new[] { "--help", "--version" },
@@ -189,6 +193,8 @@ var passed = new List<string>();
 foreach (var test in cases) { try { test.Run(); passed.Add(test.Name); Console.WriteLine("PASS " + test.Name); }
     catch (Exception e) { Console.Error.WriteLine("FAIL " + test.Name + ": " + e); return 1; } }
 if (args.Length > 2) {
+    try { foreach(string test in RootMotionChecks.Run(root,output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
+    catch(Exception e){Console.Error.WriteLine("FAIL Root motion: "+e);return 1;}
     try { foreach(string test in CharacterHostChecks.Run(output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
     catch(Exception e){Console.Error.WriteLine("FAIL Character host: "+e);return 1;}
     try { foreach (string test in PackageChecks.Run(root, args[1], output, Path.GetFullPath(args[2]))) { passed.Add(test); Console.WriteLine("PASS " + test); } }

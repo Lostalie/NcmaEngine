@@ -6,35 +6,38 @@ using Ncma.Movement;
 using Ncma.Physics;
 using Ncma.Runtime;
 using Ncma.Scene.Rendering;
+using Ncma.Animation;
 namespace Ncma.Characters;
 
 // Application-owned policy; same composition in Editor/Player/headless. Native receives
 // numbers only. This is not an Agent input injection interface or a general gameplay SDK.
-public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem
+public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommittedStepObserver, IRootMotionPresentation
 {
     private readonly PlaySession _play;
     private readonly MovementCoordinator _coordinator;
     private readonly Binding[] _bindings;
+    private readonly RootMotionSet _roots;
     private Domain? _domain;
     private bool _disposed;
     private sealed record Binding(Guid Id, CharacterData? Character, BoxColliderData? Box);
     public CoupledMovementStatus Status => _coordinator.Status;
     public Guid NumericalEpoch { get { _play.Document.VerifyAccess(); return _domain?.Epoch ?? Guid.Empty; } }
-    public static CharacterPlayRuntime? Compose(PlaySession play, PhysicsService physics)
+    public static CharacterPlayRuntime? Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets = null)
     {
         ArgumentNullException.ThrowIfNull(play); ArgumentNullException.ThrowIfNull(physics);
         var startup = play.Document.CaptureSnapshot();
         CharacterComponents.RequireComposition(startup);
         if (!CharacterComponents.HasPhysics(startup)) return null;
         if (!physics.Enabled) throw new ArgumentException("Scene physics bindings require explicit physicsEnabled=true.");
-        return new(play, physics);
+        return new(play, physics, assets);
     }
-    private CharacterPlayRuntime(PlaySession play, PhysicsService physics)
+    private CharacterPlayRuntime(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets)
     {
         _play = play;
+        _roots=new(play.Document.World,assets);
         _bindings = play.Document.World.GetObjects().Where(o => o.Has<CharacterData>() || o.Has<BoxColliderData>()).OrderBy(o => o.PersistentId)
             .Select(o => new Binding(o.PersistentId, o.Has<CharacterData>() ? o.Get<CharacterData>() : null, o.Has<BoxColliderData>() ? o.Get<BoxColliderData>() : null)).ToArray();
-        _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => _domain = new Domain(physics, _bindings));
+        _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => { _roots.Initialize(play.Document.World); return _domain = new Domain(physics, _bindings); });
         Guid[] chars = _bindings.Where(b => b.Character is not null).Select(b => b.Id).ToArray();
         Guid[] boxes = _bindings.Where(b => b.Box is not null).Select(b => b.Id).ToArray();
         Guid[] cameras = play.Document.World.GetObjects().Where(o => o.Has<FollowCameraData>()).Select(o => o.PersistentId).ToArray();
@@ -43,7 +46,13 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem
         _coordinator.FreezeConfiguration<CharacterData>(chars);
         _coordinator.FreezeConfiguration<BoxColliderData>(boxes);
         _coordinator.FreezeConfiguration<FollowCameraData>(cameras);
+        _coordinator.FreezeConfiguration<RootMotionData>(_roots.Ids);
+        if(_roots.Ids.Length!=0) {
+            _coordinator.FreezeConfiguration<SkinnedMeshData>(_roots.Ids,freezeMembership:false);
+            _coordinator.FreezeConfiguration<ClipPlaybackData>(_roots.Ids,freezeMembership:false);
+        }
         play.AddSystem(this);
+        play.AddCommittedObserver(this);
     }
     public void FixedUpdate(World world, double delta)
     {
@@ -62,6 +71,13 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem
             V3 velocity = direction * data.Speed + new V3(0, vertical, 0);
             if (state.Ground == GroundState.Ground) velocity += new V3(state.GroundVelocity.X, 0, state.GroundVelocity.Z);
             var start = world.FindObject(binding.Id).Get<TransformData>(); float turn = 0;
+            if(_roots.Contains(binding.Id)) {
+                var root=_roots.Prepare(binding.Id,start,delta);
+                // Root motion REPLACES horizontal input and input turn, not an additive second writer.
+                velocity=new V3(root.Translation.X/h,vertical,root.Translation.Z/h);
+                if(state.Ground==GroundState.Ground)velocity+=new V3(state.GroundVelocity.X,0,state.GroundVelocity.Z);
+                _coordinator.Submit(new(_coordinator.CurrentStep,binding.Id,velocity*h,root.Yaw));continue;
+            }
             if (direction.LengthSquared() > 1e-6f)
             {
                 float current = 2 * MathF.Atan2(start.Rotation.Y, start.Rotation.W), desired = MathF.Atan2(-direction.X, -direction.Z);
@@ -71,6 +87,24 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem
             _coordinator.Submit(new(_coordinator.CurrentStep, binding.Id, velocity * h, turn));
         }
     }
+    public void StepCommitted(World world,double h)=>_roots.Commit(world,h);
+    // Trusted owner-thread control at a safe boundary. Candidate clocks are never consumed before commit.
+    public void SetRootPlayback(Guid objectId,ClipPlaybackData settings)
+    {
+        _play.Document.VerifyAccess();
+        // Status is synchronized only outside a candidate step; World write access rejects read-only callbacks.
+        _coordinator.VerifyControlBoundary();
+        if(_disposed||_play.State is not (PlayState.Running or PlayState.Paused)||!Status.SnapshotValid)
+            throw new InvalidOperationException("Root playback controls require a synchronized safe boundary.");
+        _roots.Request(objectId,settings);
+    }
+    private void VerifyRootPresentation() {
+        _play.Document.VerifyAccess();if(_disposed||_play.State==PlayState.Faulted||!Status.SnapshotValid)throw new InvalidOperationException("Invalid coupled root motion presentation.");
+    }
+    public ClipPlaybackData Playback(Guid objectId){VerifyRootPresentation();return _roots.Playback(objectId);}
+    public ClipSampleTimes Sample(Guid objectId,float alpha,bool paused){VerifyRootPresentation();return _roots.Sample(objectId,alpha,paused);}
+    public void RemoveRoot(Guid objectId,Span<M4> models){VerifyRootPresentation();_roots.RemoveRoot(objectId,models);}
+    public RootMotionStatus InspectRootMotion(Guid objectId){VerifyRootPresentation();return _roots.Inspect(objectId);}
     // Pure presentation: interpolated committed target, never World/solver writes.
     public static SceneCameraView? FollowView(PlaySession play, Guid camera, uint width, uint height)
     {
@@ -87,7 +121,7 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem
     public void Dispose()
     {
         if (_disposed) return;
-        _coordinator.Dispose(); _disposed = true;
+        _coordinator.Dispose(); _play.RemoveCommittedObserver(this);_roots.Dispose(); _disposed = true;
     }
 
     private sealed class Domain(PhysicsService service, Binding[] bindings) : INumericMovementAdapter

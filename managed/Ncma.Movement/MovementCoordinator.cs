@@ -26,14 +26,14 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     private readonly List<World.ComponentAuthority> _frozenOwned = [];
     // Trusted startup-only configuration reservation; no proof is exposed to gameplay.
     // Configurations are immutable during Play, rather than silently disagreeing with solver shapes.
-    public void FreezeConfiguration<T>(ReadOnlySpan<Guid> objects) where T : struct, IComponent
+    public void FreezeConfiguration<T>(ReadOnlySpan<Guid> objects, bool freezeMembership = true) where T : struct, IComponent
     {
         Verify();
         if (_play.State != PlayState.Stopped || objects.Length > MaxTargets)
             throw new ArgumentException("Freeze a bounded configuration set before Start.");
         Guid[] ids = objects.ToArray();
         foreach (Guid id in ids) if (!World.FindObject(id).Has<T>()) throw new ArgumentException("Missing frozen configuration.");
-        _frozenFactories.Add(() => World.ClaimComponents<T>(ids, publishRequired: false, freezeMembership: true));
+        _frozenFactories.Add(() => World.ClaimComponents<T>(ids, publishRequired: false, freezeMembership: freezeMembership));
     }
     private MovementStepStamp _stamp;
     private Guid _lastWorldId, _sessionId, _worldId;
@@ -90,6 +90,14 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         Verify();
         if (!SnapshotMatches) throw new InvalidOperationException("Coupled numerical snapshot is invalid or stopped.");
         return (NumericMovementResult[])_committed.Clone();
+    }
+    public void VerifyControlBoundary()
+    {
+        Verify();World.VerifyWriteAccess();
+        if(World.IsUpdating || _collecting || _faulted || !SnapshotMatches || _play.State is not (PlayState.Running or PlayState.Paused)) {
+            var error=new InvalidOperationException("Movement control requires a synchronized owner-thread safe boundary.");
+            World.RejectStep(error);throw error;
+        }
     }
 
     void ICoupledStepParticipant.Start()

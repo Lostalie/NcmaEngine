@@ -37,7 +37,7 @@ public static class PlayerRunner
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
                 bool hasPhysics = Ncma.Characters.CharacterComponents.HasPhysics(document.CaptureSnapshot());
                 if(hasPhysics && !project.Configuration.PhysicsEnabled)throw new ArgumentException("physics_bindings_require_enabled_project");
-                if (options.Headless && project.Configuration.AssetPackage is not null) {
+                if (options.Headless && (project.Configuration.AssetPackage is not null || document.World.GetObjects().Any(o=>o.Has<Ncma.Animation.RootMotionData>()))) {
                     phase = "dependencies";
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, document.CaptureSnapshot(), true, project.Configuration.AssetPackage);
                 }
@@ -63,11 +63,12 @@ public static class PlayerRunner
                     presentation = new(plugins, visible); presentation.Start();
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }
+                Ncma.Characters.CharacterPlayRuntime? characterRuntime=null;
                 phase = "initialize"; var play = owner.StartPlay(factory: d => new PlaySession(d,
                     options.Headless ? FrameTimePolicy.Strict : FrameTimePolicy.Interactive, options.FixedDelta,
                     advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames),
-                    compose:p=>Ncma.Characters.CharacterPlayRuntime.Compose(p,physics));
-                if (presentation is not null) presentation.BindScene(play, renderAssets!, project.Configuration.SceneCamera);
+                    compose:p=>characterRuntime=Ncma.Characters.CharacterPlayRuntime.Compose(p,physics,renderAssets));
+                if (presentation is not null) presentation.BindScene(play, renderAssets!, project.Configuration.SceneCamera,characterRuntime);
                 running = true; double previous = clock.Elapsed.TotalSeconds;
                 while (options.Ticks is null || play.Tick < options.Ticks)
                 {

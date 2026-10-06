@@ -37,12 +37,13 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     private readonly Matrix4x4[] _bindingMatrices;private readonly GpuSkinPalette[] _palette;
     private Ncma.Assets.Runtime.RuntimeAssetLease? _assets;private PlaySession? _play;private bool _disposed;
     private double _previewSeconds;
+    private readonly IRootMotionPresentation? _rootMotion;
     public Guid WorldId {get;}
     public AnimationSceneCosts Costs {get;private set;}
     internal IReadOnlyList<Character> Characters=>_characters;
-    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel)
+    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel,IRootMotionPresentation? rootMotion=null)
     {
-        _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();
+        _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();_rootMotion=rootMotion;
         try{
             _assets=prepared.Assets.AcquireLease();var registry=RenderComponentRegistry.CreateRegistry();int bones=0,palettes=0;
             foreach(var obj in startup.Objects){var component=obj.Components.SingleOrDefault(c=>c.TypeId==SkinnedMeshData.TypeId);if(component is null)continue;
@@ -64,7 +65,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                         var clip=kernel.CreateClip(nativeRig,ModelPayloadCodec.DecodeClip(data.CopyData()));_leases.Add(clip);_clips.Add(id,clip);}
                 }
                 var live=world.FindObject(obj.Id);var instance=new Character(live,source,rig.Rig,rig.Skeleton,mesh.CopyPayload(),bones);
-                if(live.Has<ClipPlaybackData>()){var settings=live.Get<ClipPlaybackData>();instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
+                if(live.Has<ClipPlaybackData>() && (rootMotion is null || !live.Has<RootMotionData>())){var settings=live.Get<ClipPlaybackData>();instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
                 _characters.Add(instance);bones=checked(bones+rig.Rig.BoneCount);palettes=checked(palettes+instance.Bindings.BindingCount);
             }
             if(bones>32768||palettes>32768)throw new ArgumentException("Scene pose/palette capacity.");
@@ -83,13 +84,14 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     }
     public void Attach(PlaySession play)
     {
-        Verify();ArgumentNullException.ThrowIfNull(play);if(_play is not null||play.Document.World!=_world||play.Tick!=0)throw new ArgumentException("Attach animation to original Play before its first fixed tick.");
+        Verify();ArgumentNullException.ThrowIfNull(play);if(_play is not null||play.Document.World!=_world)throw new ArgumentException("Attach animation at its prepared committed Play boundary.");
         play.AddCommittedObserver(this);_play=play;
+        if(_characters.Any(c=>c.Object.Has<RootMotionData>()) && _rootMotion is null)throw new ArgumentException("Root motion Play presentation requires its sole committed motion source.");
     }
     public void StepCommitted(World world,double fixedDeltaSeconds)
     {
         Verify();if(world!=_world)throw new ArgumentException("Animation World owner mismatch.");
-        foreach(var c in _characters){if(!Live(c)||!c.Object.Has<ClipPlaybackData>())continue;var settings=c.Object.Get<ClipPlaybackData>();var clip=RequireClip(c,settings);
+        foreach(var c in _characters){if(!Live(c)||!c.Object.Has<ClipPlaybackData>()||c.Object.Has<RootMotionData>())continue;var settings=c.Object.Get<ClipPlaybackData>();var clip=RequireClip(c,settings);
             c.Clock??=new(world,settings,clip.Duration);c.Clock.ObserveCommitted(world,settings,clip.Duration,fixedDeltaSeconds);}
     }
     public void ResynchronizeAfterReload(PlaySession play)
@@ -112,18 +114,21 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         for(int i=0;i<_characters.Count;i++){
             var c=_characters[i];c.Active=Live(c);if(c.Active)active++;PoseClip? clip=null;ClipSampleTimes times=new(0,0,1);
             if(c.Active&&c.Object.Has<ClipPlaybackData>()){
-                var settings=c.Object.Get<ClipPlaybackData>();clip=RequireClip(c,settings);
-                if(_play is not null){if(c.Clock is null||c.Clock.CommittedTick!=_world.Tick)throw new InvalidOperationException("Animation missed its committed-step observer.");times=c.Clock.Sample(alpha,paused);}
+                var settings=_play is not null && c.Object.Has<RootMotionData>() ? _rootMotion!.Playback(c.Id) : c.Object.Get<ClipPlaybackData>();clip=RequireClip(c,settings);
+                if(_play is not null && c.Object.Has<RootMotionData>())times=_rootMotion!.Sample(c.Id,alpha,paused);
+                else if(_play is not null){if(c.Clock is null||c.Clock.CommittedTick!=_world.Tick)throw new InvalidOperationException("Animation missed its committed-step observer.");times=c.Clock.Sample(alpha,paused);}
                 else {double time=settings.StartTime+(settings.Playing?_previewSeconds*settings.Speed:0);time=settings.Loop?time%clip.Duration:Math.Min(time,clip.Duration);times=new(time,time,1);}
             }
             _samples[i]=new(c.Rig,clip,times);
         }
         if(active==0){Costs=new(0,0,0,0,0,Costs.PoseGeneration);return;}
         _kernel.Sample(_samples.AsSpan(0,_characters.Count),_locals,_models);double sampled=Stopwatch.GetElapsedTime(start).TotalMilliseconds;start=Stopwatch.GetTimestamp();int offset=0;
-        foreach(var c in _characters)if(c.Active){c.Bindings.Compose(_models.AsSpan(c.BoneOffset,c.Rig.BoneCount),_bindingMatrices.AsSpan(offset,c.Bindings.BindingCount));
+        foreach(var c in _characters)if(c.Active){
+            c.RootDisplacement=_models[c.BoneOffset].Translation-c.BindRoot;
+            if(_play is not null && c.Object.Has<RootMotionData>())_rootMotion!.RemoveRoot(c.Id,_models.AsSpan(c.BoneOffset,c.Rig.BoneCount));
+            c.Bindings.Compose(_models.AsSpan(c.BoneOffset,c.Rig.BoneCount),_bindingMatrices.AsSpan(offset,c.Bindings.BindingCount));
             for(int i=0;i<c.Bindings.BindingCount;i++)_palette[offset+i]=GpuSkinPalette.Create(_bindingMatrices[offset+i]);offset+=c.Bindings.BindingCount;
             // Authored visual displacement preserved; no GameObject position/physics authority is changed.
-            c.RootDisplacement=_models[c.BoneOffset].Translation-c.BindRoot;
         }
         Costs=new(active,_models.Length,offset,sampled,Stopwatch.GetElapsedTime(start).TotalMilliseconds,checked(Costs.PoseGeneration+1));
     }

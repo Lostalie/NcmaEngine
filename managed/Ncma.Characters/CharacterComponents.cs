@@ -72,6 +72,8 @@ public static class CharacterComponents
         {
             var parts = obj.Components.ToDictionary(c => c.TypeId);
             bool character = parts.ContainsKey(CharacterData.TypeId), box = parts.ContainsKey(BoxColliderData.TypeId);
+            if(parts.ContainsKey(Ncma.Animation.RootMotionData.TypeId) && (!character || !parts.ContainsKey(SkinnedMeshData.TypeId) || !parts.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId)))
+                throw new ArgumentException("Root motion requires a capsule, skinned mesh and explicit clip playback.");
             if (character && box) throw new ArgumentException("Character capsule and box collider are exclusive.");
             if (character || box)
             {

@@ -70,6 +70,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private Ncma.Rendering.RenderResourceCache? _sceneCache;
     private Ncma.Rendering.Scene.SceneRenderSession? _editScene, _playScene;
     private Ncma.Animation.Native.PoseKernel? _poseKernel;
+    private Ncma.Characters.CharacterPlayRuntime? _characterRuntime;
     private Guid _editAssets, _playAssets, _playSession;
     private CompiledRenderGraph? _graph;
     private uint _viewWidth, _viewHeight;
@@ -124,7 +125,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
             validateComposition: Ncma.Characters.CharacterComponents.RequireComposition,
-            composePlay:play=>Ncma.Characters.CharacterPlayRuntime.Compose(play,_physics),
+            composePlay:play=>_characterRuntime=Ncma.Characters.CharacterPlayRuntime.Compose(play,_physics,_editor?.RenderAssets),
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         if (project is not null) {
             var workspace = new EditorWorkspace(_editor);
@@ -213,7 +214,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity || _playScene?.WorldId!=play.Document.World.Identity) {
                 var snapshot = play.Document.CaptureSnapshot();
                 var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play,
-                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot));
+                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime);
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }

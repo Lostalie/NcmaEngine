@@ -73,7 +73,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 | SceneAsset / Serialization | 通用组件记录、资产引用、版本迁移 | C# `.ncmascene` JSON v1 通用组件读写/原子保存已实现；旧 .ncscene 不兼容；资产引用/迁移流水线未实现 |
 | Editor Commands | 文档修改、事务、Undo/Redo、隔离 Play | Editor.Core 持有完整文档事务/唯一 Undo；ImGui 提交 UUID 意图，原生命令栈已删除 |
 | Gameplay Services | 输入、角色、动作、战斗、任务等游戏 API | 未实现完整 SDK；当前只有基础门面/示例 |
-| Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement`；M4.2真实Jolt数值；M4.3 `Ncma.Characters` Editor/Player固定步移动与跟随相机；根运动/战斗未实现 |
+| Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement`；M4.2真实Jolt数值；M4.3固定步角色/跟随相机；M4.4候选XZ/Yaw根运动及视觉去重；战斗未实现 |
 
 当前 C# Behaviour 已支持挂载、禁用、删除、数值/布尔 Export 编辑及隔离 Play。
 M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpdate/顺序 Systems，帧后 OnUpdate 只读。默认 1/60 秒、最多追赶 8 步；严格与交互时间策略、Pause/Resume/Step/Faulted 已接入 ImGui。安全重载先隔离预检再清理/激活，成功 Paused，失败保留旧暂停或激活后 Faulted；重置私有状态，私有状态迁移未实现。
@@ -144,7 +144,7 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 ### 物理
 
 Box2D/Jolt 独立 Physics 插件与 C# 批量客户端已实现，见 [M2.6 交付记录](M2_6_DELIVERY_REPORT.md)：Physics ABI 1.1 原始计数/单次耗时（保留 1.0），独立 2D/3D Box/density/重力/线速度/旋转状态与模拟序号；C# PhysicsService/PhysicsSimulation 管理世界、暂停/单步、有界速度暂存、复制快照、诊断/profile 与故障关闭。C++ 只保留求解器资源、边界自保和数值批处理，应用策略不进入原生。最多 16 world、4096 body/world/batch；Jolt factory/job pool 集中在 DLL，数值内核不再编入 NcmaCore。项目 physicsEnabled 默认 false，启用后仅在显式场景绑定的Play中创建耦合数值world，独立PhysicsSimulation仍保持原路径。
-M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVirtual capsule、copied grounding/contacts及closest body/character ray/sweep；显式`characterSupport:true`才协商，默认独立宿主1.1及physicsEnabled=false不变。M4.3 C# `CharacterData/BoxColliderData/FollowCameraData`仅存值/UUID；应用独立服务协调真实solver、唯一Transform发布、gravity/jump/grounding/world-space WASD/yaw与只读跟随/插值。Editor隔离Play与Player/Headless共用；失败保持fail-stop，GPU/动画先释放，关闭失败保留依赖并可重试。Gameplay碰撞事件、root motion与正式战斗未实现，不把不可逆Step冒充托管事务回滚。契约/测试/限制见[M4.2交付](M4_2_DELIVERY_REPORT.md)和[M4.3交付](M4_3_DELIVERY_REPORT.md)。
+M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVirtual capsule、copied grounding/contacts及closest body/character ray/sweep；显式`characterSupport:true`才协商，默认独立宿主1.1及physicsEnabled=false不变。M4.3 C# `CharacterData/BoxColliderData/FollowCameraData`仅存值/UUID；应用独立服务协调真实solver、唯一Transform发布、gravity/jump/grounding/world-space WASD/yaw与只读跟随/插值。Editor隔离Play与Player/Headless共用；失败保持fail-stop，GPU/动画先释放，关闭失败保留依赖并可重试。M4.4候选接入XZ/Yaw root motion、碰撞约束与视觉根去重；Gameplay碰撞事件与正式战斗未实现，不把不可逆Step冒充托管事务回滚。契约/测试/限制见[M4.2交付](M4_2_DELIVERY_REPORT.md)、[M4.3交付](M4_3_DELIVERY_REPORT.md)和[M4.4交付](M4_4_DELIVERY_REPORT.md)。
 物理句柄仅标识求解器资源，不替代 GameObject 身份。
 
 ## 5. 动作动画与 FBX
@@ -161,7 +161,7 @@ M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVi
 | 模块 | 当前状态 |
 |---|---|
 | Skeleton/Clip、采样、姿势混合、逐骨骼遮罩 | 已实现原生独立运行时 |
-| Root Motion/Notify 区间数值 | 已实现原生 kernel；C# / 隔离 Python 工具消费，场景碰撞应用未实现 |
+| Root Motion/Notify 区间数值 | 独立demo原生 kernel数值；M4.4候选C# immutable根轨迹/共享committed clock/场景Jolt约束与视觉去重；Gameplay Notify未实现 |
 | Idle/Run/Attack/Dodge 实验室、调试与 Undo/Redo | 已实现独立程序化预览 |
 | C# ActionAnimationSession / 动画 C ABI 2 | 已实现：C# 时钟/策略/128 项历史，原生不可变 demo + 复制数值；旧 ABI 1 拒绝 |
 | FBX 骨架/蒙皮网格/动画导入与 CPU 线框预览 | 已实现，基于 ufbx；候选 C# Orbit/骨架/CPU 蒙皮线框已迁移（最多一万三角形） |
@@ -171,7 +171,7 @@ M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVi
 | 通用图编译/执行、完整可视化节点编辑器 | 未实现；节点枚举不代表对应求值器存在 |
 | BlendSpace、Montage、IK、重定向、动画压缩 | 未实现完整功能 |
 | 场景 SkinnedMesh/ClipPlayback 与 DX11 GPU 蒙皮 | M3.5 已实现；验收范围见交付记录 |
-| Animator 图 / CharacterMotor | Animator留M5；M4.3已接固定步capsule移动/跳跃/重力/碰撞/跟随相机，根运动/战斗未实现 |
+| Animator 图 / CharacterMotor | Animator留M6；M4.3固定步capsule移动/跳跃/重力/碰撞/跟随相机；M4.4候选根运动；战斗未实现 |
 | 正式动作/连击/命中规则及 C# 通知到游戏事件链路 | 未实现 |
 
 2026-10-06：M3.5 使用独立 `ncma_pose_get_api`/pose ABI 1.0，仅不可变数值，不是已删除的旧 Animation ABI 1，也不恢复 gameplay host；原有 animation/character ABI 2 保持原语义。纯 C# ClipClock/提交后只读观察器、正式 NCA/Scene/Edit/Play 生命周期与 query 5 compute-prepass 已接线；原始 GPU source 常驻，每帧 bounded palette，主画面与阴影共享 GPU output，未验证的 animated bind-AABB 裁剪关闭。根位移只报告不写 World/Physics。资源/GPU/GC 证据与最终 G5 状态见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)，布局/线程/预算/释放见 [契约](M3_5_RENDER_ANIMATION_ABI.md)。没有 skin 不初始化 pose/rig/palette ring，Null 不部署 pose DLL；通用 3D-capable DX11 包含 lazy DLL，专用纯 2D 裁剪包未实现。

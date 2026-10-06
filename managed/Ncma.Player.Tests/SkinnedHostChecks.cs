@@ -62,6 +62,7 @@ internal static class SkinnedHostChecks
             coupled.RestoreBytes(document.CaptureBytes());
             var actor = coupled.World.GetObjects().First(o => o.Has<SkinnedMeshData>()); actor.Set(CharacterData.Default with { FootOffsetY = 0 });
             actor.Set(TransformData.Identity with { Position = new(0, .1f, -3) });
+            actor.Set(new RootMotionData(0));
             var floor = coupled.World.CreateObject("Collision floor"); floor.Set(TransformData.Identity with { Position = new(0, -.5f, 0) }); floor.Set(new BoxColliderData(20, .5f, 20, 1000, 1, false));
             coupled.World.FindObject(camera.PersistentId).Set(new FollowCameraData(actor.PersistentId, 0, 2, 6, 1));
             string coupledScene = Path.Combine(root, "coupled.ncmascene"), coupledProject = Path.Combine(root, "coupled.ncmaproject"); SceneDocumentFiles.Save(coupled, coupledScene); byte[] coupledSaved = File.ReadAllBytes(coupledScene);
@@ -88,6 +89,6 @@ internal static class SkinnedHostChecks
         }
         return ["ASCII/binary FBX import->NCA save/restart->real animated Player, 3 cycles each, no source FBX runtime, validation 0/0",
             "M3.9 ASCII/binary source-free runtime packages: 32 Play cycles each/graphical and Null apphosts/corrupt preflight/manifest 0/0",
-            "M4.3 ASCII/binary real animated FBX coupled Player/Null, follow camera, interpolation, validation 0/0 and authoring isolation"];
+            "M4.4 ASCII/binary genuine FBX root-enabled coupled Player/Null and packed Player, follow camera, validation 0/0 and authoring isolation"];
     }
 }

@@ -66,6 +66,7 @@ public static class RenderComponentRegistry
     {
         ArgumentNullException.ThrowIfNull(registry);
         Ncma.Animation.ClipPlaybackData.Register(registry);
+        Ncma.Animation.RootMotionData.Register(registry);
         registry.Register<StaticMeshData>(StaticMeshData.TypeId, 1, Schema(("meshId", "string"), ("materialSetId", "string"),
             ("visible", "boolean"), ("castShadow", "boolean"), ("layerMask", "integer")), StaticMeshData.Validate);
         registry.Register<SkinnedMeshData>(SkinnedMeshData.TypeId, 1, Schema(("characterId", "string"), ("meshId", "string"),
