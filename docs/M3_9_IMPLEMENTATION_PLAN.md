@@ -1,7 +1,11 @@
 # M3.9 Player 资产包与联合验收方案
 
-日期：2026-10-05。状态：未实现。依赖 G8。目标是 M3 资产闭环能离开 Editor 运行并留下可追溯证据。
+日期：2026-10-05；2026-10-06 更新。状态：运行包/Player 候选已启动；不是完整交付，G9开放。依赖 G8。目标是 M3 资产闭环能离开 Editor 运行并留下可追溯证据。
 这里只提供最小资产 cook/包；完整发布器、所有目标机/性能优化与双 API 验收仍属于后续阶段。
+
+用户要求执行M3.9；G6/G7/G8仍开放，先实施无上游写流程依赖的“已提交generation→typed包→Player”候选。
+实际边界、证据和未实现项见 [运行包记录](M3_9_RUNTIME_PACKAGE_REPORT.md)、[联合状态](M3_DELIVERY_REPORT.md)。
+下面A–D仍是完整方案：确定性封装现有generation不等于A冷缓存重建，测试包manifest不等于C正式部署/恢复。
 
 ## 1 资产包与依赖闭包
 
@@ -72,7 +76,7 @@ framework-dependent开发包与self-contained目标环境验收分开；未实�
 新增测试/包审计进入canonical Build.bat，Debug→Release顺序全量，无Skip；警告视缺陷。
 保留M2冻结参考/API/ABI/Physics/Runtime/Core/Gameplay/Python负例，不为新图像刷新旧期望。
 建议产出 docs/M3_DELIVERY_REPORT.md、G1–G9逐项记录及 out/verification/m3/<configuration>/<run>/ 证据。
-这些是未来交付，当前不创建伪造的“通过”报告。
+当前已建立候选记录与逐项联合状态；未满足的门禁保持开放，不创建伪造的“通过”结论。
 
 只有资产/场景/角色/Player闭环、故障/权限/恢复、实际图形和约定人工项都有证据才能关闭M3。
 自动通过而真实素材/目标环境/长稳待验时，状态写“自动切片完成，人工待验”，不偷偷关闭M2旧门禁。

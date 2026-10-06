@@ -40,7 +40,8 @@ internal static class SkinnedHostChecks
             var light=document.World.CreateObject("Light");light.Set(TransformData.Identity);light.Set(DirectionalLightData.Default);
             string scene=Path.Combine(root,"start.ncmascene"),projectFile=Path.Combine(root,"scene.ncmaproject");SceneDocumentFiles.Save(document,scene);byte[] saved=File.ReadAllBytes(scene);
             string assembly=Assembly.GetExecutingAssembly().Location;File.Copy(assembly,Path.Combine(root,"gameplay.dll"));File.Copy(Path.ChangeExtension(assembly,".deps.json"),Path.Combine(root,"gameplay.deps.json"));
-            File.WriteAllBytes(projectFile,JsonSerializer.SerializeToUtf8Bytes(new ProjectConfiguration(1,project,"FBX scene","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera.PersistentId),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
+            var config=new ProjectConfiguration(1,project,"FBX scene","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera.PersistentId);
+            File.WriteAllBytes(projectFile,JsonSerializer.SerializeToUtf8Bytes(config,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
             for(int i=0;i<3;i++) {
                 var options=PlayerOptions.Parse(["--project",projectFile,"--ticks","6","--max-runtime-seconds","20","--report",Path.Combine(output,fixture+"-player-"+i+".json")]);
                 var report=PlayerRunner.Run(options,pluginRoot:plugins,visible:false);
@@ -50,7 +51,9 @@ internal static class SkinnedHostChecks
                 using var unlocked=new FileStream(generation,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite|FileShare.Delete);
             }
             Check(!File.Exists(Path.Combine(root,"assets/model.fbx")),"Player accidentally deployed/reparsed FBX source");
+            RuntimePackageChecks.Run(repository,root,output,plugins.Contains("windows-ninja-release",StringComparison.OrdinalIgnoreCase)?"Release":"Debug",config,document.CaptureSnapshot());
         }
-        return ["ASCII/binary FBX import->NCA save/restart->real animated Player, 3 cycles each, no source FBX runtime, validation 0/0"];
+        return ["ASCII/binary FBX import->NCA save/restart->real animated Player, 3 cycles each, no source FBX runtime, validation 0/0",
+            "M3.9 ASCII/binary source-free runtime packages: 32 Play cycles each/graphical and Null apphosts/corrupt preflight/manifest 0/0"];
     }
 }

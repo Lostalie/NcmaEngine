@@ -59,7 +59,10 @@ internal sealed class RuntimeReadPin : IDisposable
     }
     private static SafeFileHandle Open(string path, bool directory)
     {
-        var handle = CreateFileW(path, directory ? 0u : 0x80000000u, directory ? 3u : 1u, IntPtr.Zero, 3,
+        string full = Path.GetFullPath(path);
+        if (full.StartsWith(@"\\.\", StringComparison.Ordinal)) throw new ArgumentException("Runtime asset device path.");
+        string native = full.StartsWith(@"\\?\", StringComparison.Ordinal) ? full : full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
+        var handle = CreateFileW(native, directory ? 0u : 0x80000000u, directory ? 3u : 1u, IntPtr.Zero, 3,
             0x00200000u | (directory ? 0x02000000u : 0), IntPtr.Zero);
         if (handle.IsInvalid)
         {

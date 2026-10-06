@@ -6,7 +6,7 @@ namespace Ncma.Application;
 public sealed record ProjectPlugin(string Id, string Path);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProjectConfiguration(int SchemaVersion, Guid ProjectId, string Name,
-    string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false, Guid? SceneCamera = null);
+    string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false, Guid? SceneCamera = null, string? AssetPackage = null);
 public sealed class ProjectContext
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
@@ -15,6 +15,7 @@ public sealed class ProjectContext
     public ProjectConfiguration Configuration => _configuration with { Plugins = (ProjectPlugin[])_configuration.Plugins.Clone() };
     public string StartupScenePath { get; }
     public string GameplayAssemblyPath { get; }
+    public string? AssetPackagePath { get; }
     private ProjectContext(string root, ProjectConfiguration configuration)
     {
         Root = Path.GetFullPath(root); RejectReparse(Root);
@@ -29,6 +30,11 @@ public sealed class ProjectContext
         if (new FileInfo(StartupScenePath).Length > Ncma.Scene.SceneDocumentCodec.MaxBytes) throw new ArgumentException("Startup scene exceeds budget.");
         _ = Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(StartupScenePath));
         GameplayAssemblyPath = Resolve(configuration.GameplayAssembly, ".dll");
+        if (configuration.AssetPackage is { } package) {
+            if (!package.StartsWith("assets/", StringComparison.Ordinal) || package.Contains('\\') || !package.EndsWith(".ncpak", StringComparison.Ordinal))
+                throw new ArgumentException("Expected explicit assets/ runtime package.");
+            AssetPackagePath = Resolve(package, ".ncpak");
+        }
         var ids = new HashSet<string>(StringComparer.Ordinal);
         foreach (var plugin in _configuration.Plugins)
         {

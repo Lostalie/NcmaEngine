@@ -35,11 +35,15 @@ public static class PlayerRunner
                     Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),
                     Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
+                if (options.Headless && project.Configuration.AssetPackage is not null) {
+                    phase = "dependencies";
+                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, document.CaptureSnapshot(), true, project.Configuration.AssetPackage);
+                }
                 if (!options.Headless)
                 {
                     phase = "dependencies";
                     var startup = document.CaptureSnapshot();
-                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true);
+                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage);
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
                         phase = "configuration";

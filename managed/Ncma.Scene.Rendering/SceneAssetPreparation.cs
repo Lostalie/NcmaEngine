@@ -53,9 +53,25 @@ public static class SceneAssetPreparation
         return refs.OrderBy(r => r.Id.Value).ThenBy(r => r.ExpectedKind).ToArray();
         void Add(Guid id, AssetKind kind) { if (refs.Count >= RuntimeAssetLoader.MaxRequired && !refs.Contains(new(new(id), kind))) throw new ArgumentException("Scene asset reference budget."); refs.Add(new(new(id), kind)); }
     }
-    public static PreparedSceneAssetLease Prepare(string root, Guid project, SceneDocumentSnapshot scene, bool strictMissing)
+    // Explicit off-frame packaging of committed generations. Dynamic roots are host/author supplied,
+    // never guessed from script strings. Cold source rebuild and Prefab runtime spawn remain absent.
+    public static byte[] CreateRuntimePackage(string root, Guid project, SceneDocumentSnapshot scene, IEnumerable<AssetRef> dynamicRoots)
     {
-        using var prepared = RuntimeAssetLoader.Prepare(root, project, References(scene), strictMissing);
+        ArgumentNullException.ThrowIfNull(dynamicRoots);
+        var additional = dynamicRoots.Take(RuntimeAssetLoader.MaxRequired + 1).ToArray();
+        if (additional.Length > RuntimeAssetLoader.MaxRequired) throw new ArgumentException("Dynamic asset root budget.");
+        using var prepared = RuntimeAssetLoader.Prepare(root, project, References(scene).Concat(additional), true);
+        using var lease = prepared.AcquireLease();
+        using var view = new PreparedSceneAssetLease(lease.AcquireLease());
+        _ = SceneRenderValidation.Inspect(scene, view.Metadata, true);
+        foreach (var reference in References(scene)) if (reference.ExpectedKind is AssetKind.StaticMesh or AssetKind.SkinnedMesh)
+            _ = lease.RequireMesh(reference.Id.Value, reference.ExpectedKind);
+        return RuntimeAssetPackage.Encode(lease);
+    }
+    public static PreparedSceneAssetLease Prepare(string root, Guid project, SceneDocumentSnapshot scene, bool strictMissing, string? package = null)
+    {
+        using var prepared = package is null ? RuntimeAssetLoader.Prepare(root, project, References(scene), strictMissing) :
+            RuntimeAssetPackage.Prepare(root, package, project, References(scene)); // Explicit package never falls back to authoring files.
         var lease = prepared.AcquireLease();
         try
         {
