@@ -22,7 +22,7 @@ typedef enum NcmaResult {
     NCMA_SHUTDOWN_TIMEOUT = 9, NCMA_INTERNAL_ERROR = 10
 } NcmaResult;
 typedef enum NcmaModuleKind {
-    NCMA_PLATFORM = 1, NCMA_GUI = 2, NCMA_RENDERER = 3, NCMA_PHYSICS = 4, NCMA_FIXTURE = 127
+    NCMA_PLATFORM = 1, NCMA_GUI = 2, NCMA_RENDERER = 3, NCMA_PHYSICS = 4, NCMA_TEXT_MODULE = 5, NCMA_FIXTURE = 127
 } NcmaModuleKind;
 typedef struct NcmaErrorV1 {
     uint32_t code, reserved, required_bytes, message_length;

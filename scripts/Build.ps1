@@ -95,7 +95,7 @@ Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaAnimationKernel.dll') -De
 
 if (-not $SkipTests) {
     Write-Host '[Ncma] Running native architecture tests...'
-    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
+    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaUiSampleSmoke|NcmaUiTests|NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
     if ($LASTEXITCODE -ne 0) {
         throw "Native tests failed with exit code $LASTEXITCODE."
     }
@@ -108,6 +108,10 @@ Remove-Item Env:PATH -ErrorAction SilentlyContinue
 $env:Path = $effectivePath
 
 if (-not $SkipManaged) {
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Ui.Sample\Ncma.Ui.Sample.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "UI sample build failed with exit code $LASTEXITCODE." }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Ui.Tests\Ncma.Ui.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "UI runtime/authoring tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Animation.Tests\Ncma.Animation.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Animation pose/clock tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Asset.Import.Tests\Ncma.Asset.Import.Tests.csproj') --configuration $Configuration --nologo
@@ -186,7 +190,7 @@ if (-not $SkipManaged) {
             throw "Managed/native smoke test failed with exit code $LASTEXITCODE."
         }
         Write-Host '[Ncma] Running managed headless commands and managed application tests...'
-        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
+        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaUiSampleSmoke|NcmaUiTests|NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
         if ($LASTEXITCODE -ne 0) {
             throw "Managed application regression failed with exit code $LASTEXITCODE."
         }

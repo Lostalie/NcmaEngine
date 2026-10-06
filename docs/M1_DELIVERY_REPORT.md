@@ -190,5 +190,5 @@ Audit IO 在 owner pump 内有实际成本，软预算不是硬实时保证。
 
 操作清单与只读启动模板：docs/EDITOR_MCP.md、engine/config/editor-mcp.example.json。
 用户确认人工结果并补记录后再关闭 M1；未确认前不进入 M2。
-Vulkan 实际渲染、完整资产/FBX GPU 角色/Animator/Figma UI、C# 主入口、独立 Renderer/Physics 发布、
+Vulkan 实际渲染、完整资产/FBX GPU 角色/Animator/UI制作与HUD、C# 主入口、独立 Renderer/Physics 发布、
 Python 推理通信、独立网络服务仍属于后续阶段，全部保持未实现或已有预览基础状态。

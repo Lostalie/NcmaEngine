@@ -107,7 +107,7 @@ Python 游戏宿主、SDK、示例、重载与编辑器语言入口均已删除�
 GC/帧预算须用目标动作场景实测，不承诺仅凭语言选择就保证性能。
 旧 Python Transform benchmark 已随游戏 SDK 删除；新运行时和模块通信需各自测量。
 
-参考：ProwlEngine/Unity 用于 C# 组合与工作流，UE5 用于动作动画，Figma 用于 UI 编辑；
+参考：ProwlEngine/Unity 用于 C# 组合与工作流，UE5 用于动作动画，[用户图1](EDITOR_INTERFACE_REFERENCE.md)用于编辑器视觉与工作区布局；
 Infernux 仅作为 Python 模块工具分层参考。这些不是运行依赖或资产兼容承诺。
 
 ## M1.1 implemented document boundary

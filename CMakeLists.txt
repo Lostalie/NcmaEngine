@@ -167,6 +167,12 @@ if(MSVC)
 endif()
 
 if(WIN32)
+    add_library(NcmaText SHARED engine/source/plugins/text/TextPlugin.cpp)
+    target_include_directories(NcmaText PRIVATE engine/source/plugins)
+    target_compile_definitions(NcmaText PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(NcmaText PRIVATE /W4 /WX /permissive- /utf-8)
+    target_link_libraries(NcmaText PRIVATE dwrite d2d1 windowscodecs ole32)
+    set_target_properties(NcmaText PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_library(NcmaPlatform SHARED engine/source/plugins/platform/PlatformPlugin.cpp)
     target_include_directories(NcmaPlatform PRIVATE engine/source/plugins)
     target_compile_definitions(NcmaPlatform PRIVATE NCMA_PLATFORM_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -180,6 +186,7 @@ if(WIN32)
         engine/source/plugins/renderer/ResourceKernel.cpp
         engine/source/plugins/renderer/ScenePipelineKernel.cpp
         engine/source/plugins/renderer/SkinKernel.cpp
+        engine/source/plugins/renderer/UiKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
         engine/source/runtime/renderer/rhi/RhiResources.cpp)
@@ -225,6 +232,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     target_compile_options(NcmaCharacterNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
     set_target_properties(NcmaCharacterNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_executable(NcmaRendererNativeTests tests/plugins/RendererNativeTests.cpp
+        engine/source/plugins/renderer/UiKernel.cpp
         engine/source/plugins/renderer/SkinKernel.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ResourceKernel.cpp
@@ -280,6 +288,12 @@ if(NCMA_BUILD_MANAGED)
     find_program(DOTNET_EXECUTABLE dotnet)
     if(DOTNET_EXECUTABLE)
         add_custom_target(NcmaManaged
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Sample/Ncma.Ui.Sample.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Tests/Ncma.Ui.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Animation.Tests/Ncma.Animation.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
@@ -395,7 +409,14 @@ if(NCMA_BUILD_TESTS)
     add_test(NAME NcmaArchitectureTests COMMAND NcmaArchitectureTests)
     set_tests_properties(NcmaArchitectureTests PROPERTIES TIMEOUT 30)
     if(NCMA_BUILD_MANAGED AND DOTNET_EXECUTABLE)
+        add_test(NAME NcmaUiTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Ui.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")
+        set_tests_properties(NcmaUiTests PROPERTIES TIMEOUT 60)
         if(WIN32)
+            add_test(NAME NcmaUiSampleSmoke COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Sample/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaUiSample.dll"
+                --smoke --plugins "${CMAKE_BINARY_DIR}/m2/plugins")
+            set_tests_properties(NcmaUiSampleSmoke PROPERTIES TIMEOUT 60)
             add_test(NAME NcmaPhysicsTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Physics.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Physics.Tests.dll"
                 "${CMAKE_BINARY_DIR}/m2/plugins" "${CMAKE_SOURCE_DIR}/out/verification/m2/physics-$<IF:$<CONFIG:Debug>,Debug,Release>")

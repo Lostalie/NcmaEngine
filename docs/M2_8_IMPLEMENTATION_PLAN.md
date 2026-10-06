@@ -120,7 +120,7 @@ Player包在声明目标环境实际启动；不能因本机已装SDK而宣称se
 
 交付稳定托管App/Scripting/Editor services、唯一World/command、窗口输入/GUI/Renderer/Physics契约、Player/headless与部署流程。
 M3可在它们上加资产UUID/导入缓存/FBX场景/GPU蒙皮，不重建主循环、文档历史或权限。
-尚未实现：完整资产cook/Prefab、场景物理/角色、Animator图、Figma UI、Vulkan绘制、Python推理通信、网络与动态扩展。
+尚未实现：完整资产cook/Prefab、场景物理/角色、Animator图、UI制作/运行时HUD、Vulkan绘制、Python推理通信、网络与动态扩展。
 在H8证据齐全前，不把M2标为完成，不进入完整M3交付。
 
 ## 9. M2 结束后的统一清理与复测

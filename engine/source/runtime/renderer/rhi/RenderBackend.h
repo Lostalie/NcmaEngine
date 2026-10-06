@@ -52,6 +52,7 @@ namespace NcmaEngine::Rhi
         std::uint32_t Height = 720;
         bool EnableValidation = false;
         bool EnableVSync = true;
+        bool EnableDefaultDepth = true;
     };
 
     class IRenderBackend

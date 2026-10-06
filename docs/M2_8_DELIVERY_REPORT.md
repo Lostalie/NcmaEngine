@@ -92,7 +92,7 @@ M1 4096 对象约138–156ms/91MB使用不同 workload，不能直接给出提�
 [清理预检](M2_8_CLEANUP_AUDIT.md)列出当前消费者和覆盖缺口；词法命中不是删除证明。
 自动审计 audit_passed=true 只表示预检成功，始终 h8_accepted=false，
 production_promoted=false、cleanup_authorized_by_this_report=false。
-不扩展 M3/M4/M5/M6，不虚称 Vulkan/场景物理/Animator图/FigmaUI/AIworker 已实现。
+不扩展 M3/M4/M5/M6，不虚称 Vulkan/场景物理/Animator图/UI制作与HUD/AIworker 已实现。
 
 ## 5. 继续实施：测试替代与性能证据
 
@@ -247,7 +247,7 @@ manualAcceptance/selfContainedVerified=false；候选包仍独立，未虚称自
 ActionAnimationWorkspace/AgentCapabilityRegistry/ScriptRuntimeRegistry 和原生 UI/render-graph 策略原型仍有独立测试，
 不在本次旧入口/桥清理范围；consolidated_cleanup_completed=false。
 H3/H4/H5 真实 UI/MCP、H7 自包含/Explorer/Rider、完整性能与一小时长稳未完成。
-本次不会因正式目录切换而宣称 Vulkan、通用场景渲染、场景物理、完整 Animator/Figma UI 或 Python AI worker 已实现。
+本次不会因正式目录切换而宣称 Vulkan、通用场景渲染、场景物理、完整 Animator/UI制作与HUD 或 Python AI worker 已实现。
 
 两个 retired managed 缓存目录移出源码目录后，追加 Python 42/42 与 Release 只读审计通过；
 日志 out/verification/m2-entry-post-archive-python.log，审计

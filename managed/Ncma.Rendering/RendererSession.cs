@@ -52,13 +52,14 @@ public sealed unsafe partial class RendererSession : IDisposable
     public ulong CopiedBytes { get; private set; }
     public double LastEncodeMilliseconds { get; private set; }
     public RenderCapabilities Capabilities { get; } = RenderCapabilities.ReferenceDx11;
-    public RendererSession(PluginModule module, PlatformWindow window, uint width, uint height, bool validation = true, bool vsync = false, uint backend = 1)
+    public RendererSession(PluginModule module, PlatformWindow window, uint width, uint height, bool validation = true, bool vsync = false, uint backend = 1, bool pureUi = false)
     {
         if (module.Kind != ModuleKind.Renderer) throw new ArgumentException("Renderer module required.");
         _lease = module.AcquireLease();
         try {
             _platformLease = window.Module.AcquireLease();
             var create = module.ReadFunction<CreateRenderer>(56);
+            if (pureUi) { var ui = QueryUiApi(module); create = Marshal.GetDelegateForFunctionPointer<CreateRenderer>(ui.Create); }
             if(module.AbiMinor>=1)_configureReference=module.ReadFunction<ConfigureReference>(136);
             _createResources = module.ReadFunction<CreateResources>(64); _destroyResources = module.ReadFunction<DestroyResources>(72);
             _submit = module.ReadFunction<SubmitRenderer>(80); _present = module.ReadFunction<RendererOperation>(88);

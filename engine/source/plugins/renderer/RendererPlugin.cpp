@@ -7,6 +7,7 @@
 #include "ResourceKernel.h"
 #include "ScenePipelineKernel.h"
 #include "SkinKernel.h"
+#include "UiKernel.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -34,6 +35,9 @@ struct TargetGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle color,dept
     explicit TargetGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TargetGpu(){backend.DestroyTexture(color);backend.DestroyTexture(depth);}};
 uint64_t nextResource=1;
 struct Renderer {
+    bool pureUi=false;
+    uint64_t lastUiFrame=0;
+    std::unique_ptr<Rendering::UiKernel> ui;
     uint64_t handle=0,platform=0,window=0,borrows=0,lastFrame=0;
     bool active=false,failed=false,vsync=false;
     uint32_t faultResult=NCMA_INTERNAL_ERROR;
@@ -156,7 +160,8 @@ uint32_t NCMA_CALL Shutdown(uint64_t context,NcmaErrorV1* error) noexcept {
 uint32_t NCMA_CALL Status(uint64_t context,NcmaModuleStatusV1* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size():0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
+        const auto ui=renderer&&renderer->ui?renderer->ui->Stats(renderer->handle,renderer->pureUi):NcmaUiStatsV1{};
+        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size()+ui.images+ui.lists:0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
 }
 uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
@@ -166,7 +171,7 @@ uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity
         if(capacity<message.size()) return NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);
         if(!message.empty())std::memcpy(output,message.data(),message.size());return NCMA_OK;});
 }
-uint32_t NCMA_CALL Create(uint64_t context,const NcmaRendererDescriptionV1* desc,uint64_t* output,NcmaErrorV1* error) noexcept {
+uint32_t CreateImpl(uint64_t context,const NcmaRendererDescriptionV1* desc,uint64_t* output,NcmaErrorV1* error,bool pureUi) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
         if(!desc||!output||desc->struct_size!=sizeof(*desc)||desc->validation>1||desc->vsync>1||
@@ -181,6 +186,7 @@ uint32_t NCMA_CALL Create(uint64_t context,const NcmaRendererDescriptionV1* desc
         try {
             candidate->backend=std::make_unique<Rhi::D3D11RenderBackend>();
             Rhi::BackendCreateInfo info{glfwGetWin32Window(window),desc->width,desc->height,desc->validation!=0,desc->vsync!=0};
+            info.EnableDefaultDepth=!pureUi;candidate->pureUi=pureUi;
             std::string message;
             if(!candidate->backend->Initialize(info,message)) throw std::runtime_error(message);
             if(desc->validation && FAILED(candidate->backend->GetDevice()->QueryInterface(IID_PPV_ARGS(&candidate->validation))))
@@ -207,8 +213,11 @@ uint32_t NCMA_CALL Create(uint64_t context,const NcmaRendererDescriptionV1* desc
         } catch(...) { NcmaErrorV1 ignored{}; (void)ncma_platform_release_window_v1(desc->platform_module,desc->window,&ignored); throw; }
     });
 }
+uint32_t NCMA_CALL Create(uint64_t context,const NcmaRendererDescriptionV1* desc,uint64_t* output,NcmaErrorV1* error) noexcept {return CreateImpl(context,desc,output,error,false);}
+uint32_t NCMA_CALL CreateUiRenderer(uint64_t context,const NcmaRendererDescriptionV1* desc,uint64_t* output,NcmaErrorV1* error) noexcept {return CreateImpl(context,desc,output,error,true);}
 uint32_t NCMA_CALL CreateResources(uint64_t context,uint64_t handle,uint64_t* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(renderer->pureUi)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"UI-only renderer forbids 3D resources.");
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
         if(renderer->active||renderer->groups.size()>=8)return NcmaPlugin::Error(error,NCMA_BUSY);
@@ -348,12 +357,13 @@ uint32_t NCMA_CALL WaitIdle(uint64_t context,uint64_t handle,NcmaErrorV1* error)
 }
 uint32_t NCMA_CALL Destroy(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
-        if(renderer->borrows||!renderer->groups.empty()||!renderer->meshes.empty()||renderer->backend->GetLiveResourceCount()!=0)return NcmaPlugin::Error(error,NCMA_BUSY);
+        const auto ui=renderer->ui?renderer->ui->Stats(handle,renderer->pureUi):NcmaUiStatsV1{};
+        if(renderer->borrows||!renderer->groups.empty()||!renderer->meshes.empty()||renderer->backend->GetLiveResourceCount()!=0||ui.images||ui.lists)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
         if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
         NcmaErrorV1 platformError{};
         valid=ncma_platform_release_window_v1(renderer->platform,renderer->window,&platformError);if(valid){*error=platformError;return valid;}
-        renderer->backend->Shutdown();renderer.reset();return NCMA_OK;});
+        renderer->ui.reset();renderer->backend->Shutdown();renderer.reset();return NCMA_OK;});
 }
 uint32_t NCMA_CALL Capture(uint64_t context,uint64_t handle,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
@@ -374,6 +384,7 @@ uint32_t NCMA_CALL Capture(uint64_t context,uint64_t handle,uint8_t* output,uint
 uint32_t CreateMeshImpl(uint64_t context,uint64_t handle,const NcmaMeshDescriptionV1* input,NcmaGpuMeshV1* output,NcmaErrorV1* error,bool bindPose) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(renderer->pureUi)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"UI-only renderer forbids 3D resources.");
         if(!input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         const auto d=*input;
         const uint64_t bytes=static_cast<uint64_t>(d.vertex_bytes)+d.index_bytes;
@@ -511,12 +522,13 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
 #include "ResourceServices.inl"
 #include "SkinServices.inl"
 #include "ScenePipelineServices.inl"
+#include "UiServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>5)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>6)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):sizeof(NcmaSkinApiV5);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):sizeof(NcmaUiApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -526,7 +538,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
             std::memcpy(output,&extended,sizeof(extended));}
         else if(version==3) {const NcmaResourceRenderApiV3 resources{sizeof(resources),3,0x3c,CreateTexture,CreateMaterial,CreateTarget,DestroyResource,SubmitResources,ResourceStats,CaptureTarget};std::memcpy(output,&resources,sizeof(resources));}
         else if(version==4) {const NcmaScenePipelineApiV4 scene{sizeof(scene),4,0x7,CreateScenePipeline,DestroyScenePipeline,SubmitScenePipeline,ScenePipelineStats};std::memcpy(output,&scene,sizeof(scene));}
-        else {const NcmaSkinApiV5 skin{sizeof(skin),5,3,CreateSkin,DestroySkin,UpdateSkin,CaptureSkin,SkinStats};std::memcpy(output,&skin,sizeof(skin));}
+        else if(version==5) {const NcmaSkinApiV5 skin{sizeof(skin),5,3,CreateSkin,DestroySkin,UpdateSkin,CaptureSkin,SkinStats};std::memcpy(output,&skin,sizeof(skin));}
+        else {const NcmaUiApiV1 ui{sizeof(ui),1,7,CreateUiRenderer,CreateUiImage,CreateUiList,DestroyUi,SubmitUi,UiStats};std::memcpy(output,&ui,sizeof(ui));}
         return NCMA_OK;
     });
 }

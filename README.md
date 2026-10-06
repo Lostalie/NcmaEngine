@@ -36,6 +36,8 @@ Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/
 - [独立 Python 模块与通信选型](docs/PYTHON_MODULES.md)
 - [AI 深度开发契约与已实现 headless 能力](docs/AI_DEVELOPMENT.md)
 - [最新路线图](docs/ROADMAP.md)
+- [M5.1至M5.6 UI基础方案](docs/M5_1_6_IMPLEMENTATION_PLAN.md)
+- [UI文档、DX11、字体与控件交付记录](docs/M5_1_6_DELIVERY_REPORT.md)
 - [M3 资产与真实 FBX 场景角色分阶段方案](docs/M3_IMPLEMENTATION_PLAN.md)
 - [M3.2 持久 FBX 导入与 G2 验证记录](docs/M3_2_DELIVERY_REPORT.md)
 - [M1 自动交付与剩余人工验收](docs/M1_DELIVERY_REPORT.md)
@@ -55,7 +57,7 @@ Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/
 | ProwlEngine / Unity | C# 组合式对象、编辑器/资产工作流 |
 | Unreal Engine 5 | 动作动画、状态机、Root Motion、通知与节点编辑 |
 | Infernux | Python 模块/工具分层，不再作为 Python 游戏脚本方向 |
-| Figma | UI 编辑交互，不是游戏场景模型 |
+| [用户图1](docs/EDITOR_INTERFACE_REFERENCE.md) | 引擎编辑器视觉/工作区布局；不采用图中的Node场景树、品牌或未实现功能声明 |
 
 参考不作为运行依赖或资产兼容承诺；Eigen、GLFW、ImGui、spdlog、Box2D、Jolt、ufbx
 继续用于已有原生算法与后端，不扩展为托管运行时的通用依赖。

@@ -4,6 +4,11 @@
 #include "NcmaResourceRender.h"
 #include "NcmaScenePipeline.h"
 #include "NcmaSkin.h"
+#include "NcmaUiRender.h"
+#include "NcmaText.h"
+_Static_assert(sizeof(NcmaTextRequestV1)==48 && sizeof(NcmaTextMetricsV1)==32 && sizeof(NcmaTextApiV1)==88, "Text numerical layout");
+_Static_assert(sizeof(NcmaUiVertexV1)==52 && sizeof(NcmaUiBatchV1)==40, "UI vertices/batches");
+_Static_assert(sizeof(NcmaUiApiV1)==64 && sizeof(NcmaUiStatsV1)==64 && sizeof(NcmaUiFrameV1)==48, "UI table/stats/frame");
 _Static_assert(sizeof(NcmaSkinMeshV5)==56 && sizeof(NcmaSkinPaletteV5)==128 && sizeof(NcmaSkinRequestV5)==24, "skin numerical layout");
 _Static_assert(sizeof(NcmaSkinBatchV5)==32 && sizeof(NcmaSkinStatsV5)==96 && sizeof(NcmaSkinApiV5)==56, "skin table/counters");
 #include "NcmaPose.h"

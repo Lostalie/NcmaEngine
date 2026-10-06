@@ -53,7 +53,8 @@ void Key(GLFWwindow* value, int key, int, int action, int)
 void Mouse(GLFWwindow* value, int button, int action, int)
 {
     auto& item = From(value); Held(item, static_cast<uint32_t>(384 + button), action != GLFW_RELEASE);
-    Record(item, {NCMA_MOUSE_BUTTON, static_cast<uint32_t>(button), static_cast<uint32_t>(action), 0, 0, 0, 0});
+    double x=0,y=0;glfwGetCursorPos(value,&x,&y);
+    Record(item, {NCMA_MOUSE_BUTTON, static_cast<uint32_t>(button), static_cast<uint32_t>(action), 0, x, y, 0});
 }
 void Pointer(GLFWwindow* value, double x, double y) { Record(From(value), {NCMA_POINTER, 0, 0, 0, x, y, 0}); }
 void Scroll(GLFWwindow* value, double x, double y) { Record(From(value), {NCMA_SCROLL, 0, 0, 0, x, y, 0}); }

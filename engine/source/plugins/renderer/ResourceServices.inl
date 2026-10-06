@@ -1,6 +1,7 @@
 // Included in RendererPlugin's private namespace; no separate registry or scene ownership.
 uint32_t ResourceReady(uint64_t context,uint64_t handle,NcmaErrorV1* error) {
     auto valid=Instance(context,handle,error);if(valid)return valid;
+    if(renderer->pureUi)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"UI-only renderer forbids 3D resources.");
     if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
     return renderer->active?NcmaPlugin::Error(error,NCMA_BUSY):NCMA_OK;
 }

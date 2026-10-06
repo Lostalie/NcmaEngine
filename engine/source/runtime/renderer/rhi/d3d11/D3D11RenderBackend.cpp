@@ -198,7 +198,7 @@ namespace NcmaEngine::Rhi
 
     bool D3D11RenderBackend::BeginFrame(std::string& error)
     {
-        if (!m_Initialized || !m_RenderTargetView || !m_DepthStencilView)
+        if (!m_Initialized || !m_RenderTargetView || (m_CreateInfo.EnableDefaultDepth && !m_DepthStencilView))
         {
             error = "D3D11 backend is not ready";
             return false;
@@ -206,7 +206,7 @@ namespace NcmaEngine::Rhi
         ID3D11RenderTargetView* renderTargets[]{m_RenderTargetView.Get()};
         m_DeviceContext->OMSetRenderTargets(1, renderTargets, m_DepthStencilView.Get());
         m_DeviceContext->ClearRenderTargetView(m_RenderTargetView.Get(), m_ClearColor);
-        m_DeviceContext->ClearDepthStencilView(m_DepthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0F, 0);
+        if (m_DepthStencilView) m_DeviceContext->ClearDepthStencilView(m_DepthStencilView.Get(), D3D11_CLEAR_DEPTH, 1.0F, 0);
         error.clear();
         return true;
     }
@@ -840,6 +840,7 @@ namespace NcmaEngine::Rhi
             error = HResultError("ID3D11Device::CreateRenderTargetView", result);
             return false;
         }
+        if (!m_CreateInfo.EnableDefaultDepth) return true;
         D3D11_TEXTURE2D_DESC depthDescription{};
         depthDescription.Width = m_CreateInfo.Width;
         depthDescription.Height = m_CreateInfo.Height;

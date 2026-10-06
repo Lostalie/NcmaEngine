@@ -7,7 +7,6 @@
 #include "physics/runtime/PhysicsWorld2D.h"
 #include "physics/runtime/PhysicsWorld3D.h"
 #include "script/runtime/ScriptRuntimeRegistry.h"
-#include "ui/UiDocument.h"
 
 #include <cassert>
 #include <cmath>
@@ -195,13 +194,6 @@ int main()
     assert(renderGraph.Compile(error));
     assert(renderGraph.Execute(error));
     assert((executedPasses == std::vector<std::string>{"Geometry", "ToneMap"}));
-
-    UI::UiDocument ui;
-    const auto frame = ui.CreateNode("HUD", UI::UiNodeKind::Frame);
-    assert(ui.CreateNode("Score", UI::UiNodeKind::Text, frame) != 0);
-    ui.SetToken({"color.brand.primary", "color", "#6750A4"});
-    assert(ui.GetNodes().size() == 2);
-    assert(ui.GetTokens().size() == 1);
 
     Physics::PhysicsWorld2D physics2D;
     const auto body2D = physics2D.CreateBox(Vector2(0.0F, 4.0F), Vector2(0.5F, 0.5F), true);

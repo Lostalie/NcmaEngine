@@ -100,7 +100,7 @@ Build.bat -Configuration Debug
 
 ## 8. 明确不属于 M1 的内容
 
-C# Editor/Player 主入口与完整 ImGui 面板迁移属于 M2；资产数据库、持久化 FBX 角色与 GPU 蒙皮属于 M3；动作角色控制/完整物理协作属于 M4；Figma 式 UI 属于 M5；动画图编辑属于 M6；完整 Vulkan 渲染属于 M7；Python 推理通信与受约束源码扩展属于 M8。
+C# Editor/Player 主入口与完整 ImGui 面板迁移属于 M2；资产数据库、持久化 FBX 角色与 GPU 蒙皮属于 M3；动作角色控制/完整物理协作属于 M4；UI制作与运行时HUD属于 M5，编辑器视觉采用[用户图1](EDITOR_INTERFACE_REFERENCE.md)；动画图编辑属于 M6；完整 Vulkan 渲染属于 M7；Python 推理通信与受约束源码扩展属于 M8。
 
 M1 为这些系统留下固定步 System、只读视图、稳定 UUID、共享文档命令和能力注册边界，不使用预留接口冒充已经交付的功能。
 

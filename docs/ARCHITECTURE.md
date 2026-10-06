@@ -188,13 +188,15 @@ M4.5候选固定步顺序（Animator图/AI传输未实现）：
 C#候选Transform/Health与命中事件 → 托管提交 → committed动作/根时钟 → 姿态/GPU渲染数据。
 根运动提出位移，CharacterMotor 经过碰撞后决定最终位置，不由多个系统同时写 Transform。
 
-## 6. 编辑器与类 Figma UI
+## 6. 编辑器参考图与独立UI
 
-当前编辑器：C++ + GLFW + ImGui，包含对象列表、Inspector、视口、资产分类、Console、
-Play 控制、动作实验室与 FBX 窗口，场景修改使用快照 Undo/Redo。
-正式入口仍是 C++ 对照；候选 C# 编辑器业务已迁移（M2.5），平台/GUI/DX11 仍薄 C++ 插件。
-候选含共享场景命令/历史、Inspector 草稿、Play/脚本/MCP、独立 FBX/动作预览、本机偏好/文件选择/快捷键和有界 Console。
-固定工作区的侧栏宽度/工具栏高度可保存；自由 docking、多场景文档与类 Figma 制作未实现。
+当前编辑器：C# Ncma.Editor.App正式入口 + 原生GLFW/ImGui/GPU插件，包含对象列表、Inspector、
+视口、资产分类、Console、Play控制、动作实验室、FBX窗口及已实现的有界诊断/审批检查。
+C#持有共享场景命令/唯一历史、Inspector草稿、Play/脚本/MCP和本机偏好；旧C++ Editor及专属桥已移除。
+固定工作区的侧栏宽度/工具栏高度可保存；自由docking、多场景文档和完整UI制作未实现。
+新的视觉与工作区参考采用[用户图1](EDITOR_INTERFACE_REFERENCE.md)：深蓝主题、顶部模块工具栏、
+左侧扁平对象列表、主视口、Inspector、可折叠AI/工具侧栏及底部资产/Console。
+保留NcmaEngine品牌，不采用图中的Node场景树、不将图片中的AI/Vulkan/性能数据当作实现证据。
 H5 自动回归与人工未验项见 [当前交付](M2_5_H5_DELIVERY_REPORT.md)，默认入口已切换，但 H5 人工验收仍待完成。
 
 目标 C# Editor services：资产/场景文档、Selection、Inspector schema、命令/事务、
@@ -204,10 +206,14 @@ UI 单独使用 UiDocument，不采用场景 GameObject 的父子树：
 
 | 能力 | 当前状态 |
 |---|---|
-| Frame/Group/Rectangle/Text/Image、布局/样式与 Design Token 数据模型 | 已实现基础类型 |
-| 类 Figma 画布、选择/拖拽/缩放/对齐、Auto Layout 求解 | 未实现 |
-| UI 组件实例/覆盖、持久化、运行时布局/绘制/事件 | 未实现；声明类型不是完整实现 |
-| UI 编辑 Undo/事务与 Agent 操作 | 未实现完整链路 |
+| C# UiDocument/Frame/Group/Rectangle/Text/Image/基础控件、样式与类型化Token | M5.1–M5.6自动候选；旧C++ UI模型已删除，严格.ncmaui v1与复制身份 |
+| Free/横/纵、Fixed/Hug/Fill、DPI/安全区/裁剪/缓存布局 | M5.3自动候选；与预览/运行时共享，旋转裁剪明确拒绝 |
+| DX11驻留UI批次、图片/透明/圆角、字体数值与控件事件 | M5.4–M5.6实际像素/生命周期/缓存候选；不是glyph atlas、完整IME或Vulkan |
+| UI文件持久化、精确授权与Undo | M5.2复用Assets.Authoring日志和Editor.Core唯一历史；正式画布/Agent工具接线仍待后续阶段 |
+| UI制作画布、选择/拖拽/缩放/对齐与参考图工作区 | M5.7未实现；视觉/工作区依据用户图1 |
+| UI组件实例/覆盖、项目Player HUD加载与裁剪发布 | 未实现；自动候选不关闭M5完整门禁 |
+
+契约、样例和开放项见[M5.1至M5.6方案](M5_1_6_IMPLEMENTATION_PLAN.md)与[交付记录](M5_1_6_DELIVERY_REPORT.md)。C#拥有布局/权限/文本缓存/控件策略，Renderer query6和独立NcmaText仅执行数值；原生ImGui仍是编辑器表现，不是游戏UI。
 
 ## 7. 可选 Python 特殊模块与插件
 
@@ -290,7 +296,7 @@ AI 的分域权限、能力状态与闭环见 [AI_DEVELOPMENT.md](AI_DEVELOPMENT
 |---|---|
 | ProwlEngine / Unity | C# 组合式对象、编辑器与资产工作流 |
 | Unreal Engine 5 | 动作动画、状态机、Root Motion、通知与节点编辑 |
-| Figma | UI 文档与编辑交互 |
+| [用户图1](EDITOR_INTERFACE_REFERENCE.md) | 编辑器视觉和工作区布局，不采用图中场景树/品牌/能力声明 |
 | Infernux | 独立 Python 模块/工具分层 |
 
 Godot、Piccolo、Hazel 不作为框架参考。参考不等于运行依赖、资产兼容或对应功能已实现。

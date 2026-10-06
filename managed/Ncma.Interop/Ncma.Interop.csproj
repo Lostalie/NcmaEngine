@@ -9,5 +9,6 @@
     <InternalsVisibleTo Include="Ncma.Gui" />
     <InternalsVisibleTo Include="Ncma.Rendering" />
     <InternalsVisibleTo Include="Ncma.Physics" />
+    <InternalsVisibleTo Include="Ncma.Text" />
   </ItemGroup>
 </Project>

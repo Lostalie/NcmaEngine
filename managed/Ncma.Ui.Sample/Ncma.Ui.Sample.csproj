@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors><AssemblyName>NcmaUiSample</AssemblyName></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Ui.Rendering/Ncma.Ui.Rendering.csproj" /></ItemGroup>
+</Project>

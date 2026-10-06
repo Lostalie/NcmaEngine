@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 namespace Ncma.Interop;
-public enum ModuleKind : uint { Platform = 1, Gui = 2, Renderer = 3, Physics = 4, Fixture = 127 }
+public enum ModuleKind : uint { Platform = 1, Gui = 2, Renderer = 3, Physics = 4, Text = 5, Fixture = 127 }
 public enum PluginResult : uint { Ok, AbiMismatch, InvalidArgument, WrongThread, InvalidHandle, BufferTooSmall, UnsupportedFeature, Busy, DeviceLost, ShutdownTimeout, InternalError }
 public sealed class PluginException(string pluginId, string phase, PluginResult result, string message) : InvalidOperationException(message)
 {

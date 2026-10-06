@@ -21,6 +21,7 @@ public sealed class AssetProjectAuthoring : IDisposable
     public AssetFileCommands Files { get; }
     public AssetImportCommands Imports { get; }
     public MaterialCommands Materials { get; }
+    public UiCommands Ui { get; }
     private readonly List<ImportCoordinator> _coordinators = [];
     private AssetScanResult _snapshot = new(new AssetCatalog([]), []);
     public Task GenerationPreparation { get; private set; } = Task.CompletedTask;
@@ -28,13 +29,13 @@ public sealed class AssetProjectAuthoring : IDisposable
     public ulong SnapshotRevision { get { Verify(); return _snapshotRevision; } }
     public AssetScanResult Snapshot { get { Verify(); return new(_snapshot.Catalog, (AssetDiagnostic[])_snapshot.Diagnostics.Clone(),_snapshot.MetadataFiles); } }
     public AssetProjectAuthoring(string root, Guid projectId, ulong generation, EditSession edit, AssetWriteScope scope,
-        Action<string>? faultInjection = null, MaterialWriteScope? materialScope = null)
+        Action<string>? faultInjection = null, MaterialWriteScope? materialScope = null, UiWriteScope? uiScope = null)
     {
         ArgumentNullException.ThrowIfNull(edit); ArgumentNullException.ThrowIfNull(scope);
         if (projectId == Guid.Empty || generation == 0) throw new ArgumentException("Expected project identity/generation.");
         var state = edit.State;
         if (state.UndoCount != 0 || state.RedoCount != 0 || state.Frozen || state.EditBusy || state.HistoryInvalidated ||
-            edit.Describe().Any(d => d.Name is AssetMetadataCommands.CapabilityName or AssetFileCommands.CapabilityName or AssetImportCommands.CapabilityName or MaterialCommands.CapabilityName))
+            edit.Describe().Any(d => d.Name is AssetMetadataCommands.CapabilityName or AssetFileCommands.CapabilityName or AssetImportCommands.CapabilityName or MaterialCommands.CapabilityName or UiCommands.CapabilityName))
             throw new InvalidOperationException("Asset composition requires a fresh idle edit session.");
         _paths = new(root); ProjectId = projectId; Generation = generation;
         _paths.EnsureCacheDirectory("out/asset-authoring");
@@ -49,6 +50,7 @@ public sealed class AssetProjectAuthoring : IDisposable
         var bound = scope.BindCurrent(() => !_disposed);
         Metadata = new(_paths, bound, faultInjection, Clock);
         Materials = new(_paths, (materialScope ?? new MaterialWriteScope([], (_, _) => false, () => false)).Bind(() => !_disposed), Clock, faultInjection);
+        Ui = new(_paths, (uiScope ?? new UiWriteScope([], (_, _) => false, () => false)).Bind(() => !_disposed), Clock, faultInjection);
         _changes = new(projectId, generation);
         try
         {
@@ -60,6 +62,7 @@ public sealed class AssetProjectAuthoring : IDisposable
             edit.RegisterCommandParticipant(AssetFileCommands.Descriptor, Files);
             edit.RegisterCommandParticipant(AssetImportCommands.Descriptor, Imports);
             edit.RegisterCommandParticipant(MaterialCommands.Descriptor, Materials);
+            edit.RegisterCommandParticipant(UiCommands.Descriptor, Ui);
             _changes.Start(_paths);
             GenerationPreparation = Imports.PrepareStoredGenerationsAsync(Records());
         }
@@ -81,12 +84,14 @@ public sealed class AssetProjectAuthoring : IDisposable
                 if (Directory.Exists(entry)) queue.Enqueue(relative + "/.probe");
                 else if (relative.EndsWith(".ncmeta.journal", StringComparison.Ordinal)) journals.Add(relative);
                 else if (relative.EndsWith(".ncmaterial.journal", StringComparison.Ordinal) || relative.EndsWith(".ncmatset.journal", StringComparison.Ordinal)) journals.Add(relative);
+                else if (relative.EndsWith(".ncmaui.journal", StringComparison.Ordinal)) journals.Add(relative);
             }
         }
         foreach (string journal in journals.Order(StringComparer.Ordinal))
         {
             string metadata = journal[..^8];
             if (MaterialCommands.IsPath(metadata)) { Materials.Recover(metadata); continue; }
+            if (metadata.EndsWith(".ncmaui", StringComparison.Ordinal)) { Ui.Recover(metadata); continue; }
             // The bounded journal's memento determines participant kind; authorize before touching any target.
             using var lease = new AssetDirectoryLease(_paths, [journal]);
             using var file = WindowsAssetFile.Open(_paths.Resolve(journal));
@@ -145,7 +150,7 @@ public sealed class AssetProjectAuthoring : IDisposable
     {
         if (_thread != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Asset project requires owner thread.");
         if (_disposed) return; _disposed = true;
-        _changes.Dispose(); foreach (var coordinator in _coordinators) coordinator.Dispose(); Imports?.Dispose(); Metadata.Dispose(); Materials.Dispose(); Files?.Dispose();
+        _changes.Dispose(); foreach (var coordinator in _coordinators) coordinator.Dispose(); Imports?.Dispose(); Metadata.Dispose(); Materials.Dispose(); Ui.Dispose(); Files?.Dispose();
         var completion = Task.WhenAll(_coordinators.Select(c => c.Completion).Append(Imports?.Completion ?? Task.CompletedTask));
         _completion = completion.ContinueWith(_ => { _lock.Dispose(); _lockParents.Dispose(); }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
