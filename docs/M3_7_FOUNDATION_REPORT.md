@@ -27,6 +27,8 @@ Scene 测试覆盖严格格式/未知组件/绑定、范围/陈旧/线程/回调
 
 ## 未实现与下一步
 
+后续 M3.8 已复现并修复上述直接 apphost 的长prepared路径失败，证据见 [修复记录](M3_8_UI_AUTHORIZATION_REPORT.md)。这不关闭本阶段其他G7缺口。
+
 1. 完成 A 的受控 `.ncprefab` 文件/资产发布与读回，关联唯一 EditSession participant/journal，不能自行加独立文件 Undo。
 2. B：membership 值组件、完整实例/OverrideSet 身份、精确创建/组件/绑定范围及资源代数租约预检，文件与 scene 一次原子发布/选择，失败无部分实例。当前仅 detached preview；单对象删除测试仅证明普通扁平 World 不递归，不冒充已发布 Prefab 删除验收。
 3. C：登记字段覆盖、revert/apply、三方同步/冲突、普通 scene-only v2 的 `requires_project_transaction` 防越权、明确 destructive UUID 范围。

@@ -35,8 +35,8 @@ public sealed class EditorAuthorizationController(EditorWorkspace workspace)
             throw new EditRejectedException("stale_authorization_view");
         return endpoint;
     }
-    public void Pair(AuthorizationPage page, Guid connection, bool approved) => Current(page).Pair(connection, approved);
-    public void Revoke(AuthorizationPage page, Guid connection) => Current(page).Revoke(connection);
+    public void Pair(AuthorizationPage page, Guid connection, bool approved) { Current(page).Pair(connection, approved); workspace.Owner.AssetInspections?.Revoke(); }
+    public void Revoke(AuthorizationPage page, Guid connection) { Current(page).Revoke(connection); workspace.Owner.AssetInspections?.Revoke(); }
     public void Approve(AuthorizationPage page, Guid proposalId, string displayedFingerprint, bool allowHistory, Guid? confirmedDelete)
     {
         var endpoint = Current(page);

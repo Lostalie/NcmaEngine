@@ -96,6 +96,23 @@ Guid Prepare(AssetProjectAuthoring project, ImportCoordinator c, AssetRecord rec
 }
 var tests = new (string Name, Action Run)[]
 {
+    ("Derived generation long prepared paths publish/reopen without process MAX_PATH opt-in", () => {
+        string longRoot = Path.Combine(repository, "out/verification/m3-8/long-file", Guid.NewGuid().ToString("N"), new string('p', 48));
+        Directory.CreateDirectory(Path.Combine(longRoot, "assets"));
+        Guid id = Guid.NewGuid(), projectId = Guid.NewGuid(); ImportedModel model;
+        using (var kernel = new ImportKernel(kernelPath, HashFile(kernelPath))) model = kernel.LoadAndCopy(staticFixture, 30, staticOnly: true);
+        var plan = ModelImportPlanner.Build(model, Record(id, HashFile(staticFixture), true), projectId, true);
+        string full = Path.Combine(longRoot, plan.Record.Generation!.RelativePath); int preparedLength = 0;
+        using (var store = new DerivedGenerationStore(new(longRoot), projectId)) {
+            store.Prepare(plan.Record, plan.DerivedBytes, fault: phase => {
+                if (phase == "generation_written") preparedLength = Directory.EnumerateFiles(Path.GetDirectoryName(full)!).Single(p => p.EndsWith(".prepared", StringComparison.Ordinal)).Length;
+            });
+            Check(preparedLength > 260 && File.Exists(full)); store.RequirePinned(plan.Record);
+            ModelAssetManifestCodec.ValidateBundle(File.ReadAllBytes(full), plan.Record);
+        }
+        using (var reopened = new DerivedGenerationStore(new(longRoot), projectId)) { reopened.Prepare(plan.Record, null); reopened.RequirePinned(plan.Record); }
+        Check(File.Exists(full) && !Directory.EnumerateFiles(Path.GetDirectoryName(full)!).Any(p => p.EndsWith(".prepared", StringComparison.Ordinal)));
+    }),
     ("Static centimetre asymmetric fixture bakes transforms, UV and tangents; character remains strict", () => {
         using (var strict = new ImportKernel(kernelPath, HashFile(kernelPath))) Reject(() => strict.LoadAndCopy(staticFixture, 30));
         ImportedModel raw; using (var kernel = new ImportKernel(kernelPath, HashFile(kernelPath))) raw = kernel.LoadAndCopy(staticFixture, 30, staticOnly: true);

@@ -3,6 +3,8 @@
 日期：2026-10-06。基线：`c6a7e3aa0f53242494cbabdaf0412f0954207aff`。
 状态：只读切片已实现，最终顺序 Debug/Release 完整回归通过。不是完整 M3.8；G7/G8 保持开放。
 
+后续更新：正式资产只读UI授权与已知直接运行长路径失败的修复见 [后续交付](M3_8_UI_AUTHORIZATION_REPORT.md)。本文件记录前一checkpoint范围，下文“尚未接UI/失败未定位”为当时状态，不覆盖后续证据。
+
 ## 本轮范围
 
 配置 Assets 的正式 C# Editor 注册 `ncma.assets.list`、`ncma.assets.inspect`、`ncma.assets.validate`，通过已有 capability v2、owner IPC pump 和真实 MCP stdio server 动态发现/调用。不开新协议、不改原 scene revision 的语义、不引入 Python 执行/AI 推理。

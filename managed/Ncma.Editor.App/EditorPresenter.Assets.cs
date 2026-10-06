@@ -32,6 +32,7 @@ internal sealed unsafe partial class EditorPresenter
         }
         Add(GuiItemKind.Label,3,labelId++,$"Assets / revision {revision} / exact local grants {_assetWorkflow.ApprovalCount}");
         var retained=_assetWorkflow.RetainedUsage;
+        BuildAssetReadAuthorization(ref labelId,writable);
         Add(GuiItemKind.Label,3,labelId++,$"Generation pins {retained.Count}/128 / retained {retained.Bytes}/1073741824 bytes; history Undo {workspace.Owner.Edit!.State.UndoCount}/64 / Redo {workspace.Owner.Edit.State.RedoCount}");
         _assetOffset=Math.Clamp(_assetOffset,0,Math.Max(0,(_assetWorkflow.Count-1)/16*16));
         Add(GuiItemKind.Button,17,1,"Previous assets",new("asset_previous"),enabled:_assetOffset>0);Line();
@@ -41,6 +42,7 @@ internal sealed unsafe partial class EditorPresenter
                 (_selectedAsset?.AssetId==row.Id?"> ":"")+row.Kind+" / "+System.IO.Path.GetFileName(row.Source),new("asset_select",row.Id,Index:(int)row.Kind),
                 value:row.Id.ToString("D"));
             Add(GuiItemKind.Label,3,labelId++,$"{row.Id:D} / g{row.Generation} / children {row.Subassets} / dependencies {row.Dependencies}");
+            AssetReadSelector(row.Id,row.Kind.ToString(),writable);
         }
         Add(GuiItemKind.Text,17,3,"Project FBX (assets/ relative)",new("asset_source"),value:_assetSource,enabled:writable);
         Add(GuiItemKind.Number,17,4,"Samples/sec",new("asset_rate"),number:_assetRate,min:1,max:120,enabled:writable);
@@ -88,6 +90,7 @@ internal sealed unsafe partial class EditorPresenter
             Add(GuiItemKind.Button,17,22,"Next subassets",new("asset_sub_next"),enabled:_subassetOffset+16<selected.Subassets.Length);
             foreach(var sub in selected.Subassets.Skip(_subassetOffset).Take(16)) {
                 Add(GuiItemKind.Label,3,labelId++,$"{sub.Kind} {sub.Name} / {sub.AssetId:D}{(sub.Tombstone?" / tombstone":"")}");
+                AssetReadSelector(sub.AssetId,sub.Kind.ToString(),writable);
                 if(sub.Kind is AssetKind.StaticMesh or AssetKind.SkinnedMesh or AssetKind.MaterialSet or AssetKind.Clip)
                     Add(GuiItemKind.Button,18,AssetWidget(sub.AssetId),"Assign to selected object",new("asset_assign",sub.AssetId,Index:(int)sub.Kind),enabled:writable&&!sub.Tombstone&&_page!.Selected is not null);
             }
@@ -101,7 +104,9 @@ internal sealed unsafe partial class EditorPresenter
     {
         if(!action.Kind.StartsWith("asset_",StringComparison.Ordinal))return false;
         if(_assetWorkflow is null)throw new InvalidOperationException("Asset browser not configured.");
+        if(action.Kind is "asset_read_revoke" or "asset_read_clear")return ApplyAssetReadAction(action,value);
         if(_assetRevision!=workspace.Owner.Assets!.Clock.Revision)throw new InvalidOperationException("stale_asset_view");
+        if(ApplyAssetReadAction(action,value))return true;
         switch(action.Kind) {
             case "asset_previous":_assetOffset=Math.Max(0,_assetOffset-16);break;
             case "asset_next":_assetOffset+=16;break;

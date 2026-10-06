@@ -22,7 +22,7 @@ internal sealed class WindowsAssetFile : IDisposable
     public static WindowsAssetFile Open(string path, bool directory = false, bool create = false)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Authoring file transactions currently require Windows.");
-        var handle = CreateFileW(path, directory ? 0 : 0x80010000u | (create ? 0x40000000u : 0),
+        var handle = CreateFileW(NativePath(path), directory ? 0 : 0x80010000u | (create ? 0x40000000u : 0),
             directory ? 3u : 1u, IntPtr.Zero, create ? 1u : 3u, 0x00200000u | (directory ? 0x02000000u : 0), IntPtr.Zero);
         if (handle.IsInvalid) { handle.Dispose(); Fail(); }
         return new(handle, directory);
@@ -32,7 +32,7 @@ internal sealed class WindowsAssetFile : IDisposable
     public static WindowsAssetFile OpenReadLease(string path)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
-        var handle = CreateFileW(path, 0x80000000u, 1u, IntPtr.Zero, 3u, 0x00200000u, IntPtr.Zero);
+        var handle = CreateFileW(NativePath(path), 0x80000000u, 1u, IntPtr.Zero, 3u, 0x00200000u, IntPtr.Zero);
         if (handle.IsInvalid) { handle.Dispose(); Fail(); }
         return new(handle, directory: false);
     }
@@ -76,7 +76,7 @@ internal sealed class WindowsAssetFile : IDisposable
     {
         // FILE_RENAME_INFO: DWORD union, aligned HANDLE, DWORD byte length, WCHAR[]; never replace an occupant.
         int rootOffset = IntPtr.Size == 8 ? 8 : 4, lengthOffset = rootOffset + IntPtr.Size, nameOffset = lengthOffset + 4;
-        byte[] name = System.Text.Encoding.Unicode.GetBytes(Path.GetFullPath(destination));
+        byte[] name = System.Text.Encoding.Unicode.GetBytes(NativePath(destination));
         byte[] buffer = new byte[nameOffset + name.Length + 2];
         BitConverter.GetBytes(name.Length).CopyTo(buffer, lengthOffset); name.CopyTo(buffer, nameOffset);
         SetInfo(3, buffer);
@@ -90,6 +90,16 @@ internal sealed class WindowsAssetFile : IDisposable
     }
     private void Flush() { if (!FlushFileBuffers(_handle)) Fail(); }
     public void Dispose() => _handle.Dispose();
+    // These are already validated private storage paths. Explicit extended-length addressing keeps
+    // CreateFile/rename independent of whether the calling dotnet/apphost manifest opts into MAX_PATH.
+    // Do not shorten paths, change UUID/hash identities, or weaken parent/reparse validation.
+    private static string NativePath(string path)
+    {
+        string full = Path.GetFullPath(path);
+        if (full.StartsWith(@"\\.\", StringComparison.Ordinal)) throw new ArgumentException("Device paths are not asset files.");
+        if (full.StartsWith(@"\\?\", StringComparison.Ordinal)) return full;
+        return full.StartsWith(@"\\", StringComparison.Ordinal) ? @"\\?\UNC\" + full[2..] : @"\\?\" + full;
+    }
     private static void Fail() => throw new IOException("Asset file operation failed.", new Win32Exception(Marshal.GetLastWin32Error()));
     [StructLayout(LayoutKind.Sequential)]
     private struct FileInfo

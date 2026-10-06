@@ -115,6 +115,7 @@ public sealed class EditorSessionOwner : IDisposable
         var candidate = enabled ? new EditorEndpoint(_edit, projectRoot) : null;
         try { _endpoint?.Dispose(); } catch { candidate?.Dispose(); throw; }
         _endpoint = candidate;
+        _assetInspections?.Revoke(); // A replacement endpoint never inherits old asset-read approval.
     }
     public int LoadGameplay(string path)
     {

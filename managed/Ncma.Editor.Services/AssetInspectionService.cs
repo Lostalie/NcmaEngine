@@ -6,6 +6,7 @@ namespace Ncma.Editor.Services;
 
 public sealed record AssetReadRow(Guid AssetId, string Kind, string Name, string State);
 public sealed record AssetReadDiagnostic(string Code, Guid AssetId, string Field, string Severity);
+public sealed record AssetReadGrantView(Guid[] AssetIds, int RemainingSeconds);
 
 // Trusted local composition. A grant exposes sanitized metadata to paired clients, NOT file access.
 // Publish is outside the endpoint pump: inspection never scans, hashes, parses assets or waits for IO.
@@ -24,6 +25,7 @@ public sealed class AssetInspectionService
     private ulong _revision, _grantGeneration;
     private long _grantTime;
     private bool _published;
+    private Func<bool>? _audienceCurrent;
     public Guid ProjectId { get; }
     public ulong ProjectGeneration { get; }
     public ulong PublishedRevision { get { Verify(); return _revision; } }
@@ -46,7 +48,7 @@ public sealed class AssetInspectionService
     public void Publish(AssetCatalog catalog, AssetDiagnostic[] diagnostics, ulong revision)
     {
         Verify(); ArgumentNullException.ThrowIfNull(catalog); ArgumentNullException.ThrowIfNull(diagnostics);
-        if (!_current()) throw new EditCommandRejectedException("asset_snapshot_stale");
+        if (!_current()) { Revoke(); throw new EditCommandRejectedException("asset_snapshot_stale"); }
         var versions = _revisions();
         if (revision > MaxRevision || revision != versions.Clock || revision != versions.Snapshot || diagnostics.Length > 16384)
             throw new EditCommandRejectedException("asset_snapshot_stale");
@@ -67,25 +69,51 @@ public sealed class AssetInspectionService
         if (changed) Revoke();
     }
     // No request JSON or Agent tool can approve itself. Host must review exact root AND subasset UUIDs.
-    public void ApproveForPairedClients(Guid[] exactIds)
+    public void ApproveForPairedClients(Guid[] exactIds, Func<bool>? audienceCurrent = null)
     {
         Verify(); ArgumentNullException.ThrowIfNull(exactIds); RequireSnapshot();
         var state = _edit.State;
         if (state.Frozen || state.EditBusy || state.HistoryInvalidated || exactIds.Length is < 1 or > 64 ||
             exactIds.Distinct().Count() != exactIds.Length || exactIds.Any(id => id == Guid.Empty || !_entries.ContainsKey(id)))
             throw new EditRejectedException("asset_read_scope_invalid");
-        _approved = new(exactIds); _grantGeneration = _edit.DocumentGeneration; _grantTime = _time.GetTimestamp();
+        if (audienceCurrent is not null && !audienceCurrent()) throw new EditRejectedException("asset_read_scope_invalid");
+        _approved = new(exactIds); _grantGeneration = _edit.DocumentGeneration; _grantTime = _time.GetTimestamp(); _audienceCurrent = audienceCurrent;
     }
-    public void Revoke() { Verify(); _approved = []; }
+    public void Revoke() { Verify(); _approved = []; _audienceCurrent = null; }
+    // Trusted UI cache only. No source filenames or inherited child approval.
+    public AssetReadRow[] ReviewRows(Guid[] exactIds)
+    {
+        Verify(); ArgumentNullException.ThrowIfNull(exactIds); RequireSnapshot();
+        if (exactIds.Length is < 1 or > 64 || exactIds.Distinct().Count() != exactIds.Length || exactIds.Any(id => !_entries.ContainsKey(id)))
+            throw new EditRejectedException("asset_read_scope_invalid");
+        return exactIds.Order().Select(id => _entries[id].Row).ToArray();
+    }
+    public AssetReadGrantView Grant
+    {
+        get {
+            Verify(); if (!GrantActive()) return new([], 0);
+            return new(_approved.Order().ToArray(), (int)Math.Ceiling((TimeSpan.FromSeconds(60) - _time.GetElapsedTime(_grantTime, _time.GetTimestamp())).TotalSeconds));
+        }
+    }
+    private bool GrantActive()
+    {
+        if (_approved.Count == 0) return false;
+        bool active;
+        try { var versions = _revisions(); active = _current() && versions.Clock == _revision && versions.Snapshot == _revision &&
+            _grantGeneration == _edit.DocumentGeneration && _time.GetElapsedTime(_grantTime, _time.GetTimestamp()) < TimeSpan.FromSeconds(60) &&
+            (_audienceCurrent?.Invoke() ?? true); }
+        catch (Exception e) when (e is not OutOfMemoryException) { active = false; }
+        if (!active) Revoke(); // Once observed invalid, a disconnected/re-paired audience cannot revive a grant.
+        return active;
+    }
     private void RequireSnapshot()
     {
-        if (!_current()) throw new EditCommandRejectedException("asset_snapshot_stale");
+        if (!_current()) { Revoke(); throw new EditCommandRejectedException("asset_snapshot_stale"); }
         var versions = _revisions();
         if (!_published || versions.Clock != _revision || versions.Snapshot != _revision)
-            throw new EditCommandRejectedException("asset_snapshot_stale");
+        { Revoke(); throw new EditCommandRejectedException("asset_snapshot_stale"); }
     }
-    private bool Visible(Guid id) => _approved.Contains(id) && _grantGeneration == _edit.DocumentGeneration &&
-        _time.GetElapsedTime(_grantTime, _time.GetTimestamp()) < TimeSpan.FromSeconds(60);
+    private bool Visible(Guid id) => _approved.Contains(id); // Grant checked once at the owner query boundary, before enumeration.
     private static string Kind(AssetKind kind) => JsonNamingPolicy.CamelCase.ConvertName(kind.ToString());
     private static AssetReadRow Row(Guid id, AssetKind kind, string state) => new(id, Kind(kind), Kind(kind) + " " + id.ToString("D")[..8], state);
     private object InspectSafely(string name, JsonElement input)
@@ -98,6 +126,7 @@ public sealed class AssetInspectionService
     private object Inspect(string name, JsonElement input)
     {
         Verify(); RequireSnapshot();
+        _ = GrantActive();
         bool list = name == "ncma.assets.list", validate = name == "ncma.assets.validate";
         string[] allowed = list ? ["kind", "offset", "limit"] : validate ? ["assetId", "offset", "limit"] : ["assetId", "section", "offset", "limit"];
         if (input.ValueKind != JsonValueKind.Object || input.EnumerateObject().Any(p => !allowed.Contains(p.Name))) Bad();

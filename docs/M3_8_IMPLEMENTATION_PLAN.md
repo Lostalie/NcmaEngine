@@ -1,6 +1,6 @@
 # M3.8 资产与 Prefab 的 MCP 能力方案
 
-日期：2026-10-05，更新：2026-10-06。状态：已按用户要求实现只读候选（assets.list/inspect/validate），最终顺序 Debug/Release 完整回归通过；导入任务/提交、删除、Prefab MCP 与人工闭环未实现，G8 开放。原依赖 G7 与 M1 已有 scoped endpoint；当前 G7 尚开放，不借用户提前开始的授权关闭前置验收。见 [只读候选记录](M3_8_READONLY_REPORT.md)。
+日期：2026-10-05，更新：2026-10-06。状态：只读候选（assets.list/inspect/validate）已补正式UI精确UUID/已配对客户端集合审核、60秒授权和撤权，并修复直接apphost的长prepared路径失败；测试进展见 [UI授权交付记录](M3_8_UI_AUTHORIZATION_REPORT.md)。导入任务/提交、删除、Prefab MCP 与修改人工闭环未实现，G8 开放。原依赖 G7 与 M1 已有 scoped endpoint；当前 G7 尚开放，不借用户提前开始的授权关闭前置验收。前一切片见 [只读候选记录](M3_8_READONLY_REPORT.md)。
 目标是 Agent 使用语义资产/实例命令参与开发，不通过鼠标模拟、任意 Python、shell 或磁盘路径绕过编辑器。
 AI 推理/运输 worker 仍属 M8；本阶段是引擎可被 Agent 检查与获批修改的 MCP 契约。
 
