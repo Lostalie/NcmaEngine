@@ -260,11 +260,12 @@ var cases = new (string, Action)[]
     })
 };
 int failures = 0;
-foreach (var (name, run) in cases) {
+var allCases=cases.Concat(PrefabTests.Cases()).ToArray();
+foreach (var (name, run) in allCases) {
     try { run(); Console.WriteLine("PASS " + name); }
     catch (Exception e) { failures++; Console.Error.WriteLine("FAIL " + name + ": " + e); }
 }
-Console.WriteLine($"Scene document: {cases.Length - failures}/{cases.Length} passed.");
+Console.WriteLine($"Scene document: {allCases.Length - failures}/{allCases.Length} passed.");
 return failures == 0 ? 0 : 1;
 readonly record struct Health(int Points) : IComponent;
 readonly record struct Label(string Value) : IComponent;

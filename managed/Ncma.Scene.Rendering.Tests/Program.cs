@@ -105,6 +105,8 @@ internal static partial class Program
             ("skin-requires-prepared-gpu-session", () => { var d = Document(); var o = d.World.CreateObject("Skin"); o.Set(new SkinnedMeshData(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), SetId, true, true, 1)); var v = new RenderSceneExtractor(d.World).Extract(Assets, Guid.Empty, 800, 600); Check(v.Geometry.Count == 0 && v.Diagnostics.Any(x => x.Code == "skinning_unprepared")); })
         };
         RegisterAssetTests(tests);
+        tests.Add(("M3.7-A explicit character/rig/mesh/material/clip template references",PrefabRenderReferences));
+        tests.Add(("M3.7-A render template composition preflight preserves source",PrefabRenderComposition));
         foreach (int count in new[] { 1, 256, 4096 }) tests.Add(($"bounded-{count}-instances", () => BatchTest(count)));
         int passed = 0;
         foreach (var (name, run) in tests)

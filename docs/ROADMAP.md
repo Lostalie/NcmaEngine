@@ -5,7 +5,7 @@
 人工 UI/MCP、自包含、完整性能/一小时长稳和剩余旧策略审查仍待完成；M2/H8 不标记完成。
 本更新覆盖下文旧“必须保留 C++ 默认入口”的阶段限制，证据见 [最新交付](M2_8_DELIVERY_REPORT.md)。
 
-更新日期：2026-10-06（M3.6 候选）。依据当前代码与已确认的架构决策整理；不以预览、接口声明或模型骨架代替完整功能。
+更新日期：2026-10-06（M3.7 只读基础候选）。依据当前代码与已确认的架构决策整理；不以预览、接口声明或模型骨架代替完整功能。
 
 状态说明：“已实现基础”表示有代码与对应测试；“部分实现”表示尚未形成可用于游戏制作的完整流程；“未实现”表示仍是计划。下列阶段是推荐开发顺序，不是工期承诺。
 
@@ -32,7 +32,7 @@
 | C# 游戏脚本 | 部分实现：生命周期/Export/隔离 Play、M1.3 PlaySession 固定步/输入/插值/运行命令/信号原子性/重载预检、只读 OnUpdate、暂停/单步/故障 | 动作角色/完整属性类型、低分配优化；私有状态迁移未实现 |
 | 场景文档与 Undo | M1.1/M1.2 完整 SceneDocument/唯一历史/事务/Play 隔离；M3 typed UUID 引用与文件事务；唯一 .ncmascene JSON v1 | 完整资产面板/Prefab/cook |
 | 编辑器与命令服务 | C# 主入口/业务与原生 ImGui 呈现插件；Editor.Core 事务/权限/版本/幂等/草稿；原生旧入口/桥已移除 | 完整资产/材质/动画 Inspector 与第三方客户端人工验收 |
-| 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC；M3.6候选浏览/本地审批/导入/放置与类型选择 | 缩略图/独立材质浏览、完整资产 MCP、Prefab、cook、G6人工 |
+| 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC；M3.6候选浏览/本地审批/导入/放置与类型选择；M3.7严格 Prefab 格式/只读提取与放置预检候选 | 缩略图/独立材质浏览、完整资产 MCP、Prefab 保存/实例发布/覆盖/恢复、cook、G6/G7验收 |
 | D3D11 / PBR / 软阴影 | 部分实现：reference GGX/HDR/CSM/PCF/PCSS/contact；G3 资源/纹理/材质/typed Graph，G4 正式静态 Scene/Editor/Player 主画面/单方向光 shadow/HDR，G5 DX11 GPU 动画蒙皮共享主画面/阴影；M3.6候选GUI离屏合成 | 通用多阶段资源图、IBL/透明/多光、场景 CSM/contact、生产级联合验收、G6人工 |
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
 | 物理 | M2.6 薄 Box2D/Jolt 求解插件与独立 C# PhysicsService/Simulation、快照/诊断 | M4 场景同步/跨域提交策略/碰撞事件/角色控制器/Root Motion；Play 未派发 Physics Step |
@@ -127,7 +127,7 @@ H7 前候选程序不覆盖 out/bin 默认入口；H8 前不把 M2 标为完成�
 
 验收：导入 → 保存 → 重启 → 场景实例 → 动画播放完整打通；重新导入身份稳定；CPU/GPU 蒙皮误差有证据；材质缺失有诊断；失败/取消不破坏原资产和场景。
 
-2026-10-06：M3.1–M3.3 完整双配置通过，G1/G2/G3 关闭；M3.4 静态 Scene/Editor/Player 与阴影/HDR、G4 关闭，见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 正式 NCA 场景角色、最小 ClipPlayback/committed 时钟、DX11 compute 蒙皮与共享阴影完整双配置通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。M3.6 候选增加本地 FBX 导入/放置/同一历史、GUI1.3离屏视口、保守选取/独立浏览相机和Edit scrub；缩略图/独立材质浏览/人工窗口项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)。M3.7–M3.9 未实现；不是整个 M3、Animator 或完整后端完成，M2 人工/自包含/长稳门禁不因此关闭。
+2026-10-06：M3.1–M3.3 完整双配置通过，G1/G2/G3 关闭；M3.4 静态 Scene/Editor/Player 与阴影/HDR、G4 关闭，见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 正式 NCA 场景角色、最小 ClipPlayback/committed 时钟、DX11 compute 蒙皮与共享阴影完整双配置通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。M3.6 候选增加本地 FBX 导入/放置/同一历史、GUI1.3离屏视口、保守选取/独立浏览相机和Edit scrub；缩略图/独立材质浏览/人工窗口项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)。M3.7 已按用户要求推进严格格式、只读提取/放置预检候选，实例发布/覆盖/恢复未实现、G7开放，见 [候选记录](M3_7_FOUNDATION_REPORT.md)；M3.8–M3.9 未实现。不是整个 M3、Animator 或完整后端完成，M2 人工/自包含/长稳门禁不因此关闭。
 
 | 小阶段 | 详细方案 |
 | --- | --- |

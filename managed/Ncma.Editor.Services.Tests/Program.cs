@@ -93,7 +93,7 @@ static WeakReference CurrentCatalogContext(Ncma.Scripting.ScriptCatalogService c
     var instance=catalog.Instantiate(binding);
     return new(System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(instance.GetType().Assembly)!);
 }
-var cases = new (string, Action)[] {
+var cases = EditorPrefabTests.Cases().Concat(new (string, Action)[] {
     ("Direct catalog exported values, candidate ownership and failed load preserve metadata", () => {
         string path=Path.Combine(root,"out/managed/Ncma.Gameplay.Sample.dll");
         using var catalog=new Ncma.Scripting.ScriptCatalogService();using var other=new Ncma.Scripting.ScriptCatalogService();
@@ -766,7 +766,7 @@ var cases = new (string, Action)[] {
         using var verification=new PhysicsModuleHost(args[1]);
         Check(verification.Module!.Status.LiveResources==0 && verification.Module.Status.LiveJobs==0);
     }),
-};
+}).ToArray();
 foreach (var (name, run) in cases) { try { run(); Console.WriteLine("PASS: " + name); } catch (Exception e) { Console.Error.WriteLine("FAIL: " + name + "\n" + e); return 1; } }
 Console.WriteLine($"Editor services: {cases.Length}/{cases.Length} passed.");
 return 0;
