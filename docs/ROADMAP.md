@@ -150,6 +150,13 @@ M2 未完成人工/性能项继续记录；执行授权不自动关闭前置人�
 
 **状态：未实现可玩游戏；实验室预览可复用。**
 
+2026-10-06 起按 [M4 小阶段方案](M4_IMPLEMENTATION_PLAN.md) 顺序执行，各小阶段完整测试通过后
+单独提交推送。M4.1 新增 C# `Ncma.Movement` / host-only Runtime 组件写权威与 Play 耦合固定步：
+一次数值执行、唯一 Transform 发布、输入/信号事务、跨域 fail-stop、关闭失败保留资源、
+Reload 从冻结 startup 文档重建（tick 不倒退）。专项使用 deterministic fake；Jolt 角色、
+实际 Editor/Player 接线、根运动、动作战斗、调试/MCP和最终验收属于 M4.2–M4.7，未实现。
+M4.1 的最终退出门和测试证据见 [交付记录](M4_1_DELIVERY_REPORT.md)。
+
 - 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。
 - 以 Jolt 角色碰撞为 3D 动作主线，接入 C# 物理同步与碰撞事件；Box2D 保持独立 2D 路径。
 - Animator 输出根运动增量，由 C# 角色运动策略经物理约束应用到对象；不让动画、物理和脚本同时写入最终位置。

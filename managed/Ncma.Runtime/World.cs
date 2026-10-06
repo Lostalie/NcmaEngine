@@ -9,7 +9,7 @@ public sealed record ObjectSnapshot(Guid PersistentId, string Name, ComponentSna
 public sealed record WorldSnapshot(int Version, string Name, ObjectSnapshot[] Objects);
 
 // Sole scene authority; native hosts receive copied render/inspection data only.
-public sealed class World
+public sealed partial class World
 {
     public const int MaxObjects = 4096;
     public const int MaxComponentsPerObject = 64;
@@ -108,6 +108,7 @@ public sealed class World
     internal Action PrepareRestore(WorldSnapshot snapshot, Action<WorldSnapshot>? validateCandidate = null)
     {
         VerifyStructuralAccess();
+        VerifyNoAuthorities();
         _preparing = true;
         try
         {
@@ -150,6 +151,7 @@ public sealed class World
             return () =>
             {
                 VerifyStructuralAccess();
+                VerifyNoAuthorities();
                 if (_revision != revision - 1) throw new InvalidOperationException("World changed after preparing restore.");
                 _objects = objects;
                 _uuidIndex = uuids;
@@ -218,6 +220,7 @@ public sealed class World
     }
     internal void Destroy(ObjectReference reference)
     {
+        VerifyObjectStructure(Require(reference).PersistentId);
         VerifyStructuralAccess();
         Entry entry = Require(reference);
         ulong revision = checked(_revision + 1);
@@ -234,11 +237,13 @@ public sealed class World
         try { SetCore(reference, value); }
         catch (Exception error) { if (_updating) _stepError ??= error; throw; }
     }
-    private void SetCore(ObjectReference reference, object value)
+    private void SetCore(ObjectReference reference, object value, ComponentAuthority? authority = null)
     {
         VerifyWriteAccess();
         if (_preparing) throw new InvalidOperationException("Mutation during restore preparation.");
         Entry entry = Require(reference);
+        VerifyComponentAuthority(entry.PersistentId, value.GetType(), authority);
+        if (!entry.Components.ContainsKey(value.GetType())) VerifyObjectStructure(entry.PersistentId);
         object validated;
         _preparing = true;
         try { validated = Components.Validate(value); } finally { _preparing = false; }
@@ -260,6 +265,7 @@ public sealed class World
     }
     internal bool Remove<T>(ObjectReference reference) where T : struct, IComponent
     {
+        VerifyObjectStructure(Require(reference).PersistentId);
         VerifyStructuralAccess();
         Entry entry = Require(reference);
         if (!entry.Components.ContainsKey(typeof(T))) return false;
@@ -295,6 +301,7 @@ public sealed class World
     }
     internal void StageDestroy(Guid uuid)
     {
+        VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
         _stepObjects!.Remove(target.Id); _stepUuids!.Remove(uuid);
     }
@@ -305,6 +312,7 @@ public sealed class World
     }
     internal void StageAdd(Guid uuid, ComponentSnapshot value)
     {
+        VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
         object decoded;
         _preparing = true; try { decoded = Components.Decode(value); } finally { _preparing = false; }
@@ -315,6 +323,7 @@ public sealed class World
     }
     internal void StageRemove(Guid uuid, string typeId)
     {
+        VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
         Type? type = target.Entry.Components.Keys.FirstOrDefault(t => Components.Describe(t).TypeId == typeId);
         if (type is null) throw new ArgumentException("Component is not attached.");
@@ -328,11 +337,13 @@ public sealed class World
         if (!initialization) _ = checked(_tick + 1);
         var objects = new Dictionary<ulong, Entry>(_objects);
         var uuids = new Dictionary<Guid, ulong>(_uuidIndex);
+        _authorityWrites.EnsureCapacity(_authorities.Count);
+        _authorityWrites.Clear();
         _stepObjects = objects; _stepUuids = uuids; _stepNextId = _nextId; _stepError = null; _touched.Clear();
         _initializing = initialization;
         _updating = true;
     }
-    internal Action PrepareStep(Action<WorldSnapshot>? inspect = null)
+    internal Action PrepareStep(Action<WorldSnapshot>? inspect = null, bool requireAuthorityWrites = true)
     {
         VerifyWriteAccess();
         if (!_updating || _preparing) throw new InvalidOperationException("No active gameplay step.");
@@ -340,6 +351,7 @@ public sealed class World
         try
         {
             if (_stepError is not null) throw new InvalidOperationException("Runtime command rejected; step must abort.", _stepError);
+            if (requireAuthorityWrites) VerifyAuthorityWrites();
             var objects = _stepObjects!; var uuids = _stepUuids!; ulong nextId = _stepNextId;
             var candidate = new WorldSnapshot(1, _name, objects.Select(pair => new ObjectSnapshot(
                 pair.Value.PersistentId, pair.Value.Name, pair.Value.Components.Values
@@ -348,6 +360,7 @@ public sealed class World
                     Components.Describe(value.GetType()).Version, Components.EncodeObject(value))).ToArray())).ToArray());
             _ = SceneJson.EncodeBounded(candidate, MaxSnapshotBytes);
             inspect?.Invoke(candidate);
+            if (_stepError is not null) throw new InvalidOperationException("Candidate validation rejected; step must abort.", _stepError);
             return () => { _objects = objects; _uuidIndex = uuids; _nextId = nextId; _revision++; if (!_initializing) _tick++; AbortStep(); };
         }
         finally { _preparing = false; }
@@ -362,6 +375,7 @@ public sealed class World
     {
         VerifyAccess();
         _stepObjects = null; _stepUuids = null; _touched.Clear(); _stepError = null;
+        _authorityWrites.Clear();
         _updating = false;
         _initializing = false;
     }

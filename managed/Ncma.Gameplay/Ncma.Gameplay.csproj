@@ -10,5 +10,6 @@
     <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />
     <InternalsVisibleTo Include="Ncma.Editor.Services" />
     <InternalsVisibleTo Include="Ncma.Gameplay.Tests" />
+    <InternalsVisibleTo Include="Ncma.Movement" />
   </ItemGroup>
 </Project>

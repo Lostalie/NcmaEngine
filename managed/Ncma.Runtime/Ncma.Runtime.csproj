@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Ncma.Animation" />
+    <InternalsVisibleTo Include="Ncma.Movement" />
     <InternalsVisibleTo Include="Ncma.Application.Runtime" />
     <InternalsVisibleTo Include="Ncma.Managed" />
     <InternalsVisibleTo Include="Ncma.Gameplay" />

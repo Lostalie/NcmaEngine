@@ -69,6 +69,7 @@ public sealed partial class SceneWorld
         for (int i = 0; i < writes.Length; i++)
         {
             var target = Resolve(writes[i].Object);
+            Runtime.VerifyUnownedComponentWrite(target.Reference, typeof(Ncma.Runtime.TransformData));
             if (!targets.Add(target.Reference.Id) || !target.Has<Ncma.Runtime.TransformData>()) throw new ArgumentException("Duplicate target or missing Transform.");
             staged[i] = (target, (Ncma.Runtime.TransformData)Runtime.Components.Validate(ToData(writes[i].Value)));
         }
@@ -98,7 +99,7 @@ public sealed partial class SceneWorld
         return count;
     }
     internal void BeginPhase(bool initialization = false) { Verify(); Runtime.BeginStep(initialization); _phase = true; }
-    internal Action PreparePhase(Action<Ncma.Runtime.WorldSnapshot>? inspect = null)
+    internal Action PreparePhase(Action<Ncma.Runtime.WorldSnapshot>? inspect = null, bool preflight = false)
     {
         Verify();
         if (!_phase) throw new InvalidOperationException("No active gameplay phase.");
@@ -111,7 +112,7 @@ public sealed partial class SceneWorld
                 .Concat(_pendingSignals.Where(s => ids.Contains(s.Source.Id) && ids.Contains(s.Target.Id))).ToList();
             if (ready.Count > AccessCapacity) throw new InvalidOperationException("Signal capacity exceeded.");
             inspect?.Invoke(world);
-        });
+        }, requireAuthorityWrites: !preflight);
         return () => { commit(); _ready = ready!; _pendingSignals.Clear(); _consumed.Clear(); _phase = false; };
     }
     internal void CommitPhase() => PreparePhase()();

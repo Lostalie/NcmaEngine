@@ -33,6 +33,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     private readonly SceneDocument _document;
     private readonly SceneWorld _facade;
     private readonly WorldRunner _runner;
+    private ICoupledStepParticipant? _coupled;
     private readonly FrameTimePolicy _policy;
     private readonly PlayAdvanceMode _advanceMode;
     private bool _ownsFacade;
@@ -102,6 +103,18 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         if (State != PlayState.Stopped) throw new InvalidOperationException("Register Systems before Start.");
         _runner.AddSystem(system);
     }
+    internal void AttachCoupledParticipant(ICoupledStepParticipant participant)
+    {
+        Control(); ArgumentNullException.ThrowIfNull(participant);
+        if (State != PlayState.Stopped || _coupled is not null) throw new InvalidOperationException("Register one coupled coordinator before Start.");
+        _coupled = participant;
+    }
+    internal void DetachCoupledParticipant(ICoupledStepParticipant participant)
+    {
+        Control();
+        if (State != PlayState.Stopped || _coupled != participant) throw new InvalidOperationException("Stop before releasing the coupled coordinator.");
+        _coupled = null;
+    }
     public void AddCommittedObserver(ICommittedStepObserver observer)
     { Control();if(State==PlayState.Faulted)throw new InvalidOperationException("Recover Play before attaching an observer.");_runner.AddCommittedObserver(observer); }
     public void RemoveCommittedObserver(ICommittedStepObserver observer)
@@ -116,6 +129,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         _phase = "prepare"; _current = null;
         try
         {
+            _coupled?.Start();
             var snapshot = _document.CaptureSnapshot();
             var prepared = new List<Instance>();
             // Constructors/Export setters cannot mutate the live Play World.
@@ -234,6 +248,13 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     {
         Control(); ArgumentNullException.ThrowIfNull(createBehaviour);
         if (State is not (PlayState.Running or PlayState.Paused)) throw new InvalidOperationException("Reload requires active Play.");
+        if (_coupled is not null)
+        {
+            // Coupled reload is an explicit restart, not a reload over live numerical resources.
+            Stop();
+            try { _coupled.RebuildStartup(); Start(createBehaviour); return Pause(); }
+            catch (Exception error) { if (State == PlayState.Stopped) SetFault(error); throw; }
+        }
         Pause();
         var prepared = new List<Instance>();
         using (_document.World.ReadOnly())
@@ -282,6 +303,9 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         {
             if (_facade.IsInPhase) _facade.AbortPhase();
             errors = Cleanup();
+            if (_coupled is not null) _phase = "coupled_shutdown";
+            try { _coupled?.Stop(); }
+            catch (Exception error) { SetFault(error); throw new AggregateException("Coupled shutdown failed; resources remain owned. Retry Stop.", errors.Append(error)); }
             _facade.Restored(); _facade.SetContext(null); _input.Clear(resetSequence: true); _render.Clear(); _stepInput = null;
             _runner.ResetFault();
             _frameCount = 0; _steps = 0; _dropped = _totalDropped = 0;
@@ -319,6 +343,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         long setupAt = Stamp();
         try
         {
+            _coupled?.BeginStep();
             foreach (var item in _instances)
             {
                 if (!item.Created) { item.Created = true; Invoke(item, "create", item.Behaviour.DispatchCreate); }
@@ -327,6 +352,18 @@ public sealed class PlaySession : IDisposable, IGameplayContext
             update(); callbacksAt = Stamp();
             _phase = "prepare"; _current = null;
             Action consume = _input.PrepareConsume(); inputAt = Stamp();
+            if (_coupled is not null)
+            {
+                _phase = "coupled_preflight";
+                // First validate managed candidate/signals/input without running factories twice.
+                _ = _facade.PreparePhase(world => _ = _document.PrepareRuntimeStep(world, _commands.Bindings), preflight: true);
+                using (_document.World.PreparationReadOnly()) _coupled.Preflight();
+                // A caught rejected write in trusted preflight must still prevent numerical execution.
+                _ = _facade.PreparePhase(preflight: true);
+                _phase = "coupled_execute";
+                _coupled.ExecuteAndStage();
+                _phase = "prepare";
+            }
             Action? render = null, metadata = null, instances = null, receipts = null;
             Action commit = _facade.PreparePhase(world =>
             {
@@ -338,6 +375,8 @@ public sealed class PlaySession : IDisposable, IGameplayContext
             });
             worldAt = Stamp();
             commit(); metadata!(); instances!(); receipts!(); consume(); render!(); installAt = Stamp();
+            _coupled?.Committed();
+            if (_coupled is not null) _phase = "committed_observer";
             if (MeasureSteps) LastStepProfile = new(setupAt - started, callbacksAt - setupAt, inputAt - callbacksAt,
                 Math.Max(0, worldAt - inputAt - metadataTime - instanceTime - receiptsTime - renderTime),
                 metadataTime, instanceTime, receiptsTime, renderTime, installAt - worldAt);
@@ -396,9 +435,10 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     private void SetFault(Exception error)
     {
         State = PlayState.Faulted;
+        _coupled?.Faulted();
         string message = error.GetBaseException().Message;
         if (message.Length > 512) message = message[..512];
-        Fault = new("gameplay_callback_failed", _phase, SessionId, _document.World.Identity,
+        Fault = new(_coupled is null ? "gameplay_callback_failed" : "coupled_session_failed", _phase, SessionId, _document.World.Identity,
             _document.World.Tick, _current?.ObjectId, _current?.Binding.Id, _current?.Binding.TypeName, message, _attemptTick);
         _current = null;
     }
@@ -419,6 +459,6 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         if (_disposed) { _document.VerifyAccess(); return; }
         Control();
         try { Stop(); }
-        finally { if (_ownsFacade && State == PlayState.Stopped) _facade.Dispose(); _disposed = true; }
+        finally { if (State == PlayState.Stopped) { if (_ownsFacade) _facade.Dispose(); _disposed = true; } }
     }
 }

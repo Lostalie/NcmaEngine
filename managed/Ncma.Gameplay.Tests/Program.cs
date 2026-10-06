@@ -494,6 +494,7 @@ foreach (var test in cases)
     catch (Exception error) { Console.Error.WriteLine("FAIL " + test.Name + ": " + error); return 1; }
 }
 Console.WriteLine($"Gameplay tests: {passed}/{cases.Length} passed.");
+MovementCases.Run();
 if (args.Contains("--benchmark"))
 {
     Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { environment = Environment.OSVersion.ToString(), architecture = RuntimeInformation.ProcessArchitecture.ToString(), runtime = RuntimeInformation.FrameworkDescription, cpuCount = Environment.ProcessorCount }));
