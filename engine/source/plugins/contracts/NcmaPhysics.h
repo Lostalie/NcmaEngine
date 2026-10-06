@@ -1,6 +1,7 @@
 #ifndef NCMA_PHYSICS_H
 #define NCMA_PHYSICS_H
 #include "NcmaPlugin.h"
+#include "NcmaPhysicsCharacters.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -81,9 +82,14 @@ typedef struct NcmaPhysicsApiV1_1 {
     NcmaPhysicsApiV1 base;
     NcmaPhysicsReadCountersV1 read_counters;
 } NcmaPhysicsApiV1_1;
+typedef struct NcmaPhysicsApiV1_2 {
+    NcmaPhysicsApiV1_1 base;
+    NcmaQueryCharacterApiV1 query_characters;
+} NcmaPhysicsApiV1_2;
 #ifdef __cplusplus
 }
 static_assert(sizeof(NcmaPhysicsCountersV1)==72);
+static_assert(sizeof(void*)!=8 || (sizeof(NcmaPhysicsApiV1_2)==160 && offsetof(NcmaPhysicsApiV1_2,query_characters)==152));
 static_assert(sizeof(void*)!=8 || (sizeof(NcmaPhysicsApiV1_1)==152 && offsetof(NcmaPhysicsApiV1_1,read_counters)==144));
 static_assert(sizeof(NcmaPhysicsWorldDescriptionV1)==32);
 static_assert(sizeof(NcmaPhysicsBox2DV1)==32 && sizeof(NcmaPhysicsBox3DV1)==40);

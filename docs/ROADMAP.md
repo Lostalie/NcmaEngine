@@ -37,7 +37,7 @@
 | 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC；M3.6候选浏览/本地审批/导入/放置与类型选择；M3.7严格 Prefab 格式/只读提取与放置预检候选 | 缩略图/独立材质浏览、完整资产 MCP、Prefab 保存/实例发布/覆盖/恢复、cook、G6/G7验收 |
 | D3D11 / PBR / 软阴影 | 部分实现：reference GGX/HDR/CSM/PCF/PCSS/contact；G3 资源/纹理/材质/typed Graph，G4 正式静态 Scene/Editor/Player 主画面/单方向光 shadow/HDR，G5 DX11 GPU 动画蒙皮共享主画面/阴影；M3.6候选GUI离屏合成 | 通用多阶段资源图、IBL/透明/多光、场景 CSM/contact、生产级联合验收、G6人工 |
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
-| 物理 | M2.6 薄 Box2D/Jolt 求解插件与独立 C# PhysicsService/Simulation、快照/诊断 | M4 场景同步/跨域提交策略/碰撞事件/角色控制器/Root Motion；Play 未派发 Physics Step |
+| 物理 | M2.6 独立Box2D/Jolt服务；M4.1运动权威；M4.2真实Jolt角色/contacts/closest ray-sweep数值候选 | M4.3场景/Play接线、角色策略及后续Root Motion/碰撞事件；Play未派发真实Physics Step |
 | FBX 角色 | G2 持久导入/异步 Worker/UUID/generation；G5 NCA 保存重启 → 场景骨架片段 → GPU/Player，不在 Player 解析 FBX | 完整源材质/纹理、真实用户模型/所有 DCC 骨骼缩放/skin mode 覆盖 |
 | 动画 | 独立动作实验室/数值 ABI 2；M3.5 纯 C# ClipPlayback/committed 时钟/独立 Edit 预览与 pose ABI 1.0/GPU 蒙皮，根位移只报告；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
 | UI | 仅模型骨架：当前 C++ UiDocument 有节点、样式、布局字段和 Token | C# 文档、持久化、布局求解、Figma 式画布、运行时 UI 渲染/输入、组件实例/变体均未实现 |
@@ -153,8 +153,10 @@ M2 未完成人工/性能项继续记录；执行授权不自动关闭前置人�
 2026-10-06 起按 [M4 小阶段方案](M4_IMPLEMENTATION_PLAN.md) 顺序执行，各小阶段完整测试通过后
 单独提交推送。M4.1 新增 C# `Ncma.Movement` / host-only Runtime 组件写权威与 Play 耦合固定步：
 一次数值执行、唯一 Transform 发布、输入/信号事务、跨域 fail-stop、关闭失败保留资源、
-Reload 从冻结 startup 文档重建（tick 不倒退）。专项使用 deterministic fake；Jolt 角色、
-实际 Editor/Player 接线、根运动、动作战斗、调试/MCP和最终验收属于 M4.2–M4.7，未实现。
+Reload 从冻结 startup 文档重建（tick 不倒退）。K1专项使用deterministic fake，不能代表Jolt验收。
+M4.2新增显式Physics1.2/Character1.0：真实Jolt capsule、grounding/contacts、closest body/character
+ray/sweep及C#数值缓冲客户端，见[交付](M4_2_DELIVERY_REPORT.md)。实际Editor/Player接线、
+根运动、动作战斗、调试/MCP和最终验收属于M4.3–M4.7，未实现。
 M4.1 的最终退出门和测试证据见 [交付记录](M4_1_DELIVERY_REPORT.md)。
 
 - 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。

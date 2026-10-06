@@ -40,7 +40,7 @@ public sealed class PluginLoader : IDisposable
         {
             if (spec is null || string.IsNullOrWhiteSpace(spec.Id) || spec.Id.Length > 128 ||
                 !spec.Id.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_') ||
-                !Enum.IsDefined(spec.Kind) || spec.Major != 1 || spec.Minor > (spec.Kind == ModuleKind.Gui ? 3u : spec.Kind == ModuleKind.Renderer ? 2u : spec.Kind == ModuleKind.Physics ? 1u : 0u) || spec.Dependencies is null ||
+                !Enum.IsDefined(spec.Kind) || spec.Major != 1 || spec.Minor > (spec.Kind == ModuleKind.Gui ? 3u : spec.Kind == ModuleKind.Renderer ? 2u : spec.Kind == ModuleKind.Physics ? 2u : 0u) || spec.Dependencies is null ||
                 spec.Dependencies.Length > 64 || !specs.TryAdd(spec.Id, spec)) throw new ArgumentException("Invalid/duplicate plugin specification.");
             if (string.IsNullOrWhiteSpace(spec.Path) || Path.IsPathRooted(spec.Path) || spec.Path.Contains(':') ||
                 spec.Path.Split('/', '\\').Any(p => p is "" or "." or "..") ||
@@ -148,7 +148,7 @@ public sealed unsafe class PluginModule : IDisposable
             ModuleApi api;
             fixed (byte* bytes = table) api = *(ModuleApi*)bytes;
             if (api.StructSize < sizeof(ModuleApi) || api.StructSize > 4096 || api.Major != spec.Major || api.Minor < spec.Minor ||
-                api.Minor > (spec.Kind == ModuleKind.Gui ? 3u : spec.Kind == ModuleKind.Renderer ? 2u : spec.Kind == ModuleKind.Physics ? 1u : 0u) ||
+                api.Minor > (spec.Kind == ModuleKind.Gui ? 3u : spec.Kind == ModuleKind.Renderer ? 2u : spec.Kind == ModuleKind.Physics ? 2u : 0u) ||
                 api.Kind != (uint)spec.Kind || api.Initialize == 0 || api.Shutdown == 0 || api.GetStatus == 0 || api.ReadDiagnostic == 0)
                 throw new PluginException(spec.Id, "negotiate", PluginResult.AbiMismatch, "Invalid module API layout/version/kind.");
             ulong context = 0;

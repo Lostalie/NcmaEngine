@@ -119,6 +119,7 @@ static class Program {
             // Module init/shutdown generations and unload are tested separately from world reuse.
             for(int cycle=0;cycle<32;cycle++){using var host=new PhysicsModuleHost(root);using var w=PhysicsWorld.Create3D(host.Module!);w.Step(1f/60);}
             PhysicsServiceTests.Run(root,report);
+            CharacterNumericsTests.Run(root);
             Console.WriteLine("Physics H6: layouts, optional load, fixtures, preflight, handles, owner thread, 8 workloads, 32 world cycles, 32 module cycles passed.");return 0;
         }catch(Exception e){Console.Error.WriteLine(e);return 1;}
     }

@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using Ncma.Interop;
 namespace Ncma.Physics;
 public enum PhysicsDimension : uint { Two = 2, Three = 3 }
-[Flags] public enum PhysicsCapabilities : ulong { Boxes = 1, Velocity = 2, Step = 4, CopiedStates = 8, TwoD = 16, ThreeD = 32 }
+[Flags] public enum PhysicsCapabilities : ulong { Boxes = 1, Velocity = 2, Step = 4, CopiedStates = 8, TwoD = 16, ThreeD = 32, Characters = 64, Queries = 128 }
 [StructLayout(LayoutKind.Sequential)]
 internal struct WorldDescription { public uint Size, Dimension, Maximum, SubSteps; public Vector3 Gravity; public uint Reserved; }
 [StructLayout(LayoutKind.Sequential)]
@@ -45,7 +45,7 @@ public struct PhysicsCounters {
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal unsafe delegate uint DestroyWorld(ulong module,ulong world,PluginError* error);
 // No World/Editor/behaviour references. All arrays belong to the caller and may be reused;
 // one cached delegate call per batch, no per-body P/Invoke or native memory exposure.
-public sealed unsafe class PhysicsWorld : IDisposable {
+public sealed unsafe partial class PhysicsWorld : IDisposable {
     public const int MaximumBatch = 4096;
     private readonly PluginLease _lease;
     private readonly CreateBoxes2 _create2;
@@ -71,7 +71,7 @@ public sealed unsafe class PhysicsWorld : IDisposable {
         if(module.Kind!=ModuleKind.Physics)throw new ArgumentException("Physics module required.");
         _lease=module.AcquireLease();Dimension=dimension;Capabilities=(PhysicsCapabilities)module.Capabilities;
         try {
-            if(module.Capabilities!=63)throw new InvalidOperationException("Unsupported physics capability table.");
+            if(module.Capabilities!=(module.AbiMinor==2 ? 255ul : 63ul))throw new InvalidOperationException("Unsupported physics capability table.");
             var create=module.ReadFunction<CreateWorld>(56);_create2=module.ReadFunction<CreateBoxes2>(64);_create3=module.ReadFunction<CreateBoxes3>(72);
             _destroyBodies=module.ReadFunction<DestroyBodies>(80);_set2=module.ReadFunction<Set2>(88);_set3=module.ReadFunction<Set3>(96);
             _step=module.ReadFunction<StepWorld>(104);_read2=module.ReadFunction<Read2>(112);_read3=module.ReadFunction<Read3>(120);
@@ -143,10 +143,10 @@ public sealed unsafe class PhysicsWorld : IDisposable {
 public sealed class PhysicsModuleHost : IDisposable {
     private readonly PluginLoader _loader=new();
     public PluginModule? Module { get; }
-    public PhysicsModuleHost(string pluginRoot,bool enabled=true) {
+    public PhysicsModuleHost(string pluginRoot,bool enabled=true,bool characterSupport=false) {
         if(!enabled)return;
         try {
-            _loader.Load(pluginRoot,[new("ncma.physics",ModuleKind.Physics,"NcmaPhysics.dll","NcmaPhysics.dll",1,1,[])]);
+            _loader.Load(pluginRoot,[new("ncma.physics",ModuleKind.Physics,"NcmaPhysics.dll","NcmaPhysics.dll",1,characterSupport ? 2u : 1u,[])]);
             Module=_loader.Modules.Single();
         }catch{_loader.Dispose();throw;}
     }

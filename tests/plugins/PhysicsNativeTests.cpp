@@ -7,7 +7,7 @@ int main() {
     try {
         NcmaPhysicsApiV1 table{};NcmaErrorV1 error{};uint64_t context=0,two=0,three=0;
         Check(ncma_plugin_get_api(2,0,&table,sizeof(table),&error)==NCMA_ABI_MISMATCH,"major rejected");
-        Check(ncma_plugin_get_api(1,2,&table,sizeof(table),&error)==NCMA_ABI_MISMATCH,"minor rejected");
+        Check(ncma_plugin_get_api(1,3,&table,sizeof(table),&error)==NCMA_ABI_MISMATCH,"minor rejected");
         Check(ncma_plugin_get_api(1,0,&table,56,&error)==NCMA_BUFFER_TOO_SMALL && error.required_bytes==144,"short table");
         Check(ncma_plugin_get_api(1,0,&table,sizeof(table),&error)==0,"API");
         NcmaPhysicsApiV1_1 modern{};
@@ -42,13 +42,14 @@ int main() {
         Check(foreign==NCMA_WRONG_THREAD,"thread rejected");
         Check(table.module.shutdown(context,&error)==NCMA_BUSY,"unload resources retained");
         // Force real Jolt kernel exhaustion mid-batch, after one successful body:
-        // test-only invisible bodies consume 4095 slots; ABI map is empty.
+        // Test-only invisible bodies consume all but one slot (32 reserved character proxies);
+        // the public ordinary-body budget remains 4096. ABI map is empty.
         auto& w=*worlds.at(three);std::vector<uint64_t> internal;
-        for(int i=0;i<4095;++i)internal.push_back(w.three->CreateBox(Vector3(static_cast<float>(i)*2,0,0),Vector3(.25F,.25F,.25F),false));
+        for(int i=0;i<4096+static_cast<int>(NCMA_MAX_CHARACTERS)-1;++i)internal.push_back(w.three->CreateBox(Vector3(static_cast<float>(i)*2,0,0),Vector3(.25F,.25F,.25F),false));
         NcmaPhysicsBox3DV1 boxes[2]{{{0,4,0},{.5F,.5F,.5F},1,1,1},{{2,4,0},{.5F,.5F,.5F},1,1,2}};
         uint64_t outputs[2]{123,456};
         Check(table.create_boxes_3d(context,three,boxes,2,outputs,2,&error)==NCMA_INTERNAL_ERROR,"create failure");
-        Check(outputs[0]==123 && outputs[1]==456 && w.bodies.empty() && w.three->GetBodyCount()==4095 && w.stats.state==1,"creation rollback");
+        Check(outputs[0]==123 && outputs[1]==456 && w.bodies.empty() && w.three->GetBodyCount()==4096+NCMA_MAX_CHARACTERS-1 && w.stats.state==1,"creation rollback");
         for(auto body:internal)w.three->DestroyBody(body);
         // Exercise the same execution fail-stop guard used around actual solver mutation.
         try {Execution scope(*worlds.at(two));throw std::runtime_error("Injected solver failure.");}catch(const std::runtime_error&) {}

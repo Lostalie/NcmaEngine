@@ -3,7 +3,8 @@
 日期：2026-10-06。基线：`f31d5915c07bcfe0d8e96f1522eb8d9d5d19a49b`。
 状态：2026-10-06 用户在阅读本方案后要求逐个小阶段执行、测试通过后提交推送；
 按此后续执行指令确认第2节的C#运动权威/跨域fail-stop边界。M4.1已通过K1及顺序完整Debug/Release回归，
-见 [M4.1交付](M4_1_DELIVERY_REPORT.md)。M4.2–M4.7尚未实现；每阶段通过后独立提交推送再推进。
+见[M4.1交付](M4_1_DELIVERY_REPORT.md)。M4.2实际Jolt角色数值插件及C#客户端已通过K2与顺序完整
+Debug/Release回归，见[M4.2交付](M4_2_DELIVERY_REPORT.md)。M4.3–M4.7尚未实现；每阶段通过后独立提交推送再推进。
 仅“开始M4”未被当作当时未审方案的自动批准。真实Physics/角色与根运动仍按后续阶段分别验收。
 
 M3 G4/G5的静态/片段/蒙皮切片可作为基础；G6–G9、M2人工/目标环境/性能/长稳仍开放。
@@ -11,6 +12,8 @@ M3 G4/G5的静态/片段/蒙皮切片可作为基础；G6–G9、M2人工/目标
 M4推进不代表M3完成，不绕过用户真实素材与人工验收。
 
 ## 1 源码核对结论
+
+以下为方案建立时的基线核对；M4.1/M4.2进展与证据按上方交付记录，不把基线缺口当当前实现状态。
 
 - `Ncma.Runtime.World.BeginStep/PrepareStep/AbortStep` 暂存托管对象/组件，提交才增加tick；
   `Ncma.Gameplay.PlaySession.RunStep` 还协调metadata、输入消费、信号/命令receipt与插值视图。
@@ -81,7 +84,7 @@ Locomotion使用输入水平速度；Attack/Dodge的root-motion模式**替换**�
 
 ## 3 小阶段和门禁
 
-以下均是拟实施，不是已实现声明。各阶段先补自身测试，再按顺序完整Debug/Release Build.bat；
+以下为各阶段约定的实现范围；实际完成状态以上方交付记录为准。各阶段先补自身测试，再按顺序完整Debug/Release Build.bat；
 不使用Skip取得部署资格，不把自动事件注入/隐藏窗口当人工通过。
 
 ### M4.1 运动权威与跨域协调底座
@@ -165,5 +168,6 @@ Locomotion使用输入水平速度；Attack/Dodge的root-motion模式**替换**�
 ## 4 执行顺序
 
 先确认第2节 → M4.1 → M4.2 → M4.3 → M4.4 → M4.5 → M4.6 → M4.7。
-当前仅方案写入；没有接入Physics Step、新增场景物理组件、应用根运动或更改默认项目。
+M4.1协调底座和M4.2独立真实数值接口已通过；M4.3应用接线尚未实施。Editor/Player仍未派发真实
+Physics Step，没有新增场景物理组件或应用根运动，未更改默认physicsEnabled=false。
 未删除数值内核/SDK、旧策略原型或用户数据，没有引入旧类型兼容层。

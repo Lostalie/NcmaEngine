@@ -73,7 +73,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 | SceneAsset / Serialization | 通用组件记录、资产引用、版本迁移 | C# `.ncmascene` JSON v1 通用组件读写/原子保存已实现；旧 .ncscene 不兼容；资产引用/迁移流水线未实现 |
 | Editor Commands | 文档修改、事务、Undo/Redo、隔离 Play | Editor.Core 持有完整文档事务/唯一 Undo；ImGui 提交 UUID 意图，原生命令栈已删除 |
 | Gameplay Services | 输入、角色、动作、战斗、任务等游戏 API | 未实现完整 SDK；当前只有基础门面/示例 |
-| Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement` 协调契约/fake 测试；真实 Jolt CharacterMotor/应用接线/根运动/战斗未实现 |
+| Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement` 协调契约；M4.2真实Jolt角色数值接口（K2通过）；应用CharacterMotor接线/根运动/战斗未实现 |
 
 当前 C# Behaviour 已支持挂载、禁用、删除、数值/布尔 Export 编辑及隔离 Play。
 M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpdate/顺序 Systems，帧后 OnUpdate 只读。默认 1/60 秒、最多追赶 8 步；严格与交互时间策略、Pause/Resume/Step/Faulted 已接入 ImGui。安全重载先隔离预检再清理/激活，成功 Paused，失败保留旧暂停或激活后 Faulted；重置私有状态，私有状态迁移未实现。
@@ -140,7 +140,7 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 ### 物理
 
 Box2D/Jolt 独立 Physics 插件与 C# 批量客户端已实现，见 [M2.6 交付记录](M2_6_DELIVERY_REPORT.md)：Physics ABI 1.1 原始计数/单次耗时（保留 1.0），独立 2D/3D Box/density/重力/线速度/旋转状态与模拟序号；C# PhysicsService/PhysicsSimulation 管理世界、暂停/单步、有界速度暂存、复制快照、诊断/profile 与故障关闭。C++ 只保留求解器资源、边界自保和数值批处理，应用策略不进入原生。最多 16 world、4096 body/world/batch；Jolt factory/job pool 集中在 DLL，数值内核不再编入 NcmaCore。项目 physicsEnabled 默认 false，启用也只装载模块。
-C# 场景组件同步、碰撞事件、raycast、CharacterMotor、Root Motion 碰撞解算未实现。不能把 solver Step 直接接入可中止的托管固定步，跨域提交/回滚与运动权威留在 M4。
+M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVirtual capsule、copied grounding/contacts及closest body/character ray/sweep；显式`characterSupport:true`才协商，默认1.1及physicsEnabled=false不变。C#场景组件同步、Gameplay碰撞事件、可玩CharacterMotor及Root Motion碰撞解算未实现。M4.1已建立跨域fail-stop与组件写权威；M4.3才接线实际solver，不把不可逆Step冒充托管事务回滚。契约/测试/限制见[M4.2交付](M4_2_DELIVERY_REPORT.md)。
 物理句柄仅标识求解器资源，不替代 GameObject 身份。
 
 ## 5. 动作动画与 FBX
