@@ -25,6 +25,7 @@ public sealed class AssetProjectAuthoring : IDisposable
     private AssetScanResult _snapshot = new(new AssetCatalog([]), []);
     public Task GenerationPreparation { get; private set; } = Task.CompletedTask;
     private ulong _snapshotRevision;
+    public ulong SnapshotRevision { get { Verify(); return _snapshotRevision; } }
     public AssetScanResult Snapshot { get { Verify(); return new(_snapshot.Catalog, (AssetDiagnostic[])_snapshot.Diagnostics.Clone(),_snapshot.MetadataFiles); } }
     public AssetProjectAuthoring(string root, Guid projectId, ulong generation, EditSession edit, AssetWriteScope scope,
         Action<string>? faultInjection = null, MaterialWriteScope? materialScope = null)

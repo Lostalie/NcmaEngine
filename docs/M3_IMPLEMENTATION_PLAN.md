@@ -1,7 +1,7 @@
 # M3 资产系统与 FBX 场景角色实施方案
 
 日期：2026-10-05。基线：165c50b5a77e9ab7b81ce6ff19147f9a1eb27e3b。
-性质：实施方案。M3.1–M3.3 最终完整 Debug/Release 回归通过，G1/G2/G3 资源门禁关闭；M3.4 已补真实静态 DX11 场景、CPU/GPU 租约与 Editor/Player 消费，最终回归/G4 结论见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 已补正式 NCA/场景角色/最小片段播放与 DX11 GPU 蒙皮，最终双配置通过、G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)；M3.6 候选资产工作流/离屏视口已接线，缩略图/独立材质浏览/人工项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)；M3.7 已按用户要求推进严格格式、只读提取/放置预检候选，实例发布/覆盖/恢复未实现、G7开放，见 [候选记录](M3_7_FOUNDATION_REPORT.md)；M3.8–M3.9 未实现。历史范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将当前切片视为完整后端完成。
+性质：实施方案。M3.1–M3.3 最终完整 Debug/Release 回归通过，G1/G2/G3 资源门禁关闭；M3.4 已补真实静态 DX11 场景、CPU/GPU 租约与 Editor/Player 消费，最终回归/G4 结论见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 已补正式 NCA/场景角色/最小片段播放与 DX11 GPU 蒙皮，最终双配置通过、G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)；M3.6 候选资产工作流/离屏视口已接线，缩略图/独立材质浏览/人工项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)；M3.7 已按用户要求推进严格格式、只读提取/放置预检候选，实例发布/覆盖/恢复未实现、G7开放，见 [候选记录](M3_7_FOUNDATION_REPORT.md)；M3.8 已启动只读资产 MCP 候选，G8开放，见 [记录](M3_8_READONLY_REPORT.md)；M3.9 未实现。历史范围见 [M3.1记录](M3_1_DELIVERY_REPORT.md)、[M3.2记录](M3_2_DELIVERY_REPORT.md)、[M3.3-B/C/D记录](M3_3_BCD_DELIVERY_REPORT.md)、[M3.4启动记录](M3_4_FOUNDATION_REPORT.md) 和 [资产解析记录](M3_4_ASSET_RESOLVER_REPORT.md)，不将当前切片视为完整后端完成。
 
 M3 的终点是：真实 FBX 角色经过受控导入成为持久资产，重启后可实例化到扁平场景，
 在 Editor 和 DX11 Player 中播放动画、显示 PBR 材质和阴影；重新导入、编辑和获批 Agent 修改可恢复。

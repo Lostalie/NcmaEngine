@@ -1,6 +1,6 @@
 # M3.8 资产与 Prefab 的 MCP 能力方案
 
-日期：2026-10-05。状态：未实现。依赖 G7 与 M1 已有 scoped endpoint。
+日期：2026-10-05，更新：2026-10-06。状态：已按用户要求实现只读候选（assets.list/inspect/validate），最终顺序 Debug/Release 完整回归通过；导入任务/提交、删除、Prefab MCP 与人工闭环未实现，G8 开放。原依赖 G7 与 M1 已有 scoped endpoint；当前 G7 尚开放，不借用户提前开始的授权关闭前置验收。见 [只读候选记录](M3_8_READONLY_REPORT.md)。
 目标是 Agent 使用语义资产/实例命令参与开发，不通过鼠标模拟、任意 Python、shell 或磁盘路径绕过编辑器。
 AI 推理/运输 worker 仍属 M8；本阶段是引擎可被 Agent 检查与获批修改的 MCP 契约。
 
@@ -18,7 +18,7 @@ Editor UI 和 Agent 都调用 Assets.Authoring/Prefab 的同一 Prepare/Publish/
 
 ## 2 建议能力目录
 
-名称在实施后作为稳定契约。以下全部为拟新增，不写入当前 capabilities/manifest 已实现列表。
+名称在实施后作为稳定契约。前三项已有只读候选及各自 schema；其余仍为拟新增，不列入已实现能力或注册不可执行的占位工具。
 
 | 能力名 | 风险 | 精确用途 |
 | --- | --- | --- |

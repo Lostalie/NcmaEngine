@@ -23,7 +23,7 @@ Scene 测试覆盖严格格式/未知组件/绑定、范围/陈旧/线程/回调
 
 完整日志：`out/verification/m3-7/Debug-final.log`、`Release-final.log`；复制的 managed CTest 明细为 `Debug-ctest.log`、`Release-ctest.log`。Release 已按 checked 全包部署至 `out/bin/NcmaEngine.exe`；可恢复备份保留在 `out/deployment/17e5d52be66f4ada8bb5a4252873a955/backup`。部署前后 `audit_passed=true`，`h8_accepted=false`，pending 门禁不改。
 
-初次单独运行 Editor Services 在既有 M3.6 SourcePlan 文件操作中超时（`Asset file operation failed`），详见 `editor-services-debug.log`；原因未确认，不宣称已修复该偶发问题。之后最终完整 Debug/Release 中该真实导入/重启用例均通过，分别13.19s/9.17s。所有失败/中间日志保留，不删除证据或降低断言以换取通过。
+初次单独运行 Editor Services 在既有 M3.6 导入发布预备（PrepareCommit）文件操作中超时（`Asset file operation failed`），详见 `editor-services-debug.log`；原因未确认，不宣称已修复该问题。之后最终完整 Debug/Release 中该真实导入/重启用例均通过，分别13.19s/9.17s。M3.8 检查调用栈后校正此步骤名称，并非 SourcePlan。所有失败/中间日志保留，不删除证据或降低断言以换取通过。
 
 ## 未实现与下一步
 

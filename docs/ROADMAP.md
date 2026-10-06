@@ -127,7 +127,7 @@ H7 前候选程序不覆盖 out/bin 默认入口；H8 前不把 M2 标为完成�
 
 验收：导入 → 保存 → 重启 → 场景实例 → 动画播放完整打通；重新导入身份稳定；CPU/GPU 蒙皮误差有证据；材质缺失有诊断；失败/取消不破坏原资产和场景。
 
-2026-10-06：M3.1–M3.3 完整双配置通过，G1/G2/G3 关闭；M3.4 静态 Scene/Editor/Player 与阴影/HDR、G4 关闭，见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 正式 NCA 场景角色、最小 ClipPlayback/committed 时钟、DX11 compute 蒙皮与共享阴影完整双配置通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。M3.6 候选增加本地 FBX 导入/放置/同一历史、GUI1.3离屏视口、保守选取/独立浏览相机和Edit scrub；缩略图/独立材质浏览/人工窗口项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)。M3.7 已按用户要求推进严格格式、只读提取/放置预检候选，实例发布/覆盖/恢复未实现、G7开放，见 [候选记录](M3_7_FOUNDATION_REPORT.md)；M3.8–M3.9 未实现。不是整个 M3、Animator 或完整后端完成，M2 人工/自包含/长稳门禁不因此关闭。
+2026-10-06：M3.1–M3.3 完整双配置通过，G1/G2/G3 关闭；M3.4 静态 Scene/Editor/Player 与阴影/HDR、G4 关闭，见 [GPU 交付记录](M3_4_GPU_DELIVERY_REPORT.md)。M3.5 正式 NCA 场景角色、最小 ClipPlayback/committed 时钟、DX11 compute 蒙皮与共享阴影完整双配置通过，G5 关闭，见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md) 与 [契约](M3_5_RENDER_ANIMATION_ABI.md)。M3.6 候选增加本地 FBX 导入/放置/同一历史、GUI1.3离屏视口、保守选取/独立浏览相机和Edit scrub；缩略图/独立材质浏览/人工窗口项待补、G6开放，见 [记录](M3_6_DELIVERY_REPORT.md)。M3.7 已按用户要求推进严格格式、只读提取/放置预检候选，实例发布/覆盖/恢复未实现、G7开放，见 [候选记录](M3_7_FOUNDATION_REPORT.md)；M3.8 已启动只读资产 MCP 候选，G8开放，见 [记录](M3_8_READONLY_REPORT.md)；M3.9 未实现。不是整个 M3、Animator 或完整后端完成，M2 人工/自包含/长稳门禁不因此关闭。
 
 | 小阶段 | 详细方案 |
 | --- | --- |

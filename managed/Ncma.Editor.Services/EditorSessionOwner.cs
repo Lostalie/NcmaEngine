@@ -19,6 +19,7 @@ public sealed class EditorSessionOwner : IDisposable
     private EditSession? _edit;
     private EditorEndpoint? _endpoint;
     private AssetProjectAuthoring? _assets;
+    private AssetInspectionService? _assetInspections;
     private IDisposable? _playAssets;
     private ImportCoordinator? _imports;
     private PreparedSceneAssetLease? _renderAssets, _playRenderAssets;
@@ -43,6 +44,7 @@ public sealed class EditorSessionOwner : IDisposable
     public EditorEndpoint? Endpoint { get { Verify(); return _endpoint; } }
     public PlaySession? Play { get { Verify(); return _play; } }
     public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
+    public AssetInspectionService? AssetInspections { get { Verify(); return _assetInspections; } }
     public ImportCoordinator? Imports { get { Verify(); return _imports; } }
     public PreparedSceneAssetLease? RenderAssets { get { Verify(); return _renderAssets; } }
     public PreparedSceneAssetLease? PlayRenderAssets { get { Verify(); return _playRenderAssets; } }
@@ -57,6 +59,12 @@ public sealed class EditorSessionOwner : IDisposable
         if (_edit is null || _assets is not null || _play is not null) throw new InvalidOperationException("Asset startup requires a fresh Editor.");
         _assets = new(projectRoot, projectId, generation, _edit, scope ?? new([], [], [], () => true));
         _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;
+        var assets = _assets;
+        _assetInspections = new(_edit, projectId, generation, () => !_disposed && ReferenceEquals(_assets, assets),
+            () => (assets.Clock.Revision, assets.SnapshotRevision));
+        var snapshot = assets.Snapshot;
+        _assetInspections.Publish(snapshot.Catalog, snapshot.Diagnostics, assets.SnapshotRevision);
+        _assetInspections.Register(); // Defaults to zero visible UUIDs; pairing is not a file grant.
     }
     // Explicit startup/refresh; never called from a simulation/render tick or an Agent callback.
     public void PrepareRenderAssets(string projectRoot, Guid projectId)
@@ -74,7 +82,13 @@ public sealed class EditorSessionOwner : IDisposable
     }
     public bool RefreshAssets(bool force = false)
     {
-        Verify(); return _assets?.Refresh(_assets.Generation, force) ?? false;
+        Verify(); if (_assets is null) return false;
+        bool changed = _assets.Refresh(_assets.Generation, force);
+        if (_assetInspections is not null && _assetInspections.PublishedRevision != _assets.SnapshotRevision && _assets.SnapshotRevision == _assets.Clock.Revision) {
+            var snapshot = _assets.Snapshot;
+            _assetInspections.Publish(snapshot.Catalog, snapshot.Diagnostics, _assets.SnapshotRevision);
+        }
+        return changed;
     }
     internal Ncma.SceneWorld Facade { get { Verify(); return _facade; } }
     private void Verify()
@@ -163,6 +177,7 @@ public sealed class EditorSessionOwner : IDisposable
         _renderAssets = null;
         try { _assets?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _assets = null;
+        _assetInspections?.Revoke(); _assetInspections = null;
         try { _endpoint?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _endpoint = null; _facade.Dispose();
         _runtime.Dispose();
