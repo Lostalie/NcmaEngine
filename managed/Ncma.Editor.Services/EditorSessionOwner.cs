@@ -27,14 +27,18 @@ public sealed class EditorSessionOwner : IDisposable
     private Guid _assetProject;
     private readonly Action<SceneDocumentSnapshot>? _compositionPolicy;
     private readonly Func<PlaySession, IDisposable?>? _composePlay;
+    private readonly Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? _composePreparedPlay;
     private readonly Action? _beforePlayStop;
     private PlaySession? _play => _runtime.Play;
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null,
-        Action<SceneDocumentSnapshot>? validateComposition = null, Func<PlaySession, IDisposable?>? composePlay = null, Action? beforePlayStop = null)
+        Action<SceneDocumentSnapshot>? validateComposition = null, Func<PlaySession, IDisposable?>? composePlay = null, Action? beforePlayStop = null,
+        Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? composePreparedPlay = null)
     {
         _compositionPolicy = validateComposition;
         _composePlay = composePlay;
+        if(composePlay is not null&&composePreparedPlay is not null)throw new ArgumentException("Choose one Play composition contract.");
+        _composePreparedPlay=composePreparedPlay;
         _beforePlayStop = beforePlayStop;
         _document = new(name, components, snapshot => {
             _compositionPolicy?.Invoke(snapshot);
@@ -146,7 +150,8 @@ public sealed class EditorSessionOwner : IDisposable
             }
             pins = _assets?.PinForPlay();
             _busy = true;
-            var play = _runtime.StartPlay(document, d => _edit is null ? new PlaySession(d, _facade) : new PlaySession(d), _composePlay);
+            var play = _runtime.StartPlay(document, d => _edit is null ? new PlaySession(d, _facade) : new PlaySession(d),
+                p=>_composePreparedPlay is null?_composePlay?.Invoke(p):_composePreparedPlay(p,renderPins));
             _playAssets = pins; pins = null; _playRenderAssets = renderPins; renderPins = null; _edit?.SetFrozen(true); return play;
         }
         catch

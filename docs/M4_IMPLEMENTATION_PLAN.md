@@ -154,6 +154,10 @@ Locomotion使用输入水平速度；Attack/Dodge的root-motion模式**替换**�
 
 退出K6：自动只读协议/范围与样例通路通过；真实第三方可见客户端/窗口另有人工清单。
 
+实现/回归记录见 [M4.6交付](M4_6_DELIVERY_REPORT.md)：正式Debug面板、绑定精确Play/World/
+角色与配对audience的60秒只读审批、两项MCP检查和普通场景/NCP1程序化样例。
+样例生成器不进入生产包；程序化动画、隐藏窗口和内部stdio客户端不代替真实素材/人工验收。
+
 ### M4.7 联合回归和真实可玩验收
 
 - 完整Debug→Release：保留M1–M3/ABI/Physics/格式/Python/部署恢复；新代码零警告。

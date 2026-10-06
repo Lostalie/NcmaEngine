@@ -3,5 +3,5 @@
     <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Ncma.Player.App/Ncma.Player.App.csproj" /><ProjectReference Include="../Ncma.Asset.Import/Ncma.Asset.Import.csproj" /><ProjectReference Include="../Ncma.Assets.Authoring/Ncma.Assets.Authoring.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Player.App/Ncma.Player.App.csproj" /><ProjectReference Include="../Ncma.Asset.Import/Ncma.Asset.Import.csproj" /><ProjectReference Include="../Ncma.Assets.Authoring/Ncma.Assets.Authoring.csproj" /><ProjectReference Include="../Ncma.Samples/Ncma.Samples.csproj" /></ItemGroup>
 </Project>

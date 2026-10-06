@@ -160,7 +160,7 @@ M4.2新增显式Physics1.2/Character1.0：真实Jolt capsule、grounding/contact
 ray/sweep及C#数值缓冲客户端，见[交付](M4_2_DELIVERY_REPORT.md)。M4.3实现C#固定步角色/盒体绑定、
 Editor/Player/Headless实际solver接线、跟随相机与只读插值，见[交付](M4_3_DELIVERY_REPORT.md)。
 M4.4候选接入XZ/Yaw根运动、成功提交才消费的共享时钟、真实碰撞约束与GPU视觉根去重，
-见[交付](M4_4_DELIVERY_REPORT.md)。M4.5候选实现动作状态、连击/中断、tick Notify、closest-ray命中/无敌与同量子Health发布，见[交付](M4_5_DELIVERY_REPORT.md)。调试/MCP和最终验收属于M4.6–M4.7，未实现。
+见[交付](M4_4_DELIVERY_REPORT.md)。M4.5实现动作状态、连击/中断、tick Notify、closest-ray命中/无敌与同量子Health发布，见[交付](M4_5_DELIVERY_REPORT.md)。M4.6候选实现复制诊断、可信UI审批的只读角色/战斗MCP和可启动程序化样例，见[交付](M4_6_DELIVERY_REPORT.md)；M4.7联合测量/真实素材/人工验收仍开放。
 M4.1 的最终退出门和测试证据见 [交付记录](M4_1_DELIVERY_REPORT.md)。
 
 - 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。

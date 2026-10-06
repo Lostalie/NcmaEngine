@@ -118,6 +118,10 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
             World.RejectStep(error);throw error;
         }
     }
+    public void VerifyReadBoundary()
+    {
+        Verify();if(World.IsUpdating||_collecting)throw new InvalidOperationException("Copied diagnostics require a committed safe boundary.");
+    }
 
     void ICoupledStepParticipant.Start()
     {

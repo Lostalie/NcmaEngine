@@ -165,6 +165,11 @@ if (-not $SkipManaged) {
     Copy-Item -Path (Join-Path $projectRoot "managed\Ncma.Editor.Mcp\bin\$Configuration\net8.0\*") -Destination $mcpOutput -Force
     Copy-Item -Path (Join-Path $projectRoot "managed\Ncma.Editor.Transport.Tests\bin\$Configuration\net8.0\*") -Destination $transportTestsOutput -Force
     Build-GameplayAssembly
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.SampleBuilder\Ncma.SampleBuilder.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Action sample builder failed with exit code $LASTEXITCODE." }
+    $actionSampleParent = Join-Path $projectRoot "out\samples\m4-action\$Configuration"
+    & dotnet (Join-Path $projectRoot "managed\Ncma.SampleBuilder\bin\$Configuration\net8.0\Ncma.SampleBuilder.dll") $actionSampleParent (Join-Path $projectRoot 'out\managed\Ncma.Gameplay.Sample.dll')
+    if ($LASTEXITCODE -ne 0) { throw "Action sample generation failed with exit code $LASTEXITCODE." }
     & (Join-Path $PSScriptRoot 'Package-M2_7.ps1') -Configuration $Configuration -NativePluginRoot (Join-Path $buildDirectory 'm2\plugins')
     New-Item -ItemType Directory -Path $engineManagedOutput -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaNative.dll') `

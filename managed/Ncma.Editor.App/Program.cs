@@ -125,8 +125,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
             validateComposition: Ncma.Characters.CharacterComponents.RequireComposition,
-            composePlay:play=>_characterRuntime=Ncma.Characters.CharacterPlayRuntime.Compose(play,_physics,_editor?.RenderAssets),
+            composePreparedPlay:(play,assets)=>_characterRuntime=Ncma.Characters.CharacterPlayRuntime.Compose(play,_physics,assets),
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
+        var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         if (project is not null) {
             var workspace = new EditorWorkspace(_editor);
             workspace.Open(workspace.Stamp, project.StartupScenePath, true);
@@ -148,6 +149,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _animationPreview = new(Path.Combine(plugins,"NcmaNative.dll"));
             _filePicker=new();
             _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow);
+            _presenter.AttachCharacters(characters);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
         }
         if (_renderer is not null) {

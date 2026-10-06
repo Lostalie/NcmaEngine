@@ -3,5 +3,5 @@
     <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Ncma.Editor.App/Ncma.Editor.App.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Editor.App/Ncma.Editor.App.csproj" /><ProjectReference Include="../Ncma.Samples/Ncma.Samples.csproj" /></ItemGroup>
 </Project>

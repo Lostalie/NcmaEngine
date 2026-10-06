@@ -197,6 +197,8 @@ var passed = new List<string>();
 foreach (var test in cases) { try { test.Run(); passed.Add(test.Name); Console.WriteLine("PASS " + test.Name); }
     catch (Exception e) { Console.Error.WriteLine("FAIL " + test.Name + ": " + e); return 1; } }
 if (args.Length > 2) {
+    try {ActionSampleChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("K6 generated procedural sample: 0/1 actor packed Headless/DX11, disabled unused physics/GPU and authoring preserved");Console.WriteLine("PASS "+passed[^1]);}
+    catch(Exception e){Console.Error.WriteLine("FAIL Action sample: "+e);return 1;}
     try { foreach(string test in ActionCombatChecks.Run(output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
     catch(Exception e){Console.Error.WriteLine("FAIL Actions: "+e);return 1;}
     try { foreach(string test in RootMotionChecks.Run(root,output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }

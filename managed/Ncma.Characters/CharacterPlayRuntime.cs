@@ -105,6 +105,23 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
     public void RequestAction(Guid objectId,ActionRequest request){_coordinator.VerifyControlBoundary();_actions.Request(objectId,request);}
     public ActionStatus InspectAction(Guid objectId){VerifyRootPresentation();return _actions.Inspect(objectId);}
     public CombatEvent[] ReadCombatEvents(){VerifyRootPresentation();return _actions.Events();}
+    public CharacterDebugFrame ReadDebugFrame()
+    {
+        _play.Document.VerifyAccess();ObjectDisposedException.ThrowIf(_disposed,this);
+        _coordinator.VerifyReadBoundary();
+        bool valid=_play.State is PlayState.Running or PlayState.Paused && Status.SnapshotValid;
+        var rows=new List<CharacterDebugRow>(32);
+        if(valid)foreach(var binding in _bindings.Where(b=>b.Character is not null)) {
+            var obj=_play.Document.World.FindObject(binding.Id);int index=Array.IndexOf(_bindings,binding);
+            var numeric=_domain!.Character(index);bool root=_roots.Contains(binding.Id);
+            var motion=root?_roots.Inspect(binding.Id):default;
+            var action=_actions.Owns(binding.Id)?_actions.Inspect(binding.Id):default;
+            HealthData? hp=obj.Has<HealthData>()?obj.Get<HealthData>():null;
+            rows.Add(new(binding.Id,obj.Get<TransformData>().Position,numeric.Ground.ToString(),_domain.ContactCount(index),root,motion.Time,motion.DesiredDisplacement,motion.AcceptedDisplacement,
+                _actions.Owns(binding.Id)?action.State.ToString():"None",action.Instance,hp?.Current,hp?.Maximum));
+        }
+        return new(_play.SessionId,_play.Document.World.Identity,_play.Tick,_play.State.ToString(),valid,valid?"none":_play.State==PlayState.Faulted?"play_faulted":"snapshot_invalid",rows.ToArray(),valid?_actions.Events():[]);
+    }
     // Trusted owner-thread control at a safe boundary. Candidate clocks are never consumed before commit.
     public void SetRootPlayback(Guid objectId,ClipPlaybackData settings)
     {
@@ -117,7 +134,7 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
         _roots.Request(objectId,settings);
     }
     private void VerifyRootPresentation() {
-        _play.Document.VerifyAccess();if(_disposed||_play.State==PlayState.Faulted||!Status.SnapshotValid)throw new InvalidOperationException("Invalid coupled root motion presentation.");
+        _play.Document.VerifyAccess();_coordinator.VerifyReadBoundary();if(_disposed||_play.State==PlayState.Faulted||!Status.SnapshotValid)throw new InvalidOperationException("Invalid coupled root motion presentation.");
     }
     public ClipPlaybackData Playback(Guid objectId){VerifyRootPresentation();return _roots.Playback(objectId);}
     public ClipSampleTimes Sample(Guid objectId,float alpha,bool paused){VerifyRootPresentation();return _roots.Sample(objectId,alpha,paused);}
@@ -153,9 +170,11 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
         private readonly CharacterVelocity[] _velocities = new CharacterVelocity[bindings.Count(b => b.Character is not null)];
         private readonly CharacterContact[] _contacts = new CharacterContact[bindings.Count(b => b.Character is not null) * 64];
         private readonly TransformData[] _published = new TransformData[bindings.Length];
+        private readonly int[] _contactCounts=new int[bindings.Length];
         private Guid _session, _identity; private ulong _sequence; private bool _ready, _charactersCreated;
         public Guid Epoch { get; } = Guid.NewGuid();
         public CharacterState Character(int binding) => _states[Array.IndexOf(_characters, binding)];
+        public int ContactCount(int binding)=>_contactCounts[binding];
         public Guid QueryTarget(Guid actor,float reach,uint mask)
         {
             int i=Array.FindIndex(bindings,b=>b.Id==actor),n=Array.IndexOf(_characters,i);
@@ -214,7 +233,17 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
                     Rotation = Q.Normalize(inputs[i].Start.Rotation * Q.CreateFromAxisAngle(V3.UnitY, inputs[i].YawRadians))
                 };
             }
-            ulong next = _characters.Length == 0 ? _world!.Step((float)h) : _world!.StepCharacters(_sequence, (float)h, _velocities, _states, _contacts).Sequence;
+            Array.Clear(_contactCounts);ulong next;
+            if(_characters.Length==0)next=_world!.Step((float)h);
+            else {
+                var receipt=_world!.StepCharacters(_sequence,(float)h,_velocities,_states,_contacts);next=receipt.Sequence;
+                if(receipt.Contacts>_contacts.Length)throw new ArgumentException("Contact receipt budget.");
+                for(int n=0;n<receipt.Contacts;n++) {
+                    var contact=_contacts[n];int character=Array.IndexOf(_characterIds,contact.Character);
+                    if(character<0||contact.Sequence!=next)throw new ArgumentException("Contact identity/sequence mismatch.");
+                    _contactCounts[_characters[character]]++;
+                }
+            }
             if (next != stamp.Sequence) throw new ArgumentException("Numerical sequence mismatch.");
             if (_boxes.Length != 0) _world.ReadBodyStates3D(next, _boxIds, _bodies);
             for (int i = 0; i < inputs.Length; ++i) output[i] = new(bindings[i].Id, inputs[i].Start);

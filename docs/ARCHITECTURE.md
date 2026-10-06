@@ -73,7 +73,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 | SceneAsset / Serialization | 通用组件记录、资产引用、版本迁移 | C# `.ncmascene` JSON v1 通用组件读写/原子保存已实现；旧 .ncscene 不兼容；资产引用/迁移流水线未实现 |
 | Editor Commands | 文档修改、事务、Undo/Redo、隔离 Play | Editor.Core 持有完整文档事务/唯一 Undo；ImGui 提交 UUID 意图，原生命令栈已删除 |
 | Gameplay Services | 输入、角色、动作、战斗、任务等游戏 API | 未实现完整 SDK；当前只有基础门面/示例 |
-| Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement`；M4.2真实Jolt数值；M4.3固定步角色/跟随相机；M4.4 XZ/Yaw根运动及视觉去重；M4.5候选同量子Health发布/动作战斗 |
+| Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement`；M4.2真实Jolt数值；M4.3固定步角色/跟随相机；M4.4 XZ/Yaw根运动及视觉去重；M4.5同量子Health发布/动作战斗；M4.6复制Debug与审批只读MCP |
 
 当前 C# Behaviour 已支持挂载、禁用、删除、数值/布尔 Export 编辑及隔离 Play。
 M1.3 已新增 Ncma.Gameplay.PlaySession：一个 WorldRunner 派发 OnFixedUpdate/顺序 Systems，帧后 OnUpdate 只读。默认 1/60 秒、最多追赶 8 步；严格与交互时间策略、Pause/Resume/Step/Faulted 已接入 ImGui。安全重载先隔离预检再清理/激活，成功 Paused，失败保留旧暂停或激活后 Faulted；重置私有状态，私有状态迁移未实现。

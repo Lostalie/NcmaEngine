@@ -164,6 +164,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
             Line(); Button(40,"Open Scene...","browse_open",writable);Line(); Button(41,"Save Scene As...","browse_save",writable);
         }
         if(preferences is not null) { Line(); Button(42,_showPreferences?"Hide Preferences":"Preferences","preferences_toggle"); }
+        if(_characters is not null){Line();Add(GuiItemKind.Button,22,1,_showCharacters?"Hide Character Debug":"Character Debug",new("character_toggle"));}
         End();
         Panel(2, "GameObjects (flat list)", 0, toolbar, side, h - toolbar);
         Button(8, "+ GameObject", "create", writable);
@@ -450,6 +451,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
             }
         }
         End();
+        BuildCharacterDebug(w,h,ref labelId);
         _frame = new() { StructSize = (uint)Marshal.SizeOf<GuiFrame>(), Frame = frameId, ViewGeneration = _generation,
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
         return _frame;
@@ -522,6 +524,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if (e.Phase != 3) continue;
                 if(ApplyAssetAction(action,e.Value,text,stamp))continue;
                 if(ApplyViewportAction(action,e.Value,text,stamp))continue;
+                if(ApplyCharacterAction(action,e.Value))continue;
                 switch (action.Kind)
                 {
                     case "browser_camera": SceneCamera=Guid.Empty; break;
