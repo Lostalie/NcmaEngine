@@ -46,7 +46,7 @@ internal static partial class Program
     public static int Main()
     {
         var tests = new List<(string Name, Action Run)> {
-            ("registry-shared-values", () => { var r = RenderComponentRegistry.CreateRegistry(); Check(r.Describe().Count == 8); Check(r.Decode<StaticMeshData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh))) == Mesh); Check(r.Decode<Ncma.Animation.RootMotionData>(new(Ncma.Animation.RootMotionData.TypeId,1,r.Encode(new Ncma.Animation.RootMotionData(0))))==new Ncma.Animation.RootMotionData(0)); Reject(() => r.Decode<CameraData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh)))); }),
+            ("registry-shared-values", () => { var r = RenderComponentRegistry.CreateRegistry(); Check(r.Describe().Count == 9); Check(r.Decode<StaticMeshData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh))) == Mesh); Check(r.Decode<Ncma.Animation.RootMotionData>(new(Ncma.Animation.RootMotionData.TypeId,1,r.Encode(new Ncma.Animation.RootMotionData(0))))==new Ncma.Animation.RootMotionData(0)); Reject(() => r.Decode<CameraData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh)))); }),
             ("strict-schema-and-version", () => { var d = Document(); var g = Geometry(d); var snapshot = d.CaptureSnapshot(); foreach (var c in snapshot.Objects[0].Components) {
                 AtomicReject(d, snapshot with { Objects = [snapshot.Objects[0] with { Components = [c with { Version = 2 }] }] }); }
                 var component = snapshot.Objects[0].Components.Single(c => c.TypeId == StaticMeshData.TypeId);

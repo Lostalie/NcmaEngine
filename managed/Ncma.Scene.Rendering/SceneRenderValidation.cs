@@ -37,13 +37,15 @@ public static class SceneRenderValidation
     public static IReadOnlyList<SceneRenderDiagnostic> Inspect(SceneDocumentSnapshot snapshot,
         PreparedSceneAssets? assets = null, bool strictMissing = false, AssetCatalog? catalog = null)
     {
-        ArgumentNullException.ThrowIfNull(snapshot); assets ??= PreparedSceneAssets.Empty;
+        ArgumentNullException.ThrowIfNull(snapshot); bool validateActionReferences=assets is not null; assets ??= PreparedSceneAssets.Empty;
         var diagnostics = new List<SceneRenderDiagnostic>(); int primaryLights = 0;
         foreach (var obj in snapshot.Objects)
         {
             var components = obj.Components.ToDictionary(c => c.TypeId, StringComparer.Ordinal);
             bool mesh = components.ContainsKey(StaticMeshData.TypeId), skin = components.ContainsKey(SkinnedMeshData.TypeId);
             bool spatial = mesh || skin || components.ContainsKey(CameraData.TypeId) || components.ContainsKey(DirectionalLightData.TypeId);
+            if(components.ContainsKey(Ncma.Animation.ActionDefinitionData.TypeId) && (!components.ContainsKey(Ncma.Animation.RootMotionData.TypeId) || !components.ContainsKey("ncma.combat.health")))
+                throw new ArgumentException("Action definition requires explicit root-motion character and health.");
             if (mesh && skin) throw new ArgumentException("An object cannot contain both static and skinned geometry.");
             if (components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) && !skin)
                 throw new ArgumentException("Clip playback requires a skinned mesh on the same object.");
@@ -81,6 +83,15 @@ public static class SceneRenderValidation
                     if (clip is not null && (clip.CharacterId != data.CharacterId || clip.SkeletonId != data.SkeletonId ||
                         skeleton is not null && clip.Generation != skeleton.Generation))
                         throw new ArgumentException("Clip must belong to the exact character/skeleton generation.");
+                }
+                if(components.TryGetValue(Ncma.Animation.ActionDefinitionData.TypeId,out var action)) {
+                    var definition=Registry.Decode<Ncma.Animation.ActionDefinitionData>(action);
+                    foreach(Guid id in new[]{definition.IdleClip,definition.RunClip,definition.AttackClip,definition.DodgeClip}) {
+                        var clip=Resolve(obj.Id,id,AssetKind.Clip);
+                        if(validateActionReferences&&clip is null)throw new ArgumentException("Action clips must resolve in prepared immutable metadata.");
+                        if(clip is not null&&(clip.CharacterId!=data.CharacterId||clip.SkeletonId!=data.SkeletonId||skeleton is not null&&clip.Generation!=skeleton.Generation))
+                            throw new ArgumentException("Action clips must belong to the exact character/skeleton generation.");
+                    }
                 }
             }
             if (geometry is not null && materials is not null && materials.MaterialSlots < Math.Max(1, geometry.MaterialSlots))

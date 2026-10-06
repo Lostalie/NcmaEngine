@@ -38,7 +38,7 @@ public sealed partial class World
     {
         VerifyStructuralAccess();
         _ = Components.Describe(typeof(T));
-        if (objects.IsEmpty && !freezeMembership || objects.Length > MaxObjects || freezeMembership && publishRequired || _frozenComponentTypes.ContainsKey(typeof(T)))
+        if (objects.IsEmpty && (!freezeMembership || publishRequired) || objects.Length > MaxObjects || _frozenComponentTypes.ContainsKey(typeof(T)))
             throw new ArgumentException("Invalid authority target budget or frozen component type.");
         Guid[] owned = objects.ToArray();
         var unique = new HashSet<Guid>();

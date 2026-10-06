@@ -37,7 +37,7 @@
 | 资产系统 | M3.1/M3.2 已通过 G1/G2：UUID/严格元数据、索引、唯一 history、文件事务、异步持久导入、确定重导入/tombstone、typed NCA、generation journal/Play pin/精确 GC；M3.6候选浏览/本地审批/导入/放置与类型选择；M3.7严格 Prefab 格式/只读提取与放置预检候选 | 缩略图/独立材质浏览、完整资产 MCP、Prefab 保存/实例发布/覆盖/恢复、cook、G6/G7验收 |
 | D3D11 / PBR / 软阴影 | 部分实现：reference GGX/HDR/CSM/PCF/PCSS/contact；G3 资源/纹理/材质/typed Graph，G4 正式静态 Scene/Editor/Player 主画面/单方向光 shadow/HDR，G5 DX11 GPU 动画蒙皮共享主画面/阴影；M3.6候选GUI离屏合成 | 通用多阶段资源图、IBL/透明/多光、场景 CSM/contact、生产级联合验收、G6人工 |
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
-| 物理 | M2.6 独立Box2D/Jolt服务；M4.1运动权威；M4.2真实Jolt角色数值；M4.3 Editor/Player固定步角色/盒体接线；M4.4候选碰撞约束根运动 | 动作战斗/Gameplay碰撞事件、人工/性能/长稳联合验收；默认物理仍disabled |
+| 物理 | M2.6 独立Box2D/Jolt服务；M4.1运动权威；M4.2真实Jolt角色数值；M4.3 Editor/Player固定步角色/盒体接线；M4.4碰撞约束根运动；M4.5候选动作/closest-ray战斗 | 连续武器hitbox/通用Gameplay碰撞事件、人工/性能/长稳联合验收；默认物理仍disabled |
 | FBX 角色 | G2 持久导入/异步 Worker/UUID/generation；G5 NCA 保存重启 → 场景骨架片段 → GPU/Player，不在 Player 解析 FBX | 完整源材质/纹理、真实用户模型/所有 DCC 骨骼缩放/skin mode 覆盖 |
 | 动画 | 独立动作实验室/数值 ABI 2；M3.5 纯 C# ClipPlayback/committed 时钟/独立 Edit 预览与 pose ABI 1.0/GPU 蒙皮，根位移只报告；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
 | UI | 仅模型骨架：当前 C++ UiDocument 有节点、样式、布局字段和 Token | C# 文档、持久化、布局求解、Figma 式画布、运行时 UI 渲染/输入、组件实例/变体均未实现 |
@@ -160,7 +160,7 @@ M4.2新增显式Physics1.2/Character1.0：真实Jolt capsule、grounding/contact
 ray/sweep及C#数值缓冲客户端，见[交付](M4_2_DELIVERY_REPORT.md)。M4.3实现C#固定步角色/盒体绑定、
 Editor/Player/Headless实际solver接线、跟随相机与只读插值，见[交付](M4_3_DELIVERY_REPORT.md)。
 M4.4候选接入XZ/Yaw根运动、成功提交才消费的共享时钟、真实碰撞约束与GPU视觉根去重，
-见[交付](M4_4_DELIVERY_REPORT.md)。动作战斗、调试/MCP和最终验收属于M4.5–M4.7，未实现。
+见[交付](M4_4_DELIVERY_REPORT.md)。M4.5候选实现动作状态、连击/中断、tick Notify、closest-ray命中/无敌与同量子Health发布，见[交付](M4_5_DELIVERY_REPORT.md)。调试/MCP和最终验收属于M4.6–M4.7，未实现。
 M4.1 的最终退出门和测试证据见 [交付记录](M4_1_DELIVERY_REPORT.md)。
 
 - 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。

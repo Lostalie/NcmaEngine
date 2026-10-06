@@ -42,28 +42,28 @@ public sealed class ClipClock
     { ArgumentNullException.ThrowIfNull(world);if(world.IsUpdating)throw new InvalidOperationException("Prepare animation clocks at a committed boundary.");_world=world.Identity;_tick=world.Tick;Validate(settings,duration);_settings=settings;_duration=duration;_previous=_current=settings.StartTime; }
     public ulong CommittedTick { get{Verify();return _tick;} }
     public double UnwrappedTime { get{Verify();return _current;} }
-    public ClipInterval PrepareNext(World world, ClipPlaybackData settings, double duration, double fixedDelta)
+    public ClipInterval PrepareNext(World world, ClipPlaybackData settings, double duration, double fixedDelta, bool restart = false)
     {
         Verify(); Validate(settings, duration);
         if(world.Identity!=_world || world.Tick!=_tick || !double.IsFinite(fixedDelta) || fixedDelta is <.001 or >1)
             throw new ArgumentException("Prepare one interval from the original committed clock.");
-        double previous=settings.ClipId!=_settings.ClipId || settings.StartTime!=_settings.StartTime || duration!=_duration ? settings.StartTime : _current;
+        double previous=restart || settings.ClipId!=_settings.ClipId || settings.StartTime!=_settings.StartTime || duration!=_duration ? settings.StartTime : _current;
         double current=previous+(settings.Playing ? fixedDelta*settings.Speed : 0);
         if(!settings.Loop){previous=Math.Min(duration,previous);current=Math.Min(duration,current);}
         if(!double.IsFinite(current))throw new ArgumentException("Animation time overflow.");
         return new(previous,current);
     }
-    public void ObserveCommitted(World world, ClipPlaybackData settings, double duration, double fixedDelta)
+    public void ObserveCommitted(World world, ClipPlaybackData settings, double duration, double fixedDelta, bool restart = false)
     {
         Verify();ArgumentNullException.ThrowIfNull(world);Validate(settings,duration);
         if(world.IsUpdating)throw new InvalidOperationException("Animation time observes only committed fixed-step boundaries.");
         if(world.Identity!=_world || world.Tick<_tick || world.Tick-_tick>128 || !double.IsFinite(fixedDelta) || fixedDelta is <.001 or >1)
             throw new ArgumentException("Clock requires the original World and bounded committed fixed steps.");
         ulong delta=world.Tick-_tick;
-        if(delta==0 && settings==_settings && duration==_duration)return;
+        if(delta==0 && !restart && settings==_settings && duration==_duration)return;
         double previous=_current,current=_current;
         // Explicit clip/start changes reset at their committed boundary. Speed/pause/loop changes retain time.
-        if(settings.ClipId!=_settings.ClipId || settings.StartTime!=_settings.StartTime || duration!=_duration) previous=current=settings.StartTime;
+        if(restart || settings.ClipId!=_settings.ClipId || settings.StartTime!=_settings.StartTime || duration!=_duration) previous=current=settings.StartTime;
         if(delta!=0 && settings.Playing) {
             previous=current+(delta-1)*fixedDelta*settings.Speed;current+=delta*fixedDelta*settings.Speed;
             if(!settings.Loop){previous=Math.Min(duration,previous);current=Math.Min(duration,current);}

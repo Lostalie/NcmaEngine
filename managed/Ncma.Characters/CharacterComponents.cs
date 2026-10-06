@@ -61,6 +61,7 @@ public static class CharacterComponents
             ("jumpSpeed", "number"), ("turnSpeed", "number"), ("category", "integer"), ("mask", "integer"), ("controlled", "boolean")), CharacterData.Validate, runtimeAttachable: false);
         registry.Register<BoxColliderData>(BoxColliderData.TypeId, 1, Schema(("halfX", "number"), ("halfY", "number"), ("halfZ", "number"), ("density", "number"), ("category", "integer"), ("dynamic", "boolean")), BoxColliderData.Validate, runtimeAttachable: false);
         registry.Register<FollowCameraData>(FollowCameraData.TypeId, 1, Schema(("target", "string"), ("offsetX", "number"), ("offsetY", "number"), ("offsetZ", "number"), ("lookHeight", "number")), FollowCameraData.Validate, runtimeAttachable: false);
+        registry.Register<HealthData>(HealthData.TypeId,1,Schema(("current","number"),("maximum","number")),HealthData.Validate,runtimeAttachable:false);
         return registry;
     }
     private static readonly ComponentRegistry Decoder = Register(ComponentRegistry.CreateDefault());
@@ -75,6 +76,7 @@ public static class CharacterComponents
             if(parts.ContainsKey(Ncma.Animation.RootMotionData.TypeId) && (!character || !parts.ContainsKey(SkinnedMeshData.TypeId) || !parts.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId)))
                 throw new ArgumentException("Root motion requires a capsule, skinned mesh and explicit clip playback.");
             if (character && box) throw new ArgumentException("Character capsule and box collider are exclusive.");
+            if(parts.ContainsKey(HealthData.TypeId) && !character && !box)throw new ArgumentException("Combat health requires a numerical collision binding.");
             if (character || box)
             {
                 if (!parts.TryGetValue("ncma.transform", out var t)) throw new ArgumentException("Physics binding requires Transform.");

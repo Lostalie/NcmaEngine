@@ -177,7 +177,10 @@ public sealed partial class World
     internal void VerifyWriteAccess()
     {
         VerifyAccess();
-        if (_readOnlyDepth != 0) throw new InvalidOperationException("World mutation is forbidden in a read-only gameplay callback.");
+        if (_readOnlyDepth != 0) {
+            var error=new InvalidOperationException("World mutation is forbidden in a read-only gameplay callback.");
+            RejectStep(error);throw error;
+        }
     }
     internal IDisposable ReadOnly()
     {

@@ -21,6 +21,7 @@ internal sealed class RootMotionSet : IDisposable
         internal ClipClock? Clock;
         internal Vector3 Start, Desired, Accepted;
         internal float Yaw;
+        internal bool Restart, PreparedRestart;
     }
     private readonly Dictionary<Guid,Entry> _entries=[];
     private readonly Dictionary<(Guid Clip,int Root),RootMotionTrack> _tracks=[];
@@ -68,6 +69,7 @@ internal sealed class RootMotionSet : IDisposable
             e.Requested=e.Prepared=e.Committed=e.Startup;
             e.Clock=new(world,e.Startup,e.Tracks[e.Startup.ClipId].Duration);
             e.Start=e.Desired=e.Accepted=Vector3.Zero;e.Yaw=0;
+            e.Restart=e.PreparedRestart=false;
         }
     }
     internal void Request(Guid id,ClipPlaybackData settings)
@@ -76,19 +78,24 @@ internal sealed class RootMotionSet : IDisposable
         if(!e.Tracks.TryGetValue(settings.ClipId,out var track)||settings.StartTime>track.Duration)throw new ArgumentException("Playback must select a bounded pinned clip.");
         e.Requested=settings;
     }
+    internal double Duration(Guid id,Guid clip)=>_entries.TryGetValue(id,out var e)&&e.Tracks.TryGetValue(clip,out var track)?track.Duration:throw new ArgumentException("Action clip must belong to this pinned model generation.");
+    internal double Time(Guid id)=>_entries[id].Clock!.UnwrappedTime;
+    internal ClipInterval Interval(Guid id,ClipPlaybackData settings,double h,bool restart)=>_entries[id].Clock!.PrepareNext(_world!,settings,Duration(id,settings.ClipId),h,restart);
+    internal void SelectForStep(Guid id,ClipPlaybackData settings,bool restart){Request(id,settings);_entries[id].Restart=restart;}
     internal RootMotionDelta Prepare(Guid id,TransformData start,double h)
     {
         var e=_entries[id];var track=e.Tracks[e.Requested.ClipId];
-        var interval=e.Clock!.PrepareNext(_world!,e.Requested,track.Duration,h);
+        var interval=e.Clock!.PrepareNext(_world!,e.Requested,track.Duration,h,e.Restart);
         var delta=track.Extract(interval,e.Requested.Loop);
-        e.Prepared=e.Requested;e.Start=start.Position;e.Desired=Vector3.Transform(delta.Translation,start.Rotation);e.Yaw=delta.Yaw;
+        e.Prepared=e.Requested;e.PreparedRestart=e.Restart;e.Start=start.Position;e.Desired=Vector3.Transform(delta.Translation,start.Rotation);e.Yaw=delta.Yaw;
         return new(e.Desired,e.Yaw);
     }
     internal void Commit(World world,double h)
     {
         if(world!=_world)throw new ArgumentException("Root motion world identity mismatch.");
         foreach(var e in _entries.Values) {
-            e.Clock!.ObserveCommitted(world,e.Prepared,e.Tracks[e.Prepared.ClipId].Duration,h);
+            e.Clock!.ObserveCommitted(world,e.Prepared,e.Tracks[e.Prepared.ClipId].Duration,h,e.PreparedRestart);
+            e.Restart=e.PreparedRestart=false;
             e.Committed=e.Prepared;e.Accepted=world.FindObject(e.Id).Get<TransformData>().Position-e.Start;
         }
     }

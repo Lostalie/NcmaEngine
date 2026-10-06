@@ -20,6 +20,24 @@ internal static class MovementCases
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("Managed value publication shares numerical commit and rejects caught gameplay writes", () => {
+                var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
+                using var f=new Fixture(components:registry,prepare:t=>t.Set(new OwnedValue(100)));
+                f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));Reject(()=>f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(1)));
+                f.Start();f.Play.AdvanceFixedStep();Check(f.Target.Get<OwnedValue>().Value==75&&f.Play.Tick==1);
+                byte[] before=f.Document.CaptureBytes();f.Probe.Fixed=_=>{try{f.Target.Set(new OwnedValue(0));}catch(InvalidOperationException){}};
+                f.Play.AdvanceFixedStep();Check(f.Play.State==PlayState.Faulted&&f.Play.Tick==1&&f.Adapter.Steps==1&&before.SequenceEqual(f.Document.CaptureBytes()));
+            }),
+            ("Changed validator publication fails after solver without managed partial commit", () => {
+                var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v.Value==75?new(74):v);
+                using var f=new Fixture(components:registry,prepare:t=>t.Set(new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));f.Start();
+                byte[] before=f.Document.CaptureBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
+            }),
+            ("Managed publication source cannot smuggle an ordinary World write", () => {
+                var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
+                using var f=new Fixture(components:registry,prepare:t=>t.Set(new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>{try{f.Other.Name="illegal";}catch(InvalidOperationException){}return new(75);});f.Start();
+                byte[] before=f.Document.CaptureBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
+            }),
             ("Movement authority permits one validated publication and copied committed reads", () => {
                 using var f = new Fixture(); f.Start();
                 f.Probe.Fixed = _ => { f.Submit(Vector3.UnitX); Check(f.Target.Get<TransformData>().Position == Vector3.Zero); };
@@ -293,6 +311,7 @@ internal static class MovementCases
         Console.WriteLine($"Movement tests: {cases.Length}/{cases.Length} passed (deterministic fake; NOT Jolt character acceptance).");
     }
 
+    private readonly record struct OwnedValue(int Value):IComponent;
     private sealed class FaultObserver : ICommittedStepObserver
     { public void StepCommitted(World world, double fixedDeltaSeconds) => throw new InvalidOperationException("observer fault"); }
 
@@ -308,10 +327,11 @@ internal static class MovementCases
         public readonly List<FakeNumerics> Adapters = [];
         private readonly FakeNumerics _first = new();
         public FakeNumerics Adapter => Adapters.Count == 0 ? _first : Adapters[^1];
-        public Fixture(PlayAdvanceMode mode = PlayAdvanceMode.FixedSteps, bool bothTargets = false, ComponentRegistry? components = null)
+        public Fixture(PlayAdvanceMode mode = PlayAdvanceMode.FixedSteps, bool bothTargets = false, ComponentRegistry? components = null,Action<Ncma.Runtime.GameObject>? prepare=null)
         {
             Document = new("Movement fixture", components);
             Target = Document.World.CreateObject("Target"); Target.Set(TransformData.Identity); _targetId = Target.PersistentId;
+            prepare?.Invoke(Target);
             Other = Document.World.CreateObject("Other"); Other.Set(TransformData.Identity);
             Document.SetBindings(TargetId, [new(Guid.NewGuid(), "Test.Probe", true, [])]);
             Play = new(Document, FrameTimePolicy.Strict, advanceMode: mode);

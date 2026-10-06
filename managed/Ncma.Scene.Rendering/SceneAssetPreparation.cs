@@ -49,6 +49,9 @@ public static class SceneAssetPreparation
                         var material = Registry.Decode<MaterialOverrideData>(component); if (material.MaterialId != Guid.Empty) Add(material.MaterialId, AssetKind.Material); break;
                     case Ncma.Animation.ClipPlaybackData.TypeId:
                         Add(Registry.Decode<Ncma.Animation.ClipPlaybackData>(component).ClipId, AssetKind.Clip); break;
+                    case Ncma.Animation.ActionDefinitionData.TypeId:
+                        var action=Registry.Decode<Ncma.Animation.ActionDefinitionData>(component);
+                        foreach(Guid id in new[]{action.IdleClip,action.RunClip,action.AttackClip,action.DodgeClip})Add(id,AssetKind.Clip);break;
                 }
         return refs.OrderBy(r => r.Id.Value).ThenBy(r => r.ExpectedKind).ToArray();
         void Add(Guid id, AssetKind kind) { if (refs.Count >= RuntimeAssetLoader.MaxRequired && !refs.Contains(new(new(id), kind))) throw new ArgumentException("Scene asset reference budget."); refs.Add(new(new(id), kind)); }

@@ -16,6 +16,25 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     private readonly Guid[] _targets;
     private readonly Dictionary<Guid, int> _index;
     private readonly Func<INumericMovementAdapter> _factory;
+    private readonly StageMovementValues? _stageManaged;
+    private readonly List<IPublication> _publications=[];
+    private readonly HashSet<Type> _publicationTypes=[];
+    private interface IPublication {void Start();void Publish();void Close();}
+    private sealed class Publication<T>(MovementCoordinator owner,Guid[] ids,Func<Guid,T> source):IPublication where T:struct,IComponent
+    {
+        private World.ComponentAuthority? _proof;
+        public void Start()=>_proof=owner.World.ClaimComponents<T>(ids,freezeMembership:true,publishRequired:true);
+        public void Publish(){foreach(Guid id in ids){T value;using(owner.World.PreparationReadOnly())value=source(id);if(!EqualityComparer<T>.Default.Equals(owner.World.WriteOwned(_proof!,id,value),value))throw new InvalidOperationException("Publication validation changed its candidate value.");}}
+        public void Close(){_proof?.Dispose();_proof=null;}
+    }
+    public void RegisterPublication<T>(ReadOnlySpan<Guid> objects,Func<Guid,T> source)where T:struct,IComponent
+    {
+        Verify();ArgumentNullException.ThrowIfNull(source);
+        if(_play.State!=PlayState.Stopped||objects.IsEmpty||objects.Length>MaxTargets)throw new ArgumentException("Register bounded managed publication before Start.");
+        Guid[] ids=objects.ToArray();if(ids.Distinct().Count()!=ids.Length||ids.Any(id=>!World.FindObject(id).Has<T>()))throw new ArgumentException("Duplicate/missing publication target.");
+        if(!_publicationTypes.Add(typeof(T)))throw new ArgumentException("Register one complete publication set per component type.");
+        _publications.Add(new Publication<T>(this,ids,source));
+    }
     private readonly byte[] _startup;
     private readonly NumericMovementInput[] _inputs;
     private readonly NumericMovementResult[] _results, _committed;
@@ -40,13 +59,13 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     private ulong _sequence, _committedTick, _attemptTick;
     private bool _collecting, _executed, _snapshotValid, _faulted, _disposed;
 
-    public MovementCoordinator(PlaySession play, ReadOnlySpan<Guid> targets, Func<INumericMovementAdapter> factory)
+    public MovementCoordinator(PlaySession play, ReadOnlySpan<Guid> targets, Func<INumericMovementAdapter> factory,StageMovementValues? stageManaged=null)
     {
         ArgumentNullException.ThrowIfNull(play); ArgumentNullException.ThrowIfNull(factory);
         play.Document.World.VerifyAccess();
         if (play.State != PlayState.Stopped || targets.IsEmpty || targets.Length > MaxTargets)
             throw new ArgumentException("Movement composition requires stopped Play and a bounded nonempty target set.");
-        _play = play; _factory = factory; _targets = targets.ToArray(); _index = [];
+        _play = play; _factory = factory; _stageManaged=stageManaged;_targets = targets.ToArray(); _index = [];
         for (int i = 0; i < _targets.Length; i++)
             if (!_index.TryAdd(_targets[i], i) || !World.FindObject(_targets[i]).Has<TransformData>())
                 throw new ArgumentException("Duplicate or missing movement target.");
@@ -109,6 +128,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         FillInputs();
         _authority = World.ClaimComponents<TransformData>(_targets);
         foreach (var claim in _frozenFactories) _frozenOwned.Add(claim());
+        foreach(var publication in _publications)publication.Start();
         _worldId = World.Identity; _lastWorldId = _worldId; _sessionId = _play.SessionId;
         _sequence = 0; _committedTick = World.Tick; _attemptTick = World.Tick;
         _collecting = _executed = _snapshotValid = _faulted = false;
@@ -160,6 +180,8 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         for (int i = 0; i < _results.Length; i++)
             if (World.WriteOwned(_authority!, _results[i].ObjectId, _results[i].Transform) != _results[i].Transform)
                 throw new InvalidOperationException("Registered component validation changed the coupled numerical result.");
+        using(World.PreparationReadOnly())_stageManaged?.Invoke(_stamp,_results);
+        foreach(var publication in _publications)publication.Publish();
     }
 
     void ICoupledStepParticipant.Committed()
@@ -183,6 +205,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         // Failed close retains BOTH numerical ownership and write authority for explicit retry.
         using (World.ReadOnly()) _adapter?.Dispose();
         _adapter = null;
+        foreach(var publication in _publications)publication.Close();
         foreach (var claim in _frozenOwned) claim.Dispose();
         _frozenOwned.Clear();
         _authority?.Dispose(); _authority = null;

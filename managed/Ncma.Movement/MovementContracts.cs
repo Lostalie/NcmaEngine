@@ -9,6 +9,8 @@ public readonly record struct MovementIntent(MovementStepStamp Stamp, Guid Objec
 public readonly record struct NumericMovementInput(Guid ObjectId, TransformData Start, V3 Displacement, float YawRadians);
 public readonly record struct NumericMovementResult(Guid ObjectId, TransformData Transform);
 public readonly record struct NumericMovementReceipt(MovementStepStamp Stamp, int Count);
+// Managed host composition only. Borrowed readonly results; no callback crosses the plugin ABI.
+public delegate void StageMovementValues(MovementStepStamp stamp,ReadOnlySpan<NumericMovementResult> results);
 public sealed record CoupledMovementStatus(Guid SessionId, Guid WorldId, ulong CommittedTick, ulong CommittedSequence,
     ulong AttemptTick, bool NumericalExecutionStarted, bool SnapshotValid, bool ResourcesOwned, bool Faulted);
 

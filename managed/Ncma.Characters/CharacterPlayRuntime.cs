@@ -17,6 +17,7 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
     private readonly MovementCoordinator _coordinator;
     private readonly Binding[] _bindings;
     private readonly RootMotionSet _roots;
+    private readonly ActionController _actions;
     private Domain? _domain;
     private bool _disposed;
     private sealed record Binding(Guid Id, CharacterData? Character, BoxColliderData? Box);
@@ -35,9 +36,12 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
     {
         _play = play;
         _roots=new(play.Document.World,assets);
+        try{_actions=new(play.Document.World,_roots);}catch{_roots.Dispose();throw;}
         _bindings = play.Document.World.GetObjects().Where(o => o.Has<CharacterData>() || o.Has<BoxColliderData>()).OrderBy(o => o.PersistentId)
             .Select(o => new Binding(o.PersistentId, o.Has<CharacterData>() ? o.Get<CharacterData>() : null, o.Has<BoxColliderData>() ? o.Get<BoxColliderData>() : null)).ToArray();
-        _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => { _roots.Initialize(play.Document.World); return _domain = new Domain(physics, _bindings); });
+        _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => {
+            _roots.Initialize(play.Document.World);_actions.Initialize(play.Document.World,play.SessionId);return _domain = new Domain(physics, _bindings);
+        },StageCombat);
         Guid[] chars = _bindings.Where(b => b.Character is not null).Select(b => b.Id).ToArray();
         Guid[] boxes = _bindings.Where(b => b.Box is not null).Select(b => b.Id).ToArray();
         Guid[] cameras = play.Document.World.GetObjects().Where(o => o.Has<FollowCameraData>()).Select(o => o.PersistentId).ToArray();
@@ -47,6 +51,8 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
         _coordinator.FreezeConfiguration<BoxColliderData>(boxes);
         _coordinator.FreezeConfiguration<FollowCameraData>(cameras);
         _coordinator.FreezeConfiguration<RootMotionData>(_roots.Ids);
+        _coordinator.FreezeConfiguration<ActionDefinitionData>(_actions.ActorIds);
+        if(_actions.HealthIds.Length!=0)_coordinator.RegisterPublication<HealthData>(_actions.HealthIds,_actions.Health);
         if(_roots.Ids.Length!=0) {
             _coordinator.FreezeConfiguration<SkinnedMeshData>(_roots.Ids,freezeMembership:false);
             _coordinator.FreezeConfiguration<ClipPlaybackData>(_roots.Ids,freezeMembership:false);
@@ -58,25 +64,28 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
     {
         if (_disposed || world != _play.Document.World || _domain is null || !Status.SnapshotValid) throw new InvalidOperationException("Stale character domain.");
         var input = _play.Input; float h = (float)delta;
+        _actions.BeginStep();
         for (int i = 0; i < _bindings.Length; ++i)
         {
             var binding = _bindings[i]; if (binding.Character is not { } data) continue;
             var state = _domain.Character(i);
             V3 direction = data.Controlled && input.Focused ? new((input.Held(68) ? 1 : 0) - (input.Held(65) ? 1 : 0), 0, (input.Held(83) ? 1 : 0) - (input.Held(87) ? 1 : 0)) : V3.Zero;
+            if(!_actions.Alive(binding.Id))direction=V3.Zero;
             if (direction.LengthSquared() > 1) direction = V3.Normalize(direction);
             float vertical = state.Velocity.Y;
             if (state.Ground == GroundState.Ground && vertical <= state.GroundVelocity.Y) vertical = state.GroundVelocity.Y - 1;
             vertical = MathF.Max(-100, vertical + data.Gravity * h);
-            if (data.Controlled && input.Focused && input.Pressed(32) && state.Ground == GroundState.Ground) vertical = data.JumpSpeed;
+            if (_actions.Alive(binding.Id) && data.Controlled && input.Focused && input.Pressed(32) && state.Ground == GroundState.Ground) vertical = data.JumpSpeed;
             V3 velocity = direction * data.Speed + new V3(0, vertical, 0);
             if (state.Ground == GroundState.Ground) velocity += new V3(state.GroundVelocity.X, 0, state.GroundVelocity.Z);
             var start = world.FindObject(binding.Id).Get<TransformData>(); float turn = 0;
             if(_roots.Contains(binding.Id)) {
+                bool rootMode=!_actions.Owns(binding.Id)||_actions.Prepare(binding.Id,input,data.Controlled,direction.LengthSquared()>1e-6f,delta);
                 var root=_roots.Prepare(binding.Id,start,delta);
                 // Root motion REPLACES horizontal input and input turn, not an additive second writer.
-                velocity=new V3(root.Translation.X/h,vertical,root.Translation.Z/h);
+                if(rootMode){velocity=new V3(root.Translation.X/h,vertical,root.Translation.Z/h);
                 if(state.Ground==GroundState.Ground)velocity+=new V3(state.GroundVelocity.X,0,state.GroundVelocity.Z);
-                _coordinator.Submit(new(_coordinator.CurrentStep,binding.Id,velocity*h,root.Yaw));continue;
+                _coordinator.Submit(new(_coordinator.CurrentStep,binding.Id,velocity*h,root.Yaw));continue;}
             }
             if (direction.LengthSquared() > 1e-6f)
             {
@@ -87,13 +96,22 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
             _coordinator.Submit(new(_coordinator.CurrentStep, binding.Id, velocity * h, turn));
         }
     }
-    public void StepCommitted(World world,double h)=>_roots.Commit(world,h);
+    public void StepCommitted(World world,double h){_roots.Commit(world,h);_actions.Commit(world);}
+    private void StageCombat(MovementStepStamp stamp,ReadOnlySpan<NumericMovementResult> results)
+    {
+        if(stamp.SessionId!=_play.SessionId||stamp.WorldId!=_play.Document.World.Identity||stamp.FromTick!=_play.Tick)throw new InvalidOperationException("Combat stamp mismatch.");
+        _actions.StageHits((actor,reach,mask)=>_domain!.QueryTarget(actor,reach,mask));
+    }
+    public void RequestAction(Guid objectId,ActionRequest request){_coordinator.VerifyControlBoundary();_actions.Request(objectId,request);}
+    public ActionStatus InspectAction(Guid objectId){VerifyRootPresentation();return _actions.Inspect(objectId);}
+    public CombatEvent[] ReadCombatEvents(){VerifyRootPresentation();return _actions.Events();}
     // Trusted owner-thread control at a safe boundary. Candidate clocks are never consumed before commit.
     public void SetRootPlayback(Guid objectId,ClipPlaybackData settings)
     {
         _play.Document.VerifyAccess();
         // Status is synchronized only outside a candidate step; World write access rejects read-only callbacks.
         _coordinator.VerifyControlBoundary();
+        if(_actions.Owns(objectId))throw new InvalidOperationException("Action policy owns this actor's playback selection.");
         if(_disposed||_play.State is not (PlayState.Running or PlayState.Paused)||!Status.SnapshotValid)
             throw new InvalidOperationException("Root playback controls require a synchronized safe boundary.");
         _roots.Request(objectId,settings);
@@ -138,6 +156,17 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
         private Guid _session, _identity; private ulong _sequence; private bool _ready, _charactersCreated;
         public Guid Epoch { get; } = Guid.NewGuid();
         public CharacterState Character(int binding) => _states[Array.IndexOf(_characters, binding)];
+        public Guid QueryTarget(Guid actor,float reach,uint mask)
+        {
+            int i=Array.FindIndex(bindings,b=>b.Id==actor),n=Array.IndexOf(_characters,i);
+            if(n<0)throw new ArgumentException("Unknown attack capsule.");var state=_states[n];
+            var hit=_world!.Ray(_sequence,new(){StructSize=40,Mask=mask,Origin=state.Foot+new V3(0,bindings[i].Character!.Value.Radius+bindings[i].Character!.Value.HalfHeight,0),
+                Displacement=V3.Transform(new(0,0,-reach),state.Rotation),Ignore=_characterIds[n]});
+            if(hit.Sequence!=_sequence)throw new ArgumentException("Stale combat query sequence.");
+            if(hit.Hit==0)return Guid.Empty;
+            int target=hit.Kind==CollisionResourceKind.Character ? Array.IndexOf(_characterIds,hit.Resource) : hit.Kind==CollisionResourceKind.Body ? Array.IndexOf(_boxIds,hit.Resource) : -1;
+            if(target<0)throw new ArgumentException("Foreign combat query result.");return bindings[hit.Kind==CollisionResourceKind.Character?_characters[target]:_boxes[target]].Id;
+        }
         public void Initialize(Guid session, Guid identity, ReadOnlySpan<NumericMovementInput> startup)
         {
             if (_world is not null || startup.Length != bindings.Length) throw new ArgumentException("Invalid character startup.");

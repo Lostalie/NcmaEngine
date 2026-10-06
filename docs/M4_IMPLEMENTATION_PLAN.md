@@ -5,7 +5,7 @@
 按此后续执行指令确认第2节的C#运动权威/跨域fail-stop边界。M4.1已通过K1及顺序完整Debug/Release回归，
 见[M4.1交付](M4_1_DELIVERY_REPORT.md)。M4.2实际Jolt角色数值插件及C#客户端已通过K2与顺序完整
 Debug/Release回归，见[M4.2交付](M4_2_DELIVERY_REPORT.md)。M4.3已接线实际角色移动/跟随相机，
-验收状态见[M4.3交付](M4_3_DELIVERY_REPORT.md)；M4.4根运动候选及门禁见[M4.4交付](M4_4_DELIVERY_REPORT.md)，M4.5–M4.7尚未实现。每阶段通过后独立提交推送再推进。
+验收状态见[M4.3交付](M4_3_DELIVERY_REPORT.md)；M4.4根运动及门禁见[M4.4交付](M4_4_DELIVERY_REPORT.md)，M4.5动作战斗候选见[M4.5交付](M4_5_DELIVERY_REPORT.md)。M4.6–M4.7尚未实现。每阶段通过后独立提交推送再推进。
 仅“开始M4”未被当作当时未审方案的自动批准。真实Physics/角色与根运动仍按后续阶段分别验收。
 
 M3 G4/G5的静态/片段/蒙皮切片可作为基础；G6–G9、M2人工/目标环境/性能/长稳仍开放。
