@@ -16,6 +16,7 @@ public sealed class SceneRenderSession : IDisposable
     private readonly SceneGpuResources _resources;
     private readonly SceneAnimationSession? _animation;
     private readonly Ncma.Gameplay.PlaySession? _play;
+    private readonly bool _interpolateTransforms;
     private readonly World _world;
     private ulong _submittedFrame,_submittedPose;
     public Guid WorldId { get; }
@@ -40,11 +41,12 @@ public sealed class SceneRenderSession : IDisposable
     public void CaptureCharacterVertices(Guid objectId,Span<byte> output)
     { Verify();_resources.CaptureCharacterVertices(_renderer,objectId,output); }
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
-        Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null)
+        Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false)
     {
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
         WorldId = world.Identity; PreparedRevision = world.Revision; _play = play;
+        _interpolateTransforms=interpolateTransforms;
         try {
             if(startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId))) {
                 if(poseKernel is null)throw new ArgumentException("Skinned scenes require the trusted numerical pose plugin.");
@@ -57,7 +59,13 @@ public sealed class SceneRenderSession : IDisposable
     public bool Submit(ulong frame, uint width, uint height, Guid sceneCamera, SceneCameraView? browserCamera = null,
         float exposure = 1, float ambient = .03f, SceneShadowSettings? shadow = null, GpuViewTarget? target = null, Vector2 origin = default, Vector4 clear = default)
     {
-        Verify(); long time = Stopwatch.GetTimestamp(); var view = _extractor.Extract(_resources.Metadata, sceneCamera, width, height, browserCamera,_animation is not null); View = view;
+        Verify(); long time = Stopwatch.GetTimestamp();
+        IReadOnlyDictionary<Guid,TransformData>? transforms=null;
+        if(_interpolateTransforms && _play is not null) {
+            if(_play.Document.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
+            transforms=_play.RenderView.Objects.ToDictionary(o=>o.ObjectId,o=>o.Transform);
+        }
+        var view = _extractor.Extract(_resources.Metadata, browserCamera is null ? sceneCamera : Guid.Empty, width, height, browserCamera,_animation is not null,transforms); View = view;
         double extraction = Stopwatch.GetElapsedTime(time).TotalMilliseconds; _diagnostics.Clear();
         for(int i=0;i<view.Diagnostics.Count;i++) _diagnostics.Add(view.Diagnostics[i]);
         for(int i=0;i<_resources.Diagnostics.Count;i++) _diagnostics.Add(_resources.Diagnostics[i]);

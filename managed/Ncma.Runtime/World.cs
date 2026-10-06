@@ -243,7 +243,7 @@ public sealed partial class World
         if (_preparing) throw new InvalidOperationException("Mutation during restore preparation.");
         Entry entry = Require(reference);
         VerifyComponentAuthority(entry.PersistentId, value.GetType(), authority);
-        if (!entry.Components.ContainsKey(value.GetType())) VerifyObjectStructure(entry.PersistentId);
+        if (!entry.Components.ContainsKey(value.GetType())) { VerifyObjectStructure(entry.PersistentId); VerifyComponentTopology(value.GetType()); }
         object validated;
         _preparing = true;
         try { validated = Components.Validate(value); } finally { _preparing = false; }
@@ -266,6 +266,7 @@ public sealed partial class World
     internal bool Remove<T>(ObjectReference reference) where T : struct, IComponent
     {
         VerifyObjectStructure(Require(reference).PersistentId);
+        VerifyComponentTopology(typeof(T));
         VerifyStructuralAccess();
         Entry entry = Require(reference);
         if (!entry.Components.ContainsKey(typeof(T))) return false;
@@ -317,6 +318,8 @@ public sealed partial class World
         object decoded;
         _preparing = true; try { decoded = Components.Decode(value); } finally { _preparing = false; }
         Type type = decoded.GetType();
+        Components.VerifyRuntimeAttachment(type);
+        VerifyComponentTopology(type);
         if (target.Entry.Components.ContainsKey(type)) throw new ArgumentException("Component already attached.");
         if (target.Entry.Components.Count >= MaxComponentsPerObject) throw new ArgumentException("Component capacity exceeded.");
         Touch(target.Id).Components.Add(type, decoded);
@@ -327,6 +330,7 @@ public sealed partial class World
         VerifyCommandAccess(); var target = StepEntry(uuid);
         Type? type = target.Entry.Components.Keys.FirstOrDefault(t => Components.Describe(t).TypeId == typeId);
         if (type is null) throw new ArgumentException("Component is not attached.");
+        VerifyComponentTopology(type);
         Touch(target.Id).Components.Remove(type);
     }
     internal void RequireCommandTarget(Guid uuid) { VerifyCommandAccess(); _ = StepEntry(uuid); }

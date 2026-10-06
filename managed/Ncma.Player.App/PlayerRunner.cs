@@ -32,9 +32,11 @@ public static class PlayerRunner
             {
                 if (project.Configuration.Plugins.Length != 0) throw new NotSupportedException("project_plugin_overrides_unimplemented");
                 var document = new SceneDocument(project.Configuration.Name,
-                    Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),
-                    Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
+                    Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
+                    Ncma.Characters.CharacterComponents.RequireComposition);
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
+                bool hasPhysics = Ncma.Characters.CharacterComponents.HasPhysics(document.CaptureSnapshot());
+                if(hasPhysics && !project.Configuration.PhysicsEnabled)throw new ArgumentException("physics_bindings_require_enabled_project");
                 if (options.Headless && project.Configuration.AssetPackage is not null) {
                     phase = "dependencies";
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, document.CaptureSnapshot(), true, project.Configuration.AssetPackage);
@@ -54,7 +56,7 @@ public static class PlayerRunner
                 }
                 owner = new(document); owner.LoadGameplay(project.GameplayAssemblyPath);
                 string plugins = Path.GetFullPath(pluginRoot ?? Path.Combine(AppContext.BaseDirectory, "plugins"));
-                phase = "dependencies"; physics = new(plugins, project.Configuration.PhysicsEnabled);
+                phase = "dependencies"; physics = new(plugins, project.Configuration.PhysicsEnabled,characterSupport:hasPhysics);
                 if (physics.Inspect() is { Enabled: true } inspected) modules = [new("ncma.physics", inspected.AbiMajor, inspected.AbiMinor, (ulong)inspected.Capabilities)];
                 if (!options.Headless)
                 {
@@ -63,7 +65,8 @@ public static class PlayerRunner
                 }
                 phase = "initialize"; var play = owner.StartPlay(factory: d => new PlaySession(d,
                     options.Headless ? FrameTimePolicy.Strict : FrameTimePolicy.Interactive, options.FixedDelta,
-                    advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames));
+                    advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames),
+                    compose:p=>Ncma.Characters.CharacterPlayRuntime.Compose(p,physics));
                 if (presentation is not null) presentation.BindScene(play, renderAssets!, project.Configuration.SceneCamera);
                 running = true; double previous = clock.Elapsed.TotalSeconds;
                 while (options.Ticks is null || play.Tick < options.Ticks)
@@ -102,8 +105,11 @@ public static class PlayerRunner
         }
         finally
         {
-            void Close(IDisposable? service, string id) { if (service is null) return; try { service.Dispose(); } catch { errors.Add(id); } }
-            Close(owner, "runtime_shutdown_failed"); Close(physics, "physics_shutdown_failed"); Close(presentation, "presentation_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed");
+            bool Close(IDisposable? service, string id) { if (service is null) return true; try { service.Dispose(); return true; } catch { errors.Add(id); return false; } }
+            // Derived animation/GPU resources close before coupled solver and its module.
+            if(Close(presentation, "presentation_shutdown_failed")) {
+                if(Close(owner, "runtime_shutdown_failed")) { Close(physics, "physics_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed"); }
+            }
         }
         if (exit == 0 && errors.Count != 0) { exit = 6; reason = "shutdown_failed"; }
         var fault = status?.Fault is { } f ? f with { Message = "Gameplay callback failed." } : null;

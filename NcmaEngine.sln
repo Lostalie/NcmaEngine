@@ -99,6 +99,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Animation.Tests", "man
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Movement", "managed\Ncma.Movement\Ncma.Movement.csproj", "{FB202401-2026-4024-8024-000000000001}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ncma.Characters", "managed\Ncma.Characters\Ncma.Characters.csproj", "{FB202403-2026-4024-8024-000000000001}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -107,6 +109,8 @@ Global
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
         {FB202401-2026-4024-8024-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU
         {FB202401-2026-4024-8024-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
+        {FB202403-2026-4024-8024-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU
+        {FB202403-2026-4024-8024-000000000001}.Release|x64.ActiveCfg = Release|Any CPU
         {FB202904-2026-4029-8029-000000000004}.Debug|x64.ActiveCfg = Debug|Any CPU
         {FB202904-2026-4029-8029-000000000004}.Release|x64.ActiveCfg = Release|Any CPU
         {FB202904-2026-4029-8029-000000000001}.Debug|x64.ActiveCfg = Debug|Any CPU

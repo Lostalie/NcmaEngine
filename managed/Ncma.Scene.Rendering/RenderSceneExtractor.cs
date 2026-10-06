@@ -38,9 +38,12 @@ public sealed class RenderSceneExtractor
     private SceneCameraView? _browser;
     private uint _width, _height;
     private bool _skin;
+    private IReadOnlyDictionary<Guid, TransformData>? _presentationTransforms;
     private readonly int _owner = Environment.CurrentManagedThreadId;
     public RenderSceneExtractor(World world) { ArgumentNullException.ThrowIfNull(world); _ = world.Identity; _world = world; }
-    public RenderSceneView Extract(PreparedSceneAssets assets, Guid cameraObject, uint width, uint height, SceneCameraView? browserCamera = null, bool gpuSkin = false)
+    // Optional owned immutable presentation values; never install them into World.
+    public RenderSceneView Extract(PreparedSceneAssets assets, Guid cameraObject, uint width, uint height, SceneCameraView? browserCamera = null, bool gpuSkin = false,
+        IReadOnlyDictionary<Guid, TransformData>? presentationTransforms = null)
     {
         if (Environment.CurrentManagedThreadId != _owner) throw new InvalidOperationException("Extraction requires the World owner thread.");
         ArgumentNullException.ThrowIfNull(assets);
@@ -49,9 +52,10 @@ public sealed class RenderSceneExtractor
         if (_world.IsUpdating) throw new InvalidOperationException("Extraction requires a committed safe boundary.");
         Guid worldId = _world.Identity; ulong revision = _world.Revision;
         if (_cached is not null && _cached.WorldId == worldId && _cached.Revision == revision && _assets == assets.Identity &&
-            _camera == cameraObject && _browser == browserCamera && _width == width && _height == height && _skin == gpuSkin) return _cached;
+            _camera == cameraObject && _browser == browserCamera && _width == width && _height == height && _skin == gpuSkin && ReferenceEquals(_presentationTransforms,presentationTransforms)) return _cached;
         using var read = _world.ReadOnly();
         var objects = _world.GetObjects(); var diagnostics = new List<SceneRenderDiagnostic>();
+        TransformData Transform(GameObject obj)=>presentationTransforms is not null && presentationTransforms.TryGetValue(obj.PersistentId,out var t) ? t : obj.Get<TransformData>();
         SceneCameraView? camera = browserCamera;
         if (camera is { } provided && (provided.ObjectId != Guid.Empty || !SceneRenderValidation.Finite(provided.ViewProjection) ||
             !Matrix4x4.Invert(provided.ViewProjection, out var inverseCamera) || !SceneRenderValidation.Finite(inverseCamera) || !PreparedSceneAssets.Finite(provided.Position)))
@@ -62,7 +66,7 @@ public sealed class RenderSceneExtractor
             GameObject? selected = null;
             foreach (var item in objects) if (item.PersistentId == cameraObject) { selected = item; break; }
             if (selected is null || !selected.Has<CameraData>() || !selected.Has<TransformData>()) diagnostics.Add(new(cameraObject, "camera_missing"));
-            else try { camera = CreateCamera(cameraObject, selected.Get<TransformData>(), selected.Get<CameraData>(), width, height); }
+            else try { camera = CreateCamera(cameraObject, Transform(selected), selected.Get<CameraData>(), width, height); }
                 catch (ArgumentException) { diagnostics.Add(new(cameraObject, "camera_invalid")); }
         }
         else if (camera is null) diagnostics.Add(new(Guid.Empty, "camera_selection_required"));
@@ -76,7 +80,7 @@ public sealed class RenderSceneExtractor
             {
                 _ = DirectionalLightData.Validate(data);
                 if (!obj.Has<TransformData>()) throw new ArgumentException();
-                var t = obj.Get<TransformData>(); _ = SceneRenderValidation.Model(t);
+                var t = Transform(obj); _ = SceneRenderValidation.Model(t);
                 light = new(obj.PersistentId, Vector3.Transform(-Vector3.UnitZ, t.Rotation), data);
             }
             catch (ArgumentException) { diagnostics.Add(new(obj.PersistentId, "light_invalid")); }
@@ -96,7 +100,7 @@ public sealed class RenderSceneExtractor
             {
                 _ = StaticMeshData.Validate(mesh);
                 if (!obj.Has<TransformData>()) { diagnostics.Add(new(id, "transform_missing")); continue; }
-                var model = SceneRenderValidation.Model(obj.Get<TransformData>());
+                var model = SceneRenderValidation.Model(Transform(obj));
                 if (!assets.TryFind(mesh.MeshId, out var info)) { diagnostics.Add(new(id, "asset_missing", mesh.MeshId)); continue; }
                 if (info!.Kind != (skin ? AssetKind.SkinnedMesh : AssetKind.StaticMesh)) { diagnostics.Add(new(id, "asset_kind_mismatch", mesh.MeshId)); continue; }
                 if (!assets.TryFind(mesh.MaterialSetId, out var material)) diagnostics.Add(new(id, "asset_missing", mesh.MaterialSetId));
@@ -119,7 +123,7 @@ public sealed class RenderSceneExtractor
             catch (ArgumentException) { diagnostics.Add(new(id, "render_data_invalid")); }
         }
         var view = new RenderSceneView(worldId, revision, camera, light, geometry, casters, indices, diagnostics);
-        _cached = view; _assets = assets.Identity; _camera = cameraObject; _browser = browserCamera; _width = width; _height = height; _skin = gpuSkin;
+        _cached = view; _assets = assets.Identity; _camera = cameraObject; _browser = browserCamera; _width = width; _height = height; _skin = gpuSkin;_presentationTransforms=presentationTransforms;
         return view;
     }
     public static SceneCameraView CreateCamera(Guid id, TransformData transform, CameraData camera, uint width, uint height)

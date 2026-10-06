@@ -60,6 +60,7 @@ public sealed unsafe partial class PhysicsWorld : IDisposable {
     private readonly DestroyWorld _destroy;
     private readonly ReadCounters? _counters;
     private ulong _handle;
+    internal bool Released => _handle == 0;
     private PluginModule Module => _lease.Module;
     public PhysicsDimension Dimension { get; }
     public PhysicsCapabilities Capabilities { get; }

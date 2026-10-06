@@ -10,6 +10,7 @@ public sealed class RuntimeSessionOwner : IDisposable
     private readonly bool _ownsCatalog;
     private PlaySession? _play;
     private IDisposable? _lease;
+    private IDisposable? _composition;
     private PlayStatus? _lastStartFailure;
     private bool _busy, _disposed;
     public SceneDocument Document { get; }
@@ -40,20 +41,28 @@ public sealed class RuntimeSessionOwner : IDisposable
             Preflight(candidate); Catalog.CommitCandidate(candidate); return count; }
         finally { _busy = false; }
     }
-    public PlaySession StartPlay(SceneDocument? runtimeDocument = null, Func<SceneDocument, PlaySession>? factory = null)
+    public PlaySession StartPlay(SceneDocument? runtimeDocument = null, Func<SceneDocument, PlaySession>? factory = null,
+        Func<PlaySession, IDisposable?>? compose = null)
     {
         Verify(); if (_play is not null) throw new InvalidOperationException("Stop current Play first.");
         var document = runtimeDocument ?? Document; document.VerifyAccess();
-        PlaySession? candidate = null; IDisposable? lease = null; _busy = true; _lastStartFailure = null;
+        PlaySession? candidate = null; IDisposable? lease = null; IDisposable? composition = null; _busy = true; _lastStartFailure = null;
         try
         {
             using (Document.World.ReadOnly()) using (document.World.ReadOnly())
                 candidate = factory is null ? new PlaySession(document) : factory(document);
             if (candidate is null || !ReferenceEquals(candidate.Document, document)) throw new ArgumentException("Foreign Play document.");
-            lease = Catalog.AcquireLease(); candidate.Start(Catalog.Instantiate); _lease = lease; _play = candidate; return candidate;
+            using (Document.World.ReadOnly()) using (document.World.ReadOnly()) composition = compose?.Invoke(candidate);
+            lease = Catalog.AcquireLease(); candidate.Start(Catalog.Instantiate);
+            _composition = composition; _lease = lease; _play = candidate; return candidate;
         }
-        catch { if (candidate is not null) _lastStartFailure = candidate.Status;
-            try { candidate?.Dispose(); } finally { lease?.Dispose(); } throw; }
+        catch (Exception original) {
+            if (candidate is not null) _lastStartFailure = candidate.Status;
+            try { candidate?.Stop(); composition?.Dispose(); candidate?.Dispose(); lease?.Dispose(); }
+            catch (Exception close) { _play = candidate; _lease = lease; _composition = composition;
+                throw new AggregateException("Failed startup resources remain owned; retry StopPlay before unload.", original, close); }
+            throw;
+        }
         finally { _busy = false; }
     }
     public int ReloadGameplay(string path)
@@ -76,8 +85,9 @@ public sealed class RuntimeSessionOwner : IDisposable
         try { previous.Stop(); }
         finally
         {
-            try { if (previous.State == PlayState.Stopped) { _play = null;
-                try { previous.Dispose(); } finally { _lease?.Dispose(); _lease = null; } } }
+            try { if (previous.State == PlayState.Stopped) {
+                _composition?.Dispose(); _composition = null; previous.Dispose(); _lease?.Dispose(); _lease = null; _play = null;
+            } }
             finally { _busy = false; }
         }
     }

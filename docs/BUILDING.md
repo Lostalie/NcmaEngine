@@ -182,3 +182,14 @@ python -m ncma_tools.m2_audit --root F:\NcmaEngine --configuration Release
 Run Debug/Release sequentially: builds share the latest default deployment and out/managed.
 Do not run them concurrently or use the other configuration's latest deployment as acceptance evidence.
 See [M2.8 evidence and remaining gates](M2_8_DELIVERY_REPORT.md) and [cleanup preflight](M2_8_CLEANUP_AUDIT.md).
+
+## M4.3 opt-in character scenes
+
+Editor/Player register the C# `Ncma.Characters` value schemas. Projects explicitly opt in with
+`physicsEnabled: true`; only bound Play scenes create the numerical world. Default remains false.
+`ncma.character.capsule` owns fixed-step WASD/Space/gravity/yaw; `ncma.physics.box` supplies static/dynamic
+boxes; `ncma.camera.follow` refers to the exact persistent character UUID on a scene Camera.
+Use explicit `sceneCamera`, valid render metadata/NCA or NCP1, unit scale and yaw-only capsule rotation.
+Rendering interpolates copied committed transforms; it does not run solver or mutate World.
+Full verification remains sequential Debug/Release `Build.bat`, including real Editor/Player/Jolt cases.
+See [M4.3 usage, evidence and restrictions](M4_3_DELIVERY_REPORT.md). Root motion/combat/manual acceptance remain pending.

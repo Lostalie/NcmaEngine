@@ -31,15 +31,16 @@ public sealed class PhysicsService : IDisposable
     private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly PhysicsModuleHost _host;
     private readonly List<PhysicsSimulation> _worlds = new(MaximumWorlds);
+    private readonly List<PhysicsWorld> _characterDomains = new(MaximumWorlds);
     private readonly Queue<PhysicsServiceDiagnostic> _diagnostics = new(MaximumDiagnostics);
     private bool _closing, _disposed;
     private ulong _dropped;
     public Guid ServiceId { get; } = Guid.NewGuid();
     public bool Enabled { get; }
-    public PhysicsService(string pluginRoot, bool enabled = true)
+    public PhysicsService(string pluginRoot, bool enabled = true, bool characterSupport = false)
     {
         Enabled = enabled;
-        _host = new(pluginRoot, enabled);
+        _host = new(pluginRoot, enabled, characterSupport);
     }
     internal void VerifyThread()
     {
@@ -55,7 +56,8 @@ public sealed class PhysicsService : IDisposable
     {
         Verify(); ArgumentNullException.ThrowIfNull(settings);
         if (!Enabled) throw new InvalidOperationException("Physics is disabled.");
-        if (_worlds.Count >= MaximumWorlds) throw new InvalidOperationException("Physics service world budget exceeded.");
+        _characterDomains.RemoveAll(d=>d.Released);
+        if (_worlds.Count + _characterDomains.Count >= MaximumWorlds) throw new InvalidOperationException("Physics service world budget exceeded.");
         if (settings.MaximumBodies is < 1 or > PhysicsWorld.MaximumBatch ||
             !float.IsFinite(settings.FixedSeconds) || settings.FixedSeconds is <= 0 or > .25f ||
             settings.Dimension is not (PhysicsDimension.Two or PhysicsDimension.Three) ||
@@ -72,6 +74,17 @@ public sealed class PhysicsService : IDisposable
         catch (Exception e) { Record(id, 0, "physics.create_world", e); throw; }
     }
     internal void Remove(PhysicsSimulation world) => _worlds.Remove(world);
+    // Trusted numerical adapter owns this lease. Closing the service with a live domain
+    // fails and retains its module; no second Jolt/interpreter/solver owner is introduced.
+    public PhysicsWorld CreateCharacterDomain(Vector3 gravity)
+    {
+        Verify();
+        if (!Enabled || _host.Module!.AbiMinor != 2) throw new InvalidOperationException("Explicit character support is required.");
+        _characterDomains.RemoveAll(d=>d.Released);
+        if(_worlds.Count+_characterDomains.Count>=MaximumWorlds)throw new InvalidOperationException("Physics domain budget exceeded.");
+        _characterDomains.EnsureCapacity(_characterDomains.Count+1);
+        var domain=PhysicsWorld.Create3D(_host.Module, gravity);_characterDomains.Add(domain);return domain;
+    }
     internal void Record(Guid world, ulong sequence, string operation, Exception error)
     {
         if (_diagnostics.Count == MaximumDiagnostics) { _diagnostics.Dequeue(); _dropped++; }
@@ -88,7 +101,8 @@ public sealed class PhysicsService : IDisposable
     {
         VerifyThread(); ObjectDisposedException.ThrowIf(_disposed, this);
         var module = _host.Module;
-        return new(ServiceId, Enabled, _closing, _worlds.Count,
+        _characterDomains.RemoveAll(d=>d.Released);
+        return new(ServiceId, Enabled, _closing, _worlds.Count+_characterDomains.Count,
             module is null ? 0 : (PhysicsCapabilities)module.Capabilities, module?.AbiMajor ?? 0, module?.AbiMinor ?? 0, _dropped);
     }
     public PhysicsServiceDiagnostic[] CopyDiagnostics()
@@ -104,6 +118,8 @@ public sealed class PhysicsService : IDisposable
         // Failed closes remain owned and leased for explicit retry. No finalizer or force unload.
         for (int i = _worlds.Count - 1; i >= 0; --i)
             try { _worlds[i].Dispose(); } catch (Exception e) { failures.Add(e); }
+        for(int i=_characterDomains.Count-1;i>=0;--i)
+            try{_characterDomains[i].Dispose();_characterDomains.RemoveAt(i);}catch(Exception e){failures.Add(e);}
         if (failures.Count != 0) throw new AggregateException(failures);
         _host.Dispose(); _disposed = true;
     }

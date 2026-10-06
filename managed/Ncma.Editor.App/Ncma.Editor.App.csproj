@@ -6,6 +6,7 @@
     <ApplicationIcon>../../engine/build/resources/NcmaEngine.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Ncma.Characters/Ncma.Characters.csproj" />
     <InternalsVisibleTo Include="Ncma.Editor.Services.Tests" />
     <ProjectReference Include="../Ncma.Application/Ncma.Application.csproj" />
     <ProjectReference Include="../Ncma.Editor.Services/Ncma.Editor.Services.csproj" />

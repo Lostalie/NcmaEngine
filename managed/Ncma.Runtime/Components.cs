@@ -28,7 +28,7 @@ public sealed class ComponentRegistry
 {
     public const int MaxPayloadBytes = 65536;
     private sealed record Registration(Type Type, ComponentDescriptor Descriptor,
-        Func<object, object> Validate, Func<JsonElement, object> Decode);
+        Func<object, object> Validate, Func<JsonElement, object> Decode, bool RuntimeAttachable);
     private readonly Dictionary<string, Registration> _byId = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, Registration> _byType = new();
     private bool _frozen;
@@ -48,7 +48,7 @@ public sealed class ComponentRegistry
         return registry;
     }
 
-    public void Register<T>(string typeId, int version, string schema, Func<T, T> validate) where T : struct, IComponent
+    public void Register<T>(string typeId, int version, string schema, Func<T, T> validate, bool runtimeAttachable = true) where T : struct, IComponent
     {
         if (_frozen) throw new InvalidOperationException("Register extensions before creating a World.");
         ArgumentNullException.ThrowIfNull(validate);
@@ -64,7 +64,7 @@ public sealed class ComponentRegistry
             throw new ArgumentException("Component schema must be an object.");
         var descriptor = new ComponentDescriptor(typeId, version, document.RootElement.Clone());
         var registration = new Registration(typeof(T), descriptor, value => validate((T)value),
-            value => validate(value.Deserialize<T>(SceneJson.Options)));
+            value => validate(value.Deserialize<T>(SceneJson.Options)), runtimeAttachable);
         _byId.Add(typeId, registration);
         _byType.Add(typeof(T), registration);
     }
@@ -82,6 +82,11 @@ public sealed class ComponentRegistry
 
     internal void Freeze() => _frozen = true;
     internal ComponentDescriptor Describe(Type type) => Require(type).Descriptor;
+    // Trusted registration policy, not serialized metadata or an Agent-controlled flag.
+    internal void VerifyRuntimeAttachment(Type type)
+    {
+        if (!Require(type).RuntimeAttachable) throw new InvalidOperationException("This component requires authoring/startup composition; runtime attachment is not supported.");
+    }
     internal object Validate(object value)
     {
         object validated = Require(value.GetType()).Validate(value);

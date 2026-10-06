@@ -106,11 +106,11 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
             new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]),
             new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 3, ["ncma.platform", "ncma.renderer"]) ]);
-        // Independent optional module only; no scene rigid bodies or Play Step dispatch.
-        _physics = new(plugins, project?.Configuration.PhysicsEnabled == true);
+        // Explicit optional shared solver module; only bound Play creates numerical resources.
+        _physics = new(plugins, project?.Configuration.PhysicsEnabled == true,characterSupport:project?.Configuration.PhysicsEnabled == true);
         var physics = _physics.Inspect();
         if (physics.Enabled)
-            _log.Write("info", "physics.module_ready", $"Physics service ABI {physics.AbiMajor}.{physics.AbiMinor}; capabilities={physics.Capabilities}; scene integration disabled.", _correlation);
+            _log.Write("info", "physics.module_ready", $"Physics service ABI {physics.AbiMajor}.{physics.AbiMinor}; capabilities={physics.Capabilities}; explicit Play bindings only.", _correlation);
         _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaEngine", 1280, 720, !smoke);
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico"));
         string font=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts),"msyh.ttc");
@@ -122,8 +122,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         }
         _log.Write("info", cpuOnly ? "presentation.cpu_only" : ReferencePreview ? "presentation.dx11_reference" : "presentation.dx11_scene", "Managed candidate presentation initialized.", _correlation);
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
-            components: Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),
-            validateComposition: Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
+            components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
+            validateComposition: Ncma.Characters.CharacterComponents.RequireComposition,
+            composePlay:play=>Ncma.Characters.CharacterPlayRuntime.Compose(play,_physics),
+            beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         if (project is not null) {
             var workspace = new EditorWorkspace(_editor);
             workspace.Open(workspace.Stamp, project.StartupScenePath, true);
@@ -210,7 +212,8 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             }
             if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity || _playScene?.WorldId!=play.Document.World.Identity) {
                 var snapshot = play.Document.CaptureSnapshot();
-                var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play);
+                var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play,
+                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot));
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }
@@ -293,8 +296,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             }
             if (!ReferencePreview) {
                 var scene=_editor.Play is null?_editScene:_playScene;
+                if(_editor.Play?.State==Ncma.Gameplay.PlayState.Faulted)scene=null; // Invalid coupled snapshots are never rendered as synchronized.
                 Guid camera=_presenter?.SceneCamera??project?.Configuration.SceneCamera??Guid.Empty;
                 Ncma.Scene.Rendering.SceneCameraView? browser=null;
+                if(_editor.Play is { } followPlay)browser=Ncma.Characters.CharacterPlayRuntime.FollowView(followPlay,camera,width,height);
                 if(camera==Guid.Empty) {
                     browser=_presenter?.BrowserCamera(width,height)??new EditorOrbitCamera().View(width,height);
                 }
@@ -342,23 +347,26 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     public void Dispose()
     {
         if (_closed) return;
-        var failures = new List<Exception>();
-        try { _presenter?.CancelInteraction(); } catch (Exception e) { failures.Add(e); }
-        try { _nativeDiagnostics?.Dispose(); _nativeDiagnostics = null; } catch (Exception e) { failures.Add(e); }
-        try { _animationPreview?.Dispose(); _animationPreview = null; } catch (Exception e) { failures.Add(e); }
-        try { _fbxPreview?.Dispose(); _fbxPreview = null; } catch (Exception e) { failures.Add(e); }
-        try { _playScene?.Dispose(); _playScene=null; _editScene?.Dispose(); _editScene=null; _sceneCache?.Dispose(); _sceneCache=null; _poseKernel?.Dispose(); _poseKernel=null; } catch(Exception e) { failures.Add(e); }
-        try {_assetWorkflow?.Dispose();_assetWorkflow=null;}catch(Exception e){failures.Add(e);}
-        try { _editor?.Dispose(); _editor = null; } catch (Exception e) { failures.Add(e); }
-        try { _gui?.Dispose(); _gui = null; } catch (Exception e) { failures.Add(e); }
-        try { _viewportTarget?.Dispose();_viewportTarget=null; } catch(Exception e) {failures.Add(e);}
-        try { _renderService?.Dispose(); _renderService = null; } catch (Exception e) { failures.Add(e); }
-        try { _renderer?.Dispose(); _renderer = null; } catch (Exception e) { failures.Add(e); }
-        try { _window?.Dispose(); _window = null; } catch (Exception e) { failures.Add(e); }
-        try { _physics?.Dispose(); _physics = null; } catch (Exception e) { failures.Add(e); }
-        try { _loader.Dispose(); } catch (Exception e) { failures.Add(e); }
-        try { _log?.Dispose(); _log = null; } catch (Exception e) { failures.Add(e); }
-        if (failures.Count != 0) throw new AggregateException(failures);
+        // Stop at the first failed close. Keep that owner and every downstream dependency
+        // for an explicit retry; never unload plugins under a live GPU/solver resource.
+        _presenter?.CancelInteraction();
+        _nativeDiagnostics?.Dispose(); _nativeDiagnostics = null;
+        _animationPreview?.Dispose(); _animationPreview = null;
+        _fbxPreview?.Dispose(); _fbxPreview = null;
+        _playScene?.Dispose(); _playScene = null;
+        _editScene?.Dispose(); _editScene = null;
+        _sceneCache?.Dispose(); _sceneCache = null;
+        _poseKernel?.Dispose(); _poseKernel = null;
+        _assetWorkflow?.Dispose(); _assetWorkflow = null;
+        _editor?.Dispose(); _editor = null;
+        _gui?.Dispose(); _gui = null;
+        _viewportTarget?.Dispose(); _viewportTarget = null;
+        _renderService?.Dispose(); _renderService = null;
+        _renderer?.Dispose(); _renderer = null;
+        _window?.Dispose(); _window = null;
+        _physics?.Dispose(); _physics = null;
+        _loader.Dispose();
+        _log?.Dispose(); _log = null;
         _closed = true;
     }
 }

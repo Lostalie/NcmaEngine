@@ -155,8 +155,9 @@ M2 未完成人工/性能项继续记录；执行授权不自动关闭前置人�
 一次数值执行、唯一 Transform 发布、输入/信号事务、跨域 fail-stop、关闭失败保留资源、
 Reload 从冻结 startup 文档重建（tick 不倒退）。K1专项使用deterministic fake，不能代表Jolt验收。
 M4.2新增显式Physics1.2/Character1.0：真实Jolt capsule、grounding/contacts、closest body/character
-ray/sweep及C#数值缓冲客户端，见[交付](M4_2_DELIVERY_REPORT.md)。实际Editor/Player接线、
-根运动、动作战斗、调试/MCP和最终验收属于M4.3–M4.7，未实现。
+ray/sweep及C#数值缓冲客户端，见[交付](M4_2_DELIVERY_REPORT.md)。M4.3实现C#固定步角色/盒体绑定、
+Editor/Player/Headless实际solver接线、跟随相机与只读插值，见[交付](M4_3_DELIVERY_REPORT.md)。
+根运动、动作战斗、调试/MCP和最终验收属于M4.4–M4.7，未实现。
 M4.1 的最终退出门和测试证据见 [交付记录](M4_1_DELIVERY_REPORT.md)。
 
 - 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。

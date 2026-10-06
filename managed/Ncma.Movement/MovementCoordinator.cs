@@ -22,6 +22,19 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     private readonly bool[] _submitted;
     private World.ComponentAuthority? _authority;
     private INumericMovementAdapter? _adapter;
+    private readonly List<Func<World.ComponentAuthority>> _frozenFactories = [];
+    private readonly List<World.ComponentAuthority> _frozenOwned = [];
+    // Trusted startup-only configuration reservation; no proof is exposed to gameplay.
+    // Configurations are immutable during Play, rather than silently disagreeing with solver shapes.
+    public void FreezeConfiguration<T>(ReadOnlySpan<Guid> objects) where T : struct, IComponent
+    {
+        Verify();
+        if (_play.State != PlayState.Stopped || objects.Length > MaxTargets)
+            throw new ArgumentException("Freeze a bounded configuration set before Start.");
+        Guid[] ids = objects.ToArray();
+        foreach (Guid id in ids) if (!World.FindObject(id).Has<T>()) throw new ArgumentException("Missing frozen configuration.");
+        _frozenFactories.Add(() => World.ClaimComponents<T>(ids, publishRequired: false, freezeMembership: true));
+    }
     private MovementStepStamp _stamp;
     private Guid _lastWorldId, _sessionId, _worldId;
     private ulong _sequence, _committedTick, _attemptTick;
@@ -87,6 +100,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
             throw new InvalidOperationException("Rebuild from the frozen startup document before reusing coupled Play.");
         FillInputs();
         _authority = World.ClaimComponents<TransformData>(_targets);
+        foreach (var claim in _frozenFactories) _frozenOwned.Add(claim());
         _worldId = World.Identity; _lastWorldId = _worldId; _sessionId = _play.SessionId;
         _sequence = 0; _committedTick = World.Tick; _attemptTick = World.Tick;
         _collecting = _executed = _snapshotValid = _faulted = false;
@@ -161,6 +175,8 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         // Failed close retains BOTH numerical ownership and write authority for explicit retry.
         using (World.ReadOnly()) _adapter?.Dispose();
         _adapter = null;
+        foreach (var claim in _frozenOwned) claim.Dispose();
+        _frozenOwned.Clear();
         _authority?.Dispose(); _authority = null;
         _executed = false;
         Array.Clear(_inputs); Array.Clear(_results); Array.Clear(_committed); Array.Clear(_submitted);

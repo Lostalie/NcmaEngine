@@ -41,7 +41,8 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
             _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
         }
-        _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play); _camera = camera ?? Guid.Empty;
+        _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play,
+            interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot)); _camera = camera ?? Guid.Empty;
     }
     public bool Pump(PlaySession play)
     {
@@ -60,7 +61,8 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         var config = configurations.Length == 1 ? configurations[0].Get<RenderConfiguration>() : RenderConfiguration.Default(play.SessionId);
         _renderer!.Resize(_state.FramebufferWidth, _state.FramebufferHeight);
         ulong frame = ++_frame;
-        if (!_scene!.Submit(frame, _state.FramebufferWidth, _state.FramebufferHeight, _camera, exposure: config.Exposure, ambient: config.Ambient)) {
+        var follow=Ncma.Characters.CharacterPlayRuntime.FollowView(play,_camera,_state.FramebufferWidth,_state.FramebufferHeight);
+        if (!_scene!.Submit(frame, _state.FramebufferWidth, _state.FramebufferHeight, _camera,follow, exposure: config.Exposure, ambient: config.Ambient)) {
             // Empty, culled or missing-camera views clear; never substitute a reference cube.
             _pipeline!.Configure(config with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false},_state.FramebufferWidth,_state.FramebufferHeight);
             _pipeline.Submit(frame);

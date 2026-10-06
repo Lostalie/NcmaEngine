@@ -26,12 +26,16 @@ public sealed class EditorSessionOwner : IDisposable
     private string? _assetRoot;
     private Guid _assetProject;
     private readonly Action<SceneDocumentSnapshot>? _compositionPolicy;
+    private readonly Func<PlaySession, IDisposable?>? _composePlay;
+    private readonly Action? _beforePlayStop;
     private PlaySession? _play => _runtime.Play;
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null,
-        Action<SceneDocumentSnapshot>? validateComposition = null)
+        Action<SceneDocumentSnapshot>? validateComposition = null, Func<PlaySession, IDisposable?>? composePlay = null, Action? beforePlayStop = null)
     {
         _compositionPolicy = validateComposition;
+        _composePlay = composePlay;
+        _beforePlayStop = beforePlayStop;
         _document = new(name, components, snapshot => {
             _compositionPolicy?.Invoke(snapshot);
             if (_assetRoot is not null) _ = SceneRenderValidation.Inspect(snapshot, _renderAssets?.Metadata, catalog: _assets?.Snapshot.Catalog);
@@ -142,8 +146,16 @@ public sealed class EditorSessionOwner : IDisposable
             }
             pins = _assets?.PinForPlay();
             _busy = true;
-            var play = _runtime.StartPlay(document, d => _edit is null ? new PlaySession(d, _facade) : new PlaySession(d));
+            var play = _runtime.StartPlay(document, d => _edit is null ? new PlaySession(d, _facade) : new PlaySession(d), _composePlay);
             _playAssets = pins; pins = null; _playRenderAssets = renderPins; renderPins = null; _edit?.SetFrozen(true); return play;
+        }
+        catch
+        {
+            // A failed close during startup must retain the associated asset pins and Edit freeze.
+            if (_runtime.Play is not null) {
+                _playAssets = pins; pins = null; _playRenderAssets = renderPins; renderPins = null; _edit?.SetFrozen(true);
+            }
+            throw;
         }
         finally { try { pins?.Dispose(); } finally { try { renderPins?.Dispose(); } finally { _busy = false; } } }
     }
@@ -151,14 +163,14 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify();
         _busy = true;
-        try { return _runtime.ReloadGameplay(path); }
+        try { if(_play is not null)_beforePlayStop?.Invoke(); return _runtime.ReloadGameplay(path); }
         finally { try { _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); } finally { _busy = false; } }
     }
     public void StopPlay()
     {
         Verify();
         _busy = true;
-        try { _runtime.StopPlay(); }
+        try { if(_runtime.Play is not null)_beforePlayStop?.Invoke(); _runtime.StopPlay(); }
         finally
         {
             try { if (_runtime.Play is null) { _playAssets?.Dispose(); _playAssets = null; _playRenderAssets?.Dispose(); _playRenderAssets = null; _edit?.SetFrozen(false); } }

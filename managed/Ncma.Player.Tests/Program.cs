@@ -111,6 +111,22 @@ var cases = new (string Name, Action Run)[] {
         Check(owner.Play is null && before.SequenceEqual(doc.CaptureBytes()));
         owner.StartPlay(); owner.StopPlay();
     }),
+    ("Runtime composition rejects startup writes and retains failed close ownership for retry",()=>{
+        using(var owner=new RuntimeSessionOwner(Fixture())) {
+            owner.LoadGameplay(Path.Combine(projectRoot,"gameplay.dll"));byte[] before=owner.Document.CaptureBytes();
+            Reject(()=>owner.StartPlay(compose:p=>{p.Document.World.CreateObject("Forbidden composition mutation");return null;}));
+            Check(owner.Play is null && before.SequenceEqual(owner.Document.CaptureBytes()));
+            var close=new RetryComposition();owner.StartPlay(compose:_=>close);
+            Reject(owner.StopPlay);Check(owner.Play is {State:PlayState.Stopped} && close.Attempts==1);Reject(owner.Catalog.Clear);
+            owner.StopPlay();Check(owner.Play is null && close.Attempts==2);owner.Catalog.Clear();
+        }
+        using(var owner=new RuntimeSessionOwner(Fixture(createFails:true))) {
+            owner.LoadGameplay(Path.Combine(projectRoot,"gameplay.dll"));var close=new RetryComposition();
+            bool failed=false;try{owner.StartPlay(compose:_=>close);}catch(AggregateException){failed=true;}
+            Check(failed && owner.Play is not null && close.Attempts==1 && owner.LastStartFailure?.State==PlayState.Faulted);
+            Reject(owner.Catalog.Clear);owner.StopPlay();Check(owner.Play is null && close.Attempts==2);
+        }
+    }),
     ("Fault evidence captured before Stop and private exception message redacted", () => {
         Scene(3); var options = Options(); var report = PlayerRunner.Run(options);
         Check(report.ExitCode == 5 && report.Tick == 2 && report.Fault!.AttemptTick == 3 && report.State == PlayState.Faulted);
@@ -173,6 +189,8 @@ var passed = new List<string>();
 foreach (var test in cases) { try { test.Run(); passed.Add(test.Name); Console.WriteLine("PASS " + test.Name); }
     catch (Exception e) { Console.Error.WriteLine("FAIL " + test.Name + ": " + e); return 1; } }
 if (args.Length > 2) {
+    try { foreach(string test in CharacterHostChecks.Run(output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
+    catch(Exception e){Console.Error.WriteLine("FAIL Character host: "+e);return 1;}
     try { foreach (string test in PackageChecks.Run(root, args[1], output, Path.GetFullPath(args[2]))) { passed.Add(test); Console.WriteLine("PASS " + test); } }
     catch (Exception e) { Console.Error.WriteLine("FAIL Package: " + e); return 1; }
     try { foreach(string test in SceneHostChecks.Run(output,Path.GetFullPath(args[2]))) { passed.Add(test);Console.WriteLine("PASS "+test); } }
@@ -183,6 +201,11 @@ if (args.Length > 2) {
 File.WriteAllBytes(Path.Combine(output, "results.json"), JsonSerializer.SerializeToUtf8Bytes(new { passed = passed.Count, tests = passed }, json));
 Console.WriteLine($"Player tests: {passed.Count} passed."); return 0;
 
+internal sealed class RetryComposition : IDisposable
+{
+    public int Attempts;
+    public void Dispose() { if(++Attempts==1)throw new IOException("Injected close failure"); }
+}
 public sealed class PlayerProbe : Behaviour
 {
     [Export] public int FailAt { get; set; }

@@ -743,6 +743,7 @@ var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTe
     }),
     ("M3.6 asset UI plan/grant/import/history/flat placement/frozen/cancel/stale/restart",()=>M36WorkflowTests.Run(root,args[1],output)),
     ("M3.6 independent Orbit/Pan/Zoom and right-handed bounded CPU picking",M36WorkflowTests.CameraAndPicking),
+    ("M4.3 actual Editor character/scene GPU/interpolation/Edit isolation/close failure retry",()=>CharacterEditorChecks.Run(output,args[1])),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);
         File.WriteAllBytes(Path.Combine(dir,"Main.ncmascene"),new SceneDocument().CaptureBytes());

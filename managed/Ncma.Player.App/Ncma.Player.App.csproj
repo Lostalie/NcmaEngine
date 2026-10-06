@@ -11,6 +11,7 @@
     <ProjectReference Include="../Ncma.Scene.Rendering/Ncma.Scene.Rendering.csproj" />
     <ProjectReference Include="../Ncma.Rendering.Scene/Ncma.Rendering.Scene.csproj" />
     <ProjectReference Include="../Ncma.Physics/Ncma.Physics.csproj" />
+    <ProjectReference Include="../Ncma.Characters/Ncma.Characters.csproj" />
     <None Include="../../engine/build/resources/NcmaEngine.ico" Link="NcmaEngine.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
