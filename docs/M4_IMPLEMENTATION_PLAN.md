@@ -5,7 +5,7 @@
 按此后续执行指令确认第2节的C#运动权威/跨域fail-stop边界。M4.1已通过K1及顺序完整Debug/Release回归，
 见[M4.1交付](M4_1_DELIVERY_REPORT.md)。M4.2实际Jolt角色数值插件及C#客户端已通过K2与顺序完整
 Debug/Release回归，见[M4.2交付](M4_2_DELIVERY_REPORT.md)。M4.3已接线实际角色移动/跟随相机，
-验收状态见[M4.3交付](M4_3_DELIVERY_REPORT.md)；M4.4根运动及门禁见[M4.4交付](M4_4_DELIVERY_REPORT.md)，M4.5动作战斗候选见[M4.5交付](M4_5_DELIVERY_REPORT.md)。M4.6–M4.7尚未实现。每阶段通过后独立提交推送再推进。
+验收状态见[M4.3交付](M4_3_DELIVERY_REPORT.md)；M4.4根运动及门禁见[M4.4交付](M4_4_DELIVERY_REPORT.md)，M4.5动作战斗见[M4.5交付](M4_5_DELIVERY_REPORT.md)。M4.6只读调试/MCP/样例见[M4.6交付](M4_6_DELIVERY_REPORT.md)，M4.7自动联合候选与未验门禁见[M4.7交付](M4_7_DELIVERY_REPORT.md)。每阶段自动测试通过后独立提交推送再推进，K7真实素材/人工/预算/环境/长稳未通过前不关闭M4。
 仅“开始M4”未被当作当时未审方案的自动批准。真实Physics/角色与根运动仍按后续阶段分别验收。
 
 M3 G4/G5的静态/片段/蒙皮切片可作为基础；G6–G9、M2人工/目标环境/性能/长稳仍开放。
@@ -169,6 +169,10 @@ Locomotion使用输入水平速度；Attack/Dodge的root-motion模式**替换**�
 - 真机移动/转向/攻击/闪避/障碍，输入/DPI/Play-Stop/重载、第三方只读检查、目标机Player与一小时工作流。
 
 退出K7：上述约定证据齐全才关闭M4；未完成项逐项开放，且不顺带关闭M3 G6–G9/M2待验门禁。
+
+自动联合候选及未验清单见 [M4.7交付](M4_7_DELIVERY_REPORT.md)。现有GPU统计无sample-frame ID，
+last-valid异步观测不能计作32个独立GPU样本。程序化320×240初测不代表用户素材/目标硬件预算；
+必须先完成真实素材、可见窗口/第三方客户端、目标环境与1小时验收才能关闭M4。
 
 ## 4 执行顺序
 

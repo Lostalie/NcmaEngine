@@ -150,7 +150,7 @@ M2 未完成人工/性能项继续记录；执行授权不自动关闭前置人�
 
 ### M4：动作游戏纵向切片
 
-**状态：未实现可玩游戏；实验室预览可复用。**
+状态：动作纵向切片候选和程序化样例已实现；K7真实素材/可见可玩/性能/环境/长稳验收未完成。
 
 2026-10-06 起按 [M4 小阶段方案](M4_IMPLEMENTATION_PLAN.md) 顺序执行，各小阶段完整测试通过后
 单独提交推送。M4.1 新增 C# `Ncma.Movement` / host-only Runtime 组件写权威与 Play 耦合固定步：
@@ -160,7 +160,7 @@ M4.2新增显式Physics1.2/Character1.0：真实Jolt capsule、grounding/contact
 ray/sweep及C#数值缓冲客户端，见[交付](M4_2_DELIVERY_REPORT.md)。M4.3实现C#固定步角色/盒体绑定、
 Editor/Player/Headless实际solver接线、跟随相机与只读插值，见[交付](M4_3_DELIVERY_REPORT.md)。
 M4.4候选接入XZ/Yaw根运动、成功提交才消费的共享时钟、真实碰撞约束与GPU视觉根去重，
-见[交付](M4_4_DELIVERY_REPORT.md)。M4.5实现动作状态、连击/中断、tick Notify、closest-ray命中/无敌与同量子Health发布，见[交付](M4_5_DELIVERY_REPORT.md)。M4.6候选实现复制诊断、可信UI审批的只读角色/战斗MCP和可启动程序化样例，见[交付](M4_6_DELIVERY_REPORT.md)；M4.7联合测量/真实素材/人工验收仍开放。
+见[交付](M4_4_DELIVERY_REPORT.md)。M4.5实现动作状态、连击/中断、tick Notify、closest-ray命中/无敌与同量子Health发布，见[交付](M4_5_DELIVERY_REPORT.md)。M4.6实现复制诊断、可信UI审批的只读角色/战斗MCP和可启动程序化样例，见[交付](M4_6_DELIVERY_REPORT.md)。M4.7候选联合0/1/8/32角色测量和32轮共享服务故障/恢复/GPU基线测试见[交付](M4_7_DELIVERY_REPORT.md)；真实素材、GPU归因/预算、窗口/第三方客户端/目标环境/1小时门禁仍开放，M4未关闭。
 M4.1 的最终退出门和测试证据见 [交付记录](M4_1_DELIVERY_REPORT.md)。
 
 - 用 C# 建立动作状态/参数、输入缓冲、角色控制、相机和游戏生命周期。

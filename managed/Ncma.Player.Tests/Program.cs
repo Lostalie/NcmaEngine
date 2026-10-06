@@ -54,6 +54,10 @@ if(args.Length==4 && args[3]=="--action-only") {
     try {foreach(string test in ActionCombatChecks.Run(output,Path.GetFullPath(args[2])))Console.WriteLine("PASS "+test);return 0;}
     catch(Exception e){Console.Error.WriteLine("FAIL Actions: "+e);return 1;}
 }
+if(args.Length==4 && args[3]=="--action-joint-only") {
+    try {foreach(string test in ActionJointChecks.Run(root,output,Path.GetFullPath(args[2])))Console.WriteLine("PASS "+test);return 0;}
+    catch(Exception e){Console.Error.WriteLine("FAIL Joint actions: "+e);return 1;}
+}
 var cases = new (string Name, Action Run)[] {
     ("CLI preflight rejects malformed/conflicting/bounded arguments", () => {
         foreach (string[] a in new[] { new[] { "--headless" }, new[] { "--help", "--version" },
@@ -199,6 +203,8 @@ foreach (var test in cases) { try { test.Run(); passed.Add(test.Name); Console.W
 if (args.Length > 2) {
     try {ActionSampleChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("K6 generated procedural sample: 0/1 actor packed Headless/DX11, disabled unused physics/GPU and authoring preserved");Console.WriteLine("PASS "+passed[^1]);}
     catch(Exception e){Console.Error.WriteLine("FAIL Action sample: "+e);return 1;}
+    try { foreach(string test in ActionJointChecks.Run(root,output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
+    catch(Exception e){Console.Error.WriteLine("FAIL Joint actions: "+e);return 1;}
     try { foreach(string test in ActionCombatChecks.Run(output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
     catch(Exception e){Console.Error.WriteLine("FAIL Actions: "+e);return 1;}
     try { foreach(string test in RootMotionChecks.Run(root,output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }

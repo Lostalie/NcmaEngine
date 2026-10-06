@@ -11,7 +11,7 @@ namespace Ncma.Characters;
 
 // Application-owned policy; same composition in Editor/Player/headless. Native receives
 // numbers only. This is not an Agent input injection interface or a general gameplay SDK.
-public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommittedStepObserver, IRootMotionPresentation
+public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommittedStepObserver, IRootMotionPresentation
 {
     private readonly PlaySession _play;
     private readonly MovementCoordinator _coordinator;
@@ -23,24 +23,24 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
     private sealed record Binding(Guid Id, CharacterData? Character, BoxColliderData? Box);
     public CoupledMovementStatus Status => _coordinator.Status;
     public Guid NumericalEpoch { get { _play.Document.VerifyAccess(); return _domain?.Epoch ?? Guid.Empty; } }
-    public static CharacterPlayRuntime? Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets = null)
+    public static CharacterPlayRuntime? Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets = null, bool profile = false)
     {
         ArgumentNullException.ThrowIfNull(play); ArgumentNullException.ThrowIfNull(physics);
         var startup = play.Document.CaptureSnapshot();
         CharacterComponents.RequireComposition(startup);
         if (!CharacterComponents.HasPhysics(startup)) return null;
         if (!physics.Enabled) throw new ArgumentException("Scene physics bindings require explicit physicsEnabled=true.");
-        return new(play, physics, assets);
+        return new(play, physics, assets,profile);
     }
-    private CharacterPlayRuntime(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets)
+    private CharacterPlayRuntime(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets,bool profile)
     {
-        _play = play;
+        _play = play;_profileEnabled=profile;
         _roots=new(play.Document.World,assets);
         try{_actions=new(play.Document.World,_roots);}catch{_roots.Dispose();throw;}
         _bindings = play.Document.World.GetObjects().Where(o => o.Has<CharacterData>() || o.Has<BoxColliderData>()).OrderBy(o => o.PersistentId)
             .Select(o => new Binding(o.PersistentId, o.Has<CharacterData>() ? o.Get<CharacterData>() : null, o.Has<BoxColliderData>() ? o.Get<BoxColliderData>() : null)).ToArray();
         _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => {
-            _roots.Initialize(play.Document.World);_actions.Initialize(play.Document.World,play.SessionId);return _domain = new Domain(physics, _bindings);
+            _profileTick=0;_roots.Initialize(play.Document.World);_actions.Initialize(play.Document.World,play.SessionId);return _domain = new Domain(physics, _bindings);
         },StageCombat);
         Guid[] chars = _bindings.Where(b => b.Character is not null).Select(b => b.Id).ToArray();
         Guid[] boxes = _bindings.Where(b => b.Box is not null).Select(b => b.Id).ToArray();
@@ -64,7 +64,8 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
     {
         if (_disposed || world != _play.Document.World || _domain is null || !Status.SnapshotValid) throw new InvalidOperationException("Stale character domain.");
         var input = _play.Input; float h = (float)delta;
-        _actions.BeginStep();
+        _actionMs=_rootMs=_queryMs=_combatMs=0;long preparation=ProfileTime,actionTime=ProfileTime;
+        _actions.BeginStep();_actionMs+=ProfileElapsed(actionTime);
         for (int i = 0; i < _bindings.Length; ++i)
         {
             var binding = _bindings[i]; if (binding.Character is not { } data) continue;
@@ -80,8 +81,10 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
             if (state.Ground == GroundState.Ground) velocity += new V3(state.GroundVelocity.X, 0, state.GroundVelocity.Z);
             var start = world.FindObject(binding.Id).Get<TransformData>(); float turn = 0;
             if(_roots.Contains(binding.Id)) {
+                actionTime=ProfileTime;
                 bool rootMode=!_actions.Owns(binding.Id)||_actions.Prepare(binding.Id,input,data.Controlled,direction.LengthSquared()>1e-6f,delta);
-                var root=_roots.Prepare(binding.Id,start,delta);
+                _actionMs+=ProfileElapsed(actionTime);long rootTime=ProfileTime;
+                var root=_roots.Prepare(binding.Id,start,delta);_rootMs+=ProfileElapsed(rootTime);
                 // Root motion REPLACES horizontal input and input turn, not an additive second writer.
                 if(rootMode){velocity=new V3(root.Translation.X/h,vertical,root.Translation.Z/h);
                 if(state.Ground==GroundState.Ground)velocity+=new V3(state.GroundVelocity.X,0,state.GroundVelocity.Z);
@@ -95,12 +98,15 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
             }
             _coordinator.Submit(new(_coordinator.CurrentStep, binding.Id, velocity * h, turn));
         }
+        _preparationMs=ProfileElapsed(preparation);
     }
-    public void StepCommitted(World world,double h){_roots.Commit(world,h);_actions.Commit(world);}
+    public void StepCommitted(World world,double h){long start=ProfileTime;_roots.Commit(world,h);_actions.Commit(world);_commitMs=ProfileElapsed(start);_profileTick=world.Tick;}
     private void StageCombat(MovementStepStamp stamp,ReadOnlySpan<NumericMovementResult> results)
     {
         if(stamp.SessionId!=_play.SessionId||stamp.WorldId!=_play.Document.World.Identity||stamp.FromTick!=_play.Tick)throw new InvalidOperationException("Combat stamp mismatch.");
-        _actions.StageHits((actor,reach,mask)=>_domain!.QueryTarget(actor,reach,mask));
+        long start=ProfileTime;
+        _actions.StageHits((actor,reach,mask)=>{long query=ProfileTime;Guid result=_domain!.QueryTarget(actor,reach,mask);_queryMs+=ProfileElapsed(query);return result;});
+        _combatMs=ProfileElapsed(start);
     }
     public void RequestAction(Guid objectId,ActionRequest request){_coordinator.VerifyControlBoundary();_actions.Request(objectId,request);}
     public ActionStatus InspectAction(Guid objectId){VerifyRootPresentation();return _actions.Inspect(objectId);}
@@ -175,6 +181,7 @@ public sealed class CharacterPlayRuntime : IDisposable, IWorldSystem, ICommitted
         public Guid Epoch { get; } = Guid.NewGuid();
         public CharacterState Character(int binding) => _states[Array.IndexOf(_characters, binding)];
         public int ContactCount(int binding)=>_contactCounts[binding];
+        public PhysicsCounters Counters=>_world!.NativeCounters;
         public Guid QueryTarget(Guid actor,float reach,uint mask)
         {
             int i=Array.FindIndex(bindings,b=>b.Id==actor),n=Array.IndexOf(_characters,i);
