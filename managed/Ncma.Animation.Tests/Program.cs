@@ -14,6 +14,7 @@ static void Reject(Action action){try{action();}catch(Exception e)when(e is Argu
 static bool Near(Matrix4x4 a,Matrix4x4 b){ReadOnlySpan<Matrix4x4> x=[a],y=[b];var xs=MemoryMarshal.Cast<Matrix4x4,float>(x);var ys=MemoryMarshal.Cast<Matrix4x4,float>(y);for(int i=0;i<16;i++)if(Math.Abs(xs[i]-ys[i])>1e-4f+Math.Abs(ys[i])*1e-5f)return false;return true;}
 static Matrix4x4 Model(ImportTransform t)=>Matrix4x4.CreateScale(t.Scale)*Matrix4x4.CreateFromQuaternion(t.Rotation)*Matrix4x4.CreateTranslation(t.Position);
 var cases=new List<(string,Action)>();
+GraphTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));

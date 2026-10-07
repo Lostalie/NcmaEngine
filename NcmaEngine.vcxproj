@@ -50,7 +50,6 @@
   <ItemGroup>
     <ClCompile Include="engine\source\runtime\assets\FbxCharacterImporter.cpp" />
     <ClCompile Include="engine\source\runtime\ai\AgentCapabilityRegistry.cpp" />
-    <ClCompile Include="engine\source\runtime\animation\AnimationGraph.cpp" />
     <ClCompile Include="engine\source\runtime\animation\AnimationRuntime.cpp" />
     <ClCompile Include="engine\source\runtime\animation\ActionAnimationWorkspace.cpp" />
     <ClCompile Include="engine\source\runtime\core\log\Log.cpp" />
@@ -73,7 +72,6 @@
   <ItemGroup>
     <ClInclude Include="engine\source\runtime\assets\FbxCharacterImporter.h" />
     <ClInclude Include="engine\source\runtime\ai\AgentCapabilityRegistry.h" />
-    <ClInclude Include="engine\source\runtime\animation\AnimationGraph.h" />
     <ClInclude Include="engine\source\runtime\animation\AnimationRuntime.h" />
     <ClInclude Include="engine\source\runtime\animation\ActionAnimationWorkspace.h" />
     <ClInclude Include="engine\source\runtime\core\log\Log.h" />

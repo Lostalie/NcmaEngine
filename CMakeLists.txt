@@ -91,7 +91,6 @@ add_custom_command(TARGET NcmaPhysics POST_BUILD
 add_library(NcmaCore STATIC
     engine/source/runtime/assets/FbxCharacterImporter.cpp
     engine/source/runtime/ai/AgentCapabilityRegistry.cpp
-    engine/source/runtime/animation/AnimationGraph.cpp
     engine/source/runtime/animation/AnimationRuntime.cpp
     engine/source/runtime/animation/ActionDemoLibrary.cpp
     engine/source/runtime/animation/ActionAnimationWorkspace.cpp

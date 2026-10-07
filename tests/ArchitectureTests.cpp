@@ -1,5 +1,4 @@
 #include "ai/AgentCapabilityRegistry.h"
-#include "animation/AnimationGraph.h"
 #include "renderer/pipeline/PbrPipelineSettings.h"
 #include "renderer/rendergraph/RenderGraph.h"
 #include "renderer/rhi/RenderBackendRegistry.h"
@@ -149,15 +148,6 @@ int main()
     const std::string manifest = agentCapabilities.ExportManifestJson();
     assert(manifest.find("scene.list_objects") != std::string::npos);
     assert(manifest.find("read_only") != std::string::npos);
-
-    Animation::AnimationGraph animationGraph;
-    const auto clip = animationGraph.AddNode(Animation::NodeKind::ClipPlayer, "Idle");
-    const auto output = animationGraph.AddNode(Animation::NodeKind::OutputPose, "Output");
-    const auto clipPose = animationGraph.AddPin(clip, "Pose", Animation::PinType::Pose, Animation::PinDirection::Output);
-    const auto outputPose = animationGraph.AddPin(output, "Pose", Animation::PinType::Pose, Animation::PinDirection::Input);
-    assert(animationGraph.Connect(clipPose, outputPose, error));
-    std::vector<std::string> graphErrors;
-    assert(animationGraph.Validate(graphErrors));
 
     Rendering::PbrMaterialParameters material;
     material.Roughness = 0.0F;

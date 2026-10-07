@@ -17,7 +17,6 @@
     <ClCompile Include="tests\AnimationTests.cpp"><Filter>Tests</Filter></ClCompile>
     <ClCompile Include="tests\FbxImportTests.cpp"><Filter>Tests</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\ai\AgentCapabilityRegistry.cpp"><Filter>Runtime</Filter></ClCompile>
-    <ClCompile Include="engine\source\runtime\animation\AnimationGraph.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\animation\AnimationRuntime.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\animation\ActionAnimationWorkspace.cpp"><Filter>Runtime</Filter></ClCompile>
     <ClCompile Include="engine\source\runtime\core\log\Log.cpp"><Filter>Runtime</Filter></ClCompile>
@@ -45,7 +44,6 @@
     <ClInclude Include="engine\source\editor\EditorResources.h"><Filter>Resources</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\assets\FbxCharacterImporter.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\ai\AgentCapabilityRegistry.h"><Filter>Runtime</Filter></ClInclude>
-    <ClInclude Include="engine\source\runtime\animation\AnimationGraph.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\animation\AnimationRuntime.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\animation\ActionAnimationWorkspace.h"><Filter>Runtime</Filter></ClInclude>
     <ClInclude Include="engine\source\runtime\core\log\Log.h"><Filter>Runtime</Filter></ClInclude>
