@@ -42,6 +42,7 @@ public sealed partial class EditorEndpoint : IDisposable
     private readonly EndpointDescriptor _descriptor;
     private int _count, _cursor;
     private ulong _generation;
+    private ulong _audienceRevision;
     private Guid _catalogGeneration;
     private bool _disposed;
     public string DescriptorPath { get; }
@@ -72,6 +73,9 @@ public sealed partial class EditorEndpoint : IDisposable
         get { Verify(); lock (_gate) return new(_descriptor.InstanceId, _generation, DescriptorPath,
             _connections.Select(c => new ConnectionView(c.Id, c.Name, c.Paired, c.Connected, c.Queue.Count)).ToArray(), _count); }
     }
+    // Host-only monotonic stamp. Detect revoke/re-pair and disconnect/reconnect even
+    // when the same copied audience UUID set has returned before the next inspection.
+    public ulong AudienceRevision { get { Verify(); lock (_gate) return _audienceRevision; } }
     public void Pair(Guid id, bool approve)
     {
         Verify(); lock (_gate)
@@ -79,6 +83,7 @@ public sealed partial class EditorEndpoint : IDisposable
             var connection = _connections.Single(c => c.Id == id);
             if (connection.Paired) throw new InvalidOperationException("Already paired.");
             connection.Paired = approve; connection.Pairing.TrySetResult(approve);
+            _audienceRevision = checked(_audienceRevision + 1);
         }
     }
     public void Revoke(Guid id)
@@ -87,6 +92,7 @@ public sealed partial class EditorEndpoint : IDisposable
         {
             var connection = _connections.Single(c => c.Id == id);
             connection.Paired = false; connection.Pairing.TrySetResult(false);
+            _audienceRevision = checked(_audienceRevision + 1);
             _grants.Remove(id); _proposals.RemoveAll(p => p.Connection.Id == id);
             CancelQueue(connection, "connection_revoked");
         }
@@ -175,11 +181,13 @@ public sealed partial class EditorEndpoint : IDisposable
                     connection = _connections.SingleOrDefault(c => c.Id == id && !c.Connected && c.Paired &&
                         SecretEquals(c.Secret, secret)) ?? throw new ArgumentException("connection_revoked");
                     connection.Connected = true;
+                    _audienceRevision = checked(_audienceRevision + 1);
                 }
                 else
                 {
                     if (_connections.Count >= MaxConnections) throw new ArgumentException("connection_capacity");
                     connection = new(Guid.NewGuid(), hello.ClientName); _connections.Add(connection);
+                    _audienceRevision = checked(_audienceRevision + 1);
                 }
             }
             bool approved = connection.Paired || await connection.Pairing.Task.WaitAsync(idle.Token);
@@ -250,7 +258,7 @@ public sealed partial class EditorEndpoint : IDisposable
         {
             lock (_gate)
             {
-                if (connection is not null) { connection.Connected = false; CancelQueue(connection, "not_executed"); }
+                if (connection is not null) { connection.Connected = false; _audienceRevision = checked(_audienceRevision + 1); CancelQueue(connection, "not_executed"); }
                 _pipes.Remove(pipe);
             }
             pipe.Dispose();

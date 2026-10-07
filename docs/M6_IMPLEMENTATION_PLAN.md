@@ -8,6 +8,23 @@ C# 负责资产、参数、状态机、时间与事件；C++ 只执行姿态数�
 再推进下一阶段。M4 K7、M5 后续 HUD/组件、人工窗口/DPI/IME/MCP、目标环境、性能和长稳门禁
 继续开放；本授权允许动画候选开发，不将它们标为通过。M5.8–M5.10 不被暗中并入 M6。
 
+2026-10-07 AI要求更新：AI高度集成是每个动画子阶段的交付要求，不把工具与MCP推迟到M6.9。
+共享语义接口/结构化诊断从M6.2开始，图编辑和获批MCP事务在M6.4同期交付，后续节点能力同阶段
+扩充；M6.9改为跨系统AI工作流及可靠性验收。M6.1已提交基础不因此被标为已有图MCP。
+模型连接器/自然语言面板与Pythonworker仍未实现，不在动画阶段隐式配置服务/凭证或外发数据。
+
+## 每阶段的 AI 交付要求
+
+本机编辑与Agent通过同一C#业务服务，使用UUID、closed schema、确定错误码和显式能力版本，不靠
+模拟鼠标或任意表达式。读取只给批准范围内的复制快照；修改先生成可读diff/dry-run、review精确提案，
+正式提交重检session/generation/revision/resource身份，再进入同一文件事务/Undo。默认为无写权限，
+AI不能配对/批准自己。跨域多步流程不伪装成已有统一原子事务。
+
+新阶段必须测试本机与Agent同输入的语义一致性、dry-run零副作用、越权/陈旧/重复/取消拒绝，
+工具清单只注册已实现且可用能力；独立预览的输入/单步不驱动livePlay。未完成真实MCP注册的阶段
+只能称共享接口基础，不称活动编辑器AI能力。禁用AI后Player/编辑器继续工作。完整设计见
+[AI开发接口](AI_DEVELOPMENT.md)。
+
 ## 已有基础和边界
 
 已有 NCA 片段/骨架身份、只读 generation 租约、数值 PoseKernel、DX11 GPU 蒙皮、
@@ -24,14 +41,14 @@ ClipClock 成功提交时钟、XZ/Yaw 根运动与 C# 动作/碰撞权威。程�
 | 阶段 | 交付 | 当前状态 |
 | --- | --- | --- |
 | M6.1 | 严格图资产、类型和结构验证 | 自动候选通过，见交付记录 |
-| M6.2 | 编译程序、参数与提交式固定步求值 | 未实现 |
-| M6.3 | 真实片段、数值混合与场景角色运行接线 | 未实现 |
-| M6.4 | 图工作区、资源审批和共享事务 | 未实现 |
+| M6.2 | 编译求值、结构化诊断、获批只读图MCP | 自动候选通过，见M6.2交付 |
+| M6.3 | 真实角色接线、精确身份运行观察 | 未实现 |
+| M6.4 | 图工作区、共享事务与获批图MCP修改 | 未实现 |
 | M6.5 | 过渡中断、事件轨道与调试 | 未实现 |
 | M6.6 | BlendSpace | 未实现 |
 | M6.7 | 分层遮罩与缓存姿态 | 未实现 |
 | M6.8 | Montage 式 Slot 和 Section | 未实现 |
-| M6.9 | 活动编辑器动画 MCP | 未实现 |
+| M6.9 | 跨系统AI工作流和MCP可靠性验收 | 未实现 |
 | M6.10 | 运行包、纵向样例与联合验收 | 未实现 |
 
 ## M6.1 图资产和验证
@@ -67,6 +84,16 @@ unwrapped 时间；准备时检查至多32次边界跨越。零 delta 仅查询�
 循环终点、多帧率相同tick、错误session/tick/双commit、同程序多实例和预算；编译只在 off-frame。
 度量 warm path 分配与调用次数，不以字典基础标记优化 ECS。
 
+AI同期交付：compiler/validator输出有界诊断code/subject/field/expected/actual及依赖UUID，
+不泄漏路径或堆栈，不把runtime handle交给模型。通过Editor.Services薄适配器将可信主机已review的
+图编码副本接入活动Editor.Core只读能力，拟用`ncma.animgraph.inspect`和`ncma.animgraph.validate`；
+两名称已有M6.2候选实现，验证内存快照，不授予文件扫描/加载/保存权，也不执行用户代码或启动GPU。
+共享paired audience/endpoint、精确graphUUID/hash及Editor generation/revision/到期检查沿用现有模式，
+绝不能通过客户端传入图路径来扩权。自动测试覆盖默认拒绝、字段分页、scope/身份失效、错误码稳定；
+真实第三方客户端门禁另列。纯Animation程序集不依赖Editor/MCP。
+最终双配置证据见 [M6.2交付](M6_2_DELIVERY_REPORT.md)，具体时钟/相位、采样配方与审批预算见
+[求值契约](M6_2_RUNTIME_CONTRACT.md)。此候选不等于M6.3角色/numerical/GPU接线完成。
+
 ## M6.3 片段和场景接线
 
 适配已有 RuntimeAssetLease，固定精确 NCA/model/skeleton generation；先准备全部资源再发布程序，
@@ -82,6 +109,11 @@ unwrapped 时间；准备时检查至多32次边界跨越。零 delta 仅查询�
 测试实际 NCA 与独立管理端姿态 oracle、CPU/GPU误差、根剥离/阻挡、paused/single-step/Stop/reload、
 准备失败/物理后失败/关闭失败保留，Editor与Player/Headless同语义。已有单片段/动作默认不改变。
 
+AI同期交付：在获批范围内读取committed状态/参数、片段UUID/generation和采样权重/根意图诊断，
+携带graph instance/Play/World/tick/snapshotValid；错误或reload后的旧帧不作为当前状态。
+观察不增加tick、不触发采样/solver、不写World。构建基于相同已批准资源的隔离预览契约，
+预览请求有独立实例与预算，不恢复旧实验室为正式图控制，也不扩大既有角色只读scope。
+
 ## M6.4 可视化图工作区
 
 统一现有深蓝工作区和顶部菜单；动画作为独立workspace，图画布、真实角色预览、参数/状态/属性与
@@ -94,6 +126,13 @@ Play冻结时拒绝资产写入。主场景和动画预览独立，不因换work
 测试点击/缩放引脚命中、事件generation/旧事件拒绝、取消/Undo、外部文件冲突、重启保存、真实GPU截图。
 自由docking不是前置；不能用参考图替换真实预览。
 
+AI同期交付：图创建/节点/连线/参数/状态/转换命令与UI同一批次服务，拟用`ncma.animgraph.propose`/
+`ncma.animgraph.transaction`；propose是有界隔离候选，默认不写文件/history，transaction需
+可信UI批准精确请求/diff/依赖/路径。文件新建/覆盖/删除权限单独检查，不能把图UUID范围等同于目录写权。
+AI生成完整合法最小图后才提交；候选生成用请求内稳定UUID，不由每次dry-run随机重建。
+共享Undo/Redo重检原scope；revision或磁盘变化冲突，失败不覆盖人工修改。测试完整MCP→本机review→
+共享提交→UI Undo→获批Redo链路、草稿冲突/Play冻结/重复ID/取消及越权。能力不能等到M6.9才落地。
+
 ## M6.5 过渡事件和调试
 
 定义同量子单转换、目标播放/源可见姿态缓存、中断策略和剩余时间语义；首版可中断过渡从当前可见姿态
@@ -104,12 +143,18 @@ Play冻结时拒绝资产写入。主场景和动画预览独立，不因换work
 失败前后状态区别清楚，fault不能显示旧成功帧为新状态。只读高亮/暂停预览/单步属于独立预览，不新增
 Agent liveStep。测试反复中断、trigger优先级、循环边界/多周期、事件去重、32 actor上限和跨域fail-stop。
 
+AI同期交付：有界独立预览参数序列和固定步测试用例，返回状态/事件/根意图时间线与断言结果；
+UI高亮定位同一节点/转换UUID。AI可根据结果提出修复，修改仍需新提案审批，不能自行清除fault或修改
+当前Play。事件/错误文字仅作数据；无任意C#断言代码执行。轨道编辑复用M6.4事务。
+
 ## M6.6 BlendSpace
 
 增加1D/2D资产节点和有界采样点，1D排序/重复位置检查；2D非退化预编译三角剖分，边外投影到最近边，
 可重复排序规则和权重归一。同骨架/单位要求、参数有限范围、没有实时三角化；再加入显式同步组/相位
 以避免不同片段周期漂移。root/notifies采取明确主贡献源规则，不自动叠加多个步音/命中。
 编辑器显示点/轨迹/权重，事务同一history。测试点/边/退化/域外/相位边界、同帧率tick，记录采样成本。
+AI同期增加采样点/轴/同步配置的类型化事务与权重扫描检查，UI和MCP使用同一验证；
+域外/退化数据可定位点UUID，不能自动猜测/替换缺失clip。
 
 ## M6.7 分层遮罩和缓存姿态
 
@@ -118,6 +163,8 @@ Agent liveStep。测试反复中断、trigger优先级、循环边界/多周期�
 CachePose 在同一实例同一tick/参数候选内共享一次采样，跨world/tick/reload失效；预编译生命区间和
 bounded scratch allocator，禁止共享可变姿态到其他实例。图循环/缓存自引用仍拒绝。
 测试不同层权重、骨骼遮罩/绑定变更、cache命中/作废、allocation/native次数和CPU/GPU姿态对照。
+AI同期提供批准范围内的遮罩骨骼清单、层配置/缓存依赖修改及诊断；策略建议附实测输入与成本，
+不让模型直接读写姿态内存，也不把建议标为已优化。
 
 ## M6.8 Montage 式动作编排
 
@@ -125,10 +172,19 @@ bounded scratch allocator，禁止共享可变姿态到其他实例。图循环/
 接收受控请求，带会话/tick/目标/instance身份；同Slot优先级与中断策略、最多32次边界/量子、限额事件。
 动作规则/输入缓冲继续C#，RootMotion经唯一Movement权威，montage不能直接teleport或任意回调World。
 可视Section/Notify轨道和预览；测试结束/重入/打断/Combo/取消、零长度非法、跨多个Section、Play/Stop/reload。
+AI同期提供Section/Slot/Notify语义编辑、引用与时序验证、隔离动作序列预览；
+请求只能选择已批准资产/语义动作，不提供Agent live攻击/伤害/运动权威。
 
-## M6.9 活动编辑器动画 MCP
+## M6.9 跨系统 AI 工作流和 MCP 验收
 
-新增默认拒绝的只读图inspect/validate和获批图节点/连线/参数事务，能力名称/schema/风险分类固定。
+此阶段整合M6.2–M6.8已随功能交付的图读取/验证/事务/预览能力，不是首次接入动画MCP。
+目标任务为“读取获批资产→提议角色图→检查差异→获批提交→隔离预览→断言测试→证据报告”。
+场景/资产/UI能力仍按各自现有权限和实现状态使用；缺失能力返回unsupported，不默认为可写或新增假工具。
+任务步数/请求大小/并发/deadline/有限修复次数受C#预算控制，操作变化重新review，取消停止未执行步骤，
+已提交步骤有独立回执，不在失败后自动Undo用户后续修改。推理适配仅使用实际配置的服务，未接入时
+外部MCP客户端仍可工作但内置面板不显示成功生成。模型运行/费用/数据外发授权与编辑权限独立。
+
+所有能力默认拒绝，名称/schema/风险分类固定。
 范围为可信UI明确review的图UUID、路径、依赖及Editor generation/revision，paired audience/endpoint/到期
 每请求重检；Agent不能审批自己或开启推理。只读/修改复用图服务/共享history，支持dry-run和确定诊断，
 无任意表达式/eval/Python/程序集加载/文件路径扩权。独立预览请求有自己的实例/tick，不驱动livePlay。
@@ -146,6 +202,8 @@ Editor坐标或未审批文件。Player拒绝无效图/错generation/不完整�
 独立测CPU/GC/native调用/GPU帧identity。针对目标机器制定预算，1小时长稳和人工使用单列，不以
 程序化片段、共享shaderoracle或历史GPU计数代替。完整Debug/Release、smokes/strictformats/inspect/audit/
 checkeddeploy后提交；自动候选通过与整个M6正式验收分开报告。
+额外AI验收：同一获批请求链在UI/MCP得到一致图/预览/测试结果；重启后UUID/保存图可复查、
+取消/模型超时/错误工具调用不破坏文档，审计可追踪每次授权与修改，关闭AI/外部客户端后样例仍能运行。
 
 ## 延后内容
 

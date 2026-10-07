@@ -474,6 +474,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         }
         if(workspaceStyle){Region(94,"状态",_geometry.Status);Add(GuiItemKind.Label,3,labelId++,$"{(_page.State.Dirty?"场景已修改":"场景已保存")} | 对象 {_page.Total} | {_page.Play?.State.ToString()??"Edit"} | Direct3D11");End();WorkspaceMenu(ref labelId,writable);}
         BuildCharacterDebug(w,h,ref labelId);
+        BuildGraphReads(w,h,ref labelId);
         if(workspaceStyle)WorkspaceSplitters();
         _frame = new() { StructSize = (uint)Marshal.SizeOf<GuiFrame>(), Frame = frameId, ViewGeneration = _generation,
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
@@ -558,6 +559,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyAssetAction(action,e.Value,text,stamp))continue;
                 if(ApplyViewportAction(action,e.Value,text,stamp))continue;
                 if(ApplyCharacterAction(action,e.Value))continue;
+                if(ApplyGraphRead(action,e.Value))continue;
                 switch (action.Kind)
                 {
                     case "workspace_menu": int nextMenu=_activeMenu==action.Index?-1:action.Index;CancelInteraction();_activeMenu=nextMenu;break;

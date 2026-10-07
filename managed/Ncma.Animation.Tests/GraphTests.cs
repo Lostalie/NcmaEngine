@@ -14,13 +14,13 @@ internal static class GraphTests
         throw new Exception("Invalid animation graph accepted.");
     }
     private static AnimationGraphLink Link(Guid from, string fromPin, Guid to, string toPin) => new(Guid.NewGuid(), from, fromPin, to, toPin);
-    private static AnimationGraphDefinition Simple()
+    internal static AnimationGraphDefinition Simple()
     {
         var clip = AnimationGraphNode.Create(Guid.NewGuid(), "Idle", AnimationNodeKind.Clip) with { ClipId = Guid.NewGuid(), Loop = true, Speed = 1 };
         var output = AnimationGraphNode.Create(Guid.NewGuid(), "Output", AnimationNodeKind.Output);
         return new(1, Guid.NewGuid(), "角色动画", Guid.NewGuid(), Guid.Empty, [], [clip, output], [Link(clip.Id, "pose", output.Id, "pose")], [], []);
     }
-    private static AnimationGraphDefinition Mixed()
+    internal static AnimationGraphDefinition Mixed()
     {
         var d = Simple(); var clip = d.Nodes[0] with { Id = Guid.NewGuid(), ClipId = Guid.NewGuid(), Name = "Run" };
         var blend = AnimationGraphNode.Create(Guid.NewGuid(), "Blend", AnimationNodeKind.Blend) with { Weight = .5 };
@@ -29,7 +29,7 @@ internal static class GraphTests
         return d with { Parameters = [p], Nodes = [d.Nodes[0], clip, blend, d.Nodes[1], n], Links = [Link(d.Nodes[0].Id, "pose", blend.Id, "a"),
             Link(clip.Id, "pose", blend.Id, "b"), Link(blend.Id, "pose", d.Nodes[1].Id, "pose"), Link(n.Id, "value", blend.Id, "weight")] };
     }
-    private static AnimationGraphDefinition Machine()
+    internal static AnimationGraphDefinition Machine()
     {
         var d = Simple(); var run = d.Nodes[0] with { Id = Guid.NewGuid(), ClipId = Guid.NewGuid(), Name = "Run" };
         var machine = AnimationGraphNode.Create(Guid.NewGuid(), "Locomotion", AnimationNodeKind.StateMachine);

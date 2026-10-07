@@ -155,6 +155,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _filePicker=new();
             _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow,workspaceStyle:true,projectName:project?.Configuration.Name);
             _presenter.AttachCharacters(characters);
+            if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
             if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));
             if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);

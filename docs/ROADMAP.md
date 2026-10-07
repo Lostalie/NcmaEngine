@@ -25,6 +25,7 @@
 - **场景：扁平 GameObject 列表，空容器 + 组件。** Transform 可选；不恢复 Godot Node、父子对象树或 Transform 继承。骨骼、动画图、UI 文档内部层级不等于场景层级。
 - **网络：独立可选服务。** 不向 GameObject、Behaviour 或组件植入 RPC、自动复制和网络所有权。
 - **编辑器与 AI：共用 C# 命令路径。** 修改必须可撤销；AI 默认只读，事务需权限、会话和版本检查。不得另建一套绕过编辑器的修改接口。
+- **AI高度集成：各功能阶段同步交付语义工具。** 上下文读取、结构化诊断、提案/dry-run、精确审批、共享事务/Undo与测试证据形成闭环，不把AI仅作为聊天面板或等M8再加接口。模型连接器、推理和Python模块仍未实现，配置与数据外发须独立授权。
 - **跨语言：版本化 C ABI。** 明确线程、缓冲区、资源所有权与释放；不跨边界暴露 STL、C++ 异常或托管对象引用。资产保存 UUID，不保存运行时句柄。
 - **编辑器 UI：保留原生 Dear ImGui 插件。** “imgui”就是同一库；C# 通过已有版本化 GUI C ABI 提交复制的呈现数据，不引入 ImGui.NET。游戏运行时 UI 使用独立文档、布局和渲染系统。
 - **已有 SDK 继续复用：** Eigen、GLFW、Dear ImGui、spdlog、Box2D、Jolt Physics、ufbx 位于 `engine/sdk/`。C# 高层模型不得依赖其平台/GPU 头文件。
@@ -45,9 +46,9 @@
 | Vulkan | **未实现渲染**：仅加载器探测 | Device/Queue/Swapchain、资源与管线、Shader、Draw、双 API 一致性及验证层测试 |
 | 物理 | M2.6 独立Box2D/Jolt服务；M4.1运动权威；M4.2真实Jolt角色数值；M4.3 Editor/Player固定步角色/盒体接线；M4.4碰撞约束根运动；M4.5候选动作/closest-ray战斗 | 连续武器hitbox/通用Gameplay碰撞事件、人工/性能/长稳联合验收；默认物理仍disabled |
 | FBX 角色 | G2 持久导入/异步 Worker/UUID/generation；G5 NCA 保存重启 → 场景骨架片段 → GPU/Player，不在 Player 解析 FBX | 完整源材质/纹理、真实用户模型/所有 DCC 骨骼缩放/skin mode 覆盖 |
-| 动画 | 独立动作实验室/数值 ABI 2；M3.5 纯 C# ClipPlayback/committed 时钟/独立 Edit 预览与 pose ABI 1.0/GPU 蒙皮，根位移只报告；有类型化图模型 | 可视化图编辑与运行时编译、场景 Animator、BlendSpace/Montage、IK/重定向；实验室窗口不等于游戏战斗系统 |
-| UI | 仅模型骨架：当前 C++ UiDocument 有节点、样式、布局字段和 Token | C# 文档、持久化、布局求解、UI制作画布、运行时 UI 渲染/输入、组件实例/变体均未实现；编辑器视觉参考采用用户图1 |
-| AI / MCP / Python | 部分实现：项目只读 CLI；独立程序化动画预览有 8 项 stdio MCP 工具；C# 活动场景本地 scoped MCP 已接入 | 资产/动画图/UI/源码扩展的统一 MCP 未实现；活动场景已接入；Python AI 通信与推理模块未实现 |
+| 动画 | 独立动作实验室/数值ABI2；M3 NCA/committed时钟/pose/GPU蒙皮，M4碰撞约束根运动与动作候选；M6.1严格托管图数据/验证 | 图执行与节点编辑、图MCP、BlendSpace/Montage、IK/重定向未实现；M4真实素材/性能/人工门禁开放 |
+| UI | M5.1–M5.7托管文档/本机事务/布局/控件、DX11批次/独立文字内核、场景/UI制作工作区/缓存预览自动候选；旧C++ UI模型已删除 | UI Agent读写、组件实例/变体、glyph atlas/完整IME、正式Player HUD与发布仍未实现；人工/性能验收开放 |
+| AI / MCP / Python | 项目只读CLI、隔离程序化动画MCP、活动场景共享事务MCP；M3获批资产只读、M4获批角色/战斗只读候选 | 动画图/UI修改、跨系统工作流、源码扩展网关和内置推理未实现；M6按功能同期接工具，Python传输仍未实现 |
 | 网络与引擎扩展 | 独立网络系统未实现；组件 Schema 注册已有基础 | 网络传输/会话/同步服务、完整托管插件生命周期、编辑器扩展、发布与沙箱边界未实现 |
 
 补充说明：
@@ -206,8 +207,12 @@ UI制作作为同一Editor的独立工作区，保留选择/拖拽/缩放/对齐
 
 2026-10-07 用户授权逐小阶段实施、修复至测试通过后提交推送并核对远端，再进入下一阶段。
 详细范围和门禁见 [M6 实施方案](M6_IMPLEMENTATION_PLAN.md)：M6.1 严格图资产、M6.2 编译求值、
-M6.3 场景接线、M6.4 节点工作区、M6.5 过渡事件、M6.6 BlendSpace、M6.7 分层缓存、M6.8 Montage、
-M6.9 MCP、M6.10 包与联合验收。旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
+M6.3 场景接线、M6.4 节点工作区与获批图MCP事务、M6.5 过渡事件、M6.6 BlendSpace、M6.7 分层缓存、M6.8 Montage、
+M6.9 跨系统AI工作流/MCP可靠性、M6.10 包与联合验收。M6.2开始同步结构化诊断和获批只读图MCP，
+M6.5–M6.8同期扩充功能工具，不等M6.9首次接入。M6.2编译/提交式求值和两项获批只读图MCP已通过
+完整Debug/Release，图/pose32、Editor72，见[交付](M6_2_DELIVERY_REPORT.md)；后续图写入/真实角色接线/
+高级工具未实现，M6.1不因此获得新权限。
+旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
 性能/长稳门禁仍开放。M6.1 进度见 [契约](M6_1_GRAPH_CONTRACT.md) 与 [交付](M6_1_DELIVERY_REPORT.md)。
 M6.1 完整顺序Debug/Release已通过，10项新增图专项随25项pose/clock候选测试通过；仅资产/验证基础，
 尚无图执行、正式保存事务或节点编辑器，不称完整Animator。
