@@ -20,12 +20,12 @@ public sealed class PoseClip : IDisposable
     public void Dispose(){if(Key==0)return;Owner.Release(Key);Key=0;}
 }
 // Trusted bootstrap explicitly pins/verifies an absolute kernel path; not an Agent loading endpoint.
-public sealed unsafe class PoseKernel : IDisposable
+public sealed unsafe partial class PoseKernel : IDisposable
 {
     private readonly int _owner=Environment.CurrentManagedThreadId;
     private readonly HashSet<ulong> _resources=[];
     private KernelCodePin? _pin;private nint _library;private ulong _context;private Api _api;
-    public PoseKernel(string libraryPath,string expectedHash)
+    public PoseKernel(string libraryPath,string expectedHash,bool blendSupport=false)
     {
         AssetRecordCodec.ValidateHash(expectedHash);
         if(!Path.IsPathFullyQualified(libraryPath) || Path.GetFileName(libraryPath)!="NcmaAnimationKernel.dll")throw new ArgumentException("Explicit animation kernel filename/path required.");
@@ -40,6 +40,7 @@ public sealed unsafe class PoseKernel : IDisposable
             var get=(delegate* unmanaged[Cdecl]<uint,uint,void*,uint,Error*,uint>)NativeLibrary.GetExport(_library,"ncma_pose_get_api");
             Api api=default;Error error=default;Check(get(1,0,&api,72,&error),error);
             if(api.Size!=72 || api.Major!=1 || api.Minor!=0 || api.MaxBones!=1024 || api.Create==null || api.Close==null || api.Rig==null || api.Clip==null || api.Release==null || api.Sample==null || api.Stats==null)throw new ArgumentException("Pose API table rejected.");
+            if(blendSupport)LoadBlendExtension(); // Validate optional table before creating any context/resource.
             ulong context=0;Check(api.Create(&context,&error),error);if(context==0)throw new ArgumentException("Null pose context.");_api=api;_context=context;
         }catch{if(_library!=0)NativeLibrary.Free(_library);_library=0;_pin.Dispose();_pin=null;throw;}
     }

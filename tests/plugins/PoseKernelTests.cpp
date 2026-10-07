@@ -1,4 +1,5 @@
 #include "contracts/NcmaPose.h"
+#include "contracts/NcmaPoseBlend.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -31,8 +32,26 @@ int main() {
  uint32_t threadCode=0;std::thread wrong([&](){NcmaErrorV1 e{};NcmaPoseStatsV1 s{};threadCode=api.stats(context,&s,&e);});wrong.join();assert(threadCode==NCMA_WRONG_THREAD);
  for(int i=0;i<4096;i++)assert(api.sample(context,requests,2,local,model,4,&error)==0);
  uint64_t other=0;assert(api.create(&other,&error)==0);assert(api.sample(other,requests,2,local,model,4,&error)==NCMA_INVALID_HANDLE);assert(api.close(other,&error)==0);
+ NcmaPoseBlendApiV1 mix{};assert(ncma_pose_get_blend_api(2,0,&mix,32,&error)==NCMA_ABI_MISMATCH);
+ assert(ncma_pose_get_blend_api(1,1,&mix,32,&error)==NCMA_ABI_MISMATCH);
+ assert(ncma_pose_get_blend_api(1,0,&mix,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32);
+ assert(ncma_pose_get_blend_api(1,0,&mix,32,&error)==0&&mix.max_requests==32);
+ NcmaPoseBlendRequestV1 blending[2]{{rig,0,2,0,0,.5f,0},{rig,2,0,2,0,1,0}};
+ NcmaPoseTrsV1 mixed[4]{};NcmaPoseMatrixV1 mixedModel[4]{};
+ assert(mix.blend(context,blending,2,local,4,mixed,mixedModel,4,&error)==0);
+ assert(std::abs(mixed[0].position[0]-1.5f)<1e-6f&&std::abs(mixedModel[1].column_major[13]-3)<1e-6f&&mixed[2].position[0]==2);
+ NcmaPoseBlendStatsV1 mixBefore{},mixAfter{};assert(mix.stats(context,&mixBefore,&error)==0&&mixBefore.struct_size==24&&mixBefore.blended_bones==4);
+ mixedModel[0].column_major[0]=77;blending[1].reserved1=1;assert(mix.blend(context,blending,2,local,4,mixed,mixedModel,4,&error)==NCMA_INVALID_ARGUMENT);blending[1].reserved1=0;
+ local[3].scale[1]=2;assert(mix.blend(context,blending,2,local,4,mixed,mixedModel,4,&error)==NCMA_INVALID_ARGUMENT);local[3].scale[1]=1;
+ assert(mixedModel[0].column_major[0]==77&&mix.stats(context,&mixAfter,&error)==0&&mixAfter.blend_calls==mixBefore.blend_calls);
+ assert(mix.blend(context,blending,2,local,4,local,mixedModel,4,&error)==NCMA_INVALID_ARGUMENT);
+ blending[1].source_b=UINT32_MAX;assert(mix.blend(context,blending,2,local,4,mixed,mixedModel,4,&error)==NCMA_INVALID_ARGUMENT);blending[1].source_b=0;
+ blending[1].weight=-1;assert(mix.blend(context,blending,2,local,4,mixed,mixedModel,4,&error)==NCMA_INVALID_ARGUMENT);blending[1].weight=1;
+ std::thread blendWrong([&](){NcmaErrorV1 e{};NcmaPoseBlendStatsV1 s{};threadCode=mix.stats(context,&s,&e);});blendWrong.join();assert(threadCode==NCMA_WRONG_THREAD);
+ assert(api.create(&other,&error)==0);assert(mix.blend(other,blending,2,local,4,mixed,mixedModel,4,&error)==NCMA_INVALID_HANDLE);assert(api.close(other,&error)==0);
  assert(api.release(context,clip,&error)==0);assert(api.sample(context,requests,2,local,model,4,&error)==NCMA_INVALID_HANDLE);
  assert(api.release(context,rig,&error)==0&&api.stats(context,&after,&error)==0&&after.retained_bytes==0&&after.rigs==0&&after.clips==0);
+ assert(mix.blend(context,blending,2,local,4,mixed,mixedModel,4,&error)==NCMA_INVALID_HANDLE);
  assert(api.close(context,&error)==0&&api.stats(context,&after,&error)==NCMA_INVALID_HANDLE);
  std::cout<<"Pose-only ABI: layouts, TRS, bindings-independent composition, interpolation, atomic batches, owner, stale/foreign and cleanup passed.\n";
 }

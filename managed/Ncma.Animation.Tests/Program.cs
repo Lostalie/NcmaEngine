@@ -62,6 +62,7 @@ cases.Add(("Post-commit fault reports successful steps for Player fixed and paus
  }
 }));
 string path=Path.GetFullPath(args[0]);string hash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+PoseBlendTests.Add(cases,path,hash);
 cases.Add(("Code pin uses owned file handle, rejects hard links and releases locks",()=>{
  string directory=Path.Combine(args.Length==3?Path.Combine(Path.GetFullPath(args[1]),"out","verification","m3-5",args[2]):Path.GetTempPath(),"code-pin-"+Guid.NewGuid().ToString("N"));
  Directory.CreateDirectory(directory);string file=Path.Combine(directory,"NcmaAnimationKernel.dll"),moved=Path.Combine(directory,"released.dll");File.WriteAllText(file,"isolated code pin fixture");
