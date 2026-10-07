@@ -66,6 +66,7 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
             @{ id = 'ncma.character'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }
             @{ id = 'ncma.animation'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }
             @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
+            @{ id = 'ncma.text'; abiVersion = 1; path = 'plugins/NcmaText.dll'; lazy = $true }
         } elseif ($product -eq 'NcmaPlayer-dx11-candidate') {
             @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
         }) }
@@ -86,7 +87,7 @@ foreach ($file in @('NcmaPlatform.dll', 'NcmaRenderer.dll', 'glfw3.dll')) {
     Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $editor "plugins\$file")
     Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $playerDx11 "plugins\$file")
 }
-foreach ($file in @('NcmaGui.dll', 'NcmaPhysics.dll')) { Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $editor "plugins\$file") }
+foreach ($file in @('NcmaGui.dll', 'NcmaPhysics.dll', 'NcmaText.dll')) { Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $editor "plugins\$file") }
 # FBX numerical resource kernel is only in Editor, never a Player/Gameplay dependency.
 $characterKernel = Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaNative.dll'
 Copy-Exact $characterKernel (Join-Path $editor 'plugins\NcmaNative.dll')
@@ -115,7 +116,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot identify package source state.' }
 $packageDirty = $packageChanges.Count -gt 0
 $platformModule = @{ id = 'ncma.platform'; abiMajor = 1; abiMinor = 0; capabilities = 0 }
 $rendererModule = @{ id = 'ncma.renderer'; abiMajor = 1; abiMinor = 1; capabilities = 15 }
-Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 3; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
+Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 6; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
 Manifest $playerNull 'NcmaPlayer-null-candidate' @()
 Manifest $playerDx11 'NcmaPlayer-dx11-candidate' @($platformModule, $rendererModule)
 $packageIndex = Join-Path $packageWorkspace "out\verification\m2-7\$Configuration\packages.json"

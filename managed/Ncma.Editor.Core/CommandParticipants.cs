@@ -31,7 +31,7 @@ public sealed partial class EditSession
     public void RegisterCommandParticipant(CapabilityDescriptor descriptor, IEditCommandParticipant participant)
     {
         _document.VerifyAccess(); ArgumentNullException.ThrowIfNull(descriptor); ArgumentNullException.ThrowIfNull(participant);
-        if (_invoking || _frozen || _draft is not null || _history.Length != 0 || _participants.Count >= 16)
+        if (_invoking || _frozen || InteractionBusy || _history.Length != 0 || _participants.Count >= 16)
             throw new InvalidOperationException("Participant registration requires idle trusted startup.");
         if (descriptor.Risk != MutationRisk.Reversible || string.IsNullOrWhiteSpace(descriptor.Name) || descriptor.Name.Length > 128 ||
             string.IsNullOrWhiteSpace(descriptor.Description) || descriptor.Description.Length > 256 ||

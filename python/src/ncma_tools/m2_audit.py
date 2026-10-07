@@ -233,9 +233,11 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
     allowed = {"out/user/logs/editor-candidate.jsonl": 1048576,
                "out/user/logs/editor-candidate.jsonl.1": 1048576,
                "out/user/editor/preferences.json": 1048576,
+               "out/user/editor/workspace.json": 4096,
                "sample/out/user/logs/editor-candidate.jsonl": 1048576,
                "sample/out/user/logs/editor-candidate.jsonl.1": 1048576,
-               "sample/out/user/editor/preferences.json": 1048576}
+               "sample/out/user/editor/preferences.json": 1048576,
+               "sample/out/user/editor/workspace.json": 4096}
     if product.startswith("NcmaEngine"):
         for relative in sorted(extra):
             path = safe_path(root, directory + "/" + relative)
@@ -273,11 +275,22 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
                                  expected_pose[2].casefold() not in seen)
         if not previous_without_pose:
             required_kernels.add(expected_pose)
+        expected_text = ("ncma.text", 1, "plugins/NcmaText.dll")
+        previous_without_text = (directory == "out/bin" and product == "NcmaEngine-editor" and
+                                 expected_text[2].casefold() not in seen)
+        if not previous_without_text:
+            required_kernels.add(expected_text)
+            if expected_text[2].casefold() not in seen or next((k for k in kernels if k["id"] == "ncma.text"), {}).get("lazy") is not True:
+                raise ValueError("Editor UI text module must be listed and lazily initialized.")
         if set(kernel_ids) != required_kernels:
             raise ValueError("Resource-kernel ABI metadata mismatch.")
         modules = {m["id"]: (m["abiMajor"], m["abiMinor"]) for m in data["modules"]}
-        previous_gui = directory == "out/bin" and product == "NcmaEngine-editor" and modules.get("ncma.gui") == (1, 2)
-        if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, 2 if previous_gui else 3), "ncma.physics": (1, 1)}:
+        # Checked deployment audits the exact previous installation before replacing it.
+        # Only installed GUI1.2..1.5 may precede the current1.6 candidate; no runtime fallback.
+        previous_gui = (modules.get("ncma.gui", (0, 0))[1]
+                        if directory == "out/bin" and product == "NcmaEngine-editor" and
+                        modules.get("ncma.gui") in ((1, 2), (1, 3), (1, 4), (1, 5)) else 6)
+        if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, previous_gui), "ncma.physics": (1, 1)}:
             raise ValueError("Editor module ABI metadata mismatch.")
     elif set(kernel_ids) != ({expected_pose} if product == "NcmaPlayer-dx11-candidate" else set()) or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):
         raise ValueError("Editor resource/GUI deployed in Player.")

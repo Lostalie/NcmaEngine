@@ -40,7 +40,12 @@ int main(int argc, char** argv)
     assert(ncma_plugin_get_api(1, 1, &guiApi, sizeof(guiApi), &error) == NCMA_OK);
     assert(ncma_plugin_get_api(1, 2, &guiApi, sizeof(guiApi), &error) == NCMA_OK);
     assert(ncma_plugin_get_api(1, 3, &guiApi, sizeof(guiApi), &error) == NCMA_OK);
-    assert(ncma_plugin_get_api(1, 4, &guiApi, sizeof(guiApi), &error) == NCMA_ABI_MISMATCH);
+    NcmaGuiApiV1_4 toolbarApi{};
+    assert(ncma_plugin_get_api(1,4,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==4);
+    assert(ncma_plugin_get_api(1,4,&guiApi,sizeof(guiApi),&error)==NCMA_BUFFER_TOO_SMALL);
+    assert(ncma_plugin_get_api(1,5,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==5);
+    assert(ncma_plugin_get_api(1,6,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==6);
+    assert(ncma_plugin_get_api(1,7,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_ABI_MISMATCH);
     assert(getPlatform(1, 0, &api, sizeof(api), &error) == NCMA_OK);
     uint64_t platform = 0, w = 0;
     assert(api.module.initialize(nullptr, 0, &platform, &error) == NCMA_OK);
@@ -159,6 +164,30 @@ int main(int argc, char** argv)
     payload="Panel0.1 0.2 0.8 0.9 ";frame.text_bytes=static_cast<uint32_t>(payload.size());canvas[3].text_length=frame.text_bytes-5;
     assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK);
     assert(count==0 && stats.vertices>0 && ImGui::GetStyle().Colors[ImGuiCol_WindowBg].x>.5f);
+    const LONG_PTR originalStyle=GetWindowLongPtrW(hwnd,GWL_STYLE);
+    canvas[1].value=3;frame.frame++;
+    assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);
+    assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK);
+    HIGHCONTRASTW contrast{};contrast.cbSize=sizeof(contrast);
+    assert(SystemParametersInfoW(SPI_GETHIGHCONTRAST,sizeof(contrast),&contrast,0));
+    const bool highContrast=(contrast.dwFlags&HCF_HIGHCONTRASTON)!=0;
+    if(gui->chromeMask&1){BOOL dark=FALSE;assert(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark)))&&dark==(highContrast?FALSE:TRUE));}
+    for(const auto check:std::array<std::pair<uint32_t,COLORREF>,3>{{{2,RGB(9,19,31)},{4,RGB(223,233,243)},{8,RGB(43,67,90)}}}) {
+        if(!(gui->chromeMask&check.first))continue;
+        const DWORD attribute=check.first==2?DWMWA_CAPTION_COLOR:check.first==4?DWMWA_TEXT_COLOR:DWMWA_BORDER_COLOR;
+        COLORREF actual=0;assert(SUCCEEDED(DwmGetWindowAttribute(hwnd,attribute,&actual,sizeof(actual))));
+        assert(actual==(highContrast?DWMWA_COLOR_DEFAULT:check.second));
+    }
+    assert(GetWindowLongPtrW(hwnd,GWL_STYLE)==originalStyle);
+    wchar_t windowTitle[64]{};assert(GetWindowTextW(hwnd,windowTitle,64)>0&&std::wstring(windowTitle)==L"Native adapter fixture");
+    assert(SendMessageW(hwnd,WM_GETICON,ICON_SMALL,0)&&SendMessageW(hwnd,WM_GETICON,ICON_BIG,0));
+    std::cout<<"PASS native chrome DWM readback mask="<<gui->chromeMask<<"; native decorations/icon retained; highContrast="<<highContrast<<"\n";
+    canvas[1].value=1;frame.frame++;
+    assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);
+    assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK);
+    if(gui->chromeMask&2){COLORREF reset=0;assert(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_CAPTION_COLOR,&reset,sizeof(reset)))&&reset==DWMWA_COLOR_DEFAULT);}
+    if(gui->chromeMask&1){BOOL dark=TRUE;assert(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark)))&&dark==FALSE);}
+    assert(NcmaChrome::Apply(nullptr,true)==0);
     std::cout<<"PASS bounded copied canvas and theme; invalid batch leaves frame recoverable, no mutation intents\\n";
     assert(Destroy(gm, g, &error) == NCMA_OK && Shutdown(gm, &error) == NCMA_OK);
     assert(api.destroy_window(platform, w, &error) == NCMA_OK && api.module.shutdown(platform, &error) == NCMA_OK);

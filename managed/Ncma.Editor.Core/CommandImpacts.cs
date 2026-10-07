@@ -56,7 +56,7 @@ public sealed partial class EditSession
     public (CommandImpact Impact, string OriginalCapability, Guid? DestructiveTarget) DescribeRequestImpact(CapabilityRequest request)
     {
         Observe(); CheckInput(request.Input);
-        if (_invoking || _draft is not null || _frozen || _invalidated) throw new EditRejectedException("edit_busy");
+        if (_invoking || InteractionBusy || _frozen || _invalidated) throw new EditRejectedException("edit_busy");
         if (request.ContractVersion != ContractVersion || request.SessionId != SessionId || request.ExpectedRevision != Revision)
             throw new EditRejectedException("revision_conflict");
         if (request.Capability is "ncma.history.undo" or "ncma.history.redo")

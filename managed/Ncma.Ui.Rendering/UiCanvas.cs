@@ -136,6 +136,12 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
         if (_list is null || _preparedRevision != Runtime.PresentationRevision) throw new InvalidOperationException("Prepare changed UI before rendering.");
         _renderer.SubmitUi(_list, frame, clear, overlay);
     }
+    public void Produce(UiRenderTarget target,ulong frame,ulong contentRevision,Vector4 clear)
+    {
+        ObjectDisposedException.ThrowIf(_disposed,this);
+        if(_list is null||_preparedRevision!=Runtime.PresentationRevision)throw new InvalidOperationException("Prepare changed UI before rendering.");
+        _renderer.SubmitUiTarget(target,_list,frame,contentRevision,clear);
+    }
     public void Dispose()
     {
         if (_disposed) return; _ = Runtime.Stamp;

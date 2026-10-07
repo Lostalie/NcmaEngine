@@ -11,7 +11,7 @@ public sealed partial class EditSession
     private void Writable(CapabilityPermissions permissions, string capability)
     {
         Observe();
-        if (_invoking || _draft is not null) throw new EditRejectedException("edit_busy");
+        if (_invoking || InteractionBusy) throw new EditRejectedException("edit_busy");
         if (_frozen) throw new EditRejectedException("play_frozen");
         if (_invalidated) throw new EditRejectedException("history_invalidated");
         if (!permissions.Allows(capability)) throw new EditRejectedException("permission_denied");

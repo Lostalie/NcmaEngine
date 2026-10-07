@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Ncma.Ui.Rendering/Ncma.Ui.Rendering.csproj" />
     <ProjectReference Include="../Ncma.Scripting/Ncma.Scripting.csproj" />
     <ProjectReference Include="../Ncma.Application.Runtime/Ncma.Application.Runtime.csproj" />
     <ProjectReference Include="../Ncma.Editor.Transport/Ncma.Editor.Transport.csproj" />

@@ -1,4 +1,5 @@
 // White-box fault injection is restricted to this test TU; no production fault/debug export.
+#define NCMA_RENDERER_TEST_WAIT
 #include "../../engine/source/plugins/renderer/RendererPlugin.cpp"
 #include "../../engine/source/plugins/contracts/NcmaPlatform.h"
 #include <iostream>
@@ -29,7 +30,10 @@ int main(int argc,char** argv) {
         NcmaRendererDescriptionV1 desc{sizeof(desc),1,1,0,platformModule,window,256,256,{0,0}};
         Check(api.create_renderer(renderModule,&desc,&handle,&error)==0,"Renderer create");
         NcmaSceneRenderApiV1 scene{};
-        Check(latest.query_scene_render(renderModule,7,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        NcmaUiTargetApiV1 uiTargets{};
+        Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
+        Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
+        Check(latest.query_scene_render(renderModule,8,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         Check(latest.query_scene_render(renderModule,1,&scene,47,&error)==NCMA_BUFFER_TOO_SMALL && error.required_bytes==48,"Short scene service table");
         Check(latest.query_scene_render(renderModule,1,&scene,sizeof(scene),&error)==NCMA_OK && scene.version==1 && scene.capabilities==1,"Scene service negotiation");
         const float vertices[36]{-0.8f,-0.7f,.5f,0,0,1,0,0,1,0,0,1, .6f,-.7f,.5f,0,0,1,1,0,1,0,0,1, -.8f,.7f,.5f,0,0,1,0,1,1,0,0,1};
@@ -308,10 +312,27 @@ int main(int argc,char** argv) {
         Check(ui.create_list(renderModule,handle,&listInput,&listKey,&error)==NCMA_INVALID_ARGUMENT,"Nonfinite UI vertex before execution");uiVertices[0].color[0]=1;
         Check(ui.create_list(renderModule,handle,&listInput,&listKey,&error)==NCMA_OK,"UI display list create");
         Check(ui.destroy(renderModule,handle,imageKey,&error)==NCMA_BUSY,"UI list pins its images");
+        NcmaUiTargetDescriptionV1 targetDescription{sizeof(targetDescription),128,128,0};NcmaUiKeyV1 uiTarget{},uiLease{};
+        Check(uiTargets.create_target(renderModule,handle,&targetDescription,&uiTarget,&error)==NCMA_OK,"Color-only UI target create");
+        NcmaUiTargetFrameV1 targetFrame{sizeof(targetFrame),0,1,1,uiTarget,listKey,{0,0,0,1}};
+        Check(uiTargets.submit(renderModule,handle,&targetFrame,&error)==NCMA_OK&&!renderer->active&&!renderer->lastFrame&&renderer->stats.presents==0,"Offscreen production never presents/activates main frame");
+        Check(uiTargets.acquire(renderModule,handle,uiTarget,1,1,&uiLease,&error)==NCMA_OK,"UI presentation acquire");
+        ID3D11ShaderResourceView* borrowed=nullptr;
+        Check(ncma_renderer_gui_cached_image_v1(renderModule,handle,{uiLease.value,uiLease.generation},2,0,&borrowed,&error)==NCMA_BUSY,"Lease exact presentation frame");
+        Check(ncma_renderer_gui_cached_image_v1(renderModule,handle,{uiLease.value,uiLease.generation},1,1,&borrowed,&error)==NCMA_OK&&borrowed,"GUI pins exact UI lease");
+        Check(uiTargets.release(renderModule,handle,uiLease,&error)==NCMA_BUSY&&uiTargets.destroy_target(renderModule,handle,uiTarget,&error)==NCMA_BUSY,"Pinned lease retains complete ownership");
+        Check(ncma_renderer_release_gui_cached_image_v1(renderModule,handle,{uiLease.value,uiLease.generation},&error)==NCMA_OK,"GUI releases pin");
+        Check(uiTargets.release(renderModule,handle,uiLease,&error)==NCMA_OK,"UI lease release");
+        testWaitTimeout=true;Check(uiTargets.destroy_target(renderModule,handle,uiTarget,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->uiTargets.size()==1&&renderer->uiTargetBytes==128*128*4,"Target timeout retains texture and owner");testWaitTimeout=false;
+        Check(api.destroy_renderer(renderModule,handle,&error)==NCMA_BUSY,"Renderer refuses unload under UI resources");
         NcmaUiFrameV1 uiFrame{sizeof(uiFrame),0,1,listKey,{0,0,0,1}};
         Check(ui.submit(renderModule,handle,&uiFrame,&error)==NCMA_OK,"UI submit");
         uiFrame.overlay=1;Check(ui.submit(renderModule,handle,&uiFrame,&error)==NCMA_BUSY,"Repeated UI frame rejected");
         Check(Failure(&error,"Injected UI post-submit failure")==NCMA_INTERNAL_ERROR,"UI fault stops active frame");
+        Check(uiTargets.acquire(renderModule,handle,uiTarget,1,2,&uiLease,&error)==NCMA_INTERNAL_ERROR,"Faulted target cannot acquire presentation");
+        NcmaUiKeyV1 rejectedTarget{};Check(uiTargets.create_target(renderModule,handle,&targetDescription,&rejectedTarget,&error)==NCMA_INTERNAL_ERROR&&!rejectedTarget.value&&renderer->uiTargets.size()==1,"Faulted target cannot allocate more GPU resources");
+        targetFrame.frame=2;targetFrame.content_revision=2;Check(uiTargets.submit(renderModule,handle,&targetFrame,&error)==NCMA_INTERNAL_ERROR,"Faulted target cannot produce");
+        Check(uiTargets.destroy_target(renderModule,handle,uiTarget,&error)==NCMA_OK&&renderer->uiTargets.empty(),"Explicit target close retry drains after fail-stop");
         uiFrame.frame=2;uiFrame.overlay=0;Check(ui.submit(renderModule,handle,&uiFrame,&error)==NCMA_INTERNAL_ERROR,"UI cannot submit after fault");
         Check(ui.destroy(renderModule,handle,listKey,&error)==NCMA_OK&&ui.destroy(renderModule,handle,imageKey,&error)==NCMA_OK,"Faulted UI resources drain");
         Check(api.destroy_renderer(renderModule,handle,&error)==NCMA_OK,"Faulted UI renderer closes");

@@ -107,15 +107,21 @@ class M2AuditTests(unittest.TestCase):
         data["product"] = "NcmaEngine-editor-candidate"
         data["resourceKernels"] = [{"id": name, "abiVersion": 2, "path": "plugins/NcmaNative.dll"}
                                   for name in ("ncma.animation", "ncma.character")]
+        text = base / "plugins/NcmaText.dll"
+        text.parent.mkdir()
+        text.write_bytes(b"test-owned UI text module")
+        data["files"].append({"path": "plugins/NcmaText.dll", "size": text.stat().st_size,
+                              "sha256": hashlib.sha256(text.read_bytes()).hexdigest()})
+        data["resourceKernels"].append({"id": "ncma.text", "abiVersion": 1,
+                                       "path": "plugins/NcmaText.dll", "lazy": True})
         pose = base / "plugins/NcmaAnimationKernel.dll"
-        pose.parent.mkdir()
         pose.write_bytes(b"test-owned pose kernel")
         data["files"].append({"path": "plugins/NcmaAnimationKernel.dll", "size": pose.stat().st_size,
                               "sha256": hashlib.sha256(pose.read_bytes()).hexdigest()})
         data["resourceKernels"].append({"id": "ncma.pose", "abiVersion": 1,
                                        "path": "plugins/NcmaAnimationKernel.dll", "lazy": True})
         data["modules"] = [{"id": name, "abiMajor": 1, "abiMinor": minor}
-                           for name, minor in (("ncma.platform", 0), ("ncma.renderer", 1), ("ncma.gui", 3), ("ncma.physics", 1))]
+                           for name, minor in (("ncma.platform", 0), ("ncma.renderer", 1), ("ncma.gui", 6), ("ncma.physics", 1))]
         (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
         log = base / "out/user/logs/editor-candidate.jsonl"
         log.parent.mkdir(parents=True)

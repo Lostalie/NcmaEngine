@@ -8,6 +8,7 @@
 #include "ScenePipelineKernel.h"
 #include "SkinKernel.h"
 #include "UiKernel.h"
+#include "../contracts/NcmaUiTarget.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -35,6 +36,11 @@ struct TargetGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle color,dept
     explicit TargetGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TargetGpu(){backend.DestroyTexture(color);backend.DestroyTexture(depth);}};
 uint64_t nextResource=1;
 struct Renderer {
+    struct UiTarget { Rhi::TextureHandle color; uint32_t width=0,height=0; uint64_t content=0,produced=0,leases=0; };
+    struct UiLease { uint64_t target=0,content=0,produced=0,frame=0,pins=0; };
+    std::unordered_map<uint64_t,UiTarget> uiTargets;
+    std::unordered_map<uint64_t,UiLease> uiLeases;
+    uint64_t uiTargetBytes=0,uiProductions=0,uiPresentations=0;
     bool pureUi=false;
     uint64_t lastUiFrame=0;
     std::unique_ptr<Rendering::UiKernel> ui;
@@ -90,7 +96,13 @@ uint32_t Failure(NcmaErrorV1* error,const std::string& message) {
     renderer->faultResult=lost?NCMA_DEVICE_LOST:NCMA_INTERNAL_ERROR;
     return NcmaPlugin::Error(error,renderer->faultResult,message);
 }
+#ifdef NCMA_RENDERER_TEST_WAIT
+bool testWaitTimeout=false; // Only the white-box test TU; absent from shipped module/API.
+#endif
 bool Wait(Renderer& r,std::string& error) {
+#ifdef NCMA_RENDERER_TEST_WAIT
+    if(testWaitTimeout){error="Injected completion timeout; resources retained.";return false;}
+#endif
     auto* device=r.backend->GetDevice(); auto* context=r.backend->GetDeviceContext();
     if(FAILED(device->GetDeviceRemovedReason())) { error="Device lost."; return false; }
     D3D11_QUERY_DESC desc{D3D11_QUERY_EVENT,0}; ComPtr<ID3D11Query> query;
@@ -161,7 +173,7 @@ uint32_t NCMA_CALL Status(uint64_t context,NcmaModuleStatusV1* output,NcmaErrorV
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         const auto ui=renderer&&renderer->ui?renderer->ui->Stats(renderer->handle,renderer->pureUi):NcmaUiStatsV1{};
-        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size()+ui.images+ui.lists:0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
+        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size()+renderer->uiTargets.size()+renderer->uiLeases.size()+ui.images+ui.lists:0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
 }
 uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
@@ -358,7 +370,7 @@ uint32_t NCMA_CALL WaitIdle(uint64_t context,uint64_t handle,NcmaErrorV1* error)
 uint32_t NCMA_CALL Destroy(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
         const auto ui=renderer->ui?renderer->ui->Stats(handle,renderer->pureUi):NcmaUiStatsV1{};
-        if(renderer->borrows||!renderer->groups.empty()||!renderer->meshes.empty()||renderer->backend->GetLiveResourceCount()!=0||ui.images||ui.lists)return NcmaPlugin::Error(error,NCMA_BUSY);
+        if(renderer->borrows||!renderer->groups.empty()||!renderer->meshes.empty()||!renderer->uiTargets.empty()||!renderer->uiLeases.empty()||renderer->backend->GetLiveResourceCount()!=0||ui.images||ui.lists)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
         if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
         NcmaErrorV1 platformError{};
@@ -523,12 +535,13 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
 #include "SkinServices.inl"
 #include "ScenePipelineServices.inl"
 #include "UiServices.inl"
+#include "UiTargetServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>6)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>7)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):sizeof(NcmaUiApiV1);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):sizeof(NcmaUiTargetApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -539,7 +552,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==3) {const NcmaResourceRenderApiV3 resources{sizeof(resources),3,0x3c,CreateTexture,CreateMaterial,CreateTarget,DestroyResource,SubmitResources,ResourceStats,CaptureTarget};std::memcpy(output,&resources,sizeof(resources));}
         else if(version==4) {const NcmaScenePipelineApiV4 scene{sizeof(scene),4,0x7,CreateScenePipeline,DestroyScenePipeline,SubmitScenePipeline,ScenePipelineStats};std::memcpy(output,&scene,sizeof(scene));}
         else if(version==5) {const NcmaSkinApiV5 skin{sizeof(skin),5,3,CreateSkin,DestroySkin,UpdateSkin,CaptureSkin,SkinStats};std::memcpy(output,&skin,sizeof(skin));}
-        else {const NcmaUiApiV1 ui{sizeof(ui),1,7,CreateUiRenderer,CreateUiImage,CreateUiList,DestroyUi,SubmitUi,UiStats};std::memcpy(output,&ui,sizeof(ui));}
+        else if(version==6) {const NcmaUiApiV1 ui{sizeof(ui),1,7,CreateUiRenderer,CreateUiImage,CreateUiList,DestroyUi,SubmitUi,UiStats};std::memcpy(output,&ui,sizeof(ui));}
+        else {const NcmaUiTargetApiV1 ui{sizeof(ui),1,7,CreateUiTarget,DestroyUiTarget,SubmitUiTarget,CaptureUiTarget,AcquireUiTarget,ReleaseUiTarget,UiTargetStats};std::memcpy(output,&ui,sizeof(ui));}
         return NCMA_OK;
     });
 }
@@ -581,6 +595,26 @@ extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_release_gui_i
         if(token.generation!=handle||!renderer->targets.contains(token.value)||!renderer->targets.at(token.value)->guiPins)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
         renderer->targets.at(token.value)->guiPins--;return NCMA_OK;
     });
+}
+extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_gui_cached_image_v1(uint64_t context,uint64_t handle,NcmaGpuResourceV3 token,uint64_t frame,uint32_t retain,ID3D11ShaderResourceView** output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]()->uint32_t {
+        auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!output||retain>1||!frame)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        auto it=renderer->uiLeases.find(token.value);
+        if(token.generation!=handle||it==renderer->uiLeases.end())return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
+        auto& lease=it->second;auto& target=renderer->uiTargets.at(lease.target);
+        if(lease.frame!=frame||target.content!=lease.content||target.produced!=lease.produced||
+            (renderer->active?renderer->lastFrame!=frame:renderer->lastFrame>=frame))return NcmaPlugin::Error(error,NCMA_BUSY,"Stale cached image lease.");
+        auto* view=renderer->backend->BorrowTextureView(target.color);if(!view)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(retain){if(lease.pins>=64)return NcmaPlugin::Error(error,NCMA_BUSY);lease.pins++;}
+        *output=view;return NCMA_OK;
+    });
+}
+extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_release_gui_cached_image_v1(uint64_t context,uint64_t handle,NcmaGpuResourceV3 token,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]()->uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
+        auto it=renderer->uiLeases.find(token.value);if(token.generation!=handle||it==renderer->uiLeases.end()||!it->second.pins)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        it->second.pins--;return NCMA_OK;});
 }
 extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major,uint32_t minor,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     const NcmaRendererApiV1 table{{sizeof(NcmaRendererApiV1),1,0,NCMA_RENDERER,15,Initialize,Shutdown,Status,Diagnostic},

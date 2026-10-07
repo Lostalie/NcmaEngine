@@ -13,6 +13,11 @@ public sealed class UiWriteScope
     private readonly Dictionary<string, Guid> _targets;
     private readonly Func<Guid, UiResourceKind, bool> _dependency;
     private readonly Func<bool> _current;
+    private Func<string,Guid,bool>? _hostTarget;
+    public static UiWriteScope ForHost(Func<string,Guid,bool> target,Func<Guid,UiResourceKind,bool> dependency,Func<bool> current)
+    {
+        ArgumentNullException.ThrowIfNull(target);var scope=new UiWriteScope([],dependency,current);scope._hostTarget=target;return scope;
+    }
     public UiWriteScope(IEnumerable<KeyValuePair<string, Guid>> targets, Func<Guid, UiResourceKind, bool> dependency, Func<bool> current)
     {
         ArgumentNullException.ThrowIfNull(targets); _dependency = dependency ?? throw new ArgumentNullException(nameof(dependency));
@@ -22,11 +27,11 @@ public sealed class UiWriteScope
     }
     internal void Require(string path, UiDefinition d)
     {
-        if (!_current() || !_targets.TryGetValue(path, out var id) || id != d.AssetId || d.Elements.Any(e =>
+        if (!_current() || !(_hostTarget is { } host?host(path,d.AssetId):_targets.TryGetValue(path,out var id)&&id==d.AssetId) || d.Elements.Any(e =>
             e.Font != Guid.Empty && !_dependency(e.Font, UiResourceKind.Font) || e.Image != Guid.Empty && !_dependency(e.Image, UiResourceKind.Image)))
             throw new EditCommandRejectedException("ui_scope_denied", denied: true);
     }
-    internal UiWriteScope Bind(Func<bool> current) => new(_targets, _dependency, () => _current() && current());
+    internal UiWriteScope Bind(Func<bool> current) => _hostTarget is { } host?ForHost(host,_dependency,()=>_current()&&current()):new(_targets,_dependency,()=>_current()&&current());
 }
 
 // Uses the existing checked Windows storage, journal and sole Editor.Core history.

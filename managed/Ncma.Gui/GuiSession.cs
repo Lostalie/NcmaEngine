@@ -4,7 +4,7 @@ using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Rendering;
 namespace Ncma.Gui;
-public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton }
+public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton, ToolbarBegin, ToolbarButton, ToolbarBrand, ToolbarDivider, ToolbarEnd, MenuButton, MenuBrand, CachedImage, OverlayBegin, Splitter, SelectionButton }
 [StructLayout(LayoutKind.Sequential)]
 public struct GuiFrame { public uint StructSize, ItemCount, TextBytes, Reserved; public ulong Frame, ViewGeneration, DocumentGeneration, Revision; }
 [StructLayout(LayoutKind.Sequential)]
@@ -21,6 +21,10 @@ public unsafe struct GuiItem
         GuiItem item=new(){Kind=(uint)GuiItemKind.Image,Enabled=enabled?1u:0u,WidgetHigh=high,WidgetLow=low};
         item.Rect[0]=x;item.Rect[1]=y;item.Rect[2]=width;item.Rect[3]=height;
         item.Reserved[0]=(uint)token.Value;item.Reserved[1]=(uint)(token.Value>>32);item.Reserved[2]=(uint)token.Generation;item.Reserved[3]=(uint)(token.Generation>>32);return item;
+    }
+    public static GuiItem CachedImage(ulong high,ulong low,GuiCachedImageToken token,float x,float y,float width,float height,bool enabled=false)
+    {
+        var item=Image(high,low,new(token.Value,token.Generation),x,y,width,height,enabled);item.Kind=(uint)GuiItemKind.CachedImage;return item;
     }
 }
 [StructLayout(LayoutKind.Sequential)]
@@ -52,6 +56,8 @@ internal unsafe delegate uint DrawGui(ulong context, ulong handle, GuiFrame* fra
 internal unsafe delegate uint DestroyGui(ulong context, ulong handle, PluginError* error);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal unsafe delegate uint AttachRenderer(ulong context, ulong gui, ulong rendererModule, ulong renderer, PluginError* error);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal unsafe delegate uint ConfigureToolbarIcon(ulong context, ulong gui, byte* bytes, uint count, PluginError* error);
 public sealed unsafe class GuiSession : IDisposable
 {
     private readonly PluginLease _lease;
@@ -66,6 +72,14 @@ public sealed unsafe class GuiSession : IDisposable
     private readonly AttachRenderer _attach;
     private readonly DestroyGui _renderGpu;
     private bool _disposed;
+    public bool SupportsToolbar => Module.AbiMinor >= 4;
+    public void SetToolbarIcon(ReadOnlySpan<byte> ico)
+    {
+        Verify(); if (!SupportsToolbar) throw new NotSupportedException("Toolbar requires GUI ABI1.4.");
+        if (ico.Length is < 22 or > 1024 * 1024) throw new ArgumentException("Bounded ICO bytes required.");
+        var configure = Module.ReadFunction<ConfigureToolbarIcon>(104); PluginError error = default;
+        fixed (byte* bytes = ico) PluginModule.Check(Module.Id, "configure_toolbar_icon", configure(Module.Context, _handle, bytes, (uint)ico.Length, &error), error);
+    }
     public ulong BeginCalls { get; private set; }
     public ulong DrawCalls { get; private set; }
     public ulong CopiedBytes { get; private set; }
@@ -120,6 +134,9 @@ public sealed unsafe class GuiSession : IDisposable
     {
         Verify(); long started = System.Diagnostics.Stopwatch.GetTimestamp();
         if(Module.AbiMinor<3)foreach(var item in items)if(item.Kind>12)throw new NotSupportedException("GUI Image/AssetButton requires ABI 1.3.");
+        if(Module.AbiMinor<4)foreach(var item in items)if(item.Kind>14)throw new NotSupportedException("GUI toolbar requires ABI1.4.");
+        if(Module.AbiMinor<5)foreach(var item in items)if(item.Kind>19||item.Kind==(uint)GuiItemKind.Theme&&item.Value==3)throw new NotSupportedException("Workspace menu/theme requires ABI1.5.");
+        if(Module.AbiMinor<6)foreach(var item in items)if(item.Kind>21)throw new NotSupportedException("Cached UI image requires ABI1.6.");
         if (frame.ItemCount != items.Length || frame.TextBytes != text.Length) throw new ArgumentException("GUI view length mismatch.");
         PluginError error = default; GuiStats stats = default; uint count = 0;
         fixed (GuiItem* input = items) fixed (byte* source = text) fixed (GuiEvent* events = _events) fixed (byte* outputText = _text)

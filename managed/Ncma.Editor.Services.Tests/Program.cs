@@ -662,6 +662,9 @@ var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTe
         page=authorization.Capture()!; authorization.Revoke(page,hello.ConnectionId); Check(endpoint.Grants.Length==0);
         authorization.Configure(ui.Stamp,false,output); Check(authorization.Capture() is null && !File.Exists(descriptor.ProjectRoot+"/out/sessions/"+descriptor.InstanceId.ToString("N")+".json"));
     }),
+    ("M5.7 toolbar-only geometry, command guards, scoped theme, actual icon and GPU review image", () => ToolbarTests.Run(root,args[1],output)),
+    ("M5.7 unified workspace layout, project brand, stale menu guards, Play isolation and actual GPU", () => WorkspaceTests.Run(root,args[1],output)),
+    ("M5.7 color-only UI targets, exact cached leases, one Present and 32 lifecycle baselines", () => UiTargetTests.Run(args[1])),
     ("Real GUI/Renderer business view composition, validation and resource release", () => {
         if(args.Length<2) throw new ArgumentException("Plugin directory required for graphics integration.");
         using var loader=new PluginLoader(); loader.Load(args[1],[
@@ -741,6 +744,8 @@ var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTe
         }
         Check(renderer.PipelineStats.Pipelines==0&&renderer.PipelineStats.ResidentBytes==0&&renderer.ResourceStats.Creates==0);
     }),
+    ("M5.7 UI authoring approval/draft/shared Undo/cache/GPU/isolated preview",()=>UiWorkspaceTests.Run(root,args[1],output)),
+    ("M5.7 strict workspace settings/splitter cancellation/eight-handle geometry/locks/auto-layout",()=>UiGeometryTests.Run(output)),
     ("M3.6 asset UI plan/grant/import/history/flat placement/frozen/cancel/stale/restart",()=>M36WorkflowTests.Run(root,args[1],output)),
     ("M3.6 independent Orbit/Pan/Zoom and right-handed bounded CPU picking",M36WorkflowTests.CameraAndPicking),
     ("M4.4 actual Editor root motion/scene GPU/interpolation/Edit isolation/close failure retry",()=>CharacterEditorChecks.Run(output,args[1])),

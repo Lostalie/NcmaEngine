@@ -10,7 +10,7 @@ uint32_t NCMA_CALL CreateUiImage(uint64_t context,uint64_t handle,const NcmaUiIm
     return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=Instance(context,handle,error);if(valid)return valid;
         if(!input||!output||input->struct_size!=sizeof(*input)||!input->pixels||!input->width||!input->height||input->width>4096||input->height>4096||input->byte_count!=static_cast<uint64_t>(input->width)*input->height*4)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         valid=EnsureUi(error);if(valid)return valid;
-        if(!renderer->ui->CanImage(*input))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(!renderer->ui->CanImage(*input)||renderer->uiTargetBytes+renderer->ui->Stats(handle,renderer->pureUi).resident_bytes+input->byte_count>128ull*1024*1024)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         BusyScope scope;uint64_t key=0;std::string message;
         if(!renderer->ui->CreateImage(*input,key,message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
         *output={key,handle};return NCMA_OK;});
@@ -19,7 +19,7 @@ uint32_t NCMA_CALL CreateUiList(uint64_t context,uint64_t handle,const NcmaUiLis
     return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=Instance(context,handle,error);if(valid)return valid;
         if(!input||!output||!renderer->ui)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
-        if(!renderer->ui->CanList(*input,handle))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(!renderer->ui->CanList(*input,handle)||renderer->uiTargetBytes+renderer->ui->Stats(handle,renderer->pureUi).resident_bytes+static_cast<uint64_t>(input->vertex_count)*sizeof(NcmaUiVertexV1)+static_cast<uint64_t>(input->batch_count)*sizeof(NcmaUiBatchV1)>128ull*1024*1024)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         BusyScope scope;uint64_t key=0;std::string message;
         if(!renderer->ui->CreateList(*input,key,message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
         *output={key,handle};return NCMA_OK;});

@@ -63,7 +63,7 @@ function Assert-DeploymentContents([string]$Workspace, [string]$Directory, [swit
     }
     foreach ($file in $actual) {
         if ($seen.ContainsKey($file.path) -or $file.path -eq 'deployment-manifest.json') { continue }
-        if ($file.path -notin @('out/user/logs/editor-candidate.jsonl','out/user/logs/editor-candidate.jsonl.1','out/user/editor/preferences.json','sample/out/user/logs/editor-candidate.jsonl','sample/out/user/logs/editor-candidate.jsonl.1','sample/out/user/editor/preferences.json') -or $file.size -gt 1048576) { throw "Unknown install file: $($file.path)" }
+        if ($file.path -notin @('out/user/logs/editor-candidate.jsonl','out/user/logs/editor-candidate.jsonl.1','out/user/editor/preferences.json','out/user/editor/workspace.json','sample/out/user/logs/editor-candidate.jsonl','sample/out/user/logs/editor-candidate.jsonl.1','sample/out/user/editor/preferences.json','sample/out/user/editor/workspace.json') -or $file.size -gt 1048576 -or ($file.path.EndsWith('/workspace.json') -and $file.size -gt 4096)) { throw "Unknown install file: $($file.path)" }
     }
     return $actual
 }

@@ -55,7 +55,7 @@ public sealed partial class EditSession
     private EditState StateFor(ulong revision, Entry[] history, int cursor, string hash, FileContext file, Guid? selection) =>
         new(SessionId, revision, _invalidated ? 0 : cursor, _invalidated ? 0 : history.Length - cursor,
             !_invalidated && cursor > 0 ? history[cursor - 1].Label : "", !_invalidated && cursor < history.Length ? history[cursor].Label : "",
-            file.SavedHash != hash, _invalidated, _draft is not null, _frozen, selection, file.Path);
+            file.SavedHash != hash, _invalidated, InteractionBusy, _frozen, selection, file.Path);
     private void Observe()
     {
         _document.VerifyAccess();
@@ -64,7 +64,7 @@ public sealed partial class EditSession
     public void Resynchronize()
     {
         _document.VerifyAccess();
-        if (_invoking || _draft is not null || _frozen) throw new InvalidOperationException("Session is busy or frozen.");
+        if (_invoking || InteractionBusy || _frozen) throw new InvalidOperationException("Session is busy or frozen.");
         byte[] bytes = _document.CaptureBytes();
         string hash = Hash(bytes);
         _history = []; _cursor = 0; _cache = []; _cacheOrder = [];
@@ -74,7 +74,7 @@ public sealed partial class EditSession
     public void Select(Guid? objectId)
     {
         _document.VerifyAccess();
-        if (_invoking || _draft is not null) throw new InvalidOperationException("Finish the interaction before selecting.");
+        if (_invoking || InteractionBusy) throw new InvalidOperationException("Finish the interaction before selecting.");
         if (objectId is Guid id) _ = _document.World.FindObject(id);
         _selection = objectId;
     }
@@ -82,7 +82,7 @@ public sealed partial class EditSession
     {
         _document.VerifyAccess();
         if (_invoking) throw new InvalidOperationException("Session is executing.");
-        if (frozen) _draft = null;
+        if (frozen) { _draft = null; _interactionGate = null; }
         _frozen = frozen;
     }
     // Trusted hosts may inspect the one pending history authorization, never grant it from request JSON.
@@ -121,7 +121,7 @@ public sealed partial class EditSession
             }
             if (!permissions.Allows(request.Capability)) return Result(request, "denied", "permission_denied", false, new { });
             if (_frozen) return Result(request, "denied", "play_frozen", false, new { });
-            if (_draft is not null) return Result(request, "conflict", "edit_busy", false, new { });
+            if (InteractionBusy) return Result(request, "conflict", "edit_busy", false, new { });
             if (_invalidated) return Result(request, "conflict", "history_invalidated", false, new { });
             string fingerprint = Hash(Encoding.UTF8.GetBytes(request.Capability + ":" + request.ExpectedRevision + ":" + request.Input.GetRawText()));
             if (_cache.TryGetValue(request.RequestId, out var cached))

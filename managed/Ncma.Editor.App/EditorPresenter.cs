@@ -17,7 +17,7 @@ namespace Ncma.Editor.App;
 
 // Only this presentation layer knows GuiItem. Business routing and the document stay managed.
 internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, string? gameplayAssembly, string? projectRoot = null, FbxPreviewSession? fbxPreview = null, ActionPreviewSession? animationPreview = null,
-    EditorPreferencesStore? preferences = null, Func<LocalFileKind,string?>? filePicker = null, ApplicationLog? log = null, EditorAssetWorkflow? assetWorkflow=null)
+    EditorPreferencesStore? preferences = null, Func<LocalFileKind,string?>? filePicker = null, ApplicationLog? log = null, EditorAssetWorkflow? assetWorkflow=null, bool toolbarStyle=false, bool workspaceStyle=false, string? projectName=null)
 {
     private static readonly JsonSerializerOptions DataJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, IncludeFields = true, IgnoreReadOnlyProperties = true };
     private readonly Dictionary<Guid, ulong> _rowIds = [];
@@ -78,7 +78,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public void ShowRenderDiagnostics(IReadOnlyList<Ncma.Scene.Rendering.SceneRenderDiagnostic>? diagnostics) {
         _renderDiagnostics=diagnostics?.Take(4).Select(d=>$"Render: {d.Code}; object={d.ObjectId}; asset={d.AssetId}").ToArray()??[];
     }
-    public void CancelInteraction() { workspace.CancelDraft(); _jsonEdit = null; _generation = checked(_generation + 1); }
+    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelUi();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
     private static string BoundMessage(string message, int limit) {
         if (message.Length <= limit) return message;
         if (char.IsHighSurrogate(message[limit - 1])) limit--;
@@ -96,6 +96,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     private void Add(GuiItemKind kind, ulong high, ulong low, string label, ActionView? action = null,
         string value = "", double number = 0, double min = 0, double max = 0, bool enabled = true)
     {
+        if(workspaceStyle)label=WorkspaceLabel(label);
         byte[] labelBytes = Encoding.UTF8.GetBytes(label), valueBytes = Encoding.UTF8.GetBytes(value);
         if (labelBytes.Length > 4096 || valueBytes.Length > 1023 || _items.Count >= 8192 || _text.Count + labelBytes.Length + valueBytes.Length + (_items.Count+1)*96 > 2*1024*1024)
             throw new ArgumentException("Editor view budget exceeded.");
@@ -104,9 +105,9 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         _text.AddRange(labelBytes); item.TextOffset = (uint)_text.Count; item.TextLength = (uint)valueBytes.Length; _text.AddRange(valueBytes);
         _items.Add(item); if (action is not null) _actions.Add((high, low), action);
     }
-    private void Panel(ulong id, string label, float x, float y, float width, float height)
+    private void Panel(ulong id, string label, float x, float y, float width, float height, string headerStatus = "")
     {
-        Add(GuiItemKind.PanelBegin, 1, id, label);
+        Add(GuiItemKind.PanelBegin, 1, id, label, value:headerStatus);
         var item = _items[^1]; item.Rect[0] = x; item.Rect[1] = y; item.Rect[2] = Math.Max(1, width); item.Rect[3] = Math.Max(1, height); _items[^1] = item;
     }
     private void End() => Add(GuiItemKind.PanelEnd, 0, 0, "");
@@ -152,9 +153,17 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         _items.Clear(); _text.Clear(); _actions.Clear();
         bool writable = !_page.State.Frozen && !_page.State.HistoryInvalidated;
         float w = Math.Max(1, width), h = Math.Max(1, height), side = Math.Min(preferences?.Current.SideWidth??300, w * .35f), toolbar = Math.Min(preferences?.Current.ToolbarHeight??185, h * .3f);
-        Panel(1, "Scene / 场景", 0, 0, w, toolbar);
-        Add(GuiItemKind.Theme,12,1,"",number:preferences?.Current.Theme switch {"Light"=>1,"Classic"=>2,_=>0});
+        bool header=toolbarStyle&&w>=520&&toolbar>=104;
+        if(workspaceStyle){ArrangeWorkspace(w,h);WorkspaceToolbar(w);}
+        else if(header)Toolbar(w);
+        if(workspaceStyle&&_uiMode&&_ui is not null)return BuildUi(frameId);
+        // User-approved slice changes only the header. Preserve side/status/viewport geometry,
+        // existing preference field meanings and the remaining scene controls below the header.
         ulong labelId = 10000;
+        if(!workspaceStyle||_showSceneFiles){
+        if(workspaceStyle){Panel(1,"场景文件",8,54,Math.Min(600,w-16),240);var overlay=_items[^1];overlay.Value=2;_items[^1]=overlay;}
+        else Panel(1, "Scene / 场景", 0, header?64:0, w, toolbar-(header?64:0));
+        if(!workspaceStyle)Add(GuiItemKind.Theme,12,1,"",number:preferences?.Current.Theme switch {"Light"=>1,"Classic"=>2,_=>0});
         Add(GuiItemKind.Label, 3, labelId++, $"{workspace.Owner.Document.World.Name} | Revision {_page.State.Revision} | {(_page.State.Dirty ? "Modified" : "Saved")} | {_page.State.FilePath ?? "Unsaved"}");
         Add(GuiItemKind.Text, 2, 1, "Scene path (.ncmascene)", new("path"), _path);
         Add(GuiItemKind.Checkbox, 2, 2, "Confirm replacing unsaved document", new("discard"), number: _discardConfirmed ? 1 : 0, max: 1, enabled: writable);
@@ -166,19 +175,24 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         if(preferences is not null) { Line(); Button(42,_showPreferences?"Hide Preferences":"Preferences","preferences_toggle"); }
         if(_characters is not null){Line();Add(GuiItemKind.Button,22,1,_showCharacters?"Hide Character Debug":"Character Debug",new("character_toggle"));}
         End();
-        Panel(2, "GameObjects (flat list)", 0, toolbar, side, h - toolbar);
+        }
+        if(workspaceStyle)Region(2,"场景对象",_geometry.Objects);
+        else Panel(2, "GameObjects (flat list)", 0, toolbar, side, h - toolbar);
+        if(workspaceStyle)Add(GuiItemKind.Text,24,50,"搜索对象",new("workspace_search"),value:_objectSearch);
         Button(8, "+ GameObject", "create", writable);
         Button(9, "Previous page", "previous", _offset > 0); Line(); Button(10, "Next page", "next", _offset + 32 < _page.Total);
         Add(GuiItemKind.Label, 3, labelId++, $"Objects: {_page.Total}; page {_offset / 32 + 1}");
         foreach (var row in _page.Rows)
         {
+            if(workspaceStyle&&_objectSearch.Length>0&&!row.Name.Contains(_objectSearch,StringComparison.OrdinalIgnoreCase))continue;
             if (!_rowIds.TryGetValue(row.Id, out ulong low)) _rowIds.Add(row.Id, low = checked(++_nextRowId));
             Add(GuiItemKind.Button, 4, low, (_page.State.Selection == row.Id ? "> " : "") + row.Name,
                 new("select", row.Id));
         }
-        BuildAssets(ref labelId,writable);
+        if(!workspaceStyle)BuildAssets(ref labelId,writable);
         End();
-        Panel(3, "Inspector / 检查器", w - side, toolbar, side, h - toolbar);
+        if(workspaceStyle)Region(3,"属性检查器",_geometry.Inspector);
+        else Panel(3, "Inspector / 检查器", w - side, toolbar, side, h - toolbar);
         if (_page.Selected is { } selected)
         {
             Add(GuiItemKind.Label, 3, labelId++, selected.Id.ToString());
@@ -291,8 +305,10 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         }
         End();
         float center = Math.Max(1, w - 2 * side);
-        Viewport = (side+8, toolbar + Math.Min(220, h - toolbar)+28, Math.Max(1,center-16), Math.Max(1, h - toolbar - 256));
-        Panel(4, "Play / Status / Console", side, toolbar, center, Math.Min(220, h - toolbar));
+        if(!workspaceStyle)Viewport = (side+8, toolbar + Math.Min(220, h - toolbar)+28, Math.Max(1,center-16), Math.Max(1, h - toolbar - 256));
+        if(workspaceStyle){Region(92,"资源浏览器",_geometry.Assets);BuildAssets(ref labelId,writable);End();Region(4,"控制台",_geometry.Console);}
+        else Panel(4, "Play / Status / Console", side, toolbar, center, Math.Min(220, h - toolbar));
+        if(!workspaceStyle){
         Button(14, "Play", "start", _page.Play is null && !_page.State.HistoryInvalidated);
         Line();
         Button(15, "Stop", "stop", _page.Play is not null);
@@ -309,6 +325,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         Add(GuiItemKind.Button,14,2,"Use selected scene camera",new("scene_camera",_page.Selected?.Id??Guid.Empty),enabled:_page.Selected?.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.CameraData.TypeId)==true);
         if(projectRoot is not null) { Line(); Add(GuiItemKind.Button,14,3,"Refresh render assets",new("render_refresh")); }
         BuildBrowserControls();
+        }
         Add(GuiItemKind.Label,3,labelId++,SceneCamera==Guid.Empty?"Independent browser camera / scene static PBR":"Scene camera: "+SceneCamera.ToString("D"));
         foreach(string diagnostic in _renderDiagnostics) Add(GuiItemKind.Label,3,labelId++,diagnostic);
         if (_page.Play is { } play)
@@ -345,7 +362,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
             Add(GuiItemKind.Button,11,9,"Preferences Undo",new("preferences_undo",Operation:preferences.Revision),enabled:preferences.CanUndo);
             Add(GuiItemKind.Button,11,10,"Preferences Redo",new("preferences_redo",Operation:preferences.Revision),enabled:preferences.CanRedo);
         }
-        if (fbxPreview is not null && preferences?.Current.ShowPreviews!=false)
+        if (fbxPreview is not null && preferences?.Current.ShowPreviews!=false && (!workspaceStyle||_activeMenu==2))
         {
             _fbxStatus = fbxPreview.Capture();
             Add(GuiItemKind.Label, 3, labelId++, "FBX — isolated C# preview/history; not a scene Animator");
@@ -416,6 +433,9 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 foreach (string chunk in InspectionText.Split(state.GetRawText())) Add(GuiItemKind.Label,3,labelId++,chunk);
             }
         }
+        if(workspaceStyle){End();if(_geometry.Ai.Width>0)Region(93,"AI 工具",_geometry.Ai,"未接入推理服务");else if(_activeMenu==4)Panel(93,"AI 工具",w-Math.Min(360,w),48,Math.Min(360,w),h-80,headerStatus:"未接入推理服务");}
+        if(!workspaceStyle||_geometry.Ai.Width>0||_activeMenu==4){
+        if(workspaceStyle){string[] tools=["场景检查","资源检查","脚本工具","性能检查"];for(int i=0;i<tools.Length;i++)Add(GuiItemKind.Button,24,60+(ulong)i,tools[i],enabled:false);}
         Add(GuiItemKind.Label, 3, labelId++, "MCP is off by default. Pairing and approval are human UI actions only.");
         _authorization = _authorizationController.Capture();
         Add(GuiItemKind.Button, 5, 1, _authorization is null ? "Enable local MCP" : "Disable local MCP", new("mcp_toggle"), enabled: projectRoot is not null);
@@ -451,7 +471,10 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
             }
         }
         End();
+        }
+        if(workspaceStyle){Region(94,"状态",_geometry.Status);Add(GuiItemKind.Label,3,labelId++,$"{(_page.State.Dirty?"场景已修改":"场景已保存")} | 对象 {_page.Total} | {_page.Play?.State.ToString()??"Edit"} | Direct3D11");End();WorkspaceMenu(ref labelId,writable);}
         BuildCharacterDebug(w,h,ref labelId);
+        if(workspaceStyle)WorkspaceSplitters();
         _frame = new() { StructSize = (uint)Marshal.SizeOf<GuiFrame>(), Frame = frameId, ViewGeneration = _generation,
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
         return _frame;
@@ -459,7 +482,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     // Adds the renderer's opaque target identity to a copied view, never a native pointer.
     public GuiFrame AttachViewport(GuiImageToken token)
     {
-        Panel(5,"Scene Viewport",Viewport.X-8,Viewport.Y-28,Viewport.Width+16,Viewport.Height+36);
+        Panel(5,workspaceStyle?"场景视口":"Scene Viewport",Viewport.X-8,Viewport.Y-(workspaceStyle?42:28),Viewport.Width+16,Viewport.Height+(workspaceStyle?50:36));
         _items.Add(GuiItem.Image(15,1,token,Viewport.X,Viewport.Y,Viewport.Width,Viewport.Height,enabled:_page is {State.Frozen:false,State.HistoryInvalidated:false}));
         _actions.Add((15,1),new("viewport"));
         End();_frame.ItemCount=(uint)_items.Count;_frame.TextBytes=(uint)_text.Count;return _frame;
@@ -478,6 +501,14 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     public bool Shortcut(uint key,bool control,bool shift,bool captured,bool focused)
     {
+        if(_uiMode&&_ui is not null&&focused&&!captured){
+            if(!control&&key==70){_uiController.Focus(Viewport.Width,Viewport.Height);BoundUiZoom();return true;}
+            if(control&&key==83){try{if(_ui.HasDraft){_uiPreview?.Prepare(_ui,UiPreviewViewport);_ui.Confirm();}else _ui.ValidateFile();}catch(Exception e){CancelUi();Record(e.Message);}return true;}
+            if(control&&key is 90 or 89&&!_ui.HasDraft&&!_uiTest){try{workspace.History(workspace.Stamp,key==89||shift);SynchronizeUi();}catch(Exception e){Record(e.Message);}return true;}
+            // Unhandled shortcuts in UI mode must not create/open a scene behind it.
+            if(control&&key is 78 or 79){try{CancelUi();string? path=filePicker?.Invoke(key==78?LocalFileKind.SaveUi:LocalFileKind.OpenUi);if(path is not null){_uiPath=Ncma.Assets.Authoring.UiAuthoringSource.ValidatePath(Path.GetRelativePath(projectRoot!,path).Replace('\\','/'));_ui.ReviewFile(workspace.Stamp,_uiPath,key==78);_uiWrite=false;_uiConfirm="";}}catch(Exception e){Record(e.Message);}return true;}
+            return false;
+        }
         if(!control || captured || !focused || workspace.HasDraft || workspace.Owner.Play is not null)return false;
         if(key is not (78 or 79 or 83 or 90 or 89 or 82) || key==82 && !shift)return false;
         try {
@@ -507,6 +538,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                     throw new ArgumentException("Invalid GUI event.");
                 string text = new UTF8Encoding(false, true).GetString(output.Slice((int)e.TextOffset, (int)e.TextLength));
                 var stamp = _page.Stamp;
+                if(ApplyLayout(action,e))continue;
+                if(ApplyUi(action,e,text))continue;
                 if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "export")
                 {
                     if (e.Phase == 1) {
@@ -527,6 +560,11 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyCharacterAction(action,e.Value))continue;
                 switch (action.Kind)
                 {
+                    case "workspace_menu": int nextMenu=_activeMenu==action.Index?-1:action.Index;CancelInteraction();_activeMenu=nextMenu;break;
+                    case "workspace_close_menu":_activeMenu=-1;_generation=checked(_generation+1);break;
+                    case "workspace_ai":_showAiTools=!_showAiTools;_layoutStore?.Save(_layoutStore.Revision,_layout with{ShowAi=_showAiTools});_activeMenu=-1;_generation=checked(_generation+1);break;
+                    case "workspace_files":_showSceneFiles=!_showSceneFiles;_activeMenu=-1;_generation=checked(_generation+1);break;
+                    case "workspace_search":_objectSearch=text;_generation=checked(_generation+1);break;
                     case "browser_camera": SceneCamera=Guid.Empty; break;
                     case "scene_camera": SceneCamera=action.Object; break;
                     case "render_refresh": _refreshRenderAssets=true; break;
@@ -615,6 +653,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                             Guid.TryParse(_agentDeleteConfirmation,out Guid deletion) ? deletion : null); _reviewedProposal = false; break;
                     default: workspace.PlayControl(stamp, action.Kind); break;
                 }
+                if(workspaceStyle&&e.WidgetHigh==25){_activeMenu=-1;_generation=checked(_generation+1);}
             }
             // Trusted user constructors/lifecycle callbacks may throw arbitrary managed errors.
             // Keep their failure visible in the editor; do not recover fatal process corruption.

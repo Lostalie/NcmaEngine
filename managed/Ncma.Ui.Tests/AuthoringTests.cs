@@ -25,7 +25,14 @@ internal static class AuthoringTests
             byte[] scene = edit.Document.CaptureBytes(); var before = commands.Read("assets/Hud.ncmaui");
             var changed = before.Elements[0] with { Name = "Edited" };
             var draft = new UiDraft(edit, commands, clock, "assets/Hud.ncmaui"); draft.Update([new(UiEditKind.Replace, changed.Id, changed)]);
+            Check(edit.State.EditBusy);
+            Check(edit.Invoke(Request(edit, "ncma.history.undo", Json(new { })), Permissions).Code == "edit_busy");
+            Check(edit.Invoke(Request(edit, "ncma.scene.transaction", Json(new { operations = new[] { new { op = "create", objectId = Guid.NewGuid(), name = "Blocked" } } })), Permissions).Code == "edit_busy");
+            Reject(() => edit.Select(null)); Reject(() => edit.NewDocument(edit.Revision, Permissions));
+            Reject(() => new UiDraft(edit, commands, clock, "assets/Hud.ncmaui"));
+            Reject(() => Task.Run(() => draft.Capture()).GetAwaiter().GetResult());
             Check(commands.Read("assets/Hud.ncmaui").Elements[0].Name == "Root"); draft.Cancel(); Reject(() => draft.Capture());
+            Check(!edit.State.EditBusy);
             draft = new(edit, commands, clock, "assets/Hud.ncmaui");
             for (int i = 0; i < 100; i++) draft.Update([new(UiEditKind.Replace, changed.Id, changed with { Name = "Edited" + i })]);
             Check(draft.Commit(Permissions)?.Changed == true && edit.State.UndoCount == 2);
@@ -54,6 +61,7 @@ internal static class AuthoringTests
             var draft = new UiDraft(edit, commands, clock, "assets/Hud.ncmaui"); draft.Update([new(UiEditKind.Replace, d.Root, d.Elements[0] with { Name = "Draft" })]);
             File.WriteAllBytes(Path.Combine(root, "assets/Hud.ncmaui"), UiCodec.Encode(d with { Name = "External" })); Reject(() => draft.Commit(Permissions));
             Check(commands.Read("assets/Hud.ncmaui").Name == "External");
+            Check(!edit.State.EditBusy); // Failed confirmation releases the gate without overwriting external data.
         });
         yield return ("UI journal recovery and failure compensation preserve exact documents", () => {
             foreach (string stage in new[] { "journal_created", "backup:0", "published:0" }) {

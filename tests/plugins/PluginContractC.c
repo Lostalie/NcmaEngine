@@ -1,10 +1,14 @@
 #include "NcmaPlugin.h"
+#include "NcmaGui.h"
+_Static_assert(sizeof(NcmaGuiApiV1)==104 && sizeof(NcmaGuiApiV1_4)==112, "scoped toolbar additive table");
 #include "NcmaPhysics.h"
 #include "NcmaRenderer.h"
 #include "NcmaResourceRender.h"
 #include "NcmaScenePipeline.h"
 #include "NcmaSkin.h"
 #include "NcmaUiRender.h"
+#include "NcmaUiTarget.h"
+_Static_assert(sizeof(NcmaUiTargetApiV1)==72 && sizeof(NcmaUiTargetFrameV1)==72 && sizeof(NcmaUiTargetStatsV1)==56,"UI target/lease additive contract");
 #include "NcmaText.h"
 _Static_assert(sizeof(NcmaTextRequestV1)==48 && sizeof(NcmaTextMetricsV1)==32 && sizeof(NcmaTextApiV1)==88, "Text numerical layout");
 _Static_assert(sizeof(NcmaUiVertexV1)==52 && sizeof(NcmaUiBatchV1)==40, "UI vertices/batches");

@@ -80,6 +80,8 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private EditorSessionOwner? _editor;
     private EditorAssetWorkflow? _assetWorkflow;
     private EditorPresenter? _presenter;
+    private EditorUiWorkspace? _uiWorkspace;
+    private EditorUiPreview? _uiPreview;
     private FbxPreviewSession? _fbxPreview;
     private ActionPreviewSession? _animationPreview;
     private EditorPreferencesStore? _preferences;
@@ -106,13 +108,13 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
             new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]),
-            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 3, ["ncma.platform", "ncma.renderer"]) ]);
+            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 6, ["ncma.platform", "ncma.renderer"]) ]);
         // Explicit optional shared solver module; only bound Play creates numerical resources.
         _physics = new(plugins, project?.Configuration.PhysicsEnabled == true,characterSupport:project?.Configuration.PhysicsEnabled == true);
         var physics = _physics.Inspect();
         if (physics.Enabled)
             _log.Write("info", "physics.module_ready", $"Physics service ABI {physics.AbiMajor}.{physics.AbiMinor}; capabilities={physics.Capabilities}; explicit Play bindings only.", _correlation);
-        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaEngine", 1280, 720, !smoke);
+        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), EditorPresenter.WindowTitle(project?.Configuration.Name), 1280, 720, !smoke);
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico"));
         string font=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts),"msyh.ttc");
         if(!smoke && !preview)_preferences=new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/preferences.json"),font);
@@ -121,6 +123,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, 1280, 720);
             _renderService = new(_renderer); _sceneCache=new(_renderer); _gui.AttachRenderer(_renderer);
         }
+        _gui.SetToolbarIcon(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico")));
         _log.Write("info", cpuOnly ? "presentation.cpu_only" : ReferencePreview ? "presentation.dx11_reference" : "presentation.dx11_scene", "Managed candidate presentation initialized.", _correlation);
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
@@ -135,7 +138,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if (Directory.Exists(Path.Combine(project.Root, "assets")))
             {
                 _assetWorkflow=new(workspace,project.Root,project.Configuration.ProjectId,1);
-                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope); // Exact human approvals only; Agent cannot manufacture grants.
+                _uiWorkspace=new(workspace,project.Root);
+                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope,_uiWorkspace.Scope); // Exact human approvals only; Agent cannot manufacture grants.
+                if(_renderer is not null)_uiPreview=new(_renderer,plugins);
                 if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
                     _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _assetWorkflow.IsSourceApproved);
             }
@@ -148,8 +153,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _fbxPreview = new(Path.Combine(plugins, "NcmaNative.dll")); // lazy immutable kernel loading on trusted local import only
             _animationPreview = new(Path.Combine(plugins,"NcmaNative.dll"));
             _filePicker=new();
-            _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow);
+            _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow,workspaceStyle:true,projectName:project?.Configuration.Name);
             _presenter.AttachCharacters(characters);
+            if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));
+            if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
         }
         if (_renderer is not null) {
@@ -199,6 +206,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         }
         // Trusted preparation boundary BEFORE simulation/render; snapshots only on explicit resource/session changes.
         SynchronizeSceneResources();
+        _presenter?.SynchronizeUi();
     }
     private static RenderConfiguration ClearConfiguration(RenderConfiguration c) => c with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false};
     private void SynchronizeSceneResources() {
@@ -237,8 +245,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     public void SubmitInput(FrameContext frame) {
         if(_presenter is not null && _input.Focused && !_input.CancelInteraction) {
             bool Held(int key) => (_state.Held[key/64]&(1UL<<(key%64)))!=0;
-            foreach(var input in _window!.Events)if(input.Kind==1 && input.Action==1)
-                _presenter.Shortcut(input.Key,Held(341)||Held(345),Held(340)||Held(344),_capture.Keyboard!=0,_input.Focused);
+            foreach(var input in _window!.Events){
+                if(input.Kind==5)_presenter.UiKeyboard(0,char.ConvertFromUtf32((int)input.Codepoint),false,_capture.Keyboard!=0);
+                if(input.Kind==1 && input.Action==1&&!_presenter.UiKeyboard(input.Key,"",Held(340)||Held(344),_capture.Keyboard!=0))_presenter.Shortcut(input.Key,Held(341)||Held(345),Held(340)||Held(344),_capture.Keyboard!=0,_input.Focused);
+            }
         }
         bool focused = _input.Focused && _capture.Mouse == 0;
         double x = focused && _pointerWasFocused ? _input.PointerX - _previousPointerX : 0;
@@ -265,7 +275,11 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         GuiStats stats;
         if (_presenter is not null) {
             description = _presenter.Build(frame.FrameId,_state.Width,_state.Height);
-            if(!ReferencePreview&&_renderer is not null) {
+            bool uiActive=_presenter.UiWorkspaceActive;
+            if(uiActive&&_renderer is not null&&_state.Minimized==0&&_state.FramebufferWidth>0&&_state.FramebufferHeight>0){
+                if(_uiPreview!.Prepared&&!_uiPreview.RecoveryRequired&&_uiPreview.Acquire(frame.FrameId) is {} token)description=_presenter.AttachUiImage(token);
+            }
+            if(!uiActive&&!ReferencePreview&&_renderer is not null) {
                 if(_state.Minimized==0&&_state.FramebufferWidth>0&&_state.FramebufferHeight>0) {
                     var area=_presenter.Viewport;
                     uint targetWidth=Math.Clamp((uint)Math.Ceiling(area.Width*_state.FramebufferWidth/Math.Max(_state.Width,1)),1,4096);
@@ -297,7 +311,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                 else _configuration=configurations.Length==1?configurations[0].Get<RenderConfiguration>():RenderConfiguration.Default(_editor.Edit.SessionId);
                 _configurationRevision=configurationWorld.Revision; _configurationWorld=configurationWorld.Identity;
             }
-            if (!ReferencePreview) {
+            if(_presenter?.UiWorkspaceActive==true){
+                _renderService!.Configure(ClearConfiguration(_configuration),_state.FramebufferWidth,_state.FramebufferHeight);_renderService.Submit(frame.FrameId,0,0);
+            } else if (!ReferencePreview) {
                 var scene=_editor.Play is null?_editScene:_playScene;
                 if(_editor.Play?.State==Ncma.Gameplay.PlayState.Faulted)scene=null; // Invalid coupled snapshots are never rendered as synchronized.
                 Guid camera=_presenter?.SceneCamera??project?.Configuration.SceneCamera??Guid.Empty;
@@ -332,6 +348,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _renderService.Submit(frame.FrameId,x,y,hasModel ? model : default);
             }
             _gui.RenderGpu(); _renderer.Present();
+            _uiPreview?.ReleasePresentation();
             var gpuStats=_renderer.Stats;
             if(gpuStats.ValidationErrors!=0 || gpuStats.ValidationWarnings!=0) throw new InvalidOperationException("DX11 validation failed.");
         }
@@ -361,8 +378,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _sceneCache?.Dispose(); _sceneCache = null;
         _poseKernel?.Dispose(); _poseKernel = null;
         _assetWorkflow?.Dispose(); _assetWorkflow = null;
+        _uiWorkspace?.Dispose();_uiWorkspace=null;
         _editor?.Dispose(); _editor = null;
         _gui?.Dispose(); _gui = null;
+        _uiPreview?.Dispose();_uiPreview=null;
         _viewportTarget?.Dispose(); _viewportTarget = null;
         _renderService?.Dispose(); _renderService = null;
         _renderer?.Dispose(); _renderer = null;

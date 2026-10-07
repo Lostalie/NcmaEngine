@@ -19,3 +19,6 @@ extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_validate_gui_
 // submitted target frame. retain=1 pins the target; release after render/discard. No GPU wait.
 extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_gui_image_v1(uint64_t module,uint64_t renderer,NcmaGpuResourceV3 token,uint64_t frame,uint32_t retain,ID3D11ShaderResourceView**,NcmaErrorV1*) noexcept;
 extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_release_gui_image_v1(uint64_t module,uint64_t renderer,NcmaGpuResourceV3 token,NcmaErrorV1*) noexcept;
+// GUI1.6: token identifies a query7 presentation lease, NOT a scene target. Exact lease frame.
+extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_gui_cached_image_v1(uint64_t,uint64_t,NcmaGpuResourceV3,uint64_t,uint32_t,ID3D11ShaderResourceView**,NcmaErrorV1*) noexcept;
+extern "C" NCMA_RENDERER_INTERNAL uint32_t NCMA_CALL ncma_renderer_release_gui_cached_image_v1(uint64_t,uint64_t,NcmaGpuResourceV3,NcmaErrorV1*) noexcept;
