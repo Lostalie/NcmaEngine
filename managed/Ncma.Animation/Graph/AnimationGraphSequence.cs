@@ -1,7 +1,7 @@
 namespace Ncma.Animation;
 
 // Closed, typed checks; no executable assertions, clocks supplied by an Agent, files or live Play.
-public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Parameter, RootX, RootYaw }
+public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Parameter, RootX, RootYaw, CacheHits, CacheRequests }
 public sealed record AnimationSequenceWrite(int Step, Guid ParameterId, AnimationParameterKind Kind, double Value);
 public sealed record AnimationSequenceAssertion(int Step, AnimationSequenceAssertionKind Kind, Guid SubjectId, double Value);
 public sealed record AnimationSequenceCase(double FixedDelta, int Steps, AnimationSequenceWrite[] Writes, AnimationSequenceAssertion[] Assertions);
@@ -10,6 +10,7 @@ public sealed record AnimationSequenceStep(AnimationGraphFrame Frame, ulong Sequ
 {
     // Parameter-space inspection includes inactive nodes: it does NOT claim live pose/GPU evaluation.
     public IReadOnlyList<AnimationSequenceSpace> Spaces {get;init;}=Array.Empty<AnimationSequenceSpace>();
+    public AnimationCacheStatistics Cache {get;init;}
 }
 public sealed record AnimationSequenceCheck(int Index, int Step, bool Passed, string Code);
 public sealed record AnimationSequenceResult(Guid GraphId, string GraphContentHash, string EventContentHash,
@@ -50,6 +51,8 @@ public static class AnimationGraphSequence
                 case AnimationSequenceAssertionKind.Parameter:
                     if (!program.ParameterIndices.TryGetValue(assertion.SubjectId, out int index)) throw new ArgumentException("Exact parameter assertion.");
                     Value(program.Parameters[index].Kind, assertion.Value); break;
+                case AnimationSequenceAssertionKind.CacheHits:case AnimationSequenceAssertionKind.CacheRequests:
+                    if(assertion.SubjectId!=Guid.Empty||!double.IsFinite(assertion.Value)||assertion.Value<0||assertion.Value>4096||Math.Truncate(assertion.Value)!=assertion.Value)throw new ArgumentException("Bounded integral global cache assertion.");break;
                 case AnimationSequenceAssertionKind.RootX:case AnimationSequenceAssertionKind.RootYaw:
                     if(!rootSupported||assertion.SubjectId!=Guid.Empty)throw new ArgumentException("Prepared independent root source required.");AnimationGraphCodec.Scalar(assertion.Value,-1000,1000);break;
             }
@@ -75,7 +78,7 @@ public static class AnimationGraphSequence
             AnimationSequenceRootIntent? root=null;
             if(rootSource is not null){int n=instance.CopyCommittedPlan(plan);root=rootSource.Evaluate(plan.AsSpan(0,n),instance.Frame.Output);if(!float.IsFinite(root.Value.Translation.LengthSquared())||root.Value.Translation.LengthSquared()>1e6f||Math.Abs(root.Value.Translation.Y)>1e-6||!float.IsFinite(root.Value.Yaw)||Math.Abs(root.Value.Yaw)>Math.PI)throw new ArgumentException("Bounded numerical root intent required.");}
             var spaceRows=spaces.Select(s=>new AnimationSequenceSpace(context.Tick,s.NodeId,s.Definition.Id,s.Program.Evaluate(instance.CommittedParameter(s.Definition.AxisX.ParameterId),s.Definition.AxisY is{} y?instance.CommittedParameter(y.ParameterId):0))).ToArray();
-            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root){Spaces=Array.AsReadOnly(spaceRows)};
+            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root){Spaces=Array.AsReadOnly(spaceRows),Cache=instance.CacheStatistics};
             for (int at = 0; at < assertions.Length; at++) {
                 var assertion = assertions[at]; if (assertion.Step != step) continue;
                 bool passed = assertion.Kind switch {
@@ -85,6 +88,8 @@ public static class AnimationGraphSequence
                     AnimationSequenceAssertionKind.Parameter => instance.CommittedParameter(assertion.SubjectId) == assertion.Value,
                     AnimationSequenceAssertionKind.RootX=>root is{} r&&Math.Abs(r.Translation.X-assertion.Value)<1e-5,
                     AnimationSequenceAssertionKind.RootYaw=>root is{} yaw&&Math.Abs(yaw.Yaw-assertion.Value)<1e-5,
+                    AnimationSequenceAssertionKind.CacheHits=>timeline[step-1].Cache.Hits==assertion.Value,
+                    AnimationSequenceAssertionKind.CacheRequests=>timeline[step-1].Cache.Requests==assertion.Value,
                     _ => throw new ArgumentException("Closed assertion required.")
                 };
                 checks[at] = new(at, step, passed, passed ? "assertion_passed" : "assertion_failed");

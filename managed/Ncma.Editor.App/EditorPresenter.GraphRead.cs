@@ -23,7 +23,7 @@ internal sealed unsafe partial class EditorPresenter
         var summary = _graphs.LocalSummary;
         if (summary.Id != Guid.Empty) {
             Add(GuiItemKind.Label, 3, labelId++, $"{summary.Name}: {summary.Id:D}\n{summary.Relative}\nSHA256 {summary.Hash}");
-            Add(GuiItemKind.Label, 3, labelId++, "只验证严格图结构；资源未准备，当前场景/Play未接入图执行。");
+            Add(GuiItemKind.Label, 3, labelId++, "此检查只验证严格图结构；不准备资源或执行当前场景/Play。骨架清单/独立序列/事务须分别审阅。");
             Add(GuiItemKind.Button, 40, 6, "上一页图数据", new("graph_previous"), enabled: _graphPage > 0); Line();
             Add(GuiItemKind.Button, 40, 7, "下一页图数据", new("graph_next"), enabled: _graphPage + 6 < _graphReviewText.Length);
             foreach (string line in _graphReviewText.Skip(_graphPage).Take(6)) Add(GuiItemKind.Label, 3, labelId++, line);

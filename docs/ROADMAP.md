@@ -227,7 +227,9 @@ M6.5 A–D自动候选完成，见[M6.5-D交付](M6_5_D_DELIVERY_REPORT.md)。
 M6.6 A–D完整Debug/Release自动候选通过：严格v3替代v2、准备期1D/2D拓扑、实际NCA共享相位、
 主贡献事件/root与全混合pose stripping、中断缓存/搬移NCP1 Player、typed采样编辑与精确获批AI权重扫描。
 D的0/1/8/32 Editor、16个搬移正式Player、调度/fault/reload联合测试通过，
-见[M6.6方案](M6_6_IMPLEMENTATION_PLAN.md)与[D交付](M6_6_D_DELIVERY_REPORT.md)；M6.7尚未开始。
+见[M6.6方案](M6_6_IMPLEMENTATION_PLAN.md)与[D交付](M6_6_D_DELIVERY_REPORT.md)。
+M6.7 A–C完整双配置自动候选通过：精确骨架遮罩、native layer1.0、严格v4/cache、typed作者及单独获批骨清单/
+缓存诊断；人工/素材/目标/性能/1h仍开放，见[M6.7交付](M6_7_C_DELIVERY_REPORT.md)。下一阶段M6.8。
 并非内置推理接入或真实用户素材/人工/目标/性能/长稳验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
 性能/长稳门禁仍开放。M6.1 进度见 [契约](M6_1_GRAPH_CONTRACT.md) 与 [交付](M6_1_DELIVERY_REPORT.md)。

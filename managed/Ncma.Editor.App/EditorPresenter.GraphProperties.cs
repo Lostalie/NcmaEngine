@@ -17,7 +17,8 @@ internal sealed unsafe partial class EditorPresenter
             if(n.Kind==AnimationNodeKind.Clip)Text("clip","Clip UUID",n.ClipId.ToString("D"));
             if(n.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace){Bool("loop","循环",n.Loop);Number("speed","速度",n.Speed,0,8);}
             if(n.BlendSpace is not null)BuildSpaceProperties(n,writable);
-            if(n.Kind==AnimationNodeKind.Blend)Number("weight","混合权重",n.Weight,0,1);
+            if(n.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive)Number("weight","混合权重",n.Weight,0,1);
+            if(n.Layer is not null)BuildLayerProperties(n,writable);
             if(n.Kind==AnimationNodeKind.Parameter)Text("parameter","参数 UUID",n.ParameterId.ToString("D"));
         }else if(section=="parameter"){
             var p=d.Parameters.Single(v=>v.Id==element);Text("name","参数名称",p.Name);Number("kind","类型 0 Float / 1 Int / 2 Bool / 3 Trigger",(int)p.Kind,0,3);

@@ -24,6 +24,9 @@ public static class AnimationGraphAuthoringSchemas
             var sample=shapes[0]!["properties"]!["blendSpace"]!["anyOf"]![0]!["properties"]!["samples"]!["items"]!.DeepClone();
             cases.Add(Closed(new(){["op"]=Constant("blendspace.sample.upsert"),["nodeId"]=Uuid(),["sample"]=sample}));
             cases.Add(Closed(new(){["op"]=Constant("blendspace.sample.delete"),["nodeId"]=Uuid(),["sampleId"]=Uuid()}));
+            var bone=shapes[0]!["properties"]!["layer"]!["anyOf"]![0]!["properties"]!["mask"]!["properties"]!["bones"]!["items"]!.DeepClone();
+            cases.Add(Closed(new(){["op"]=Constant("layer.bone.upsert"),["nodeId"]=Uuid(),["bone"]=bone}));
+            cases.Add(Closed(new(){["op"]=Constant("layer.bone.delete"),["nodeId"]=Uuid(),["bonePath"]=new JsonObject{["type"]="string",["maxLength"]=4096}}));
             cases.Add(Closed(new() { ["op"] = Constant("graph.rename"), ["name"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256 } }));
             cases.Add(Closed(new() { ["op"] = Constant("graph.entry"), ["stateId"] = Uuid() }));
             var input = Closed(new() { ["graphId"] = Uuid(), ["proposalId"] = Uuid(), ["operations"] = new JsonObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 64, ["items"] = new JsonObject { ["oneOf"] = cases } } });

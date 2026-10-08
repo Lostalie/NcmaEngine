@@ -103,8 +103,9 @@ public sealed class AnimationGraphSequences:IDisposable
             "timeline"=>result.Timeline.Skip(offset).Take(limit).Select(t=>(object)new{frame=t.Frame,sequence=t.Sequence,eventCount=t.Events.Count,root=t.Root}).ToArray(),
             "events"=>result.Timeline.SelectMany(t=>t.Events).Skip(offset).Take(limit).Cast<object>().ToArray(),
             "weights"=>result.Timeline.SelectMany(t=>t.Spaces).Skip(offset).Take(limit).Cast<object>().ToArray(),
+            "cache"=>result.Timeline.Skip(offset).Take(limit).Select(t=>(object)t.Cache).ToArray(),
             "checks"=>result.Checks.Skip(offset).Take(limit).Cast<object>().ToArray(),_=>throw new ArgumentException("Closed sequence section.")};
-        int total=section.GetString() switch{"summary"=>1,"timeline"=>result.Timeline.Count,"events"=>result.Timeline.Sum(t=>t.Events.Count),"weights"=>result.Timeline.Sum(t=>t.Spaces.Count),_=>result.Checks.Count};
+        int total=section.GetString() switch{"summary"=>1,"timeline" or "cache"=>result.Timeline.Count,"events"=>result.Timeline.Sum(t=>t.Events.Count),"weights"=>result.Timeline.Sum(t=>t.Spaces.Count),_=>result.Checks.Count};
         if(section.GetString()=="summary")rows=rows.Skip(offset).Take(limit).ToArray();
         return new{caseId,graphId=graph,caseHash=Required(caseId).Hash,graphHash=result.GraphContentHash,eventHash=result.EventContentHash,publication=_lease!.Identity,resourcesPrepared=true,rootMotionSupported=result.RootMotionSupported,collisionExecuted=false,livePlay=false,section=section.GetString(),total,offset,nextOffset=offset+limit<total?(int?)(offset+limit):null,items=rows};
     }

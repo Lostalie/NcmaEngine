@@ -16,7 +16,7 @@ public static class AnimationGraphInspectionSchemas
         ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties,
         ["required"] = new JsonArray((required.Length == 0 ? properties.Select(p => p.Key) : required).Select(v => (JsonNode?)JsonValue.Create(v)).ToArray())
     };
-    private static JsonObject Array(JsonNode items, int maximum = 32) => new() { ["type"] = "array", ["maxItems"] = maximum, ["items"] = items };
+    private static JsonObject Array(JsonNode items, int maximum = 32) => new() { ["type"] = "array", ["minItems"] = 0, ["maxItems"] = maximum, ["items"] = items };
     private static JsonObject Nullable(JsonNode value) => new() { ["anyOf"] = new JsonArray(value, new JsonObject { ["type"] = "null" }) };
     private static JsonObject Envelope(JsonObject data) => new() { ["oneOf"] = new JsonArray(Frame(data, true), Frame(new() {
         ["oneOf"] = new JsonArray(Object(new()), Object(new() { ["message"] = Text(EditSession.MaxInputBytes) })) }, false)) };

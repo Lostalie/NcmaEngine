@@ -21,10 +21,10 @@ public sealed class AnimationBoneMaskProgram
         foreach(var b in mask.Bones){if(!indices.TryGetValue(b.BonePath,out int index)||bones[index].Parent<0&&b.Weight!=0)throw new ArgumentException("Missing bone or root layer authority rejected.");_weights[index]=b.Weight;}
         _definition=mask with{Bones=mask.Bones.OrderBy(b=>b.BonePath,StringComparer.Ordinal).ToArray()};
     }
-    public static void Validate(AnimationBoneMask mask)
+    public static void Validate(AnimationBoneMask mask,bool allowEmpty=false)
     {
         ArgumentNullException.ThrowIfNull(mask);
-        if(mask.Id==Guid.Empty||mask.SkeletonId==Guid.Empty||mask.SkeletonHash is null||mask.SkeletonHash.Length!=64||mask.SkeletonHash.Any(c=>c is not (>= '0' and <= '9') and not (>= 'A' and <= 'F'))||mask.Bones is null||mask.Bones.Length is <1 or >1024)throw new ArgumentException("Bounded mask UUID/hash/bones required.");
+        if(mask.Id==Guid.Empty||mask.SkeletonId==Guid.Empty||mask.SkeletonHash is null||mask.SkeletonHash.Length!=64||mask.SkeletonHash.Any(c=>c is not (>= '0' and <= '9') and not (>= 'A' and <= 'F'))||mask.Bones is null||mask.Bones.Length>1024||!allowEmpty&&mask.Bones.Length==0)throw new ArgumentException("Bounded mask UUID/hash/bones required.");
         var seen=new HashSet<string>(StringComparer.Ordinal);foreach(var bone in mask.Bones){if(bone is null)throw new ArgumentException("Mask bone required.");Path(bone.BonePath);if(!seen.Add(bone.BonePath)||!float.IsFinite(bone.Weight)||bone.Weight is <0 or >1)throw new ArgumentException("Unique finite bone weights required.");}
     }
     private static void Path(string path){AnimationGraphCodec.Text(path,4096);if(path.StartsWith('/')||path.EndsWith('/')||path.Contains("//")||path.Split('/').Any(p=>p is "." or ".."||p.Contains('\\')))throw new ArgumentException("Canonical stable bone path required.");}

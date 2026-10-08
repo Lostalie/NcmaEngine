@@ -28,7 +28,7 @@ public static class AnimationGraphEdits
         foreach (var n in d.Nodes) { Id(n.Id); AnimationGraphCodec.Text(n.Name); if (!Enum.IsDefined(n.Kind)) throw new ArgumentException("Draft node kind.");
             AnimationGraphCodec.Scalar(n.X, -65536, 65536); AnimationGraphCodec.Scalar(n.Y, -65536, 65536); AnimationGraphCodec.Scalar(n.Speed, 0, 8); AnimationGraphCodec.Scalar(n.Weight, 0, 1);
             if(n.BlendSpace is{} space){Id(space.Id);if(space.AxisX is null||space.Dimensions is not (1 or 2)||space.Samples is null||space.Samples.Length>BlendSpaceProgram.MaximumSamples||space.Samples.Any(s=>s is null))throw new ArgumentException("Bounded space draft.");AnimationGraphCodec.Scalar(space.CycleSeconds,.001,600);foreach(var axis in new[]{space.AxisX,space.AxisY}.Where(a=>a is not null)){AnimationGraphCodec.Text(axis!.Name);AnimationGraphCodec.Text(axis.Unit);AnimationGraphCodec.Scalar(axis.Minimum,-1000000,1000000);AnimationGraphCodec.Scalar(axis.Maximum,-1000000,1000000);}foreach(var s in space.Samples){Id(s.Id);AnimationGraphCodec.Scalar(s.X,-1000000,1000000);AnimationGraphCodec.Scalar(s.Y,-1000000,1000000);}}
-            if(n.Layer is{} layer){AnimationBoneMaskProgram.Validate(layer.Mask);Id(layer.Mask.Id);AnimationGraphCodec.Scalar(layer.ReferenceTime,0,600);}
+            if(n.Layer is{} layer){AnimationBoneMaskProgram.Validate(layer.Mask,allowEmpty:true);Id(layer.Mask.Id);AnimationGraphCodec.Scalar(layer.ReferenceTime,0,600);}
         }
         foreach (var p in d.Parameters) { Id(p.Id); AnimationGraphCodec.Text(p.Name); if (!Enum.IsDefined(p.Kind)) throw new ArgumentException("Draft parameter kind."); AnimationGraphCodec.Scalar(p.FloatDefault, -1000000, 1000000); }
         foreach (var l in d.Links) { Id(l.Id); AnimationGraphCodec.Text(l.FromPin, 16); AnimationGraphCodec.Text(l.ToPin, 16); }
@@ -57,6 +57,12 @@ public static class AnimationGraphEdits
                 case "transition.upsert": Closed(op, "op", "transition"); var transition = Decode<AnimationTransition>(op, "transition"); d = d with { Transitions = Upsert(d.Transitions, transition, t => t.Id) }; break;
                 case "event.upsert":Closed(op,"op","marker");var marker=Decode<AnimationEventMarker>(op,"marker");d=d with{Events=Upsert(d.Events,marker,e=>e.Id)};break;
                 case "event.delete":Closed(op,"op","id");d=d with{Events=Delete(d.Events,Uuid(op,"id"),e=>e.Id)};break;
+                case "layer.bone.upsert":
+                    Closed(op,"op","nodeId","bone");var layerNode=LayerNode(d,Uuid(op,"nodeId"));var bone=Decode<AnimationBoneWeight>(op,"bone");var entries=layerNode.Layer!.Mask.Bones;
+                    d=d with{Nodes=d.Nodes.Select(n=>n.Id==layerNode.Id?n with{Layer=n.Layer! with{Mask=n.Layer.Mask with{Bones=entries.Where(b=>b.BonePath!=bone.BonePath).Append(bone).ToArray()}}}:n).ToArray()};break;
+                case "layer.bone.delete":
+                    Closed(op,"op","nodeId","bonePath");var deleteNode=LayerNode(d,Uuid(op,"nodeId"));string bonePath=op.GetProperty("bonePath").GetString()??throw new ArgumentException("Bone path required.");if(!deleteNode.Layer!.Mask.Bones.Any(b=>b.BonePath==bonePath))throw new ArgumentException("Existing exact bone required.");
+                    d=d with{Nodes=d.Nodes.Select(n=>n.Id==deleteNode.Id?n with{Layer=n.Layer! with{Mask=n.Layer.Mask with{Bones=n.Layer.Mask.Bones.Where(b=>b.BonePath!=bonePath).ToArray()}}}:n).ToArray()};break;
                 case "blendspace.sample.upsert":
                     Closed(op,"op","nodeId","sample");var spaceNode=SpaceNode(d,Uuid(op,"nodeId"));var point=Decode<BlendSpaceSample>(op,"sample");
                     d=d with{Nodes=Upsert(d.Nodes,spaceNode with{BlendSpace=spaceNode.BlendSpace! with{Samples=Upsert(spaceNode.BlendSpace.Samples,point,s=>s.Id)}},n=>n.Id)};break;
@@ -81,6 +87,7 @@ public static class AnimationGraphEdits
         }
         return requireComplete ? AnimationGraphCodec.Decode(AnimationGraphCodec.Encode(d)) : CopyDraft(d);
     }
+    private static AnimationGraphNode LayerNode(AnimationGraphDefinition d,Guid id)=>d.Nodes.SingleOrDefault(n=>n.Id==id&&n.Kind is AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive&&n.Layer is not null)??throw new ArgumentException("Exact layer node required.");
     private static AnimationGraphDefinition DeleteNode(AnimationGraphDefinition d, Guid id)
     {
         var states = d.States.Where(s => s.PoseNode == id).Select(s => s.Id).ToHashSet();

@@ -175,6 +175,7 @@ M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVi
 | 动画图作者工作区/共享事务/获批MCP | M6.4自动候选：类型引脚、复制草稿、参数/状态/条件、checked保存及Undo/Redo、双人工批准propose/transaction、独立真实NCA/GPU预览；人工/高级节点未验收 |
 | 图过渡中断/提交事件/debug | M6.5 A–D双配置自动候选完成；持久事件/策略、轨道UI、精确获批独立序列MCP、32actor与正式Player联合通过；非live控制/推理服务，人工/素材/目标/性能/长稳开放，见C契约与D交付 |
 | BlendSpace | M6.6-A–D完整双配置自动候选通过；共享相位/主贡献事件-root/真实NCA配方，typed作者与精确获批AI权重扫描；0/1/8/32 Editor/搬移正式Headless-DX11 Player及调度/fault/reload联合测试通过；人工/素材/目标/性能/1h未验收，见M6_6_D_DELIVERY_REPORT.md |
+| 分层遮罩与缓存姿态 | M6.7 A–C完整双配置自动候选通过；精确骨架hash/path、override/additive/CachePose、typed作者及独立获批骨骼/缓存诊断，实际NCA/CPU-GPU/正式Player验证；人工/素材/性能/长稳仍开放 |
 | Montage、IK、重定向、动画压缩 | 未实现完整功能 |
 | 场景 SkinnedMesh/ClipPlayback 与 DX11 GPU 蒙皮 | M3.5 已实现；验收范围见交付记录 |
 | Animator 图 / CharacterMotor | M6.3-A/B/C/D完整双配置自动候选通过；真实图根/唯一Jolt/skin-shadow及精确获批运行MCP，人工/素材/性能/长稳未验收；M4独立动作策略不变 |

@@ -28,6 +28,7 @@ public sealed class EditorAnimationGraphWorkspace : IDisposable
     private EditInteractionLease? _interaction; private bool _fileWrite, _disposed; private ulong _content = 1, _knownAssets;
     public AnimationGraphInspections Reads { get; }
     public AnimationGraphSequences Sequences {get;}
+    public AnimationGraphSkeletons Skeletons {get;}
     public AnimationGraphWriteScope Scope { get; }
     private EditSession Edit => _workspace.Owner.Edit!;
     private AssetProjectAuthoring Assets => _workspace.Owner.Assets ?? throw new EditRejectedException("graph_project_missing");
@@ -45,6 +46,7 @@ public sealed class EditorAnimationGraphWorkspace : IDisposable
         Scope = new(Approved, id => { try { _=Required(id);return true; } catch(Exception e) when(e is InvalidOperationException or ArgumentException){return false;} }, ValidateResources);
         Reads = new(workspace, root, _time);
         Sequences=new(workspace,root,project,Reads,()=>Stamp,()=>HasDraft?null:Capture(),_time);
+        Skeletons=new(workspace,root,project,Reads,()=>Stamp,()=>Capture(),()=>HasDraft,_time);
         Edit.RegisterInspection(AnimationGraphAuthoringSchemas.Descriptor, Propose);
     }
     private bool Current() => !_disposed && _workspace.Stamp.SessionId == _session && _workspace.Stamp.Generation == _generation;
@@ -194,7 +196,7 @@ public sealed class EditorAnimationGraphWorkspace : IDisposable
     public void Cancel() { _ = Edit.State; _interaction?.Dispose(); _interaction = null; _draft = _baseline = null; _content = checked(_content + 1); ClearProposals(); }
     public void CancelProposal(Guid id) { Verify(); Assets.Graphs.CancelProposal(id); _candidates.Remove(id); _retired.Add(id); Review = null; }
     private void ClearProposals() { foreach (Guid id in _candidates.Keys.ToArray()) { _workspace.Owner.Assets?.Graphs.CancelProposal(id); _retired.Add(id); } _candidates.Clear(); Review = null; }
-    public void Revoke() { _ = Edit.State; foreach (var pin in _pins.Values) pin.Dispose(); _pins.Clear(); _approvals.Clear(); _fileWrite = false; Reads.Revoke();Sequences.Revoke();Review = null; }
+    public void Revoke() { _ = Edit.State; foreach (var pin in _pins.Values) pin.Dispose(); _pins.Clear(); _approvals.Clear(); _fileWrite = false; Reads.Revoke();Sequences.Revoke();Skeletons.Revoke();Review = null; }
     private void RequireUnchangedFile() { if (_path is null) throw new EditRejectedException("graph_file_conflict"); if(_raw is null){Assets.Graphs.RequireMissing(_path);return;} if(!Assets.Graphs.Read(_path).AsSpan().SequenceEqual(_raw))throw new EditRejectedException("graph_file_conflict"); }
     // Trusted explicit preview preparation, never called by a capability or simulation callback.
     public RuntimeAssetSnapshot PreparePreview(Guid proposal)
@@ -205,5 +207,5 @@ public sealed class EditorAnimationGraphWorkspace : IDisposable
     }
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
     private static string ResourceProof(RuntimeAsset asset)=>asset.Kind+":"+asset.Generation+":"+asset.ContentHash;
-    public void Dispose() { if (_disposed) return; Cancel(); Revoke();Sequences.Dispose();_disposed = true; }
+    public void Dispose() { if (_disposed) return; Cancel(); Revoke();Sequences.Dispose();Skeletons.Dispose();_disposed = true; }
 }

@@ -13,7 +13,7 @@ public static class AnimationSequenceSchemas
     private static JsonObject Const(object value)=>new(){["const"]=JsonSerializer.SerializeToNode(value)};
     private static JsonObject Values(params string[] values)=>new(){["type"]="string",["enum"]=new JsonArray(values.Select(v=>(JsonNode?)JsonValue.Create(v)).ToArray())};
     private static JsonObject Closed(JsonObject p)=>new(){["type"]="object",["additionalProperties"]=false,["properties"]=p,["required"]=new JsonArray(p.Select(f=>(JsonNode?)JsonValue.Create(f.Key)).ToArray())};
-    private static JsonObject Array(JsonNode row,int max)=>new(){["type"]="array",["maxItems"]=max,["items"]=row};
+    private static JsonObject Array(JsonNode row,int max)=>new(){["type"]="array",["minItems"]=0,["maxItems"]=max,["items"]=row};
     private static JsonObject Nullable(JsonNode row)=>new(){["oneOf"]=new JsonArray(row,new JsonObject{["type"]="null"})};
     private static JsonObject Vector()=>Closed(new(){["x"]=Number(-1000,1000,false),["y"]=Number(-1000,1000,false),["z"]=Number(-1000,1000,false)});
     private static JsonNode Envelope(JsonObject data){var outer=JsonNode.Parse(AnimationGraphInspectionSchemas.Descriptors()[0].OutputSchema.GetRawText())!;outer["oneOf"]![0]!["properties"]!["data"]=data;return outer;}
@@ -21,7 +21,7 @@ public static class AnimationSequenceSchemas
     {
         var test=Closed(new(){["fixedDelta"]=Number(.001,1,false),["steps"]=Number(1,256),
             ["writes"]=Array(Closed(new(){["step"]=Number(1,256),["parameterId"]=Id(),["kind"]=Values("float","int","bool","trigger"),["value"]=Number(int.MinValue,int.MaxValue,false)}),512),
-            ["assertions"]=Array(Closed(new(){["step"]=Number(1,256),["kind"]=Values("state","transition","eventCount","parameter","rootX","rootYaw"),["subjectId"]=Id(),["value"]=Number(int.MinValue,int.MaxValue,false)}),64)});
+            ["assertions"]=Array(Closed(new(){["step"]=Number(1,256),["kind"]=Values("state","transition","eventCount","parameter","rootX","rootYaw","cacheHits","cacheRequests"),["subjectId"]=Id(),["value"]=Number(int.MinValue,int.MaxValue,false)}),64)});
         var propose=Closed(new(){["graphId"]=Id(),["caseId"]=Id(),["test"]=test});
         var proposal=Closed(new(){["caseId"]=Id(),["graphId"]=Id(),["caseHash"]=Text(64),["graphHash"]=Text(64),["eventHash"]=Text(64),["steps"]=Number(1,256),["executionApproved"]=Const(false)});
         var context=Closed(new(){["sessionId"]=Id(),["worldId"]=Id(),["tick"]=Number(0,256)});
@@ -32,9 +32,10 @@ public static class AnimationSequenceSchemas
         var check=Closed(new(){["index"]=Number(0,63),["step"]=Number(1,256),["passed"]=Bool(),["code"]=Values("assertion_passed","assertion_failed")});
         var contribution=Closed(new(){["sampleId"]=Id(),["clipId"]=Id(),["weight"]=Number(0,1,false)});
         var weights=Closed(new(){["step"]=Number(1,256),["nodeId"]=Id(),["spaceId"]=Id(),["weights"]=Closed(new(){["count"]=Number(1,3),["a"]=contribution,["b"]=contribution.DeepClone(),["c"]=contribution.DeepClone(),["primarySample"]=Id(),["primaryClip"]=Id(),["x"]=Number(-1000000,1000000,false),["y"]=Number(-1000000,1000000,false),["projected"]=Bool()})});
-        var input=Closed(new(){["graphId"]=Id(),["caseId"]=Id(),["section"]=Values("summary","timeline","events","checks","weights"),["offset"]=Number(0,8192),["limit"]=Number(1,8)});
-        var output=Closed(new(){["caseId"]=Id(),["graphId"]=Id(),["caseHash"]=Text(64),["graphHash"]=Text(64),["eventHash"]=Text(64),["publication"]=Id(),["resourcesPrepared"]=Const(true),["rootMotionSupported"]=Bool(),["collisionExecuted"]=Const(false),["livePlay"]=Const(false),["section"]=Values("summary","timeline","events","checks","weights"),["total"]=Number(0,8192),["offset"]=Number(0,8192),["nextOffset"]=Nullable(Number(0,8200)),["items"]=Array(new JsonObject{["oneOf"]=new JsonArray(summary,timeline,receipt,check,weights)},8)});
+        var cache=Closed(new(){["tick"]=Number(1,256),["requests"]=Number(0,4096),["hits"]=Number(0,4096)});
+        var input=Closed(new(){["graphId"]=Id(),["caseId"]=Id(),["section"]=Values("summary","timeline","events","checks","weights","cache"),["offset"]=Number(0,8192),["limit"]=Number(1,8)});
+        var output=Closed(new(){["caseId"]=Id(),["graphId"]=Id(),["caseHash"]=Text(64),["graphHash"]=Text(64),["eventHash"]=Text(64),["publication"]=Id(),["resourcesPrepared"]=Const(true),["rootMotionSupported"]=Bool(),["collisionExecuted"]=Const(false),["livePlay"]=Const(false),["section"]=Values("summary","timeline","events","checks","weights","cache"),["total"]=Number(0,8192),["offset"]=Number(0,8192),["nextOffset"]=Nullable(Number(0,8200)),["items"]=Array(new JsonObject{["oneOf"]=new JsonArray(summary,timeline,receipt,check,weights,cache)},8)});
         return [new(Propose,"Propose a bounded closed independent sequence against host-prepared immutable NCA graph resources. No execution, live Play, file or history mutation.",MutationRisk.ReadOnly,JsonSerializer.SerializeToElement(propose),JsonSerializer.SerializeToElement(Envelope(proposal))),
-            new(Run,"Read/run the exact human-approved independent numerical sequence, paged state/events/root intentions/checks/parameter-space weights (including inactive nodes). Never live Play, physics collision, GPU, callbacks or fault recovery.",MutationRisk.ReadOnly,JsonSerializer.SerializeToElement(input),JsonSerializer.SerializeToElement(Envelope(output)))];
+            new(Run,"Read/run the exact human-approved independent numerical sequence, paged state/events/root intentions/checks/parameter-space weights (including inactive nodes)/committed cache counts. Never live Play, physics collision, GPU, callbacks or fault recovery.",MutationRisk.ReadOnly,JsonSerializer.SerializeToElement(input),JsonSerializer.SerializeToElement(Envelope(output)))];
     }
 }

@@ -63,7 +63,8 @@ internal sealed unsafe partial class EditorPresenter
             var matches=_animCanvas.Search(_animSearch);_animOffset=Math.Clamp(_animOffset,0,Math.Max(0,(matches.Length-1)/16*16));
             foreach(var n in d.Nodes.Where(n=>matches.Contains(n.Id)).Skip(_animOffset).Take(16))Add(GuiItemKind.SelectionButton,51,1000+AnimRow(n.Id),(_animCanvas.Selection.Contains(n.Id)?"[x] ":"")+n.Name,new("anim_select",Operation:new GraphIntent(author.Stamp,n.Id)));
             AnimButton(14,"上一页节点","anim_previous",enabled:_animOffset>0);Line();AnimButton(15,"下一页节点","anim_next",enabled:_animOffset+16<matches.Length);
-            foreach(var kind in Enum.GetValues<AnimationNodeKind>())AnimButton((int)kind<6?20+(ulong)kind:80+(ulong)kind,"+ "+kind,"anim_add_node",kind,author.HasDraft&&writable&&kind is not (AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive));
+            foreach(var kind in Enum.GetValues<AnimationNodeKind>())AnimButton((int)kind<6?20+(ulong)kind:80+(ulong)kind,"+ "+kind,"anim_add_node",kind,author.HasDraft&&writable&&(kind is not (AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive)||author.Skeletons.Prepared));
+            AnimButton(90,"骨骼清单 / 精确NCA审批","anim_bones_toggle");
             AnimButton(26,"删除选中节点及关联边","anim_delete",enabled:author.HasDraft&&_animCanvas.Selection.Length>0);AnimButton(27,"自动排列","anim_arrange",enabled:author.HasDraft&&d.Nodes.Length is >0 and <=64);
             foreach(string section in new[]{"parameter","state","transition","link","event"})AnimButton(30+(ulong)Array.IndexOf(new[]{"parameter","state","transition","link","event"},section),"查看 / 编辑 "+section,"anim_section",section);
             Add(GuiItemKind.Checkbox,50,35,"允许从已提交姿态中断过渡",new("anim_interruptions",Operation:new GraphIntent(author.Stamp)),number:d.InterruptTransitions?1:0,max:1,enabled:author.HasDraft&&writable&&d.Nodes.Any(n=>n.Kind==AnimationNodeKind.StateMachine));
@@ -120,7 +121,7 @@ internal sealed unsafe partial class EditorPresenter
         foreach(var message in _messages.TakeLast(4))Add(GuiItemKind.Label,50,label++,message);AnimButton(58,"撤销全部图文件/Agent批准","anim_revoke");AnimButton(60,"独立序列 / AI用例审批","anim_sequence_toggle");End();
         if(_geometry.Ai.Width>0){Region(406,"AI 图工具",_geometry.Ai,"未接入推理服务");Add(GuiItemKind.Label,50,label++,"inspect / validate / propose / transaction\n图语义审阅和端点请求授权是两道独立批准；默认拒绝。切换到场景区可配对/审阅端点，不授予文件权限。");AnimButton(59,"返回场景端点审批（保留 Agent 提案）","anim_endpoint");End();}
         Region(408,"",_geometry.Status);Add(GuiItemKind.Label,50,label++,$"动画图 | zoom {_animCanvas.Zoom:F2} | 选择 {_animCanvas.Selection.Length} | {(author.HasDraft?"未保存草稿":"已保存 / 只读")} | C# authoring / ImGui presentation");End();
-        WorkspaceMenu(ref label,!author.HasDraft&&!_page!.State.Frozen);BuildGraphReads(_geometry.Status.Width,_geometry.Status.Y+28,ref label);BuildAnimSequences(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
+        WorkspaceMenu(ref label,!author.HasDraft&&!_page!.State.Frozen);BuildGraphReads(_geometry.Status.Width,_geometry.Status.Y+28,ref label);BuildAnimSequences(_geometry.Status.Width,_geometry.Status.Y+28,ref label);BuildAnimBones(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         _frame=new(){StructSize=(uint)Marshal.SizeOf<GuiFrame>(),Frame=frameId,ViewGeneration=_generation,DocumentGeneration=_page!.Stamp.Generation,Revision=_page.Stamp.Revision,ItemCount=(uint)_items.Count,TextBytes=(uint)_text.Count};return _frame;
     }
     private static (Guid Id,string Name)[] AnimElements(AnimationGraphDefinition d,string section)=>section switch{"parameter"=>d.Parameters.Select(v=>(v.Id,v.Name)).ToArray(),"state"=>d.States.Select(v=>(v.Id,v.Name)).ToArray(),"transition"=>d.Transitions.Select(v=>(v.Id,"Transition "+v.Id.ToString("D"))).ToArray(),"link"=>d.Links.Select(v=>(v.Id,v.FromPin+" → "+v.ToPin)).ToArray(),"event"=>d.Events.OrderBy(v=>v.Time).ThenBy(v=>v.Id).Select(v=>(v.Id,$"{v.Time:F3}s · {v.Name}")).ToArray(),_=>d.Nodes.Select(v=>(v.Id,v.Name)).ToArray()};
@@ -143,6 +144,7 @@ internal sealed unsafe partial class EditorPresenter
         if(action.Kind=="anim_switch"){if(e.Phase==3){CancelInteraction();_uiMode=false;_graphMode=!_graphMode;_activeMenu=-1;SynchronizeGraph();}return true;}
         if(action.Operation is not GraphIntent intent||intent.Stamp!=author.Stamp)throw new EditRejectedException("graph_view_stale");
         if(ApplyAnimSequence(action,e,text))return true;
+        if(ApplyAnimBones(action,e,text))return true;
         if(action.Kind=="anim_property"){if(e.Phase==3){ApplyAnimProperty((GraphProperty)intent.Payload!,e.Value,text);SynchronizeGraph();}return true;}
         if(action.Kind=="anim_pointer"){AnimPointer(e,text);return true;}
         if(action.Kind=="anim_event_pointer"){AnimEventPointer(e,text);return true;}
@@ -175,7 +177,7 @@ internal sealed unsafe partial class EditorPresenter
             case "anim_delete":author.ApplyDraft(_animCanvas.DeleteSelected());break;
             case "anim_delete_element":author.ApplyDraft(AnimationGraphEdits.Operations(new{op=_animSection+".delete",id=_animElement}));break;
             case "anim_entry":author.ApplyDraft(AnimationGraphEdits.Operations(new{op="graph.entry",stateId=_animElement}));break;
-            case "anim_add_node":var kind=(AnimationNodeKind)intent.Payload!;if(kind==AnimationNodeKind.BlendSpace){AddAnimSpace(d!);break;}var node=AnimationGraphNode.Create(Guid.NewGuid(),kind.ToString(),kind) with{X=64+d!.Nodes.Length*12,Y=96};if(kind==AnimationNodeKind.Clip)node=node with{ClipId=Guid.Parse(_animClip.Length>0?_animClip:d.Nodes.First(n=>n.Kind==AnimationNodeKind.Clip).ClipId.ToString()),Speed=1,Loop=true};if(kind==AnimationNodeKind.Parameter)node=node with{ParameterId=d.Parameters.FirstOrDefault()?.Id??Guid.Empty};if(kind==AnimationNodeKind.Blend)node=node with{Weight=.5};author.ApplyDraft(AnimationGraphEdits.Operations(new{op="node.upsert",node}));break;
+            case "anim_add_node":var kind=(AnimationNodeKind)intent.Payload!;if(kind==AnimationNodeKind.BlendSpace){AddAnimSpace(d!);break;}if(kind is AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive){AddAnimLayer(d!,kind);break;}var node=AnimationGraphNode.Create(Guid.NewGuid(),kind.ToString(),kind) with{X=64+d!.Nodes.Length*12,Y=96};if(kind==AnimationNodeKind.Clip)node=node with{ClipId=Guid.Parse(_animClip.Length>0?_animClip:d.Nodes.First(n=>n.Kind==AnimationNodeKind.Clip).ClipId.ToString()),Speed=1,Loop=true};if(kind==AnimationNodeKind.Parameter)node=node with{ParameterId=d.Parameters.FirstOrDefault()?.Id??Guid.Empty};if(kind==AnimationNodeKind.Blend)node=node with{Weight=.5};author.ApplyDraft(AnimationGraphEdits.Operations(new{op="node.upsert",node}));break;
             case "anim_add_element":
                 var definition=d??throw new ArgumentException("Graph missing.");Guid added=Guid.NewGuid();
                 object op=(string)intent.Payload! switch{

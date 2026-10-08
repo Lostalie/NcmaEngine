@@ -30,7 +30,7 @@ NCA准备核对骨架hash/完整骨骼路径及显式参考clip/time。预编译
 全部解释器/完整未引用行验证同步升级，中断缓存是全混合committed alpha1 pose。
 测试实际NCA、独立CPU/native/GPU oracle、root stripping、故障/Reload/Stop/资源基线及Headless。
 
-## C 作者和AI同源工具联合验收
+## C 作者和AI同源工具联合验收 自动候选通过
 
 typed遮罩骨/层/参考/cache编辑和读诊断，精确已批准骨架/文件/resource/hash/审阅者/TTL边界。
 UI与Agent共享closed语义、draft/diff、单history durable transaction、Undo/Redo，序列只运行独立实例。
