@@ -6,7 +6,7 @@ M6.3按可独立验证的四个切片落实真实资产、数值、场景/角色
 
 ## A 数值混合扩展
 
-状态：自动候选完整Debug/Release已通过，见 [A交付记录](M6_3_A_DELIVERY_REPORT.md)。B也已通过，C/D仍未完成。
+状态：自动候选完整Debug/Release已通过，见 [A交付记录](M6_3_A_DELIVERY_REPORT.md)。B也已通过，C/D最新状态见下文。
 
 在现有NcmaAnimationKernel同一context/rig上增设独立pose-blend1.0导出，原pose1.0的72字节表、
 request和stats保持原样。输入固定TRS、opaque rig、source offsets和weight；输出复制TRS/模型矩阵。
@@ -36,8 +36,9 @@ GPU资源后clip/rig，最后资产/模块。正式场景将M6.2采样/混合计
 
 ## C 唯一角色运动权威
 
-状态：B 已推送并核对远端，C 开始实施；细分接线顺序和门禁见
-[C 实施方案](M6_3_C_IMPLEMENTATION_PLAN.md)。内部根配方候选不代表已开放 Animator + RootMotion。
+状态：C2/C3真实准备/图候选根/Jolt接线及C4完整双配置自动门禁通过；见
+[C 实施方案](M6_3_C_IMPLEMENTATION_PLAN.md)、[C/D契约](M6_3_CD_RUNTIME_CONTRACT.md)和
+[交付记录](M6_3_CD_DELIVERY_REPORT.md)。安全组合已开放 Animator + RootMotion，不开放Action混挂。
 
 图参数/动作输入由C#游戏逻辑或可信主机在安全边界提出；AI只有复制观察，不获live输入控制。
 Animator的Prepare与现有Movement/Character协调器同量子：先准备所有图/根意图，再一次Jolt执行，
@@ -49,6 +50,9 @@ Animator的Prepare与现有Movement/Character协调器同量子：先准备所�
 关闭/停止/冻结startup恢复/重载前未提交以及事故后观察失效。
 
 ## D GPU 和 AI 联合证据
+
+状态：同一已提交图/skin/shadow、精确当前pose stamp、独立审批只读运行MCP和共享本机观察已实现，
+专项及完整双配置自动门禁通过；最终回归结果见[C/D交付记录](M6_3_CD_DELIVERY_REPORT.md)。
 
 蒙皮源网格驻留，最终palette由同一已提交图/姿态服务产生；geometry/shadow共享精确skin frame，
 无每帧CPU skinned vertices上传。验证实际DX11图角色渲染与API层、独立CPU oracle/误差及生命周期。

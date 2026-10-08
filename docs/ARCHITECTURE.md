@@ -175,7 +175,7 @@ M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVi
 | 动画图作者工作区/共享事务/获批MCP | M6.4自动候选：类型引脚、复制草稿、参数/状态/条件、checked保存及Undo/Redo、双人工批准propose/transaction、独立真实NCA/GPU预览；人工/高级节点未验收 |
 | BlendSpace、Montage、IK、重定向、动画压缩 | 未实现完整功能 |
 | 场景 SkinnedMesh/ClipPlayback 与 DX11 GPU 蒙皮 | M3.5 已实现；验收范围见交付记录 |
-| Animator 图 / CharacterMotor | M6.3-A/B真实NCA/pose/GPU及Editor/Player/Headless候选；图根运动权威C/D未完成。M4.3capsule移动/碰撞，M4.4根运动，M4.5候选C#动作策略 |
+| Animator 图 / CharacterMotor | M6.3-A/B/C/D完整双配置自动候选通过；真实图根/唯一Jolt/skin-shadow及精确获批运行MCP，人工/素材/性能/长稳未验收；M4独立动作策略不变 |
 | 正式动作/连击/命中规则及 C# 通知到游戏事件链路 | M4.5候选Idle/Run/Attack/Dodge、buffer/cancel/combo、closest-ray伤害/无敌与提交后CombatEvent快照；通用GameplaySignal转发/连续武器hitbox未实现 |
 
 2026-10-06：M3.5 使用独立 `ncma_pose_get_api`/pose ABI 1.0，仅不可变数值，不是已删除的旧 Animation ABI 1，也不恢复 gameplay host；原有 animation/character ABI 2 保持原语义。纯 C# ClipClock/提交后只读观察器、正式 NCA/Scene/Edit/Play 生命周期与 query 5 compute-prepass 已接线；原始 GPU source 常驻，每帧 bounded palette，主画面与阴影共享 GPU output，未验证的 animated bind-AABB 裁剪关闭。根位移只报告不写 World/Physics。资源/GPU/GC 证据与最终 G5 状态见 [交付记录](M3_5_GPU_DELIVERY_REPORT.md)，布局/线程/预算/释放见 [契约](M3_5_RENDER_ANIMATION_ABI.md)。没有 skin 不初始化 pose/rig/palette ring，Null 不部署 pose DLL；通用 3D-capable DX11 包含 lazy DLL，专用纯 2D 裁剪包未实现。

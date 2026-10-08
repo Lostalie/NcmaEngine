@@ -134,6 +134,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             composePreparedPlay:(play,assets)=>{_sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics,assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;},
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
+        var graphRuntime=new AnimationRuntimeInspectionService(_editor,()=>_sceneRuntime,()=>_playScene);graphRuntime.Register();
         if (project is not null) {
             var workspace = new EditorWorkspace(_editor);
             workspace.Open(workspace.Stamp, project.StartupScenePath, true);
@@ -160,6 +161,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _filePicker=new();
             _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow,workspaceStyle:true,projectName:project?.Configuration.Name);
             _presenter.AttachCharacters(characters);
+            _presenter.AttachAnimationRuntime(graphRuntime);
             if(_animationGraphs is not null)_presenter.AttachGraphAuthoring(_animationGraphs,_graphPreview);
             else if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
             if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));

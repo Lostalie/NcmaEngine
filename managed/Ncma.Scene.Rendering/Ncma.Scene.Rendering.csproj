@@ -4,6 +4,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute"><_Parameter1>Ncma.Characters</_Parameter1></AssemblyAttribute>
     <ProjectReference Include="../Ncma.Animation/Ncma.Animation.csproj" />
     <ProjectReference Include="../Ncma.Gameplay/Ncma.Gameplay.csproj" />
     <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />

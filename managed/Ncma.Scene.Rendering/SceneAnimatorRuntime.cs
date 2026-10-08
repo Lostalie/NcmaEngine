@@ -5,6 +5,10 @@ using Ncma.Gameplay;
 using Ncma.Runtime;
 namespace Ncma.Scene.Rendering;
 
+public sealed record AnimatorResourceIdentity(Guid Id,string Kind,string Generation,string ContentHash);
+public sealed record AnimatorRuntimeBinding(Guid ObjectId,Guid GraphId,Guid SkeletonId,Guid PublicationId,
+    string GraphHash,IReadOnlyList<AnimatorResourceIdentity> Resources);
+
 // Same host composition in Editor, Player and Headless. No numerical plugin/GPU/IO in a step.
 public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommittedStepObserver, IPlayCompositionLifetime
 {
@@ -15,6 +19,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         internal readonly AnimationProgram Program = program;
         internal AnimationGraphInstance? Instance;
         internal AnimationEvaluationToken? Pending;
+        internal AnimatorRuntimeBinding? Binding;
     }
     private readonly PlaySession _play;
     private readonly Actor[] _actors;
@@ -45,7 +50,14 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
                 var rig = (RuntimeDataAsset)_assets.Require(source.SkeletonId, AssetKind.Skeleton);
                 if (rig.ModelId != skin.CharacterId) throw new ArgumentException("Animator skin model mismatch.");
                 bones = checked(bones + ModelPayloadCodec.DecodeSkeleton(rig.CopyData()).Bones.Length);
-                actors.Add(new(obj.PersistentId, source, program));
+                var root=(RuntimeDataAsset)_assets.Require(skin.CharacterId,AssetKind.Character);
+                var manifest=ModelAssetManifestCodec.Decode(root.CopyData());
+                var required=new HashSet<Guid>{source.GraphId,source.SkeletonId,skin.CharacterId};
+                foreach(var m in manifest.Meshes){required.Add(m.Mesh);required.Add(m.Materials);}
+                foreach(Guid id in manifest.Clips)required.Add(id);
+                var proofs=_assets.List().Where(a=>required.Contains(a.Id)).Select(a=>new AnimatorResourceIdentity(a.Id,a.Kind.ToString(),a.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture),a.ContentHash)).OrderBy(a=>a.Id).ToArray();
+                if(proofs.Length!=required.Count)throw new ArgumentException("Animator complete resource identity closure missing.");
+                actors.Add(new(obj.PersistentId, source, program){Binding=new(obj.PersistentId,source.GraphId,source.SkeletonId,_assets.Identity,program.ContentHash,Array.AsReadOnly(proofs))});
             }
             if (bones > 32768) throw new ArgumentException("Animator scene bone budget.");
             _actors = actors.ToArray();
@@ -97,6 +109,28 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         return actor;
     }
     public AnimationGraphFrame ReadFrame(Guid objectId) => Read(objectId).Instance!.Frame;
+    // Immutable prepared resource proof. No disk/native queries or sampling; source leases outlive this host.
+    public IReadOnlyList<AnimatorRuntimeBinding> DescribeBindings()
+    {World.VerifyAccess();ObjectDisposedException.ThrowIf(_disposed,this);if(World.IsUpdating)throw new InvalidOperationException("Committed boundary required.");return Array.AsReadOnly(_actors.Select(a=>a.Binding!).ToArray());}
+    internal AnimationProgram PreparedProgram(Guid objectId, RuntimeAssetLease assets)
+    {
+        World.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_play.State != PlayState.Stopped || _assets!.Identity != assets.Identity) throw new InvalidOperationException("Exact stopped graph resource publication required.");
+        return _actors.Single(a => a.Id == objectId).Program;
+    }
+    internal AnimationGraphFrame CopyPreparedRootPlan(Guid objectId, AnimationStepContext context, Span<AnimationPoseInstruction> destination)
+    {
+        VerifyIdentity();
+        if (!World.IsUpdating || context != new AnimationStepContext(_session, _world, World.Tick)) throw new InvalidOperationException("Exact collecting graph quantum required.");
+        Actor? actor = null; foreach(var candidate in _actors) if(candidate.Id==objectId){actor=candidate;break;}
+        if(actor is null)throw new ArgumentException("Unknown graph root actor.");
+        var token = actor.Pending ?? throw new InvalidOperationException("Graph must prepare before character intentions.");
+        var frame = actor.Instance!.PreparedFrame(token);
+        if (actor.Instance.CopyPreparedPlan(token, destination) != frame.InstructionCount) throw new InvalidOperationException("Prepared graph output mismatch.");
+        return frame;
+    }
+    public AnimationGraphDebugFrame ReadDebug(Guid objectId) => Read(objectId).Instance!.ReadDebug(new(_session, _world, World.Tick));
+    public int CopyCommittedEvents(Guid objectId, Span<AnimationGraphEvent> destination) => Read(objectId).Instance!.CopyCommittedEvents(new(_session, _world, World.Tick), destination);
     public void VerifyPresentation(World world, RuntimeAssetLease assets)
     {
         VerifyIdentity();

@@ -21,7 +21,7 @@ internal static class CharacterInspectionTests
     private sealed class Clock:TimeProvider {internal long Time;public override long TimestampFrequency=>TimeSpan.TicksPerSecond;public override long GetTimestamp()=>Time;}
     private sealed class StepAction(Action action):IWorldSystem {public void FixedUpdate(World world,double h)=>action();}
     private static JsonElement Json(object value)=>JsonSerializer.SerializeToElement(value,Wire.Json);
-    private static void Schema(JsonElement value,JsonElement schema)
+    internal static void Schema(JsonElement value,JsonElement schema)
     {
         if(schema.TryGetProperty("oneOf",out var branches)){int matches=0;foreach(var branch in branches.EnumerateArray())try{Schema(value,branch);matches++;}catch(InvalidOperationException){}Check(matches==1,"schema oneOf");return;}
         if(schema.TryGetProperty("anyOf",out var choices)){foreach(var choice in choices.EnumerateArray())try{Schema(value,choice);return;}catch(InvalidOperationException){}throw new InvalidOperationException("schema anyOf");}
@@ -31,7 +31,7 @@ internal static class CharacterInspectionTests
         switch(type.GetString()) {
             case "object":Check(value.ValueKind==JsonValueKind.Object);var properties=schema.GetProperty("properties");foreach(var p in value.EnumerateObject()){Check(properties.TryGetProperty(p.Name,out var s));Schema(p.Value,s);}foreach(var r in schema.GetProperty("required").EnumerateArray())Check(value.TryGetProperty(r.GetString()!,out _));break;
             case "array":Check(value.ValueKind==JsonValueKind.Array&&value.GetArrayLength()<=schema.GetProperty("maxItems").GetInt32()&&value.GetArrayLength()>=schema.GetProperty("minItems").GetInt32());foreach(var v in value.EnumerateArray())Schema(v,schema.GetProperty("items"));break;
-            case "number":case "integer":Check(value.ValueKind==JsonValueKind.Number&&double.IsFinite(value.GetDouble()));if(type.GetString()=="integer")Check(value.TryGetUInt64(out _));Check(value.GetDouble()>=schema.GetProperty("minimum").GetDouble()&&value.GetDouble()<=schema.GetProperty("maximum").GetDouble());break;
+            case "number":case "integer":Check(value.ValueKind==JsonValueKind.Number&&double.IsFinite(value.GetDouble()));if(type.GetString()=="integer")Check(value.TryGetInt64(out _)||value.TryGetUInt64(out _));Check(value.GetDouble()>=schema.GetProperty("minimum").GetDouble()&&value.GetDouble()<=schema.GetProperty("maximum").GetDouble());break;
             case "string":Check(value.ValueKind==JsonValueKind.String);if(schema.TryGetProperty("maxLength",out var max))Check(value.GetString()!.Length<=max.GetInt32());if(schema.TryGetProperty("pattern",out var pattern))Check(Regex.IsMatch(value.GetString()!,pattern.GetString()!));break;
             case "boolean":Check(value.ValueKind is JsonValueKind.False or JsonValueKind.True);break;
             case "null":Check(value.ValueKind==JsonValueKind.Null);break;

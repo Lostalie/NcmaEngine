@@ -7,6 +7,7 @@ namespace Ncma.Rendering.Scene;
 using Vector3 = System.Numerics.Vector3;
 
 public readonly record struct SceneRenderCosts(double ExtractionMilliseconds, double EncodeMilliseconds, int GeometryDraws, int ShadowDraws, bool GpuSubmitted);
+public readonly record struct AnimationPresentationStamp(Guid WorldId,Guid PublicationId,ulong Tick,ulong RendererFrame,ulong PoseGeneration,int GeometryDraws,int ShadowDraws);
 // Application owns shared cache and independent Edit/Play sessions. No reference resources are created.
 public sealed class SceneRenderSession : IDisposable
 {
@@ -19,6 +20,11 @@ public sealed class SceneRenderSession : IDisposable
     private readonly bool _interpolateTransforms;
     private readonly World _world;
     private ulong _submittedFrame,_submittedPose;
+    private readonly Guid _publication;
+    private AnimationPresentationStamp? _animationStamp;
+    // Copied observation of a successful submission, not a native GPU-time sample or a new render operation.
+    public AnimationPresentationStamp? ReadAnimationPresentation()
+    {Verify();return _animationStamp is {} stamp&&stamp.WorldId==_world.Identity&&stamp.Tick==_world.Tick&&_play is not {State:Ncma.Gameplay.PlayState.Faulted} ? stamp:null;}
     public Guid WorldId { get; }
     public ulong PreparedRevision { get; }
     public SceneAnimationSession? Animation => _animation;
@@ -47,6 +53,7 @@ public sealed class SceneRenderSession : IDisposable
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
         WorldId = world.Identity; PreparedRevision = world.Revision; _play = play;
+        _publication=assets.Assets.Identity;
         _interpolateTransforms=interpolateTransforms;
         try {
             if(startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId))) {
@@ -60,7 +67,7 @@ public sealed class SceneRenderSession : IDisposable
     public bool Submit(ulong frame, uint width, uint height, Guid sceneCamera, SceneCameraView? browserCamera = null,
         float exposure = 1, float ambient = .03f, SceneShadowSettings? shadow = null, GpuViewTarget? target = null, Vector2 origin = default, Vector4 clear = default)
     {
-        Verify(); long time = Stopwatch.GetTimestamp();
+        Verify(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
         IReadOnlyDictionary<Guid,TransformData>? transforms=null;
         if(_interpolateTransforms && _play is not null) {
             if(_play.Document.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
@@ -104,6 +111,7 @@ public sealed class SceneRenderSession : IDisposable
         _pipeline.Submit(frame, _geometry.AsSpan(0, geo), _casters.AsSpan(0, casters), new(camera.Position, toLight, color), lightVP,
             settings, target, new(origin.X + width * camera.Data.ViewportX, origin.Y + height * camera.Data.ViewportY, w, h), clear);
         _submittedFrame=frame;_submittedPose=_animation?.Costs.PoseGeneration??0;
+        if(_animation is not null)_animationStamp=new(WorldId,_publication,_world.Tick,frame,_submittedPose,geo,casters);
         Costs = new(extraction, encoding, geo, casters, true); return true;
     }
     // User click only. No GPU readback or per-frame CPU skinning. Animated bounds use the

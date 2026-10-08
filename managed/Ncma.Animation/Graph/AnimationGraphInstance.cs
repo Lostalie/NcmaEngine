@@ -26,6 +26,11 @@ public sealed class AnimationGraphInstance
     private Guid _transition, _nextTransition;
     private ulong _sequence;
     private bool _prepared;
+    private readonly AnimationGraphEvent[] _events = new AnimationGraphEvent[AnimationProgram.MaximumEventsPerQuantum],
+        _committedEvents = new AnimationGraphEvent[AnimationProgram.MaximumEventsPerQuantum];
+    private int _eventCount, _committedEventCount;
+    private ulong _committedSequence;
+    private AnimationEvaluationOutcome _outcome;
     public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context)
     {
         _program = program ?? throw new ArgumentNullException(nameof(program)); RequireContext(context);
@@ -61,12 +66,14 @@ public sealed class AnimationGraphInstance
     {
         Verify(); CheckContext(context);
         if (_prepared || context.Tick == ulong.MaxValue || _sequence == ulong.MaxValue) throw new InvalidOperationException("One bounded quantum may be prepared.");
-        AnimationGraphCodec.Scalar(fixedDelta, .001, 1);
-        Build(fixedDelta, true); _sequence++; _prepared = true; return new(_identity, _sequence, _context.Tick);
+        _sequence++;
+        try { AnimationGraphCodec.Scalar(fixedDelta, .001, 1); Build(fixedDelta, true); CollectEvents(); }
+        catch { _outcome = AnimationEvaluationOutcome.PreparationRejected; throw; }
+        _prepared = true; _outcome = AnimationEvaluationOutcome.Prepared; return new(_identity, _sequence, _context.Tick);
     }
     private void Token(AnimationEvaluationToken token)
     { Verify(); if (!_prepared || token.InstanceId != _identity || token.Sequence != _sequence || token.SourceTick != _context.Tick) throw new InvalidOperationException("Stale/foreign prepared graph quantum."); }
-    public void Abort(AnimationEvaluationToken token) { Token(token); _prepared = false; }
+    public void Abort(AnimationEvaluationToken token) { Token(token); _prepared = false; _outcome = AnimationEvaluationOutcome.Aborted; }
     public void Commit(AnimationEvaluationToken token, AnimationStepContext committed)
     {
         Token(token); RequireContext(committed);
@@ -75,13 +82,40 @@ public sealed class AnimationGraphInstance
         _candidateTimes.CopyTo(_times, 0); _requested.CopyTo(_committedParameters, 0);
         for (int i = 0; i < _consume.Length; i++) if (_consume[i]) _requested[i] = _committedParameters[i] = 0;
         _state = _nextState; _from = _nextFrom; _elapsed = _nextElapsed; _duration = _nextDuration; _transition = _nextTransition;
-        _context = committed; PublishPlan(); _prepared = false;
+        _context = committed; PublishPlan();
+        Array.Copy(_events, _committedEvents, _eventCount); _committedEventCount = _eventCount;
+        _committedSequence = token.Sequence; _prepared = false; _outcome = AnimationEvaluationOutcome.Committed;
     }
     private void PublishPlan() { Array.Copy(_plan, _committedPlan, _count); _committedCount = _count; _committedOutput = _output; }
     public int CopyPreparedPlan(AnimationEvaluationToken token, Span<AnimationPoseInstruction> destination)
     { Token(token); if (destination.Length < _count) throw new ArgumentException("Graph plan output capacity."); _plan.AsSpan(0, _count).CopyTo(destination); return _count; }
+    public AnimationGraphFrame PreparedFrame(AnimationEvaluationToken token)
+    {
+        Token(token); return new(_identity, _program.AssetId, _context with { Tick = _context.Tick + 1 },
+            _nextState < 0 ? Guid.Empty : _program.States[_nextState], _nextFrom < 0 ? Guid.Empty : _program.States[_nextFrom],
+            _nextTransition, _nextFrom < 0 ? 1 : (float)Math.Min(1, _nextElapsed / _nextDuration), _output, _count);
+    }
     public int CopyCommittedPlan(Span<AnimationPoseInstruction> destination)
     { Verify(); if (destination.Length < _committedCount) throw new ArgumentException("Graph plan output capacity."); _committedPlan.AsSpan(0, _committedCount).CopyTo(destination); return _committedCount; }
+    // Repeated reads copy the same committed receipts; they never dispatch events or consume them.
+    public int CopyCommittedEvents(AnimationStepContext context, Span<AnimationGraphEvent> destination)
+    {
+        Verify(); CheckContext(context);
+        if (_prepared || _outcome == AnimationEvaluationOutcome.PreparationRejected) throw new InvalidOperationException("Graph event snapshot not valid.");
+        if (destination.Length < _committedEventCount) throw new ArgumentException("Graph event output capacity.");
+        _committedEvents.AsSpan(0, _committedEventCount).CopyTo(destination); return _committedEventCount;
+    }
+    // Off-frame copied diagnostics, not live World authority. Failed preparation preserves but labels historical data.
+    public AnimationGraphDebugFrame ReadDebug(AnimationStepContext context)
+    {
+        Verify(); CheckContext(context);
+        var parameters = new AnimationDebugParameter[_committedParameters.Length];
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = new(_program.Parameters[i].Id, _program.Parameters[i].Kind, _committedParameters[i]);
+        bool valid = !_prepared && _outcome != AnimationEvaluationOutcome.PreparationRejected;
+        return new(Frame, _committedSequence, _sequence, _outcome, valid, _program.EventContentHash,
+            Array.AsReadOnly(parameters), Array.AsReadOnly(_committedPlan.AsSpan(0, _committedCount).ToArray()),
+            Array.AsReadOnly(valid ? _committedEvents.AsSpan(0, _committedEventCount).ToArray() : Array.Empty<AnimationGraphEvent>()), false);
+    }
     public AnimationGraphFrame Frame {
         get { Verify(); return new(_identity, _program.AssetId, _context, _state < 0 ? Guid.Empty : _program.States[_state],
             _from < 0 ? Guid.Empty : _program.States[_from], _transition, _from < 0 ? 1 : (float)Math.Min(1, _elapsed / _duration), _committedOutput, _committedCount); }
@@ -134,6 +168,28 @@ public sealed class AnimationGraphInstance
     }
     private int Add(AnimationPoseInstruction instruction)
     { if (_count == _plan.Length) throw new ArgumentException("Bounded graph plan exceeded."); _plan[_count] = instruction; return _count++; }
+    private void CollectEvents()
+    {
+        _eventCount = 0;
+        int primary = _nextState < 0 ? Primary(_program.Output) : _program.StatePrimaryClips[_nextState];
+        int context = _nextState < 0 ? 0 : _nextState + 1;
+        int slot = _slots[context * _program.NodeCount + primary];
+        if (slot < 0) throw new InvalidOperationException("Target event source missing from prepared plan.");
+        var clip = _plan[slot]; var markers = _program.EventTracks[primary];
+        if (markers.Length == 0 || clip.Current <= clip.Previous) return;
+        double first = clip.Loop ? Math.Floor(clip.Previous / clip.Duration) : 0;
+        double last = clip.Loop ? Math.Floor(clip.Current / clip.Duration) : 0;
+        // Integer cycles must remain exactly representable; no cycle counter wrapping or non-progressing loop.
+        if (last > 9007199254740991d || last - first > 32) throw new ArgumentException("Event cycle precision/boundary budget.");
+        for (int cycle = 0; cycle <= last - first; cycle++) foreach (var marker in markers) {
+            double at = (first + cycle) * clip.Duration + marker.Time;
+            if (at <= clip.Previous || at > clip.Current) continue;
+            if (_eventCount == _events.Length) throw new ArgumentException("Animation event quantum budget.");
+            _events[_eventCount++] = new(_identity, _program.AssetId, _context with { Tick = _context.Tick + 1 }, _sequence,
+                _nextState < 0 ? Guid.Empty : _program.States[_nextState], clip.NodeId, marker.Id, marker.ClipId, at, marker.Name);
+        }
+        int Primary(int index) => _program.Nodes[index].Kind == AnimationNodeKind.Clip ? index : Primary(_program.Nodes[index].A);
+    }
     private int Evaluate(int index, int context)
     {
         int at = context * _program.NodeCount + index; if (_slots[at] >= 0) return _slots[at];

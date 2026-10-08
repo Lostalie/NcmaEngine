@@ -46,8 +46,8 @@ public static class SceneRenderValidation
             bool mesh = components.ContainsKey(StaticMeshData.TypeId), skin = components.ContainsKey(SkinnedMeshData.TypeId);
             if (components.TryGetValue(Ncma.Animation.AnimatorData.TypeId, out var animatorComponent)) {
                 var animator = Registry.Decode<Ncma.Animation.AnimatorData>(animatorComponent);
-                if (!skin || components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) || components.ContainsKey(Ncma.Animation.ActionDefinitionData.TypeId) || components.ContainsKey(Ncma.Animation.RootMotionData.TypeId))
-                    throw new ArgumentException("Animator requires skin and excludes clip/action/root playback; graph root motion is not wired yet.");
+                if (!skin || components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) || components.ContainsKey(Ncma.Animation.ActionDefinitionData.TypeId))
+                    throw new ArgumentException("Animator requires skin and excludes clip/action playback.");
                 if (Registry.Decode<SkinnedMeshData>(components[SkinnedMeshData.TypeId]).SkeletonId != animator.SkeletonId) throw new ArgumentException("Animator skin skeleton mismatch.");
                 _ = Resolve(obj.Id, animator.GraphId, AssetKind.AnimationGraph);
             }
@@ -57,8 +57,9 @@ public static class SceneRenderValidation
             if (mesh && skin) throw new ArgumentException("An object cannot contain both static and skinned geometry.");
             if (components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) && !skin)
                 throw new ArgumentException("Clip playback requires a skinned mesh on the same object.");
-            if(components.ContainsKey(Ncma.Animation.RootMotionData.TypeId) && (!skin || !components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) || !components.ContainsKey("ncma.character.capsule")))
-                throw new ArgumentException("Root motion requires character capsule/skinned clip composition.");
+            if(components.ContainsKey(Ncma.Animation.RootMotionData.TypeId) && (!skin ||
+                components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) == components.ContainsKey(Ncma.Animation.AnimatorData.TypeId) || !components.ContainsKey("ncma.character.capsule")))
+                throw new ArgumentException("Root motion requires capsule/skin and exactly one clip or Animator source.");
             if (components.ContainsKey(MaterialOverrideData.TypeId) && !mesh && !skin)
                 throw new ArgumentException("Material override requires a mesh component.");
             if (spatial)

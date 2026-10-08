@@ -14,6 +14,7 @@ public sealed class RootMotionTrack
     public double Duration { get; }
     public int RootIndex { get; }
     internal int KeyCount => _keys.Length;
+    internal Matrix4x4 InitialPlanar => Planar(_keys[0].Value);
     public RootMotionTrack(SkeletonPayload skeleton, ClipPayload clip, int rootIndex)
     {
         var rig=ModelPayloadCodec.DecodeSkeleton(ModelPayloadCodec.Encode(skeleton));

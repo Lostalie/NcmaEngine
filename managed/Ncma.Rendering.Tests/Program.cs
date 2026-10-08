@@ -315,6 +315,8 @@ internal static unsafe partial class Program
     }
     public static int Main(string[] args)
     {
+        if(args.Length==4 && args[0]=="--graph-root-player-child")
+            return Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
             TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
             if(args.Length is not (3 or 4 or 6))return 2;

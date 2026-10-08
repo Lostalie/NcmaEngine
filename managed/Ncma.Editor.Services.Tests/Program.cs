@@ -750,6 +750,7 @@ var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTe
     ("M3.6 independent Orbit/Pan/Zoom and right-handed bounded CPU picking",M36WorkflowTests.CameraAndPicking),
     ("M4.4 actual Editor root motion/scene GPU/interpolation/Edit isolation/close failure retry",()=>CharacterEditorChecks.Run(output,args[1])),
     ("M4.6 character/combat closed schemas, live stdio, precise UI approval/expiry/revoke/redaction and reload",()=>CharacterInspectionTests.Run(root,args[1],output)),
+    ("M6.3-D graph runtime exact resource/Play/UI approval + real stdio read/expiry/revoke/reload/fault",()=>AnimationRuntimeInspectionTests.Run(root,args[1],output)),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);
         File.WriteAllBytes(Path.Combine(dir,"Main.ncmascene"),new SceneDocument().CaptureBytes());

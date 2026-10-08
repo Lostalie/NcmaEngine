@@ -12,7 +12,7 @@ public sealed class ScenePlayRuntime : IDisposable
     public static ScenePlayRuntime Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets)
     {
         var owner = new ScenePlayRuntime();
-        try { owner.Characters = CharacterPlayRuntime.Compose(play, physics, assets); owner.Animators = SceneAnimatorRuntime.Compose(play, assets); return owner; }
+        try { owner.Animators = SceneAnimatorRuntime.Compose(play, assets); owner.Characters = CharacterPlayRuntime.Compose(play, physics, assets, animators: owner.Animators); return owner; }
         catch { owner.Dispose(); throw; }
     }
     public void Dispose()

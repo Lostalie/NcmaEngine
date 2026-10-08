@@ -31,7 +31,7 @@ internal sealed class RootMotionSet : IDisposable
     internal RootMotionSet(World world,PreparedSceneAssetLease? assets)
     {
         try {
-            foreach(var obj in world.GetObjects().Where(o=>o.Has<RootMotionData>())) {
+            foreach(var obj in world.GetObjects().Where(o=>o.Has<RootMotionData>()&&!o.Has<AnimatorData>())) {
                 if(assets is null)throw new ArgumentException("Root motion requires off-frame immutable asset preparation, including Headless.");
                 _lease??=assets.Assets.AcquireLease();
                 var skin=obj.Get<SkinnedMeshData>();var settings=obj.Get<ClipPlaybackData>();var root=obj.Get<RootMotionData>();
@@ -61,6 +61,8 @@ internal sealed class RootMotionSet : IDisposable
         }catch{Dispose();throw;}
     }
     internal Guid[] Ids => _entries.Keys.ToArray();
+    internal int TrackCount => _tracks.Count;
+    internal int RetainedKeyCount => _retainedKeys;
     internal bool Contains(Guid id)=>_entries.ContainsKey(id);
     internal void Initialize(World world)
     {

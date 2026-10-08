@@ -17,6 +17,9 @@ public sealed class AnimationProgram
     internal readonly Transition[][] Transitions;
     internal readonly Dictionary<Guid, int> ParameterIndices;
     internal readonly int Output, Entry, Machine;
+    internal readonly AnimationEventMarker[][] EventTracks;
+    public string EventContentHash { get; }
+    public const int MaximumEventsPerQuantum = AnimationEventCompilation.MaxEvents;
     public Guid AssetId { get; }
     public Guid SkeletonId { get; }
     public ulong ResourceGeneration { get; }
@@ -25,7 +28,8 @@ public sealed class AnimationProgram
     public int ParameterCount => Parameters.Length;
     public int StateCount => States.Length;
     public int MaximumPlanInstructions => 3 * NodeCount + 1;
-    private AnimationProgram(AnimationGraphDefinition d, IReadOnlyList<AnimationClipDescriptor> clips, ulong generation)
+    private AnimationProgram(AnimationGraphDefinition d, IReadOnlyList<AnimationClipDescriptor> clips, ulong generation,
+        IReadOnlyList<AnimationEventMarker> events)
     {
         // Off-frame topological compilation, including state and scalar dependencies.
         var byId = d.Nodes.ToDictionary(n => n.Id); var seenNodes = new HashSet<Guid>(); var ordered = new List<AnimationGraphNode>();
@@ -48,6 +52,7 @@ public sealed class AnimationProgram
             Scalar(n.Id, n.Kind == AnimationNodeKind.Clip ? "speed" : "weight"), n.ClipId,
             n.Kind == AnimationNodeKind.Clip ? clipMap[n.ClipId].Duration : 0, n.Loop, n.Speed, n.Weight)).ToArray();
         Output = Array.FindIndex(Nodes, n => n.Kind == AnimationNodeKind.Output);
+        (EventTracks, EventContentHash) = AnimationEventCompilation.Compile(Nodes, events);
         Machine = Array.FindIndex(Nodes, n => n.Kind == AnimationNodeKind.StateMachine);
         States = d.States.Select(s => s.Id).ToArray(); StateRoots = d.States.Select(s => ids[s.PoseNode]).ToArray();
         StatePrimaryClips = StateRoots.Select(Primary).ToArray(); Entry = Array.IndexOf(States, d.EntryState);
@@ -60,7 +65,7 @@ public sealed class AnimationProgram
         int Primary(int node) => Nodes[node].Kind == AnimationNodeKind.Clip ? node : Primary(Nodes[node].A);
     }
     public static AnimationProgram Compile(AnimationGraphDefinition definition, ulong skeletonGeneration,
-        IReadOnlyList<AnimationClipDescriptor> clips)
+        IReadOnlyList<AnimationClipDescriptor> clips, IReadOnlyList<AnimationEventMarker>? events = null)
     {
         ArgumentNullException.ThrowIfNull(clips);
         var copy = AnimationGraphCodec.Decode(AnimationGraphCodec.Encode(definition));
@@ -73,7 +78,7 @@ public sealed class AnimationProgram
                 throw new AnimationGraphValidationException("clip_metadata", c.Id, "Exact same-generation skeleton/clip metadata required.");
         }
         if (!seen.SetEquals(required)) throw new AnimationGraphValidationException("clip_missing", copy.AssetId, "Required clip metadata is missing.");
-        return new(copy, clips.ToArray(), skeletonGeneration);
+        return new(copy, clips.ToArray(), skeletonGeneration, events ?? Array.Empty<AnimationEventMarker>());
     }
     public IReadOnlyList<AnimationParameter> DescribeParameters() => Array.AsReadOnly((AnimationParameter[])Parameters.Clone());
 }

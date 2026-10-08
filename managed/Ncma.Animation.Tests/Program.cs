@@ -16,6 +16,7 @@ static Matrix4x4 Model(ImportTransform t)=>Matrix4x4.CreateScale(t.Scale)*Matrix
 var cases=new List<(string,Action)>();
 GraphTests.Add(cases);
 GraphRuntimeTests.Add(cases);
+GraphEventTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));

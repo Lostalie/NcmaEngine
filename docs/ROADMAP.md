@@ -215,7 +215,8 @@ M6.5–M6.8同期扩充功能工具，不等M6.9首次接入。M6.2编译/提交
 M6.3-A独立数值pose-blend1.0完整双配置通过（图/pose35、Editor72），原pose表冻结，使用同一context/rig；
 [A交付](M6_3_A_DELIVERY_REPORT.md)仅证明数值扩展。[B交付](M6_3_B_DELIVERY_REPORT.md)完整双配置自动候选
 通过，Animator固定真实NCA/图package、共享Editor/Player/Headless、提交式实例与数值/GPU场景接线；
-C根运动权威与D完整图GPU/获批运行观察联合门禁仍未完成，C1仅内部数值检查点。
+C/D最新补齐图根与唯一Jolt、精确当前skin/shadow和独立获批runtime读取，完整双配置自动门禁通过；
+见[C/D契约](M6_3_CD_RUNTIME_CONTRACT.md)和[交付记录](M6_3_CD_DELIVERY_REPORT.md)。真实用户素材和人工门禁仍开放。
 2026-10-08按用户请求先实施独立M6.4：深蓝节点画布、类型化属性/条件、精确文件/资源审批、
 共享Undo/Redo、活动MCP propose/transaction和独立真实NCA/GPU预览已接入自动候选。
 见[M6.4方案](M6_4_IMPLEMENTATION_PLAN.md)与[交付](M6_4_DELIVERY_REPORT.md)。
