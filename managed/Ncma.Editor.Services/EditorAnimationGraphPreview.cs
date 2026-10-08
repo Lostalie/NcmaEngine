@@ -20,6 +20,7 @@ public sealed class EditorAnimationGraphPreview(RendererSession renderer, Func<P
     public Guid WorldId => _document?.World.Identity??Guid.Empty;
     public ulong Tick => _document?.World.Tick??0;
     public AnimationGraphFrame? GraphFrame => _scene?.Animation?.PreviewFrame(_object);
+    public AnimationGraphDebugFrame? GraphDebug => _scene?.Animation?.PreviewDebug(_object);
     public void Prepare(RuntimeAssetSnapshot snapshot,Guid graphId)
     {
         ObjectDisposedException.ThrowIf(_disposed,this);Close();
@@ -41,7 +42,7 @@ public sealed class EditorAnimationGraphPreview(RendererSession renderer, Func<P
     public void Control(Guid parameter,AnimationParameterKind kind,double value) { if(_scene?.Animation is null)throw new InvalidOperationException("Preview not prepared.");_scene.Animation.ControlPreview(_object,parameter,kind,value); }
     public GuiImageToken? Draw(ulong frame,uint width,uint height)
     {
-        ObjectDisposedException.ThrowIf(_disposed,this);if(_scene is null)return null;if(width is <1 or >4096||height is <1 or >4096)throw new ArgumentException("Preview target budget.");
+        ObjectDisposedException.ThrowIf(_disposed,this);if(_scene is null||GraphDebug?.SnapshotValid!=true)return null;if(width is <1 or >4096||height is <1 or >4096)throw new ArgumentException("Preview target budget.");
         if(_target is null||_target.Width!=width||_target.Height!=height){var candidate=renderer.CreateViewTarget(width,height);try{_target?.Dispose();}catch{candidate.Dispose();throw;}_target=candidate;}
         return _scene.Submit(frame,width,height,_camera,target:_target)?_target.ImageToken:null;
     }

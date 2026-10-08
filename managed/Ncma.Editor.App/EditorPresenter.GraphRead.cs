@@ -55,7 +55,7 @@ internal sealed unsafe partial class EditorPresenter
                 if (selected is not null) {
                     if (projectRoot is null) throw new EditRejectedException("graph_project_missing");
                     if(_graphAuthor is not null)_graphAuthor.Open(Path.GetRelativePath(projectRoot, selected).Replace('\\', '/'));else _graphs.OpenTrustedRelative(Path.GetRelativePath(projectRoot, selected).Replace('\\', '/'));
-                    var graph = _graphs.LocalCopy(); _graphReviewText = InspectionText.Split(System.Text.Encoding.UTF8.GetString(AnimationGraphCodec.Encode(graph)), 1800).ToArray();
+                    var graph = _graphs.LocalCopy(); _graphReviewText = InspectionText.Split(System.Text.Encoding.UTF8.GetString(AnimationGraphCodec.Encode(graph)), AnimationGraphCodec.MaxBytes).ToArray();
                     _graphPage = 0; _graphReview = null; _graphReviewed = false;
                 } break;
             case "graph_previous": _graphPage = Math.Max(0, _graphPage - 6); break;

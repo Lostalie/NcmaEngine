@@ -76,12 +76,12 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                     if (settings.SkeletonId != graph.CopyDefinition().SkeletonId || settings.SkeletonId != source.SkeletonId) throw new ArgumentException("Graph presentation skeleton mismatch.");
                     var program = graph.PrepareProgram(_assets);
                     GraphPoseSnapshotSource? previewSource=null;
-                    bool enablePreviewInterruptions=previewInterruptions&&animators is null;
+                    bool enablePreviewInterruptions=(previewInterruptions||program.InterruptTransitions)&&animators is null;
                     if(enablePreviewInterruptions&&!previewSources.TryGetValue(graph.Id,out previewSource)) {
                         previewSource=GraphPoseSnapshotPreparation.Prepare(program,_assets);previewScratch=checked(previewScratch+previewSource.ScratchTransforms);
                         if(previewScratch>262144)throw new ArgumentException("Preview interruption numeric scratch budget.");previewSources.Add(graph.Id,previewSource);
                     }
-                    instance.AnimatorSource = settings; instance.GraphPose = new(program,rig.Rig,_clips,kernel); instance.PreviewGraph = new(program,new(Guid.NewGuid(),WorldId,0),previewSource,enablePreviewInterruptions);
+                    instance.AnimatorSource = settings; instance.GraphPose = new(program,rig.Rig,_clips,kernel); instance.PreviewGraph = animators is null?new(program,new(Guid.NewGuid(),WorldId,0),previewSource,enablePreviewInterruptions):null;
                 }
                 if(live.Has<ClipPlaybackData>() && (rootMotion is null || !live.Has<RootMotionData>())){var settings=live.Get<ClipPlaybackData>();instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
                 _characters.Add(instance);bones=checked(bones+rig.Rig.BoneCount);palettes=checked(palettes+instance.Bindings.BindingCount);
@@ -138,6 +138,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     public void SetPreviewTime(double seconds)
     {Verify();if(_play is not null||!double.IsFinite(seconds)||seconds is <0 or >600)throw new ArgumentException("Edit preview time range.");if(_characters.Any(c=>c.GraphPose is not null))throw new NotSupportedException("Graph preview seeking is not implemented; sequential preview only.");_previewSeconds=seconds;}
     public AnimationGraphFrame PreviewFrame(Guid objectId) { Verify();if(_play is not null)throw new InvalidOperationException("Not an independent preview.");return _characters.Single(c=>c.Id==objectId).PreviewGraph?.Frame??throw new ArgumentException("Preview graph missing."); }
+    public AnimationGraphDebugFrame PreviewDebug(Guid objectId) {Verify();if(_play is not null)throw new InvalidOperationException("Not an independent preview.");var graph=_characters.Single(c=>c.Id==objectId).PreviewGraph??throw new ArgumentException("Preview graph missing.");return graph.ReadDebug(graph.Frame.Context);}
     public void ControlPreview(Guid objectId,Guid parameter,AnimationParameterKind kind,double value)
     {
         Verify();if(_play is not null||!double.IsFinite(value))throw new ArgumentException("Independent preview control only.");var graph=_characters.Single(c=>c.Id==objectId).PreviewGraph??throw new ArgumentException("Preview graph missing.");

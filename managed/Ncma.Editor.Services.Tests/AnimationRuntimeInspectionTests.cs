@@ -32,7 +32,7 @@ internal static class AnimationRuntimeInspectionTests
         Guid rig=record.Subassets.Single(s=>s.Kind==AssetKind.Skeleton).AssetId;var clips=record.Subassets.Where(s=>s.Kind==AssetKind.Clip).Select(s=>s.AssetId).ToArray();
         var clip=AnimationGraphNode.Create(Guid.NewGuid(),"Idle",AnimationNodeKind.Clip) with{ClipId=clips[0],Speed=1,Loop=true};
         var end=AnimationGraphNode.Create(Guid.NewGuid(),"Output",AnimationNodeKind.Output);
-        var graph=new AnimationGraphDefinition(1,Guid.NewGuid(),"Runtime approved graph",rig,Guid.Empty,[],[clip,end],[new(Guid.NewGuid(),clip.Id,"pose",end.Id,"pose")],[],[]);
+        var graph=new AnimationGraphDefinition(AnimationGraphCodec.CurrentVersion,Guid.NewGuid(),"Runtime approved graph",rig,Guid.Empty,[],[clip,end],[new(Guid.NewGuid(),clip.Id,"pose",end.Id,"pose")],[],[]);
         string graphFile=Path.Combine(sample.Root,"assets/runtime.ncmaanim");File.WriteAllBytes(graphFile,AnimationGraphCodec.Encode(graph));
         using var physics=new PhysicsService(plugins,characterSupport:true);ScenePlayRuntime? runtime=null;bool injectFailure=false;
         using var owner=new EditorSessionOwner("Graph runtime",components:CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),validateComposition:CharacterComponents.RequireComposition,

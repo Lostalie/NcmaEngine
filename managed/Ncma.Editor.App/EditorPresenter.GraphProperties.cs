@@ -31,6 +31,8 @@ internal sealed unsafe partial class EditorPresenter
                 Add(GuiItemKind.Button,50,id++,"删除条件 "+i,new("anim_property",Operation:new GraphIntent(_graphAuthor!.Stamp,new GraphProperty(section,element,"condition_delete",i))),enabled:writable);
             }
             Add(GuiItemKind.Button,50,id++,"添加条件",new("anim_property",Operation:new GraphIntent(_graphAuthor!.Stamp,new GraphProperty(section,element,"condition_add"))),enabled:writable&&t.Conditions.Length<AnimationGraphCodec.MaxConditions&&d.Parameters.Length>0);
+        }else if(section=="event"){
+            var marker=d.Events.Single(v=>v.Id==element);Text("name","事件名称（数据，不是回调）",marker.Name);Text("clip","Clip UUID",marker.ClipId.ToString("D"));Number("time","事件时间（秒，实际长度保存时验证）",marker.Time,.000001,600);
         }else if(section=="link"){
             var l=d.Links.Single(v=>v.Id==element);Text("from","输出节点 UUID",l.From.ToString("D"));Text("to","输入节点 UUID",l.To.ToString("D"));Text("from_pin","输出引脚",l.FromPin);Text("to_pin","输入引脚",l.ToPin);
         }
@@ -47,6 +49,7 @@ internal sealed unsafe partial class EditorPresenter
             case "parameter":var p=d.Parameters.Single(v=>v.Id==field.Id);p=field.Field switch{"name"=>p with{Name=text},"kind"=>p with{Kind=(AnimationParameterKind)Integer(value,0,3),FloatDefault=0,IntDefault=0,BoolDefault=false},"float"=>p with{FloatDefault=value},"int"=>p with{IntDefault=Integer(value,int.MinValue,int.MaxValue)},"bool"=>p with{BoolDefault=Boolean(value)},_=>throw new ArgumentException("Parameter property.")};op=new{op="parameter.upsert",parameter=p};break;
             case "state":var s=d.States.Single(v=>v.Id==field.Id);s=field.Field switch{"name"=>s with{Name=text},"pose"=>s with{PoseNode=Id(text)},_=>throw new ArgumentException("State property.")};op=new{op="state.upsert",state=s};break;
             case "link":var l=d.Links.Single(v=>v.Id==field.Id);l=field.Field switch{"from"=>l with{From=Id(text)},"to"=>l with{To=Id(text)},"from_pin"=>l with{FromPin=text},"to_pin"=>l with{ToPin=text},_=>throw new ArgumentException("Link property.")};op=new{op="link.upsert",link=l};break;
+            case "event":var marker=d.Events.Single(v=>v.Id==field.Id);marker=field.Field switch{"name"=>marker with{Name=text},"clip"=>marker with{ClipId=Id(text)},"time"=>marker with{Time=value},_=>throw new ArgumentException("Event property.")};op=new{op="event.upsert",marker};break;
             case "transition":var t=d.Transitions.Single(v=>v.Id==field.Id);
                 if(field.Field.StartsWith("condition_",StringComparison.Ordinal)){
                     var conditions=t.Conditions.ToList();if(field.Field=="condition_add"){var first=d.Parameters.First();conditions.Add(new(first.Id,first.Kind==AnimationParameterKind.Trigger?AnimationComparison.Triggered:AnimationComparison.Equal,0,0,false));}

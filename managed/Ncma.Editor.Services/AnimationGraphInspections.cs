@@ -52,10 +52,10 @@ public sealed class AnimationGraphInspections
         using var parsed = JsonDocument.Parse(canonical);
         object[] Rows(string name) => parsed.RootElement.GetProperty(name).EnumerateArray().Select(v => (object)v.Clone()).ToArray();
         var rows = new Dictionary<string, object[]> {
-            ["summary"] = [new { candidate.AssetId, candidate.Name, candidate.SkeletonId, candidate.EntryState, version = candidate.Version }],
+            ["summary"] = [new { candidate.AssetId, candidate.Name, candidate.SkeletonId, candidate.EntryState, version = candidate.Version,candidate.InterruptTransitions }],
             ["nodes"] = Rows("nodes"), ["parameters"] = Rows("parameters"),
             ["links"] = Rows("links"), ["states"] = Rows("states"), ["transitions"] = Rows("transitions"),
-            ["dependencies"] = AnimationGraphValidation.Dependencies(candidate).Cast<object>().ToArray()
+            ["dependencies"] = AnimationGraphValidation.Dependencies(candidate).Cast<object>().ToArray(),["events"]=Rows("events")
         };
         ulong publication = checked(_publication + 1); string hash = Convert.ToHexString(SHA256.HashData(canonical));
         _snapshot = candidate; _hash = hash; _dependencies = dependencies; _relative = relative; _rows = rows; _publication = publication;

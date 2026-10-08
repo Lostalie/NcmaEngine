@@ -18,7 +18,7 @@ internal static class GraphTests
     {
         var clip = AnimationGraphNode.Create(Guid.NewGuid(), "Idle", AnimationNodeKind.Clip) with { ClipId = Guid.NewGuid(), Loop = true, Speed = 1 };
         var output = AnimationGraphNode.Create(Guid.NewGuid(), "Output", AnimationNodeKind.Output);
-        return new(1, Guid.NewGuid(), "角色动画", Guid.NewGuid(), Guid.Empty, [], [clip, output], [Link(clip.Id, "pose", output.Id, "pose")], [], []);
+        return new(AnimationGraphCodec.CurrentVersion, Guid.NewGuid(), "角色动画", Guid.NewGuid(), Guid.Empty, [], [clip, output], [Link(clip.Id, "pose", output.Id, "pose")], [], []);
     }
     internal static AnimationGraphDefinition Mixed()
     {
@@ -62,8 +62,8 @@ internal static class GraphTests
         }));
         cases.Add(("M6.1 strict JSON fields/version/enums and removed format rejection", () => {
             var d = Simple(); string json = Encoding.UTF8.GetString(AnimationGraphCodec.Encode(d));
-            foreach (string bad in new[] { json.Replace("\"version\":1", "\"version\":2"), json.Replace("\"version\":1,", ""),
-                json.Insert(1, "\"version\":1,"), json.Insert(1, "\"worldHandle\":1,"), json.Replace("\"clip\"", "\"Clip\""),
+            foreach (string bad in new[] { json.Replace("\"version\":2", "\"version\":1"),json.Replace("\"version\":2", "\"version\":3"), json.Replace("\"version\":2,", ""),
+                json.Insert(1, "\"version\":2,"), json.Insert(1, "\"worldHandle\":1,"), json.Replace("\"clip\"", "\"Clip\""),
                 json.Replace("\"clip\"", "0"), json.Replace("\"clip\"", "\"clip, blend\""), json.Replace("\"clip\"", "\"inverseKinematics\""),
                 json.Replace("\"loop\":true,", ""), json.Replace("\"x\":0", "\"x\":0,\"x\":1"), json.Replace("\"name\":", "\"Name\":"),
                 "{\"sceneObjects\":[],\"version\":6}", "null" }) Reject(() => AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(bad)));

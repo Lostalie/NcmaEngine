@@ -1,10 +1,12 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Ncma.Animation;
 
-// Trusted, copied compilation input; not a file codec, resource pin or callback authority.
-public sealed record AnimationEventMarker(Guid Id, Guid ClipId, double Time, string Name);
+// Copied authored data; marker text never grants callback, damage or resource authority.
+public sealed record AnimationEventMarker([property:JsonRequired] Guid Id,[property:JsonRequired] Guid ClipId,
+    [property:JsonRequired] double Time,[property:JsonRequired] string Name);
 public readonly record struct AnimationGraphEvent(Guid InstanceId, Guid GraphId, AnimationStepContext Context,
     ulong Sequence, Guid StateId, Guid NodeId, Guid MarkerId, Guid ClipId, double UnwrappedTime, string Name);
 public enum AnimationEvaluationOutcome { Ready, Prepared, Committed, Aborted, PreparationRejected }

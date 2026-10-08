@@ -7,6 +7,7 @@ namespace Ncma.Animation;
 public static class AnimationGraphCodec
 {
     public const string Extension = ".ncmaanim";
+    public const int CurrentVersion=2,MaxEvents=4096;
     public const int MaxBytes = 1024 * 1024, MaxNodes = 256, MaxLinks = 1024,
         MaxParameters = 64, MaxStates = 64, MaxTransitions = 256, MaxConditions = 8;
     private static readonly UTF8Encoding Utf8 = new(false, true);
@@ -26,7 +27,7 @@ public static class AnimationGraphCodec
         AnimationGraphValidation.Validate(definition);
         // Stable bytes independent of collection enumeration order. All references use persistent UUIDs.
         var canonical = definition with {
-            Parameters = definition.Parameters.OrderBy(p => p.Id).ToArray(), Nodes = definition.Nodes.OrderBy(n => n.Id).ToArray(),
+            Events=definition.Events.OrderBy(e=>e.Id).ToArray(),Parameters = definition.Parameters.OrderBy(p => p.Id).ToArray(), Nodes = definition.Nodes.OrderBy(n => n.Id).ToArray(),
             Links = definition.Links.OrderBy(l => l.Id).ToArray(), States = definition.States.OrderBy(s => s.Id).ToArray(),
             Transitions = definition.Transitions.OrderBy(t => t.Id).Select(t => t with {
                 Conditions = t.Conditions.OrderBy(c => c.ParameterId).ToArray() }).ToArray()

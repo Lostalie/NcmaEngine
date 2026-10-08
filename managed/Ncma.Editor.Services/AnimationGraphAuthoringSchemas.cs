@@ -18,6 +18,9 @@ public static class AnimationGraphAuthoringSchemas
                 string field = fields[i]; cases.Add(Closed(new() { ["op"] = Constant(field + ".upsert"), [field] = shapes[i]!.DeepClone() }));
                 cases.Add(Closed(new() { ["op"] = Constant(field + ".delete"), ["id"] = Uuid() }));
             }
+            cases.Add(Closed(new(){["op"]=Constant("event.upsert"),["marker"]=shapes[7]!.DeepClone()}));
+            cases.Add(Closed(new(){["op"]=Constant("event.delete"),["id"]=Uuid()}));
+            cases.Add(Closed(new(){["op"]=Constant("graph.interruptions"),["enabled"]=new JsonObject{["type"]="boolean"}}));
             cases.Add(Closed(new() { ["op"] = Constant("graph.rename"), ["name"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 256 } }));
             cases.Add(Closed(new() { ["op"] = Constant("graph.entry"), ["stateId"] = Uuid() }));
             var input = Closed(new() { ["graphId"] = Uuid(), ["proposalId"] = Uuid(), ["operations"] = new JsonObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 64, ["items"] = new JsonObject { ["oneOf"] = cases } } });
@@ -31,6 +34,6 @@ public static class AnimationGraphAuthoringSchemas
     private static JsonObject Constant(string text) => new() { ["const"] = text };
     private static JsonObject Uuid() => new() { ["type"] = "string", ["pattern"] = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" };
     private static JsonObject Hash() => new() { ["type"] = "string", ["pattern"] = "^[0-9A-F]{64}$" };
-    private static JsonObject Count() => new() { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 4096 };
+    private static JsonObject Count() => new() { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 8192 };
     private static JsonObject Closed(JsonObject properties) => new() { ["type"] = "object", ["additionalProperties"] = false, ["properties"] = properties, ["required"] = new JsonArray(properties.Select(p => (JsonNode?)JsonValue.Create(p.Key)).ToArray()) };
 }

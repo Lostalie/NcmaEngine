@@ -24,7 +24,7 @@ internal static unsafe partial class Program
         var value=AnimationGraphNode.Create(Guid.NewGuid(),"Weight",AnimationNodeKind.Parameter) with{ParameterId=parameter.Id};
         var output=AnimationGraphNode.Create(Guid.NewGuid(),"Output",AnimationNodeKind.Output);
         AnimationGraphLink Link(Guid from,string pin,Guid to,string input)=>new(Guid.NewGuid(),from,pin,to,input);
-        return new(1,Guid.NewGuid(),"Pinned graph",f.Manifest.Skeleton!.Value,Guid.Empty,[parameter],[a,b,blend,value,output],
+        return new(AnimationGraphCodec.CurrentVersion,Guid.NewGuid(),"Pinned graph",f.Manifest.Skeleton!.Value,Guid.Empty,[parameter],[a,b,blend,value,output],
             [Link(a.Id,"pose",blend.Id,"a"),Link(b.Id,"pose",blend.Id,"b"),Link(value.Id,"value",blend.Id,"weight"),Link(blend.Id,"pose",output.Id,"pose")],[],[]);
     }
     private sealed class GraphFailure(Action<World> action):IWorldSystem {public void FixedUpdate(World world,double delta)=>action(world);}

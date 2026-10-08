@@ -14,7 +14,8 @@ public static class AnimationGraphEdits
     public static AnimationGraphDefinition CopyDraft(AnimationGraphDefinition d)
     {
         ArgumentNullException.ThrowIfNull(d);
-        if (d.Version != 1 || d.AssetId == Guid.Empty || d.SkeletonId == Guid.Empty || d.AssetId == d.SkeletonId ||
+        if (d.Version != AnimationGraphCodec.CurrentVersion || d.AssetId == Guid.Empty || d.SkeletonId == Guid.Empty || d.AssetId == d.SkeletonId ||
+            d.Events is null||d.Events.Length>AnimationGraphCodec.MaxEvents||d.Events.Any(e=>e is null)||
             d.Nodes is null || d.Nodes.Length > AnimationGraphCodec.MaxNodes || d.Nodes.Any(n => n is null) ||
             d.Parameters is null || d.Parameters.Length > AnimationGraphCodec.MaxParameters || d.Parameters.Any(p => p is null) ||
             d.Links is null || d.Links.Length > AnimationGraphCodec.MaxLinks || d.Links.Any(l => l is null) ||
@@ -31,9 +32,10 @@ public static class AnimationGraphEdits
         foreach (var s in d.States) { Id(s.Id); AnimationGraphCodec.Text(s.Name); }
         foreach (var t in d.Transitions) { Id(t.Id); AnimationGraphCodec.Scalar(t.Duration, 0, 10); if (t.ExitTime is { } exit) AnimationGraphCodec.Scalar(exit, 0, 1);
             if (t.Priority is < 0 or > 255) throw new ArgumentException("Draft priority."); foreach (var c in t.Conditions) { if (!Enum.IsDefined(c.Comparison)) throw new ArgumentException("Draft comparison."); AnimationGraphCodec.Scalar(c.FloatValue, -1000000, 1000000); } }
+        foreach(var e in d.Events){Id(e.Id);AnimationGraphCodec.Text(e.Name);AnimationGraphCodec.Scalar(e.Time,double.Epsilon,600);if(e.ClipId==Guid.Empty)throw new ArgumentException("Event clip UUID.");}
         if (JsonSerializer.SerializeToUtf8Bytes(d, Json).Length > AnimationGraphCodec.MaxBytes) throw new ArgumentException("Draft bytes exceeded.");
         return d with { Nodes = d.Nodes.ToArray(), Parameters = d.Parameters.ToArray(), Links = d.Links.ToArray(), States = d.States.ToArray(),
-            Transitions = d.Transitions.Select(t => t with { Conditions = t.Conditions.ToArray() }).ToArray() };
+            Events=d.Events.Select(e=>e with{}).ToArray(),Transitions = d.Transitions.Select(t => t with { Conditions = t.Conditions.ToArray() }).ToArray() };
     }
     public static AnimationGraphDefinition Apply(AnimationGraphDefinition source, JsonElement operations, bool requireComplete = true)
     {
@@ -50,6 +52,9 @@ public static class AnimationGraphEdits
                 case "parameter.upsert": Closed(op, "op", "parameter"); var parameter = Decode<AnimationParameter>(op, "parameter"); d = d with { Parameters = Upsert(d.Parameters, parameter, p => p.Id) }; break;
                 case "state.upsert": Closed(op, "op", "state"); var state = Decode<AnimationGraphState>(op, "state"); d = d with { States = Upsert(d.States, state, s => s.Id) }; break;
                 case "transition.upsert": Closed(op, "op", "transition"); var transition = Decode<AnimationTransition>(op, "transition"); d = d with { Transitions = Upsert(d.Transitions, transition, t => t.Id) }; break;
+                case "event.upsert":Closed(op,"op","marker");var marker=Decode<AnimationEventMarker>(op,"marker");d=d with{Events=Upsert(d.Events,marker,e=>e.Id)};break;
+                case "event.delete":Closed(op,"op","id");d=d with{Events=Delete(d.Events,Uuid(op,"id"),e=>e.Id)};break;
+                case "graph.interruptions":Closed(op,"op","enabled");var enabled=op.GetProperty("enabled");if(enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw new ArgumentException("Boolean interruption policy.");d=d with{InterruptTransitions=enabled.GetBoolean()};break;
                 case "graph.rename": Closed(op, "op", "name"); d = d with { Name = op.GetProperty("name").GetString() ?? throw new ArgumentException("Graph name.") }; break;
                 case "graph.entry": Closed(op, "op", "stateId"); d = d with { EntryState = Uuid(op, "stateId", empty: true) }; break;
                 case "node.delete": case "link.delete": case "parameter.delete": case "state.delete": case "transition.delete":
@@ -70,7 +75,8 @@ public static class AnimationGraphEdits
     private static AnimationGraphDefinition DeleteNode(AnimationGraphDefinition d, Guid id)
     {
         var states = d.States.Where(s => s.PoseNode == id).Select(s => s.Id).ToHashSet();
-        return d with { Nodes = Delete(d.Nodes, id, n => n.Id), Links = d.Links.Where(l => l.From != id && l.To != id).ToArray(),
+        var nodes=Delete(d.Nodes,id,n=>n.Id);var clips=nodes.Where(n=>n.Kind==AnimationNodeKind.Clip).Select(n=>n.ClipId).ToHashSet();
+        return d with { Nodes = nodes, Events=d.Events.Where(e=>clips.Contains(e.ClipId)).ToArray(),Links = d.Links.Where(l => l.From != id && l.To != id).ToArray(),
             States = d.States.Where(s => !states.Contains(s.Id)).ToArray(), Transitions = d.Transitions.Where(t => !states.Contains(t.From) && !states.Contains(t.To)).ToArray(),
             EntryState = states.Contains(d.EntryState) ? Guid.Empty : d.EntryState };
     }

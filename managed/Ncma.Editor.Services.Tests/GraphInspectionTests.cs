@@ -39,7 +39,7 @@ internal static class GraphInspectionTests
             else Root = Path.Combine(output, "m6-2-graph-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(Root, "assets")); File = Path.Combine(Root, "assets/test.ncmaanim");
             var clip = AnimationGraphNode.Create(Guid.NewGuid(), "approved clip", AnimationNodeKind.Clip) with { ClipId = Clip, Speed = 1, Loop = true };
             var end = AnimationGraphNode.Create(Guid.NewGuid(), "Output", AnimationNodeKind.Output);
-            var d = new AnimationGraphDefinition(1, Graph, "Approved graph", Rig, Guid.Empty, [], [clip, end], [new(Guid.NewGuid(), clip.Id, "pose", end.Id, "pose")], [], []);
+            var d = new AnimationGraphDefinition(AnimationGraphCodec.CurrentVersion, Graph, "Approved graph", Rig, Guid.Empty, [], [clip, end], [new(Guid.NewGuid(), clip.Id, "pose", end.Id, "pose")], [], []);
             System.IO.File.WriteAllBytes(File, AnimationGraphCodec.Encode(d)); Workspace = new(Owner);
             if(authoring){Writer=new(Workspace,Root,project,Time);Owner.ConfigureAssets(Root,project,1,graphScope:Writer.Scope);Graphs=Writer.Reads;}else Graphs = new(Workspace, Root, Time);
             View = new(Workspace, null, Root, filePicker: kind => kind == Ncma.Platform.LocalFileKind.OpenAnimationGraph ? File : null, workspaceStyle: true);if(Writer is not null)View.AttachGraphAuthoring(Writer);else View.AttachGraphReads(Graphs);

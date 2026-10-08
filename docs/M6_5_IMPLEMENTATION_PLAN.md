@@ -5,7 +5,7 @@
 本文件不授予live控制，不宣称完整M6.5、真实用户FBX、人工MCP、性能或长稳验收完成。
 A基础随C/D完整Debug/Release回归通过（graph/pose/clock45）；见M6_3_CD_DELIVERY_REPORT.md。
 B可中断过渡自动候选完整Debug/Release通过；证据见M6_5_B_DELIVERY_REPORT.md。
-C持久事件/策略作者工具、获批序列MCP及D联合验收尚未完成。
+C持久事件/策略作者工具、获批序列MCP完整Debug/Release自动候选通过；D联合验收尚未完成。
 
 ## A：提交事件、调试和隔离序列基础（本次）
 
@@ -35,7 +35,7 @@ C持久事件/策略作者工具、获批序列MCP及D联合验收尚未完成�
 可信host显式opt-in，现有严格v1不暗中扩展；C才定义持久格式/策略。冻结源根区间为零，
 目标加权意图仍交给唯一Jolt移动权威。详见M6_5_B_RUNTIME_CONTRACT.md。
 
-## C：轨道编辑、可见调试与获批 AI 序列工具（未实现）
+## C：轨道编辑、可见调试与获批 AI 序列工具（双配置自动候选通过）
 
 先明确事件资产的严格新格式及 NCP 身份闭包，不暗中放宽现有 v1 或恢复旧格式。
 标记编辑走 M6.4 的 shared semantic edits、精确资源/文件 review 和唯一 Undo/Redo。
@@ -44,6 +44,8 @@ MCP 序列检查需可信主机批准精确编译程序和事件指纹、资源 
 默认拒绝，不接受资源路径或 Agent 自报 duration 作为真实资源准备证据。
 同请求 UI/MCP 一致；超量、陈旧、重复、取消、排队失效和真实 stdio 测试。
 独立预览参数序列/固定步不是 live Play Step，无 Agent fault 清除、回调、伤害或代码执行。
+当前格式严格v2，必需events/interruptTransitions；v1拒绝无兼容。实际NCA资源准备、
+根意图与审批细节见M6_5_C_RUNTIME_CONTRACT.md，结果见M6_5_C_DELIVERY_REPORT.md。
 
 ## D：联合回归与剩余门禁（未完成）
 

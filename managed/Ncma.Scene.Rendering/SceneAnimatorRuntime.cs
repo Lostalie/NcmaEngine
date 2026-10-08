@@ -62,7 +62,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
                 foreach(Guid id in manifest.Clips)required.Add(id);
                 var proofs=_assets.List().Where(a=>required.Contains(a.Id)).Select(a=>new AnimatorResourceIdentity(a.Id,a.Kind.ToString(),a.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture),a.ContentHash)).OrderBy(a=>a.Id).ToArray();
                 if(proofs.Length!=required.Count)throw new ArgumentException("Animator complete resource identity closure missing.");
-                GraphPoseSnapshotSource? poseSource=null;if(interruptTransitions && !poseSources.TryGetValue(graph.Id,out poseSource)){poseSource=GraphPoseSnapshotPreparation.Prepare(program,_assets);poseScratch=checked(poseScratch+poseSource.ScratchTransforms);if(poseScratch>262144)throw new ArgumentException("Scene interruption numeric scratch budget.");poseSources.Add(graph.Id,poseSource);}
+                GraphPoseSnapshotSource? poseSource=null;if((interruptTransitions||program.InterruptTransitions) && !poseSources.TryGetValue(graph.Id,out poseSource)){poseSource=GraphPoseSnapshotPreparation.Prepare(program,_assets);poseScratch=checked(poseScratch+poseSource.ScratchTransforms);if(poseScratch>262144)throw new ArgumentException("Scene interruption numeric scratch budget.");poseSources.Add(graph.Id,poseSource);}
                 actors.Add(new(obj.PersistentId, source, program){Binding=new(obj.PersistentId,source.GraphId,source.SkeletonId,_assets.Identity,program.ContentHash,Array.AsReadOnly(proofs)),PoseSource=poseSource});
             }
             if (bones > 32768) throw new ArgumentException("Animator scene bone budget.");

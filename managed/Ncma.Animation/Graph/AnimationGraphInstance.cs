@@ -40,6 +40,7 @@ public sealed class AnimationGraphInstance
     public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false)
     {
         _program = program ?? throw new ArgumentNullException(nameof(program)); RequireContext(context);
+        interruptTransitions|=program.InterruptTransitions;
         _context = context; _state = program.Entry;
         if(interruptTransitions && (poseSource is null||poseSource.GraphId!=program.AssetId||poseSource.SkeletonId!=program.SkeletonId||poseSource.GraphContentHash!=program.ContentHash||poseSource.ResourceGeneration!=program.ResourceGeneration||poseSource.BoneCount is <1 or >1024))throw new ArgumentException("Interruptions require the exact bounded pinned pose provider.");
         _poseSource=poseSource;_interruptions=interruptTransitions;

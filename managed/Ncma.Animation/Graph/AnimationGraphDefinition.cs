@@ -49,7 +49,11 @@ public sealed record AnimationGraphDefinition(
     [property: JsonRequired] AnimationGraphNode[] Nodes,
     [property: JsonRequired] AnimationGraphLink[] Links,
     [property: JsonRequired] AnimationGraphState[] States,
-    [property: JsonRequired] AnimationTransition[] Transitions);
+    [property: JsonRequired] AnimationTransition[] Transitions)
+{
+    [JsonRequired] public AnimationEventMarker[] Events { get; init; }=[];
+    [JsonRequired] public bool InterruptTransitions { get; init; }
+}
 
 // Immutable, owned publication. Mutable authoring DTOs never become a live runtime program.
 public sealed class AnimationGraphDocument

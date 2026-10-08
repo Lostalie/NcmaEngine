@@ -14,8 +14,8 @@ public static class AnimationGraphValidation
     public static void Validate(AnimationGraphDefinition d)
     {
         ArgumentNullException.ThrowIfNull(d);
-        Require(d.Version == 1 && d.AssetId != Guid.Empty && d.SkeletonId != Guid.Empty && d.AssetId != d.SkeletonId,
-            "identity", d.AssetId, "Graph v1 and distinct graph/skeleton UUIDs required.");
+        Require(d.Version == AnimationGraphCodec.CurrentVersion && d.AssetId != Guid.Empty && d.SkeletonId != Guid.Empty && d.AssetId != d.SkeletonId,
+            "identity", d.AssetId, "Strict graph v2 and distinct graph/skeleton UUIDs required; v1 is removed.");
         AnimationGraphCodec.Text(d.Name, 256);
         Require(d.Parameters is not null && d.Nodes is not null && d.Links is not null && d.States is not null && d.Transitions is not null,
             "collections", d.AssetId, "All graph collections are required.");
@@ -25,8 +25,9 @@ public static class AnimationGraphValidation
         var links = d.Links ?? throw new ArgumentException("Links required.");
         var states = d.States ?? throw new ArgumentException("States required.");
         var transitions = d.Transitions ?? throw new ArgumentException("Transitions required.");
+        var events=d.Events??throw new ArgumentException("Events required.");
         Require(parameters.Length <= AnimationGraphCodec.MaxParameters && nodes.Length is >= 2 and <= AnimationGraphCodec.MaxNodes &&
-            links.Length <= AnimationGraphCodec.MaxLinks && states.Length <= AnimationGraphCodec.MaxStates && transitions.Length <= AnimationGraphCodec.MaxTransitions,
+            links.Length <= AnimationGraphCodec.MaxLinks && states.Length <= AnimationGraphCodec.MaxStates && transitions.Length <= AnimationGraphCodec.MaxTransitions && events.Length<=AnimationGraphCodec.MaxEvents,
             "budget", d.AssetId, "Animation graph collection budget exceeded.");
         var identities = new HashSet<Guid> { d.AssetId, d.SkeletonId };
         void Identity(Guid id) => Require(id != Guid.Empty && identities.Add(id), "duplicate_identity", id, "Graph elements require distinct persistent UUIDs.");
@@ -56,7 +57,7 @@ public static class AnimationGraphValidation
         foreach (var s in states) {
             if (s is null) throw new ArgumentException("Null state."); Identity(s.Id); AnimationGraphCodec.Text(s.Name);
             Require(names.Add(s.Name) && nodeMap.TryGetValue(s.PoseNode, out var root) && root.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend,
-                "state_pose", s.Id, "State requires a Clip/Blend pose root and unique name; nested machines are not v1.");
+                "state_pose", s.Id, "State requires a Clip/Blend pose root and unique name; nested machines are not supported.");
             stateMap.Add(s.Id, s);
         }
         var priorities = new HashSet<(Guid, int)>();
@@ -84,6 +85,8 @@ public static class AnimationGraphValidation
                 Require(valid, "condition_type", t.Id, "Condition operand/comparison does not match parameter type.");
             }
         }
+        foreach(var e in events){if(e is null)throw new ArgumentException("Null event.");Identity(e.Id);AnimationGraphCodec.Text(e.Name);
+            Require(nodes.Any(n=>n.Kind==AnimationNodeKind.Clip&&n.ClipId==e.ClipId)&&double.IsFinite(e.Time)&&e.Time>0&&e.Time<=600,"event",e.Id,"Graph-owned clip UUID and finite (0,600] event time required; actual duration checked at preparation.");}
         var dependencies = nodeMap.Keys.ToDictionary(id => id, _ => new List<Guid>());
         var occupied = new HashSet<(Guid, string)>();
         foreach (var l in links) {
@@ -102,7 +105,8 @@ public static class AnimationGraphValidation
         var machines = nodes.Where(n => n.Kind == AnimationNodeKind.StateMachine).ToArray();
         Require(output.Length == 1, "output", d.AssetId, "Exactly one Output node required.");
         Require(machines.Length <= 1 && (machines.Length == 0 ? states.Length == 0 && transitions.Length == 0 && d.EntryState == Guid.Empty : states.Length > 0 && stateMap.ContainsKey(d.EntryState)),
-            "state_machine", d.AssetId, "v1 supports zero or one machine with an explicit reachable entry state.");
+            "state_machine", d.AssetId, "Supports zero or one machine with an explicit reachable entry state.");
+        Require(!d.InterruptTransitions||machines.Length==1,"interruption_policy",d.AssetId,"Interruptions require a state machine.");
         if (machines.Length == 1) {
             dependencies[machines[0].Id].AddRange(states.Select(s => s.PoseNode));
             var reachedStates = new HashSet<Guid> { d.EntryState }; var pending = new Queue<Guid>(); pending.Enqueue(d.EntryState);

@@ -24,6 +24,7 @@ public sealed class AnimationProgram
     public Guid SkeletonId { get; }
     public ulong ResourceGeneration { get; }
     public string ContentHash { get; }
+    public bool InterruptTransitions {get;}
     public int NodeCount => Nodes.Length;
     public int ParameterCount => Parameters.Length;
     public int StateCount => States.Length;
@@ -40,7 +41,7 @@ public sealed class AnimationProgram
             ordered.Add(byId[id]);
         }
         Order(d.Nodes.Single(n => n.Kind == AnimationNodeKind.Output).Id); d = d with { Nodes = ordered.ToArray() };
-        AssetId = d.AssetId; SkeletonId = d.SkeletonId; ResourceGeneration = generation;
+        AssetId = d.AssetId; SkeletonId = d.SkeletonId; ResourceGeneration = generation;InterruptTransitions=d.InterruptTransitions;
         ContentHash = Convert.ToHexString(SHA256.HashData(AnimationGraphCodec.Encode(d)));
         Parameters = d.Parameters.ToArray(); ParameterIndices = Parameters.Select((p, i) => (p.Id, i)).ToDictionary(x => x.Id, x => x.i);
         var ids = d.Nodes.Select((n, i) => (n.Id, i)).ToDictionary(x => x.Id, x => x.i);
@@ -78,7 +79,8 @@ public sealed class AnimationProgram
                 throw new AnimationGraphValidationException("clip_metadata", c.Id, "Exact same-generation skeleton/clip metadata required.");
         }
         if (!seen.SetEquals(required)) throw new AnimationGraphValidationException("clip_missing", copy.AssetId, "Required clip metadata is missing.");
-        return new(copy, clips.ToArray(), skeletonGeneration, events ?? Array.Empty<AnimationEventMarker>());
+        if(events is not null&&events.Count>AnimationGraphCodec.MaxEvents)throw new ArgumentException("Event metadata budget.");
+        return new(copy, clips.ToArray(), skeletonGeneration, events is null?copy.Events:copy.Events.Concat(events).ToArray());
     }
     public IReadOnlyList<AnimationParameter> DescribeParameters() => Array.AsReadOnly((AnimationParameter[])Parameters.Clone());
 }
@@ -90,7 +92,7 @@ public static class AnimationGraphDiagnostics
     public static IReadOnlyList<AnimationGraphDiagnostic> Validate(AnimationGraphDefinition definition)
     {
         try { AnimationGraphValidation.Validate(definition); return Array.Empty<AnimationGraphDiagnostic>(); }
-        catch (AnimationGraphValidationException e) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic(e.Code, e.Subject, "graph", "valid_graph_v1", "rejected") }); }
+        catch (AnimationGraphValidationException e) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic(e.Code, e.Subject, "graph", "valid_graph_v2", "rejected") }); }
         catch (ArgumentException) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic("invalid_data", definition?.AssetId ?? Guid.Empty, "graph", "bounded_valid_data", "rejected") }); }
     }
 }

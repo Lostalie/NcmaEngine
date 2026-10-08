@@ -1,11 +1,11 @@
 namespace Ncma.Animation;
 
 // Closed, typed checks; no executable assertions, clocks supplied by an Agent, files or live Play.
-public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Parameter }
+public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Parameter, RootX, RootYaw }
 public sealed record AnimationSequenceWrite(int Step, Guid ParameterId, AnimationParameterKind Kind, double Value);
 public sealed record AnimationSequenceAssertion(int Step, AnimationSequenceAssertionKind Kind, Guid SubjectId, double Value);
 public sealed record AnimationSequenceCase(double FixedDelta, int Steps, AnimationSequenceWrite[] Writes, AnimationSequenceAssertion[] Assertions);
-public sealed record AnimationSequenceStep(AnimationGraphFrame Frame, ulong Sequence, IReadOnlyList<AnimationGraphEvent> Events);
+public sealed record AnimationSequenceStep(AnimationGraphFrame Frame, ulong Sequence, IReadOnlyList<AnimationGraphEvent> Events,AnimationSequenceRootIntent? Root=null);
 public sealed record AnimationSequenceCheck(int Index, int Step, bool Passed, string Code);
 public sealed record AnimationSequenceResult(Guid GraphId, string GraphContentHash, string EventContentHash,
     ulong MetadataGeneration, bool ResourcesPrepared, bool RootMotionSupported,
@@ -15,7 +15,7 @@ public static class AnimationGraphSequence
 {
     public const int MaxSteps = 256, MaxWrites = 512, MaxAssertions = 64, MaxOutputEvents = 8192;
     // Off-frame trusted entry. Compiled metadata is NOT evidence of resource pins or numerical/GPU execution.
-    public static AnimationSequenceResult Run(AnimationProgram program, AnimationSequenceCase input)
+    public static AnimationSequenceCase OwnInput(AnimationProgram program, AnimationSequenceCase input,bool rootSupported=false)
     {
         ArgumentNullException.ThrowIfNull(program); ArgumentNullException.ThrowIfNull(input);
         AnimationGraphCodec.Scalar(input.FixedDelta, .001, 1);
@@ -45,11 +45,20 @@ public static class AnimationGraphSequence
                 case AnimationSequenceAssertionKind.Parameter:
                     if (!program.ParameterIndices.TryGetValue(assertion.SubjectId, out int index)) throw new ArgumentException("Exact parameter assertion.");
                     Value(program.Parameters[index].Kind, assertion.Value); break;
+                case AnimationSequenceAssertionKind.RootX:case AnimationSequenceAssertionKind.RootYaw:
+                    if(!rootSupported||assertion.SubjectId!=Guid.Empty)throw new ArgumentException("Prepared independent root source required.");AnimationGraphCodec.Scalar(assertion.Value,-1000,1000);break;
             }
         }
+        return new(input.FixedDelta,input.Steps,writes,assertions);
+    }
+    public static AnimationSequenceResult Run(AnimationProgram program, AnimationSequenceCase input,IAnimationPoseSnapshotSource? poseSource=null,IAnimationSequenceRootSource? rootSource=null)
+    {
+        input=OwnInput(program,input,rootSource is not null);var writes=input.Writes;var assertions=input.Assertions;
+        if(rootSource is not null&&(rootSource.GraphId!=program.AssetId||rootSource.SkeletonId!=program.SkeletonId||rootSource.GraphContentHash!=program.ContentHash||rootSource.ResourceGeneration!=program.ResourceGeneration))throw new ArgumentException("Exact independent root source required.");
         var byStep = writes.GroupBy(w => w.Step).ToDictionary(g => g.Key, g => g.OrderBy(w => w.ParameterId).ToArray());
         var context = new AnimationStepContext(Guid.NewGuid(), Guid.NewGuid(), 0);
-        var instance = new AnimationGraphInstance(program, context); var timeline = new AnimationSequenceStep[input.Steps];
+        var instance = new AnimationGraphInstance(program, context,poseSource); var timeline = new AnimationSequenceStep[input.Steps];
+        var plan=new AnimationPoseInstruction[program.MaximumPlanInstructions];
         var checks = new AnimationSequenceCheck[assertions.Length]; var events = new AnimationGraphEvent[AnimationProgram.MaximumEventsPerQuantum]; int total = 0;
         for (int step = 1; step <= input.Steps; step++) {
             if (byStep.TryGetValue(step, out var changes)) foreach (var write in changes) Apply(instance, write);
@@ -57,7 +66,9 @@ public static class AnimationGraphSequence
             instance.Commit(token, context = context with { Tick = context.Tick + 1 });
             int count = instance.CopyCommittedEvents(context, events); total = checked(total + count);
             if (total > MaxOutputEvents) throw new ArgumentException("Animation sequence output budget.");
-            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()));
+            AnimationSequenceRootIntent? root=null;
+            if(rootSource is not null){int n=instance.CopyCommittedPlan(plan);root=rootSource.Evaluate(plan.AsSpan(0,n),instance.Frame.Output);if(!float.IsFinite(root.Value.Translation.LengthSquared())||root.Value.Translation.LengthSquared()>1e6f||Math.Abs(root.Value.Translation.Y)>1e-6||!float.IsFinite(root.Value.Yaw)||Math.Abs(root.Value.Yaw)>Math.PI)throw new ArgumentException("Bounded numerical root intent required.");}
+            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root);
             for (int at = 0; at < assertions.Length; at++) {
                 var assertion = assertions[at]; if (assertion.Step != step) continue;
                 bool passed = assertion.Kind switch {
@@ -65,12 +76,14 @@ public static class AnimationGraphSequence
                     AnimationSequenceAssertionKind.Transition => instance.Frame.TransitionId == assertion.SubjectId,
                     AnimationSequenceAssertionKind.EventCount => timeline[step - 1].Events.Count(e => assertion.SubjectId == Guid.Empty || e.MarkerId == assertion.SubjectId) == assertion.Value,
                     AnimationSequenceAssertionKind.Parameter => instance.CommittedParameter(assertion.SubjectId) == assertion.Value,
+                    AnimationSequenceAssertionKind.RootX=>root is{} r&&Math.Abs(r.Translation.X-assertion.Value)<1e-5,
+                    AnimationSequenceAssertionKind.RootYaw=>root is{} yaw&&Math.Abs(yaw.Yaw-assertion.Value)<1e-5,
                     _ => throw new ArgumentException("Closed assertion required.")
                 };
                 checks[at] = new(at, step, passed, passed ? "assertion_passed" : "assertion_failed");
             }
         }
-        return new(program.AssetId, program.ContentHash, program.EventContentHash, program.ResourceGeneration, false, false,
+        return new(program.AssetId, program.ContentHash, program.EventContentHash, program.ResourceGeneration, false, rootSource is not null,
             Array.AsReadOnly(timeline), Array.AsReadOnly(checks), checks.All(c => c.Passed));
     }
     private static void Value(AnimationParameterKind kind, double value)

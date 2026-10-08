@@ -23,7 +23,7 @@ internal static unsafe partial class Program
         var machine=AnimationGraphNode.Create(Guid.NewGuid(),"Machine",AnimationNodeKind.StateMachine);
         var a=new AnimationGraphState(Guid.NewGuid(),"Right",baseGraph.Nodes[0].Id);
         var b=new AnimationGraphState(Guid.NewGuid(),"Left",baseGraph.Nodes[1].Id);
-        var graph=baseGraph with{EntryState=a.Id,Parameters=[parameter],Nodes=[baseGraph.Nodes[0],baseGraph.Nodes[1],machine,baseGraph.Nodes[4]],
+        var graph=baseGraph with{InterruptTransitions=true,Events=[new(Guid.NewGuid(),baseGraph.Nodes[0].ClipId,.1,"Right step"),new(Guid.NewGuid(),baseGraph.Nodes[1].ClipId,.1,"Left step")],EntryState=a.Id,Parameters=[parameter],Nodes=[baseGraph.Nodes[0],baseGraph.Nodes[1],machine,baseGraph.Nodes[4]],
             Links=[new(Guid.NewGuid(),machine.Id,"pose",baseGraph.Nodes[4].Id,"pose")],States=[a,b],
             Transitions=[new(Guid.NewGuid(),a.Id,b.Id,0,1,null,[new(parameter.Id,AnimationComparison.Equal,0,0,true)]),
                 new(Guid.NewGuid(),b.Id,a.Id,0,1,null,[new(parameter.Id,AnimationComparison.Equal,0,0,false)])]};
@@ -47,7 +47,7 @@ internal static unsafe partial class Program
             var d=Document(1,root);Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId,camera=d.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
             using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
-            using var runtime=ScenePlayRuntime.Compose(play,physics,assets,interruptTransitions:true);
+            using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
             play.Start(_=>throw new Exception("No behaviours"));play.Pause();
             try {
                 using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
@@ -60,6 +60,7 @@ internal static unsafe partial class Program
                     if(step==0){expectedX=.08f;expectedYaw=.254f;}else {expectedX=previousX+(targetX-previousX)*.1f;expectedYaw=previousYaw+(targetYaw-previousYaw)*.1f;}
                     Check(play.Step().State==PlayState.Paused,"Pinned NCA interruption quantum: "+play.Fault?.Code);
                     var debug=runtime.Animators.ReadDebug(id);Check(debug.Frame.Context.Tick==(ulong)step+1&&debug.Instructions.Count==3,"One clock/constant interrupted recipe budget");
+                    Check(debug.Events.Count==1&&debug.Events[0].Name==(step%2==0?"Left step":"Right step"),"Persistent v2 target-only event committed once on every reentry");
                     if(step>0) {
                         Check(debug.Frame.FrozenPoseGeneration==(ulong)step,"Exact interruption generation");runtime.Animators.CopyFrozenPose(id,(ulong)step,frozen);
                         Check(Math.Abs(frozen[0].Position.X-previousX)<1e-5&&Math.Abs(2*Math.Atan2(frozen[1].Rotation.Y,frozen[1].Rotation.W)-previousYaw)<1e-5,"Independent committed whole-pose cache oracle");
@@ -90,7 +91,7 @@ internal static unsafe partial class Program
         var previewDocument=Document(1,false);var previewId=previewDocument.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
         using(var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,previewDocument.CaptureSnapshot(),true)) {
             var program=((RuntimeAnimationGraphAsset)assets.Assets.Require(graph.AssetId,AssetKind.AnimationGraph)).PrepareProgram(assets.Assets);
-            var source=GraphPoseSnapshotPreparation.Prepare(program,assets.Assets);var instance=new AnimationGraphInstance(program,new(Guid.NewGuid(),Guid.NewGuid(),0),source,true);
+            var source=GraphPoseSnapshotPreparation.Prepare(program,assets.Assets);var instance=new AnimationGraphInstance(program,new(Guid.NewGuid(),Guid.NewGuid(),0),source);
             for(int n=0;n<512;n++){instance.SetBool(parameter.Id,n%2==0);var t=instance.Prepare(instance.Frame.Context,.1);instance.Commit(t,instance.Frame.Context with{Tick=instance.Frame.Context.Tick+1});}
             long before=GC.GetAllocatedBytesForCurrentThread();
             for(int n=0;n<1024;n++){instance.SetBool(parameter.Id,n%2==0);var t=instance.Prepare(instance.Frame.Context,.1);instance.Commit(t,instance.Frame.Context with{Tick=instance.Frame.Context.Tick+1});}
@@ -101,7 +102,7 @@ internal static unsafe partial class Program
             Check(untouched.All(v=>v.Position==new Vector3(7,8,9)),"Rejected complete pose must not copy partial outputs");
             Reject(()=>source.Evaluate(rows,instance.Frame.Output,locals,instance.Frame.FrozenPoseGeneration+1,untouched));
             byte[] original=previewDocument.CaptureBytes();
-            using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,previewDocument.World,assets,previewDocument.CaptureSnapshot(),poseKernel:kernel,previewInterruptions:true))using(var target=renderer.CreateViewTarget(256,256)) {
+            using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,previewDocument.World,assets,previewDocument.CaptureSnapshot(),poseKernel:kernel))using(var target=renderer.CreateViewTarget(256,256)) {
                 scene.Animation!.ControlPreview(previewId,parameter.Id,AnimationParameterKind.Bool,1);scene.Animation.AdvancePreview(1d/60);
                 scene.Animation.ControlPreview(previewId,parameter.Id,AnimationParameterKind.Bool,0);scene.Animation.AdvancePreview(1d/60);
                 Check(scene.Animation.PreviewFrame(previewId).FrozenPoseGeneration==1&&previewDocument.World.Tick==0,"Independent preview interruption uses no Play/World tick");
@@ -113,7 +114,7 @@ internal static unsafe partial class Program
         foreach(int count in new[]{0,8,32}) {
             var d=Document(count,false);var ids=d.World.GetObjects().Where(o=>o.Has<AnimatorData>()).Select(o=>o.PersistentId).ToArray();
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
-            using var runtime=ScenePlayRuntime.Compose(play,physics,assets,interruptTransitions:true);play.Start(_=>throw new Exception("No behaviours"));
+            using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));
             try {
                 foreach(Guid id in ids)runtime.Animators!.SetBool(id,parameter.Id,true);Check(play.AdvanceFixedStep().State==PlayState.Running,"Many interruption first quantum");
                 for(int i=0;i<ids.Length;i++)if(i%2==0)runtime.Animators!.SetBool(ids[i],parameter.Id,false);
@@ -123,7 +124,7 @@ internal static unsafe partial class Program
             }finally{play.Stop();}
         }
         var failedDocument=Document(1,false);var failedId=failedDocument.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
-        using(var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,failedDocument.CaptureSnapshot(),true))using(var play=new PlaySession(failedDocument,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps))using(var runtime=ScenePlayRuntime.Compose(play,physics,assets,interruptTransitions:true)) {
+        using(var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,failedDocument.CaptureSnapshot(),true))using(var play=new PlaySession(failedDocument,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps))using(var runtime=ScenePlayRuntime.Compose(play,physics,assets)) {
             bool fail=false;play.AddSystem(new GraphFailure(_=>{if(fail)throw new InvalidOperationException("Prepared interruption must not publish");}));play.Start(_=>throw new Exception("No behaviours"));
             try{runtime.Animators!.SetBool(failedId,parameter.Id,true);Check(play.AdvanceFixedStep().State==PlayState.Running,"Failed cache baseline");runtime.Animators.SetBool(failedId,parameter.Id,false);fail=true;
                 Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==1,"Failed interruption quantum preserves committed tick");Reject(()=>runtime.Animators.CopyFrozenPose(failedId,1,new AnimationLocalTransform[2]));
