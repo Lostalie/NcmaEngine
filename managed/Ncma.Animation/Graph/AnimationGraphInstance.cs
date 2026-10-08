@@ -2,14 +2,15 @@ namespace Ncma.Animation;
 
 public readonly record struct AnimationStepContext(Guid SessionId, Guid WorldId, ulong Tick);
 public readonly record struct AnimationEvaluationToken(Guid InstanceId, ulong Sequence, ulong SourceTick);
-public enum AnimationPoseOperation { Clip, Blend }
+public enum AnimationPoseOperation { Clip, Blend, Frozen }
 // TRS sampling/mixing recipe only, never native pointers or direct World writes.
 public readonly record struct AnimationPoseInstruction(AnimationPoseOperation Operation, Guid NodeId, Guid ClipId,
-    double Previous, double Current, double Duration, bool Loop, int SourceA, int SourceB, float Weight);
+    double Previous, double Current, double Duration, bool Loop, int SourceA, int SourceB, float Weight, ulong CacheGeneration=0);
 public readonly record struct AnimationGraphFrame(Guid InstanceId, Guid GraphId, AnimationStepContext Context,
-    Guid StateId, Guid FromStateId, Guid TransitionId, float TransitionWeight, int Output, int InstructionCount);
+    Guid StateId, Guid FromStateId, Guid TransitionId, float TransitionWeight, int Output, int InstructionCount,ulong FrozenPoseGeneration=0);
 
-// Trusted host commits this numerical-free instance only AFTER the corresponding World step succeeds.
+// Trusted host commits this instance only AFTER the corresponding World step succeeds.
+// Optional trusted numeric snapshots run only at an interruption; they own no clock or World.
 // This stamp API is not World authority: production host/asset/Character composition is M6.3.
 public sealed class AnimationGraphInstance
 {
@@ -31,10 +32,18 @@ public sealed class AnimationGraphInstance
     private int _eventCount, _committedEventCount;
     private ulong _committedSequence;
     private AnimationEvaluationOutcome _outcome;
-    public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context)
+    private readonly IAnimationPoseSnapshotSource? _poseSource;
+    private readonly AnimationLocalTransform[] _frozen,_candidateFrozen;
+    private readonly bool _interruptions;
+    private ulong _frozenGeneration,_nextFrozenGeneration;
+    private bool _cacheChanged;
+    public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false)
     {
         _program = program ?? throw new ArgumentNullException(nameof(program)); RequireContext(context);
         _context = context; _state = program.Entry;
+        if(interruptTransitions && (poseSource is null||poseSource.GraphId!=program.AssetId||poseSource.SkeletonId!=program.SkeletonId||poseSource.GraphContentHash!=program.ContentHash||poseSource.ResourceGeneration!=program.ResourceGeneration||poseSource.BoneCount is <1 or >1024))throw new ArgumentException("Interruptions require the exact bounded pinned pose provider.");
+        _poseSource=poseSource;_interruptions=interruptTransitions;
+        _frozen=new AnimationLocalTransform[interruptTransitions?poseSource!.BoneCount:0];_candidateFrozen=new AnimationLocalTransform[_frozen.Length];
         _requested = new double[program.ParameterCount]; _committedParameters = new double[_requested.Length]; _consume = new bool[_requested.Length];
         for (int i = 0; i < _requested.Length; i++) _requested[i] = program.Parameters[i].Kind switch {
             AnimationParameterKind.Float => program.Parameters[i].FloatDefault, AnimationParameterKind.Int => program.Parameters[i].IntDefault,
@@ -82,6 +91,7 @@ public sealed class AnimationGraphInstance
         _candidateTimes.CopyTo(_times, 0); _requested.CopyTo(_committedParameters, 0);
         for (int i = 0; i < _consume.Length; i++) if (_consume[i]) _requested[i] = _committedParameters[i] = 0;
         _state = _nextState; _from = _nextFrom; _elapsed = _nextElapsed; _duration = _nextDuration; _transition = _nextTransition;
+        if(_cacheChanged){_candidateFrozen.CopyTo(_frozen,0);_frozenGeneration=_nextFrozenGeneration;}
         _context = committed; PublishPlan();
         Array.Copy(_events, _committedEvents, _eventCount); _committedEventCount = _eventCount;
         _committedSequence = token.Sequence; _prepared = false; _outcome = AnimationEvaluationOutcome.Committed;
@@ -93,8 +103,10 @@ public sealed class AnimationGraphInstance
     {
         Token(token); return new(_identity, _program.AssetId, _context with { Tick = _context.Tick + 1 },
             _nextState < 0 ? Guid.Empty : _program.States[_nextState], _nextFrom < 0 ? Guid.Empty : _program.States[_nextFrom],
-            _nextTransition, _nextFrom < 0 ? 1 : (float)Math.Min(1, _nextElapsed / _nextDuration), _output, _count);
+            _nextTransition, _nextFrom == -1 ? 1 : (float)Math.Min(1, _nextElapsed / _nextDuration), _output, _count,PlanGeneration(_plan,_count));
     }
+    public int CopyFrozenPose(ulong generation,Span<AnimationLocalTransform> destination)
+    {Verify();if(_prepared||generation==0||generation!=_frozenGeneration||destination.Length<_frozen.Length)throw new InvalidOperationException("Exact committed frozen pose generation required.");_frozen.CopyTo(destination);return _frozen.Length;}
     public int CopyCommittedPlan(Span<AnimationPoseInstruction> destination)
     { Verify(); if (destination.Length < _committedCount) throw new ArgumentException("Graph plan output capacity."); _committedPlan.AsSpan(0, _committedCount).CopyTo(destination); return _committedCount; }
     // Repeated reads copy the same committed receipts; they never dispatch events or consume them.
@@ -118,8 +130,10 @@ public sealed class AnimationGraphInstance
     }
     public AnimationGraphFrame Frame {
         get { Verify(); return new(_identity, _program.AssetId, _context, _state < 0 ? Guid.Empty : _program.States[_state],
-            _from < 0 ? Guid.Empty : _program.States[_from], _transition, _from < 0 ? 1 : (float)Math.Min(1, _elapsed / _duration), _committedOutput, _committedCount); }
+            _from < 0 ? Guid.Empty : _program.States[_from], _transition, _from == -1 ? 1 : (float)Math.Min(1, _elapsed / _duration), _committedOutput, _committedCount,PlanGeneration(_committedPlan,_committedCount)); }
     }
+    private static ulong PlanGeneration(AnimationPoseInstruction[] plan,int count)
+    {for(int i=0;i<count;i++)if(plan[i].Operation==AnimationPoseOperation.Frozen)return plan[i].CacheGeneration;return 0;}
     private double Speed(AnimationProgram.Node node)
     { double speed = node.ScalarParameter < 0 ? node.Speed : _requested[node.ScalarParameter]; AnimationGraphCodec.Scalar(speed, 0, 8); return speed; }
     private static double Next(double previous, double duration, bool loop, double delta)
@@ -154,17 +168,25 @@ public sealed class AnimationGraphInstance
     {
         _delta = delta; _count = 0; Array.Fill(_slots, -1); Array.Clear(_consume); _times.CopyTo(_candidateTimes, 0);
         _nextState = _state; _nextFrom = _from; _nextElapsed = _elapsed; _nextDuration = _duration; _nextTransition = _transition;
+        _nextFrozenGeneration=_frozenGeneration;_cacheChanged=false;
         // At most one selection per quantum. A completed transition becomes eligible on the next quantum.
-        if (transitions && _state >= 0 && _from < 0) foreach (var t in _program.Transitions[_state]) {
+        if (transitions && _state >= 0 && (_from == -1||_interruptions)) foreach (var t in _program.Transitions[_state]) {
             if (!Conditions(t) || !Exit(t)) continue;
             _nextState = t.To; _nextFrom = t.Duration > 0 ? _state : -1; _nextElapsed = 0; _nextDuration = t.Duration; _nextTransition = t.Id;
+            if(_from!=-1 && t.Duration>0){
+                if(_frozenGeneration>=9007199254740991UL)throw new ArgumentException("Frozen pose generation budget.");
+                Array.Fill(_candidateFrozen,new AnimationLocalTransform(default,default,float.NaN));
+                _poseSource!.Evaluate(_committedPlan.AsSpan(0,_committedCount),_committedOutput,_frozen,_frozenGeneration,_candidateFrozen);
+                foreach(var v in _candidateFrozen)if(!float.IsFinite(v.Position.LengthSquared())||!float.IsFinite(v.Scale)||v.Scale<=0||!float.IsFinite(v.Rotation.LengthSquared())||Math.Abs(v.Rotation.LengthSquared()-1)>1e-4)throw new ArgumentException("Complete finite normalized uniform frozen pose required.");
+                _nextFrozenGeneration=_frozenGeneration+1;_cacheChanged=true;_nextFrom=-2;
+            }
             Array.Clear(_candidateTimes, (t.To + 1) * _program.NodeCount, _program.NodeCount);
             foreach (var c in t.Conditions) if (c.Comparison == AnimationComparison.Triggered) _consume[c.Parameter] = true;
             break;
         }
-        if (_nextFrom >= 0) { _nextElapsed = Math.Min(_nextDuration, _nextElapsed + delta); }
+        if (_nextFrom != -1) { _nextElapsed = Math.Min(_nextDuration, _nextElapsed + delta); }
         _output = Evaluate(_program.Output, 0);
-        if (_nextFrom >= 0 && _nextElapsed >= _nextDuration) _nextFrom = -1;
+        if (_nextFrom != -1 && _nextElapsed >= _nextDuration) _nextFrom = -1;
     }
     private int Add(AnimationPoseInstruction instruction)
     { if (_count == _plan.Length) throw new ArgumentException("Bounded graph plan exceeded."); _plan[_count] = instruction; return _count++; }
@@ -205,8 +227,8 @@ public sealed class AnimationGraphInstance
                 result = Add(new(AnimationPoseOperation.Blend, node.Id, Guid.Empty, 0, 0, 0, false, a, b, (float)weight)); break;
             case AnimationNodeKind.StateMachine:
                 int target = Evaluate(_program.StateRoots[_nextState], _nextState + 1);
-                if (_nextFrom < 0) result = target;
-                else { int source = Evaluate(_program.StateRoots[_nextFrom], _nextFrom + 1); result = Add(new(AnimationPoseOperation.Blend, node.Id,
+                if (_nextFrom == -1) result = target;
+                else { int source = _nextFrom==-2?Add(new(AnimationPoseOperation.Frozen,node.Id,Guid.Empty,0,0,0,false,-1,-1,0,_nextFrozenGeneration)):Evaluate(_program.StateRoots[_nextFrom], _nextFrom + 1); result = Add(new(AnimationPoseOperation.Blend, node.Id,
                     Guid.Empty, 0, 0, 0, false, source, target, (float)(_nextElapsed / _nextDuration))); } break;
             default: throw new InvalidOperationException("Scalar parameter nodes cannot be pose instructions.");
         }

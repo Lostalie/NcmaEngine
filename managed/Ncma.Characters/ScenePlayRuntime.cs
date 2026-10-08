@@ -9,10 +9,10 @@ public sealed class ScenePlayRuntime : IDisposable
 {
     public CharacterPlayRuntime? Characters { get; private set; }
     public SceneAnimatorRuntime? Animators { get; private set; }
-    public static ScenePlayRuntime Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets)
+    public static ScenePlayRuntime Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets,bool interruptTransitions=false)
     {
         var owner = new ScenePlayRuntime();
-        try { owner.Animators = SceneAnimatorRuntime.Compose(play, assets); owner.Characters = CharacterPlayRuntime.Compose(play, physics, assets, animators: owner.Animators); return owner; }
+        try { owner.Animators = SceneAnimatorRuntime.Compose(play, assets,interruptTransitions); owner.Characters = CharacterPlayRuntime.Compose(play, physics, assets, animators: owner.Animators); return owner; }
         catch { owner.Dispose(); throw; }
     }
     public void Dispose()

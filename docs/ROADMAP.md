@@ -220,6 +220,9 @@ C/D最新补齐图根与唯一Jolt、精确当前skin/shadow和独立获批runti
 2026-10-08按用户请求先实施独立M6.4：深蓝节点画布、类型化属性/条件、精确文件/资源审批、
 共享Undo/Redo、活动MCP propose/transaction和独立真实NCA/GPU预览已接入自动候选。
 见[M6.4方案](M6_4_IMPLEMENTATION_PLAN.md)与[交付](M6_4_DELIVERY_REPORT.md)。
+M6.5-B固定预算、提交边界姿态缓存的可中断过渡已通过完整Debug/Release自动候选，保持唯一图时钟/运动权威和
+只读精确runtime MCP。完整门禁见[M6.5-B交付](M6_5_B_DELIVERY_REPORT.md)；
+持久事件/策略作者工具与获批独立序列MCP为C，联合验收为D，尚未完成。
 并非C/D完成、内置推理接入或真实用户素材/人工验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
 性能/长稳门禁仍开放。M6.1 进度见 [契约](M6_1_GRAPH_CONTRACT.md) 与 [交付](M6_1_DELIVERY_REPORT.md)。

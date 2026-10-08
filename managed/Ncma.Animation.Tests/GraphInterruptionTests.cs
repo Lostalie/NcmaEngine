@@ -1,0 +1,42 @@
+using System.Numerics;
+using Ncma.Animation;
+using Vector3=System.Numerics.Vector3;
+
+internal static class GraphInterruptionTests
+{
+    private static void Check(bool value){if(!value)throw new Exception("M6.5-B interruption assertion.");}
+    private static void Reject(Action action){try{action();}catch(Exception e)when(e is ArgumentException or InvalidOperationException){return;}throw new Exception("Invalid interruption accepted.");}
+    private sealed class Source(AnimationProgram p,Guid positive):IAnimationPoseSnapshotSource {
+        internal string? OverrideHash;
+        public Guid GraphId=>p.AssetId;public Guid SkeletonId=>p.SkeletonId;public string GraphContentHash=>OverrideHash??p.ContentHash;public ulong ResourceGeneration=>p.ResourceGeneration;public int BoneCount=>2;
+        internal bool Invalid;internal int Captures;private readonly AnimationLocalTransform[] _scratch=new AnimationLocalTransform[p.MaximumPlanInstructions*2];
+        public void Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan,int output,ReadOnlySpan<AnimationLocalTransform> frozen,ulong generation,Span<AnimationLocalTransform> destination){Captures++;if(Invalid){destination[0]=new(Vector3.Zero,Quaternion.Identity,1);return;}
+            for(int i=0;i<plan.Length;i++)for(int b=0;b<2;b++){var row=plan[i];_scratch[i*2+b]=row.Operation switch{AnimationPoseOperation.Clip=>new(new Vector3((float)row.Current*(row.ClipId==positive?1:-1)),Quaternion.Identity,1),AnimationPoseOperation.Frozen=>row.CacheGeneration==generation?frozen[b]:throw new ArgumentException("Stale cache"),AnimationPoseOperation.Blend=>new(Vector3.Lerp(_scratch[row.SourceA*2+b].Position,_scratch[row.SourceB*2+b].Position,row.Weight),Quaternion.Identity,1),_=>throw new ArgumentException("Operation")};}
+            _scratch.AsSpan(output*2,2).CopyTo(destination);
+        }
+    }
+    private static (AnimationGraphDefinition Graph,AnimationProgram Program,Source Source) Fixture(){var d=GraphTests.Machine();d=d with{Transitions=d.Transitions.Select(t=>t with{Duration=1,ExitTime=null,Conditions=[new(d.Parameters[0].Id,AnimationComparison.Equal,0,0,t.To!=d.EntryState)]}).ToArray()};var p=AnimationProgram.Compile(d,1,d.Nodes.Where(n=>n.Kind==AnimationNodeKind.Clip).Select(n=>new AnimationClipDescriptor(n.ClipId,d.SkeletonId,1,1)).ToArray());return(d,p,new(p,d.Nodes[0].ClipId));}
+    private static void Step(AnimationGraphInstance i,double h=.1){var t=i.Prepare(i.Frame.Context,h);i.Commit(t,i.Frame.Context with{Tick=i.Frame.Context.Tick+1});}
+    public static void Add(List<(string,Action)> cases){
+        cases.Add(("M6.5-B exact resource provider and explicit opt-in",()=>{var(d,p,s)=Fixture();Reject(()=>new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),null,true));s.OverrideHash=new string('0',64);Reject(()=>new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true));s.OverrideHash=null;var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0));i.SetBool(d.Parameters[0].Id,true);Step(i);i.SetBool(d.Parameters[0].Id,false);Step(i);Check(i.Frame.StateId==d.States[1].Id&&i.Frame.FrozenPoseGeneration==0&&s.Captures==0);}));
+        cases.Add(("M6.5-B freezes complete current committed mix and advances only target",()=>{var(d,p,s)=Fixture();var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);i.SetBool(d.Parameters[0].Id,true);Step(i);i.SetBool(d.Parameters[0].Id,false);Step(i);Check(i.Frame.StateId==d.EntryState&&i.Frame.FrozenPoseGeneration==1&&s.Captures==1);var cache=new AnimationLocalTransform[2];i.CopyFrozenPose(1,cache);Check(Math.Abs(cache[0].Position.X-.08f)<1e-6);var plan=i.ReadDebug(i.Frame.Context).Instructions;Check(plan.Count==3&&plan.Count(r=>r.Operation==AnimationPoseOperation.Frozen)==1&&plan.Single(r=>r.Operation==AnimationPoseOperation.Clip).Current==.1);Reject(()=>i.CopyFrozenPose(2,cache));}));
+        cases.Add(("M6.5-B Abort retains previous cache and reuses only new exact generation",()=>{var(d,p,s)=Fixture();var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);i.SetBool(d.Parameters[0].Id,true);Step(i);i.SetBool(d.Parameters[0].Id,false);Step(i);var previous=new AnimationLocalTransform[2];i.CopyFrozenPose(1,previous);i.SetBool(d.Parameters[0].Id,true);var t=i.Prepare(i.Frame.Context,.1);Check(i.PreparedFrame(t).FrozenPoseGeneration==2);Reject(()=>i.CopyFrozenPose(1,new AnimationLocalTransform[2]));i.Abort(t);var same=new AnimationLocalTransform[2];i.CopyFrozenPose(1,same);Check(same.SequenceEqual(previous));Step(i);Check(i.Frame.FrozenPoseGeneration==2);Reject(()=>i.CopyFrozenPose(1,same));}));
+        cases.Add(("M6.5-B partial/invalid snapshot fails whole candidate and preserves successful cache",()=>{var(d,p,s)=Fixture();var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);i.SetBool(d.Parameters[0].Id,true);Step(i);i.SetBool(d.Parameters[0].Id,false);s.Invalid=true;Reject(()=>i.Prepare(i.Frame.Context,.1));Check(i.Frame.Context.Tick==1&&i.Frame.FrozenPoseGeneration==0&&!i.ReadDebug(i.Frame.Context).SnapshotValid);s.Invalid=false;Step(i);Check(i.Frame.FrozenPoseGeneration==1&&i.Frame.Context.Tick==2);}));
+        cases.Add(("M6.5-B repeated interruption stays constant depth and bounded cache, owner isolated",()=>{var(d,p,s)=Fixture();var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);for(int n=0;n<128;n++){i.SetBool(d.Parameters[0].Id,n%2==0);Step(i);Check(i.Frame.InstructionCount==3&&i.Frame.FrozenPoseGeneration==(ulong)n);}Check(s.Captures==127);Reject(()=>Task.Run(()=>i.CopyFrozenPose(127,new AnimationLocalTransform[2])).GetAwaiter().GetResult());var other=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);Check(other.Frame.FrozenPoseGeneration==0);Reject(()=>other.CopyFrozenPose(127,new AnimationLocalTransform[2]));}));
+        cases.Add(("M6.5-B interruption endpoints retire source, not its immutable committed recipe",()=>{var(d,p,s)=Fixture();var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);i.SetBool(d.Parameters[0].Id,true);Step(i);i.SetBool(d.Parameters[0].Id,false);Step(i,1);Check(i.Frame.FromStateId==Guid.Empty&&i.Frame.FrozenPoseGeneration==1&&i.Frame.TransitionWeight==1);var saved=new AnimationLocalTransform[2];i.CopyFrozenPose(1,saved);Step(i);Check(i.Frame.InstructionCount==1&&i.Frame.FrozenPoseGeneration==0&&i.ReadDebug(i.Frame.Context).Instructions.All(r=>r.Operation!=AnimationPoseOperation.Frozen));}));
+        cases.Add(("M6.5-B interrupt priority, selected trigger commit and target-only receipts",()=>{
+            var(d,_,_)=Fixture();var trigger=new AnimationParameter(Guid.NewGuid(),"Interrupt",AnimationParameterKind.Trigger,0,0,false);
+            var chosen=d.Transitions[1] with{Id=Guid.NewGuid(),Priority=0,Conditions=[new(trigger.Id,AnimationComparison.Triggered,0,0,false)]};
+            d=d with{Parameters=[d.Parameters[0],trigger],Transitions=[d.Transitions[0],d.Transitions[1] with{Priority=1},chosen]};
+            var p=AnimationProgram.Compile(d,1,d.Nodes.Where(n=>n.Kind==AnimationNodeKind.Clip).Select(n=>new AnimationClipDescriptor(n.ClipId,d.SkeletonId,1,1)).ToArray(),
+                [new(Guid.NewGuid(),d.Nodes[0].ClipId,.1,"idle"),new(Guid.NewGuid(),d.Nodes[1].ClipId,.1,"run")]);
+            var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),new Source(p,d.Nodes[0].ClipId),true);i.SetBool(d.Parameters[0].Id,true);Step(i);i.SetBool(d.Parameters[0].Id,false);i.SetTrigger(trigger.Id);
+            var t=i.Prepare(i.Frame.Context,.1);Check(i.PreparedFrame(t).TransitionId==chosen.Id);i.Abort(t);Check(i.CommittedParameter(trigger.Id)==0);Step(i);
+            var debug=i.ReadDebug(i.Frame.Context);Check(debug.Frame.TransitionId==chosen.Id&&debug.Events.Count==1&&debug.Events[0].Name=="idle"&&i.CommittedParameter(trigger.Id)==0);
+        }));
+        cases.Add(("M6.5-B warmed repeated cache Prepare/Commit allocates zero",()=>{var(d,p,s)=Fixture();var i=new AnimationGraphInstance(p,new(Guid.NewGuid(),Guid.NewGuid(),0),s,true);
+            for(int n=0;n<512;n++){i.SetBool(d.Parameters[0].Id,n%2==0);Step(i);}long before=GC.GetAllocatedBytesForCurrentThread();
+            for(int n=0;n<1024;n++){i.SetBool(d.Parameters[0].Id,n%2==0);Step(i);}Check(GC.GetAllocatedBytesForCurrentThread()==before&&i.Frame.InstructionCount==3);
+        }));
+    }
+}

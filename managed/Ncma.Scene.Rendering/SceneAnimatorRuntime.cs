@@ -9,7 +9,8 @@ public sealed record AnimatorResourceIdentity(Guid Id,string Kind,string Generat
 public sealed record AnimatorRuntimeBinding(Guid ObjectId,Guid GraphId,Guid SkeletonId,Guid PublicationId,
     string GraphHash,IReadOnlyList<AnimatorResourceIdentity> Resources);
 
-// Same host composition in Editor, Player and Headless. No numerical plugin/GPU/IO in a step.
+// Same host composition in Editor, Player and Headless. No native pose/GPU/IO in a step.
+// Explicit interruption opt-in uses bounded immutable managed numeric snapshots, never a second clock.
 public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommittedStepObserver, IPlayCompositionLifetime
 {
     private sealed class Actor(Guid id, AnimatorData source, AnimationProgram program)
@@ -20,6 +21,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         internal AnimationGraphInstance? Instance;
         internal AnimationEvaluationToken? Pending;
         internal AnimatorRuntimeBinding? Binding;
+        internal GraphPoseSnapshotSource? PoseSource;
     }
     private readonly PlaySession _play;
     private readonly Actor[] _actors;
@@ -27,20 +29,23 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
     private RuntimeAssetLease? _assets;
     private Guid _session, _world;
     private bool _disposed;
+    private readonly bool _interruptions;
     private World World => _play.Document.World;
-    public static SceneAnimatorRuntime? Compose(PlaySession play, PreparedSceneAssetLease? assets)
+    public static SceneAnimatorRuntime? Compose(PlaySession play, PreparedSceneAssetLease? assets,bool interruptTransitions=false)
     {
         var snapshot = play.Document.CaptureSnapshot(); SceneRenderValidation.RequireComposition(snapshot);
         if (!snapshot.Objects.Any(o => o.Components.Any(c => c.TypeId == AnimatorData.TypeId))) return null;
         if (assets is null) throw new ArgumentException("Animator requires prepared assets, including Headless.");
-        return new(play, assets);
+        return new(play, assets,interruptTransitions);
     }
-    private SceneAnimatorRuntime(PlaySession play, PreparedSceneAssetLease assets)
+    private SceneAnimatorRuntime(PlaySession play, PreparedSceneAssetLease assets,bool interruptTransitions)
     {
         _play = play;
+        _interruptions=interruptTransitions;
         try {
             _assets = assets.Assets.AcquireLease();
             var programs = new Dictionary<Guid, AnimationProgram>(); var actors = new List<Actor>(); int bones = 0;
+            var poseSources=new Dictionary<Guid,GraphPoseSnapshotSource>();int poseScratch=0;
             foreach (var obj in World.GetObjects().Where(o => o.Has<AnimatorData>()).OrderBy(o => o.PersistentId)) {
                 if (actors.Count >= 32) throw new ArgumentException("Animator actor budget is 32.");
                 var source = obj.Get<AnimatorData>(); var skin = obj.Get<SkinnedMeshData>();
@@ -57,7 +62,8 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
                 foreach(Guid id in manifest.Clips)required.Add(id);
                 var proofs=_assets.List().Where(a=>required.Contains(a.Id)).Select(a=>new AnimatorResourceIdentity(a.Id,a.Kind.ToString(),a.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture),a.ContentHash)).OrderBy(a=>a.Id).ToArray();
                 if(proofs.Length!=required.Count)throw new ArgumentException("Animator complete resource identity closure missing.");
-                actors.Add(new(obj.PersistentId, source, program){Binding=new(obj.PersistentId,source.GraphId,source.SkeletonId,_assets.Identity,program.ContentHash,Array.AsReadOnly(proofs))});
+                GraphPoseSnapshotSource? poseSource=null;if(interruptTransitions && !poseSources.TryGetValue(graph.Id,out poseSource)){poseSource=GraphPoseSnapshotPreparation.Prepare(program,_assets);poseScratch=checked(poseScratch+poseSource.ScratchTransforms);if(poseScratch>262144)throw new ArgumentException("Scene interruption numeric scratch budget.");poseSources.Add(graph.Id,poseSource);}
+                actors.Add(new(obj.PersistentId, source, program){Binding=new(obj.PersistentId,source.GraphId,source.SkeletonId,_assets.Identity,program.ContentHash,Array.AsReadOnly(proofs)),PoseSource=poseSource});
             }
             if (bones > 32768) throw new ArgumentException("Animator scene bone budget.");
             _actors = actors.ToArray();
@@ -71,7 +77,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         _session = _play.SessionId; _world = World.Identity;
         foreach (var actor in _actors) {
             if (World.FindObject(actor.Id).Get<AnimatorData>() != actor.Source) throw new ArgumentException("Animator startup binding changed.");
-            actor.Instance = new(actor.Program, new(_session, _world, World.Tick)); actor.Pending = null;
+            actor.Instance = new(actor.Program, new(_session, _world, World.Tick),actor.PoseSource,_interruptions); actor.Pending = null;
         }
         _claims.Add(World.ClaimComponents<AnimatorData>(_actors.Select(a => a.Id).ToArray(), publishRequired: false, freezeMembership: true));
         _claims.Add(World.ClaimComponents<SkinnedMeshData>(_actors.Select(a => a.Id).ToArray(), publishRequired: false));
@@ -109,6 +115,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         return actor;
     }
     public AnimationGraphFrame ReadFrame(Guid objectId) => Read(objectId).Instance!.Frame;
+    public int CopyFrozenPose(Guid objectId,ulong generation,Span<AnimationLocalTransform> destination)=>Read(objectId).Instance!.CopyFrozenPose(generation,destination);
     // Immutable prepared resource proof. No disk/native queries or sampling; source leases outlive this host.
     public IReadOnlyList<AnimatorRuntimeBinding> DescribeBindings()
     {World.VerifyAccess();ObjectDisposedException.ThrowIf(_disposed,this);if(World.IsUpdating)throw new InvalidOperationException("Committed boundary required.");return Array.AsReadOnly(_actors.Select(a=>a.Binding!).ToArray());}

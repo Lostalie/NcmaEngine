@@ -42,13 +42,13 @@ internal sealed class GraphRootMotionRecipe
             RootMotionDelta result;
             switch (row.Operation) {
                 case AnimationPoseOperation.Clip:
-                    if (!_tracks.TryGetValue(row.ClipId, out var track) || row.Duration != track.Duration ||
+                    if (row.CacheGeneration!=0 || !_tracks.TryGetValue(row.ClipId, out var track) || row.Duration != track.Duration ||
                         row.SourceA != -1 || row.SourceB != -1 || row.Weight != 0)
                         throw new ArgumentException("Exact prepared root clip/duration required.");
                     result = track.Extract(new(row.Previous, row.Current), row.Loop);
                     break;
                 case AnimationPoseOperation.Blend:
-                    if (row.ClipId != Guid.Empty || row.Duration != 0 || row.Previous != 0 || row.Current != 0 || row.Loop ||
+                    if (row.CacheGeneration!=0 || row.ClipId != Guid.Empty || row.Duration != 0 || row.Previous != 0 || row.Current != 0 || row.Loop ||
                         row.SourceA < 0 || row.SourceA >= i || row.SourceB < 0 || row.SourceB >= i ||
                         !float.IsFinite(row.Weight) || row.Weight is < 0 or > 1)
                         throw new ArgumentException("Backward bounded graph root blend required.");
@@ -57,6 +57,10 @@ internal sealed class GraphRootMotionRecipe
                     float yaw = MathF.IEEERemainder(a.Yaw + MathF.IEEERemainder(b.Yaw - a.Yaw, 2 * MathF.PI) * row.Weight, 2 * MathF.PI);
                     result = new(Vector3.Lerp(a.Translation, b.Translation, row.Weight), yaw);
                     break;
+                case AnimationPoseOperation.Frozen:
+                    if(row.CacheGeneration==0||row.CacheGeneration>9007199254740991UL||row.ClipId!=Guid.Empty||row.Previous!=0||row.Current!=0||row.Duration!=0||row.Loop||row.SourceA!=-1||row.SourceB!=-1||row.Weight!=0)throw new ArgumentException("Exact frozen pose row required.");
+                    // Frozen visual source owns no advancing clip interval; only the target contributes root motion.
+                    result=default;break;
                 default: throw new ArgumentException("Unknown graph root operation.");
             }
             if (!float.IsFinite(result.Translation.LengthSquared()) || result.Translation.LengthSquared() > 1e6f ||

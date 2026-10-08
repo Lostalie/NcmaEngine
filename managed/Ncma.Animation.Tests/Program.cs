@@ -17,6 +17,7 @@ var cases=new List<(string,Action)>();
 GraphTests.Add(cases);
 GraphRuntimeTests.Add(cases);
 GraphEventTests.Add(cases);
+GraphInterruptionTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));

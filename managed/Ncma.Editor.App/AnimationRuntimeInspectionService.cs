@@ -88,8 +88,8 @@ internal sealed class AnimationRuntimeInspectionService(EditorSessionOwner owner
         if(presentation?.Invoke()?.ReadAnimationPresentation() is {} stamp&&stamp.WorldId==debug.Frame.Context.WorldId&&stamp.PublicationId==binding.PublicationId&&stamp.Tick==debug.Frame.Context.Tick&&stamp.RendererFrame<=9007199254740991&&stamp.PoseGeneration<=9007199254740991)
             pose=new{stamp.RendererFrame,stamp.PoseGeneration,stamp.GeometryDraws,stamp.ShadowDraws};
         return Result(true,"none",new{binding=new{binding.ObjectId,binding.GraphId,binding.SkeletonId,binding.PublicationId,binding.GraphHash},debug.Frame.InstanceId,debug.Frame.StateId,debug.Frame.FromStateId,debug.Frame.TransitionId,debug.Frame.TransitionWeight,
-            sequence=debug.CommittedSequence,debug.Frame.Output,instructionTotal=debug.Instructions.Count,offset,nextOffset=offset+limit<debug.Instructions.Count?(int?)(offset+limit):null,
-            instructions=debug.Instructions.Skip(offset).Take(limit).Select(r=>new{operation=r.Operation.ToString(),r.NodeId,r.ClipId,r.Previous,r.Current,r.Duration,r.Loop,r.SourceA,r.SourceB,r.Weight}).ToArray(),
+            sequence=debug.CommittedSequence,debug.Frame.FrozenPoseGeneration,debug.Frame.Output,instructionTotal=debug.Instructions.Count,offset,nextOffset=offset+limit<debug.Instructions.Count?(int?)(offset+limit):null,
+            instructions=debug.Instructions.Skip(offset).Take(limit).Select(r=>new{operation=r.Operation.ToString(),r.NodeId,r.ClipId,r.Previous,r.Current,r.Duration,r.Loop,r.SourceA,r.SourceB,r.Weight,r.CacheGeneration}).ToArray(),
             parameters=debug.Parameters.Select(p=>new{p.Id,kind=p.Kind.ToString(),p.Value}).ToArray(),root,pose});
     }
     private static EditCommandRejectedException Invalid()=>new("animator_input_invalid");

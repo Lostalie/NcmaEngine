@@ -45,12 +45,13 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     public Guid WorldId {get;}
     public AnimationSceneCosts Costs {get;private set;}
     internal IReadOnlyList<Character> Characters=>_characters;
-    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null)
+    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false)
     {
         _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();_rootMotion=rootMotion;_animators=animators;
         try{
             animators?.VerifyPresentation(world,prepared.Assets);
-            _assets=prepared.Assets.AcquireLease();var registry=RenderComponentRegistry.CreateRegistry();int bones=0,palettes=0;
+            _assets=prepared.Assets.AcquireLease();var registry=RenderComponentRegistry.CreateRegistry();int bones=0,palettes=0,previewScratch=0;
+            var previewSources=new Dictionary<Guid,GraphPoseSnapshotSource>();
             foreach(var obj in startup.Objects){var component=obj.Components.SingleOrDefault(c=>c.TypeId==SkinnedMeshData.TypeId);if(component is null)continue;
                 var source=registry.Decode<SkinnedMeshData>(component);
                 if(!_assets.TryResolve(source.MeshId,AssetKind.SkinnedMesh,out _)||!_assets.TryResolve(source.SkeletonId,AssetKind.Skeleton,out _)||!_assets.TryResolve(source.CharacterId,AssetKind.Character,out _))continue;
@@ -74,7 +75,13 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                     var settings = live.Get<AnimatorData>(); var graph = (Ncma.Assets.Runtime.RuntimeAnimationGraphAsset)_assets.Require(settings.GraphId,AssetKind.AnimationGraph);
                     if (settings.SkeletonId != graph.CopyDefinition().SkeletonId || settings.SkeletonId != source.SkeletonId) throw new ArgumentException("Graph presentation skeleton mismatch.");
                     var program = graph.PrepareProgram(_assets);
-                    instance.AnimatorSource = settings; instance.GraphPose = new(program,rig.Rig,_clips,kernel); instance.PreviewGraph = new(program,new(Guid.NewGuid(),WorldId,0));
+                    GraphPoseSnapshotSource? previewSource=null;
+                    bool enablePreviewInterruptions=previewInterruptions&&animators is null;
+                    if(enablePreviewInterruptions&&!previewSources.TryGetValue(graph.Id,out previewSource)) {
+                        previewSource=GraphPoseSnapshotPreparation.Prepare(program,_assets);previewScratch=checked(previewScratch+previewSource.ScratchTransforms);
+                        if(previewScratch>262144)throw new ArgumentException("Preview interruption numeric scratch budget.");previewSources.Add(graph.Id,previewSource);
+                    }
+                    instance.AnimatorSource = settings; instance.GraphPose = new(program,rig.Rig,_clips,kernel); instance.PreviewGraph = new(program,new(Guid.NewGuid(),WorldId,0),previewSource,enablePreviewInterruptions);
                 }
                 if(live.Has<ClipPlaybackData>() && (rootMotion is null || !live.Has<RootMotionData>())){var settings=live.Get<ClipPlaybackData>();instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
                 _characters.Add(instance);bones=checked(bones+rig.Rig.BoneCount);palettes=checked(palettes+instance.Bindings.BindingCount);
@@ -155,7 +162,9 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
             AnimationGraphFrame frame; int count;
             if(_play is null){frame=c.PreviewGraph!.Frame;count=c.PreviewGraph.CopyCommittedPlan(pose.Plan);}
             else {frame=_animators!.ReadFrame(c.Id);count=_animators.CopyCommittedPlan(c.Id,pose.Plan);}
-            pose.Evaluate(count,frame.Output,paused || _play is null ? 1 : alpha,_locals.AsSpan(c.BoneOffset,c.Rig.BoneCount),_models.AsSpan(c.BoneOffset,c.Rig.BoneCount));
+            ulong frozen=0;for(int i=0;i<count;i++)if(pose.Plan[i].Operation==AnimationPoseOperation.Frozen){ulong generation=pose.Plan[i].CacheGeneration;if(frozen!=0&&frozen!=generation)throw new InvalidOperationException("One frozen source generation per graph recipe.");frozen=generation;}
+            if(frozen!=0){if(_play is null)c.PreviewGraph!.CopyFrozenPose(frozen,pose.Frozen);else _animators!.CopyFrozenPose(c.Id,frozen,pose.Frozen);}
+            pose.Evaluate(count,frame.Output,paused || _play is null ? 1 : alpha,_locals.AsSpan(c.BoneOffset,c.Rig.BoneCount),_models.AsSpan(c.BoneOffset,c.Rig.BoneCount),frozen);
         }
         double sampled=Stopwatch.GetElapsedTime(start).TotalMilliseconds;start=Stopwatch.GetTimestamp();int offset=0;
         foreach(var c in _characters)if(c.Active){
