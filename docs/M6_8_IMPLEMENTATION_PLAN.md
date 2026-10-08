@@ -15,6 +15,9 @@ Slot名称/优先级/是否可中断/root策略/blend窗口；Section明确slot�
 
 ## B 唯一固定步运行与数值路径
 
+B按B1合作固定步状态→B2正式Animator/NCA/pose-root接线分步验证，各自完整双配置通过并提交后前进。
+B1合作状态完整双配置自动候选通过，但不能当作B运行时完成，契约见M6_8_B1_RUNTIME_CONTRACT.md，B2尚未接线。
+
 复用AnimationGraphInstance和SceneAnimatorRuntime的唯一Prepare/Commit/Abort及安全边界控制，
 没有独立World、OnUpdate时钟、solver或Actor网络字段。Slot播放/取消/Section跳转带精确instance/session/world/tick。
 有限请求/队列、同Slot优先级和明确中断，完整候选验证后提交；Abort/fault不消费请求或发布新时间/事件。
