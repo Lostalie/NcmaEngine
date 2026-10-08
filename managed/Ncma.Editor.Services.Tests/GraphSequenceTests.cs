@@ -102,7 +102,7 @@ internal static class GraphSequenceTests
             w.Sequences.PrepareTrusted();Guid sequence=w.Sequences.ProposeLocal(new(.1,1,[],[new(1,AnimationSequenceAssertionKind.EventCount,marker.Id,1)]));Check(w.Sequences.RunLocal(sequence).Passed);
             f.Workspace.History(f.Workspace.Stamp,false);w.Synchronize();Check(original.SequenceEqual(File.ReadAllBytes(f.File)));Reject(()=>w.Sequences.RunLocal(sequence));f.Workspace.History(f.Workspace.Stamp,true);w.Synchronize();Check(w.Capture()!.Events.Single()==marker);
             w.Begin(w.Stamp);w.ApplyDraft(AnimationGraphEdits.Operations(new{op="event.upsert",marker=marker with{Time=600}}));id=w.PrepareLocal();Reject(()=>w.CaptureReview(id));w.Cancel();
-            string old=System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(f.File)).Replace("\"version\":3","\"version\":2");File.WriteAllText(f.File,old);byte[] rejected=File.ReadAllBytes(f.File);Reject(()=>w.Open("assets/test.ncmaanim"));Check(rejected.SequenceEqual(File.ReadAllBytes(f.File)));
+            string old=System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(f.File)).Replace("\"version\":4","\"version\":3");File.WriteAllText(f.File,old);byte[] rejected=File.ReadAllBytes(f.File);Reject(()=>w.Open("assets/test.ncmaanim"));Check(rejected.SequenceEqual(File.ReadAllBytes(f.File)));
         });
     }
 }

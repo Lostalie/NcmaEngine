@@ -10,8 +10,8 @@ internal static class GraphEventFormatTests
     {
         cases.Add(("M6.5-C retained strict event/policy fields and removed v1/v2 rejection",()=>{
             var d=GraphTests.Simple();string json=Encoding.UTF8.GetString(AnimationGraphCodec.Encode(d));
-            foreach(string bad in new[]{json.Replace("\"version\":3","\"version\":1"),json.Replace("\"version\":3","\"version\":2"),json.Replace(",\"events\":[]",""),json.Replace(",\"interruptTransitions\":false",""),json.Replace("\"events\":[]","\"events\":null"),json.Replace("\"interruptTransitions\":false","\"interruptTransitions\":0")})Reject(()=>AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(bad)));
-            Reject(()=>AnimationGraphCodec.Encode(d with{Version=1}));Reject(()=>AnimationGraphCodec.Encode(d with{Version=2}));Check(AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(json)).Version==3);
+            foreach(string bad in new[]{json.Replace("\"version\":4","\"version\":1"),json.Replace("\"version\":4","\"version\":2"),json.Replace("\"version\":4","\"version\":3"),json.Replace(",\"events\":[]",""),json.Replace(",\"interruptTransitions\":false",""),json.Replace("\"events\":[]","\"events\":null"),json.Replace("\"interruptTransitions\":false","\"interruptTransitions\":0")})Reject(()=>AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(bad)));
+            Reject(()=>AnimationGraphCodec.Encode(d with{Version=1}));Reject(()=>AnimationGraphCodec.Encode(d with{Version=2}));Reject(()=>AnimationGraphCodec.Encode(d with{Version=3}));Check(AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(json)).Version==4);
         }));
         cases.Add(("M6.5-C canonical owned persistent markers and actual-duration compile",()=>{
             var d=GraphTests.Simple();var a=new AnimationEventMarker(Guid.NewGuid(),d.Nodes[0].ClipId,.1,"footstep");var b=a with{Id=Guid.NewGuid(),Time=.2};d=d with{Events=[a,b]};

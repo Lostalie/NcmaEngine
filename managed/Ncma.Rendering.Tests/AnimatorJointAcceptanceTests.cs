@@ -76,7 +76,7 @@ internal static unsafe partial class Program
             }
             Check(!Directory.Exists(Path.Combine(moved,"out"))&&Directory.GetFiles(Path.Combine(moved,"assets")).Length==1,"Moved Player does not use source or import cache");
         }
-        File.WriteAllText(Path.Combine(output,evidencePrefix+"-joint-results.json"),JsonSerializer.Serialize(new{schema=2,graphVersion=graph.Version,blendSpace=graph.Nodes.Any(n=>n.BlendSpace is not null),editorActors=counts,editorCyclesPerCount=2,ticksPerCycle=8,committedTargetEvents=true,interruptions=true,uniqueJolt=true,editUnchanged=true,closeFailureRetention=true,players=playerEvidence,manualAccepted=false}));
+        File.WriteAllText(Path.Combine(output,evidencePrefix+"-joint-results.json"),JsonSerializer.Serialize(new{schema=2,graphVersion=graph.Version,blendSpace=graph.Nodes.Any(n=>n.BlendSpace is not null),layers=graph.Nodes.Any(n=>n.Layer is not null),cache=graph.Nodes.Any(n=>n.Kind==AnimationNodeKind.CachePose),editorActors=counts,editorCyclesPerCount=2,ticksPerCycle=8,committedTargetEvents=true,interruptions=true,uniqueJolt=true,editUnchanged=true,closeFailureRetention=true,players=playerEvidence,manualAccepted=false}));
         Console.WriteLine("PASS "+stage+" current graph events/interruption/unique Jolt/skin-shadow Editor 0-1-8-32, moved source-free Headless/DX11 Player16 cases");
     }
 }

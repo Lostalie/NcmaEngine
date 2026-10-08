@@ -7,8 +7,8 @@ namespace Ncma.Animation;
 public static class AnimationGraphCodec
 {
     public const string Extension = ".ncmaanim";
-    public const int CurrentVersion=3,MaxEvents=4096,MaxBlendSpaces=16,MaxClipDependencies=128;
-    public const int MaxPlanInstructions=3*MaxNodes+1+10*MaxBlendSpaces;
+    public const int CurrentVersion=4,MaxEvents=4096,MaxBlendSpaces=16,MaxLayers=16,MaxClipDependencies=128;
+    public const int MaxPlanInstructions=3*MaxNodes+1+10*MaxBlendSpaces+MaxLayers;
     public const int MaxBytes = 1024 * 1024, MaxNodes = 256, MaxLinks = 1024,
         MaxParameters = 64, MaxStates = 64, MaxTransitions = 256, MaxConditions = 8;
     private static readonly UTF8Encoding Utf8 = new(false, true);
@@ -28,7 +28,7 @@ public static class AnimationGraphCodec
         AnimationGraphValidation.Validate(definition);
         // Stable bytes independent of collection enumeration order. All references use persistent UUIDs.
         var canonical = definition with {
-            Events=definition.Events.OrderBy(e=>e.Id).ToArray(),Parameters = definition.Parameters.OrderBy(p => p.Id).ToArray(), Nodes = definition.Nodes.OrderBy(n => n.Id).Select(n=>n.BlendSpace is{} s?n with{BlendSpace=s with{Samples=s.Samples.OrderBy(p=>p.Id).ToArray()}}:n).ToArray(),
+            Events=definition.Events.OrderBy(e=>e.Id).ToArray(),Parameters = definition.Parameters.OrderBy(p => p.Id).ToArray(), Nodes = definition.Nodes.OrderBy(n => n.Id).Select(CanonicalNode).ToArray(),
             Links = definition.Links.OrderBy(l => l.Id).ToArray(), States = definition.States.OrderBy(s => s.Id).ToArray(),
             Transitions = definition.Transitions.OrderBy(t => t.Id).Select(t => t with {
                 Conditions = t.Conditions.OrderBy(c => c.ParameterId).ToArray() }).ToArray()
@@ -37,6 +37,9 @@ public static class AnimationGraphCodec
         if (encoded.Length > MaxBytes) throw new ArgumentException("Animation graph byte budget.");
         return encoded;
     }
+    private static AnimationGraphNode CanonicalNode(AnimationGraphNode n)=>n with{
+        BlendSpace=n.BlendSpace is{} s?s with{Samples=s.Samples.OrderBy(p=>p.Id).ToArray()}:null,
+        Layer=n.Layer is{} l?l with{Mask=l.Mask with{Bones=l.Mask.Bones.OrderBy(b=>b.BonePath,StringComparer.Ordinal).ToArray()}}:null};
     public static AnimationGraphDefinition Decode(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length is < 2 or > MaxBytes) throw new ArgumentException("Animation graph byte budget.");

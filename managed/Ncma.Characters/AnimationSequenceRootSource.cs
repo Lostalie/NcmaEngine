@@ -27,7 +27,7 @@ public sealed class AnimationSequenceRootSource:IAnimationSequenceRootSource
             if(anchor is not null){ReadOnlySpan<System.Numerics.Matrix4x4> a=[anchor.InitialPlanar],b=[track.InitialPlanar];var x=System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Matrix4x4,float>(a);var y=System.Runtime.InteropServices.MemoryMarshal.Cast<System.Numerics.Matrix4x4,float>(b);for(int n=0;n<x.Length;n++)if(Math.Abs(x[n]-y[n])>1e-5)throw new ArgumentException("Shared root anchor required.");}
             anchor??=track;tracks.Add(id,track);
         }
-        _recipe=new(tracks,program.MaximumPlanInstructions);
+        _recipe=new(tracks,program.MaximumPlanInstructions,program);
     }
     public AnimationSequenceRootIntent Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan,int output){var delta=_recipe.Evaluate(plan,output);return new(delta.Translation,delta.Yaw);}
 }

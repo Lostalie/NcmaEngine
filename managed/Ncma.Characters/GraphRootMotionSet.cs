@@ -53,7 +53,7 @@ internal sealed class GraphRootMotionSet : IDisposable
                     if (anchor is not null && !Same(anchor.InitialPlanar, track.InitialPlanar)) throw new ArgumentException("Graph root clips must share their initial planar anchor.");
                     anchor ??= track; selected.Add(id, track);
                 }
-                _entries.Add(obj.PersistentId, new(obj.PersistentId, new(selected, program.MaximumPlanInstructions), anchor!, program.MaximumPlanInstructions));
+                _entries.Add(obj.PersistentId, new(obj.PersistentId, new(selected, program.MaximumPlanInstructions,program), anchor!, program.MaximumPlanInstructions));
             }
         } catch { Dispose(); throw; }
     }

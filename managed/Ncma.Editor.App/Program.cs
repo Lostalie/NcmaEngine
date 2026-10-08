@@ -244,7 +244,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         if(!snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId)))return null;
         if(_poseKernel is null) {
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
-            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
+            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
         }
         return _poseKernel;
     }

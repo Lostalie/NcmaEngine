@@ -171,7 +171,7 @@ M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVi
 | FBX 骨架/蒙皮网格/动画导入与 CPU 线框预览 | 已实现，基于 ufbx；候选 C# Orbit/骨架/CPU 蒙皮线框已迁移（最多一万三角形） |
 | FBX 角色资源 C ABI 2 | 已实现：不可变资源、复制报告/索引、显式时间采样/CPU 蒙皮；角色 ABI 1 拒绝 |
 | 候选 C# FBX 独立播放/暂停/片段/Undo/Redo | 已实现有界预览服务/完整报告分页及控件；可见窗口人工验收未完成 |
-| 动画图类型/引脚/连线及基础合法性检查 | 当前M6.6-B严格v3含BlendSpace与事件/中断策略，v1/v2拒绝；有界C#配方与提交式状态机，完整B双配置自动门禁通过 |
+| 动画图类型/引脚/连线及基础合法性检查 | 当前M6.7-B严格v4含BlendSpace/Layer/CachePose与事件/中断，v1/v2/v3拒绝；有界C#配方/提交式状态机及完整B双配置自动门禁通过 |
 | 动画图作者工作区/共享事务/获批MCP | M6.4自动候选：类型引脚、复制草稿、参数/状态/条件、checked保存及Undo/Redo、双人工批准propose/transaction、独立真实NCA/GPU预览；人工/高级节点未验收 |
 | 图过渡中断/提交事件/debug | M6.5 A–D双配置自动候选完成；持久事件/策略、轨道UI、精确获批独立序列MCP、32actor与正式Player联合通过；非live控制/推理服务，人工/素材/目标/性能/长稳开放，见C契约与D交付 |
 | BlendSpace | M6.6-A–D完整双配置自动候选通过；共享相位/主贡献事件-root/真实NCA配方，typed作者与精确获批AI权重扫描；0/1/8/32 Editor/搬移正式Headless-DX11 Player及调度/fault/reload联合测试通过；人工/素材/目标/性能/1h未验收，见M6_6_D_DELIVERY_REPORT.md |

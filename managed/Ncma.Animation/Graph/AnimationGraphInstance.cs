@@ -2,10 +2,13 @@ namespace Ncma.Animation;
 
 public readonly record struct AnimationStepContext(Guid SessionId, Guid WorldId, ulong Tick);
 public readonly record struct AnimationEvaluationToken(Guid InstanceId, ulong Sequence, ulong SourceTick);
-public enum AnimationPoseOperation { Clip, Blend, Frozen, RootSource }
+public enum AnimationPoseOperation { Clip, Blend, Frozen, RootSource, LayerOverride, LayerAdditive }
 // TRS sampling/mixing recipe only, never native pointers or direct World writes.
 public readonly record struct AnimationPoseInstruction(AnimationPoseOperation Operation, Guid NodeId, Guid ClipId,
-    double Previous, double Current, double Duration, bool Loop, int SourceA, int SourceB, float Weight, ulong CacheGeneration=0);
+    double Previous, double Current, double Duration, bool Loop, int SourceA, int SourceB, float Weight, ulong CacheGeneration=0)
+{
+    public int SourceC {get;init;}=-1;
+}
 public readonly record struct AnimationGraphFrame(Guid InstanceId, Guid GraphId, AnimationStepContext Context,
     Guid StateId, Guid FromStateId, Guid TransitionId, float TransitionWeight, int Output, int InstructionCount,ulong FrozenPoseGeneration=0);
 
@@ -40,6 +43,7 @@ public sealed class AnimationGraphInstance
     private readonly bool _interruptions;
     private ulong _frozenGeneration,_nextFrozenGeneration;
     private bool _cacheChanged;
+    private int _cacheRequests,_cacheHits;private AnimationCacheStatistics _committedCache;
     public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false)
     {
         _program = program ?? throw new ArgumentNullException(nameof(program)); RequireContext(context);
@@ -98,6 +102,7 @@ public sealed class AnimationGraphInstance
         _state = _nextState; _from = _nextFrom; _elapsed = _nextElapsed; _duration = _nextDuration; _transition = _nextTransition;
         if(_cacheChanged){_candidateFrozen.CopyTo(_frozen,0);_frozenGeneration=_nextFrozenGeneration;}
         _context = committed; PublishPlan();
+        _committedCache=new(committed.Tick,_cacheRequests,_cacheHits);
         Array.Copy(_events, _committedEvents, _eventCount); _committedEventCount = _eventCount;
         _committedSequence = token.Sequence; _prepared = false; _outcome = AnimationEvaluationOutcome.Committed;
     }
@@ -114,6 +119,7 @@ public sealed class AnimationGraphInstance
     {Verify();if(_prepared||generation==0||generation!=_frozenGeneration||destination.Length<_frozen.Length)throw new InvalidOperationException("Exact committed frozen pose generation required.");_frozen.CopyTo(destination);return _frozen.Length;}
     public int CopyCommittedPlan(Span<AnimationPoseInstruction> destination)
     { Verify(); if (destination.Length < _committedCount) throw new ArgumentException("Graph plan output capacity."); _committedPlan.AsSpan(0, _committedCount).CopyTo(destination); return _committedCount; }
+    public AnimationCacheStatistics CacheStatistics {get{Verify();if(_prepared||_outcome==AnimationEvaluationOutcome.PreparationRejected)throw new InvalidOperationException("Current committed cache statistics required.");return _committedCache;}}
     // Repeated reads copy the same committed receipts; they never dispatch events or consume them.
     public int CopyCommittedEvents(AnimationStepContext context, Span<AnimationGraphEvent> destination)
     {
@@ -172,6 +178,7 @@ public sealed class AnimationGraphInstance
     private void Build(double delta, bool transitions)
     {
         _delta = delta; _count = 0; Array.Fill(_slots, -1);Array.Fill(_primaryRows,-1);Array.Clear(_phaseAdvanced); Array.Clear(_consume); _times.CopyTo(_candidateTimes, 0);
+        _cacheRequests=_cacheHits=0;
         _nextState = _state; _nextFrom = _from; _nextElapsed = _elapsed; _nextDuration = _duration; _nextTransition = _transition;
         _nextFrozenGeneration=_frozenGeneration;_cacheChanged=false;
         // At most one selection per quantum. A completed transition becomes eligible on the next quantum.
@@ -219,10 +226,12 @@ public sealed class AnimationGraphInstance
     }
     private int Evaluate(int index, int context)
     {
-        int at = context * _program.NodeCount + index; if (_slots[at] >= 0) return _slots[at];
+        int at = context * _program.NodeCount + index;bool cache=_program.Nodes[index].Kind==AnimationNodeKind.CachePose;
+        if(cache)_cacheRequests++;if (_slots[at] >= 0){if(cache)_cacheHits++;return _slots[at];}
         var node = _program.Nodes[index]; int result;
         switch (node.Kind) {
-            case AnimationNodeKind.Output: result = Evaluate(node.A, context); break;
+            case AnimationNodeKind.Output:
+            case AnimationNodeKind.CachePose: result = Evaluate(node.A, context); break;
             case AnimationNodeKind.Clip:
                 double previous = _candidateTimes[at]; double current = Next(previous, node.Duration, node.Loop, _delta * Speed(node));
                 _candidateTimes[at] = current; result = Add(new(AnimationPoseOperation.Clip, node.Id, node.Clip, previous, current, node.Duration, node.Loop, -1, -1, 0)); break;
@@ -243,6 +252,12 @@ public sealed class AnimationGraphInstance
                 double weight = node.ScalarParameter < 0 ? node.Weight : _requested[node.ScalarParameter]; AnimationGraphCodec.Scalar(weight, 0, 1);
                 int a = Evaluate(node.A, context), b = Evaluate(node.B, context);
                 result = Add(new(AnimationPoseOperation.Blend, node.Id, Guid.Empty, 0, 0, 0, false, a, b, (float)weight)); break;
+            case AnimationNodeKind.LayerOverride:
+            case AnimationNodeKind.LayerAdditive:
+                double layerWeight=node.ScalarParameter<0?node.Weight:_requested[node.ScalarParameter];AnimationGraphCodec.Scalar(layerWeight,0,1);
+                int basis=Evaluate(node.A,context),layerPose=Evaluate(node.B,context),reference=-1;
+                if(node.Kind==AnimationNodeKind.LayerAdditive){var l=node.Layer!;reference=Add(new(AnimationPoseOperation.Clip,node.Id,l.ReferenceClip,l.ReferenceTime,l.ReferenceTime,_program.ClipDuration(l.ReferenceClip),false,-1,-1,0));}
+                result=Add(new(node.Kind==AnimationNodeKind.LayerOverride?AnimationPoseOperation.LayerOverride:AnimationPoseOperation.LayerAdditive,node.Id,Guid.Empty,0,0,0,false,basis,layerPose,(float)layerWeight){SourceC=reference});break;
             case AnimationNodeKind.StateMachine:
                 int target = Evaluate(_program.StateRoots[_nextState], _nextState + 1);
                 if (_nextFrom == -1) result = target;

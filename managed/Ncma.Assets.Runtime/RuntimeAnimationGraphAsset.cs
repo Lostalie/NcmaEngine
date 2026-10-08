@@ -27,7 +27,7 @@ public sealed class RuntimeAnimationGraphAsset : RuntimeAsset
         var manifest = ModelAssetManifestCodec.Decode(root.CopyData());
         if (root.Generation != skeleton.Generation || root.SkeletonId != skeleton.Id || skeleton.SkeletonId != skeleton.Id ||
             manifest.Skeleton != skeleton.Id) throw new ArgumentException("Graph exact skeleton/model generation required.");
-        int bones = ModelPayloadCodec.DecodeSkeleton(skeleton.CopyData()).Bones.Length;
+        var layout=DescribeSkeleton(skeleton);int bones=layout.Bones.Length;
         var clips = new List<AnimationClipDescriptor>();
         foreach (var dependency in AnimationGraphValidation.Dependencies(graph).Where(d => !d.IsSkeleton)) {
             var asset = (RuntimeDataAsset)lease.Require(dependency.Id, AssetKind.Clip);
@@ -36,8 +36,15 @@ public sealed class RuntimeAnimationGraphAsset : RuntimeAsset
                 clip.BoneCount != bones || !manifest.Clips.Contains(asset.Id)) throw new ArgumentException("Graph exact clip closure required.");
             clips.Add(new(asset.Id, skeleton.Id, skeleton.Generation, clip.Clip.Duration));
         }
-        var program = AnimationProgram.Compile(graph, skeleton.Generation, clips);
+        var program = AnimationProgram.Compile(graph, skeleton.Generation, clips,skeleton:layout);
         if ((long)program.MaximumPlanInstructions * bones > 65536) throw new ArgumentException("Graph numerical scratch budget exceeded.");
         return program;
+    }
+    public static AnimationSkeletonDescriptor DescribeSkeleton(RuntimeDataAsset skeleton)
+    {
+        if(skeleton.Kind!=AssetKind.Skeleton)throw new ArgumentException("Skeleton data required.");
+        var bones=ModelPayloadCodec.DecodeSkeleton(skeleton.CopyData()).Bones;var rows=new AnimationBoneIdentity[bones.Length];
+        for(int i=0;i<bones.Length;i++){string segment=Uri.EscapeDataString(bones[i].Name);if(segment is "." or "..")segment=segment.Replace(".","%2E",StringComparison.Ordinal);rows[i]=new(bones[i].Parent<0?segment:rows[bones[i].Parent].Path+"/"+segment,bones[i].Parent);}
+        return new(skeleton.Id,skeleton.ContentHash,rows);
     }
 }

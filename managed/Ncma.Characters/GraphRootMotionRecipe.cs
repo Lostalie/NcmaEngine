@@ -10,8 +10,9 @@ internal sealed class GraphRootMotionRecipe
     private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly Dictionary<Guid, RootMotionTrack> _tracks;
     private readonly RootMotionDelta[] _scratch;
+    private readonly Dictionary<Guid,AnimationLayerBinding> _layers;
 
-    internal GraphRootMotionRecipe(IReadOnlyDictionary<Guid, RootMotionTrack> tracks, int maximumInstructions)
+    internal GraphRootMotionRecipe(IReadOnlyDictionary<Guid, RootMotionTrack> tracks, int maximumInstructions,AnimationProgram? program=null)
     {
         ArgumentNullException.ThrowIfNull(tracks);
         if (tracks.Count is < 1 or > 128 || maximumInstructions is < 1 or > AnimationGraphCodec.MaxPlanInstructions)
@@ -27,6 +28,7 @@ internal sealed class GraphRootMotionRecipe
             _tracks.Add(pair.Key, pair.Value);
         }
         _scratch = new RootMotionDelta[maximumInstructions];
+        _layers=program?.CopyLayers().ToDictionary(l=>l.NodeId)??[];
     }
 
     // Intervals come from the sole prepared graph token, not a second ClipClock.
@@ -36,6 +38,7 @@ internal sealed class GraphRootMotionRecipe
         if (Environment.CurrentManagedThreadId != _owner) throw new InvalidOperationException("Graph root owner thread required.");
         if (plan.IsEmpty || plan.Length > _scratch.Length || output < 0 || output >= plan.Length)
             throw new ArgumentException("Bounded graph root output required.");
+        AnimationPoseRecipe.Validate(plan,output);
         for (int i = 0; i < plan.Length; i++) {
             var row = plan[i];
             if (row.NodeId == Guid.Empty) throw new ArgumentException("Graph root node identity required.");
@@ -60,6 +63,11 @@ internal sealed class GraphRootMotionRecipe
                 case AnimationPoseOperation.RootSource:
                     if(row.CacheGeneration!=0||row.ClipId!=Guid.Empty||row.Duration!=0||row.Previous!=0||row.Current!=0||row.Loop||row.Weight!=0||row.SourceA<0||row.SourceA>=i||row.SourceB<0||row.SourceB>=i||plan[row.SourceB].Operation!=AnimationPoseOperation.Clip)throw new ArgumentException("Exact backward BlendSpace primary root source required.");
                     result=_scratch[row.SourceB];break;
+                case AnimationPoseOperation.LayerOverride:
+                case AnimationPoseOperation.LayerAdditive:
+                    // Layers cannot acquire movement authority; both overlay/reference rows were fully validated above.
+                    if(!_layers.TryGetValue(row.NodeId,out var layer)||row.Operation==AnimationPoseOperation.LayerAdditive&&(plan[row.SourceC].ClipId!=layer.Definition.ReferenceClip||plan[row.SourceC].Current!=layer.Definition.ReferenceTime))throw new ArgumentException("Exact prepared layer for base-only root.");
+                    result=_scratch[row.SourceA];break;
                 case AnimationPoseOperation.Frozen:
                     if(row.CacheGeneration==0||row.CacheGeneration>9007199254740991UL||row.ClipId!=Guid.Empty||row.Previous!=0||row.Current!=0||row.Duration!=0||row.Loop||row.SourceA!=-1||row.SourceB!=-1||row.Weight!=0)throw new ArgumentException("Exact frozen pose row required.");
                     // Frozen visual source owns no advancing clip interval; only the target contributes root motion.

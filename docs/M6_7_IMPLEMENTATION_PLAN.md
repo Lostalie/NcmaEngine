@@ -21,7 +21,7 @@ A自动候选只验证数值/身份，不改变当前graphv3，不接正式图/�
 覆盖独立System.Numerics oracle、Quaternion符号/0/1/半权重/父骨、失配/别名/foreign/thread/scaleoverflow、
 32×1024暖调用分配与原接口回归。完整门禁见M6_7_A_DELIVERY_REPORT.md。
 
-## B 严格图和真实NCA求值
+## B 严格图和真实NCA求值 自动候选通过
 
 Override/Additive、CachePose与严格新格式替代旧格式；原始拒绝文件保留，不增加compatibility/migration。
 NCA准备核对骨架hash/完整骨骼路径及显式参考clip/time。预编译缓存依赖和scratch生命期；

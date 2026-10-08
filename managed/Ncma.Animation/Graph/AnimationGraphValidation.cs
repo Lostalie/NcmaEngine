@@ -15,7 +15,7 @@ public static class AnimationGraphValidation
     {
         ArgumentNullException.ThrowIfNull(d);
         Require(d.Version == AnimationGraphCodec.CurrentVersion && d.AssetId != Guid.Empty && d.SkeletonId != Guid.Empty && d.AssetId != d.SkeletonId,
-            "identity", d.AssetId, "Strict graph v3 and distinct graph/skeleton UUIDs required; v1/v2 are removed.");
+            "identity", d.AssetId, "Strict graph v4 and distinct graph/skeleton UUIDs required; v1/v2/v3 are removed.");
         AnimationGraphCodec.Text(d.Name, 256);
         Require(d.Parameters is not null && d.Nodes is not null && d.Links is not null && d.States is not null && d.Transitions is not null,
             "collections", d.AssetId, "All graph collections are required.");
@@ -41,7 +41,7 @@ public static class AnimationGraphValidation
             Require(p.Kind == AnimationParameterKind.Bool || !p.BoolDefault, "parameter_default", p.Id, "Triggers start unarmed; irrelevant bool defaults are forbidden.");
             parameterMap.Add(p.Id, p);
         }
-        var nodeMap = new Dictionary<Guid, AnimationGraphNode>();int spaces=0;
+        var nodeMap = new Dictionary<Guid, AnimationGraphNode>();int spaces=0,layers=0;
         foreach (var n in nodes) {
             if (n is null) throw new ArgumentException("Null node."); Identity(n.Id); AnimationGraphCodec.Text(n.Name);
             Require(Enum.IsDefined(n.Kind), "node_kind", n.Id, "Unsupported node kind.");
@@ -51,15 +51,19 @@ public static class AnimationGraphValidation
                 (n.Kind == AnimationNodeKind.Parameter ? parameterMap.ContainsKey(n.ParameterId) : n.ParameterId == Guid.Empty) &&
                 (n.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace || !n.Loop && n.Speed == 0) &&
                 (n.Kind==AnimationNodeKind.BlendSpace?n.BlendSpace is not null:n.BlendSpace is null) &&
-                (n.Kind == AnimationNodeKind.Blend || n.Weight == 0), "node_fields", n.Id, "Missing or irrelevant kind-specific node fields.");
+                (n.Kind is AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive?n.Layer is not null:n.Layer is null) &&
+                (n.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive || n.Weight == 0), "node_fields", n.Id, "Missing or irrelevant kind-specific node fields.");
             if(n.BlendSpace is{} space){Require(++spaces<=AnimationGraphCodec.MaxBlendSpaces,"blendspace_budget",n.Id,"At most16 BlendSpace nodes.");_=new BlendSpaceProgram(space);Identity(space.Id);foreach(var sample in space.Samples)Identity(sample.Id);
                 foreach(var axis in new[]{space.AxisX,space.AxisY}.Where(a=>a is not null))Require(parameterMap.TryGetValue(axis!.ParameterId,out var parameter)&&parameter.Kind==AnimationParameterKind.Float,"blendspace_axis_type",n.Id,"Float axis parameter required.");}
+            if(n.Layer is{} layer){Require(++layers<=AnimationGraphCodec.MaxLayers,"layer_budget",n.Id,"At most16 layers.");if(layer.Mask is null)throw new ArgumentException("Layer mask required.");AnimationBoneMaskProgram.Validate(layer.Mask);Identity(layer.Mask.Id);
+                Require(layer.Mask.SkeletonId==d.SkeletonId,"layer_skeleton",n.Id,"Layer exact skeleton UUID required.");AnimationGraphCodec.Scalar(layer.ReferenceTime,0,600);
+                Require(n.Kind==AnimationNodeKind.LayerOverride?layer.ReferenceClip==Guid.Empty&&layer.ReferenceTime==0:layer.ReferenceClip!=Guid.Empty,"layer_reference",n.Id,"Additive requires explicit reference Clip/time; override reference must be neutral.");}
             nodeMap.Add(n.Id, n);
         }
         var stateMap = new Dictionary<Guid, AnimationGraphState>(); names.Clear();
         foreach (var s in states) {
             if (s is null) throw new ArgumentException("Null state."); Identity(s.Id); AnimationGraphCodec.Text(s.Name);
-            Require(names.Add(s.Name) && nodeMap.TryGetValue(s.PoseNode, out var root) && root.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend or AnimationNodeKind.BlendSpace,
+            Require(names.Add(s.Name) && nodeMap.TryGetValue(s.PoseNode, out var root) && root.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend or AnimationNodeKind.BlendSpace or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive or AnimationNodeKind.CachePose,
                 "state_pose", s.Id, "State requires a Clip/Blend pose root and unique name; nested machines are not supported.");
             stateMap.Add(s.Id, s);
         }
@@ -101,7 +105,7 @@ public static class AnimationGraphValidation
             dependencies[l.To].Add(l.From);
         }
         foreach (var n in nodes) {
-            string[] required = n.Kind switch { AnimationNodeKind.Blend => ["a", "b"], AnimationNodeKind.Output => ["pose"], _ => [] };
+            string[] required = n.Kind switch { AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive => ["a", "b"], AnimationNodeKind.Output or AnimationNodeKind.CachePose => ["pose"], _ => [] };
             foreach (string pin in required) Require(occupied.Contains((n.Id, pin)), "missing_input", n.Id, "Required pose input is not connected: " + pin);
         }
         var output = nodes.Where(n => n.Kind == AnimationNodeKind.Output).ToArray();
@@ -143,13 +147,13 @@ public static class AnimationGraphValidation
             AnimationParameterKind.Bool => AnimationPinType.Bool, AnimationParameterKind.Trigger => AnimationPinType.Trigger,
             _ => throw new ArgumentException("Unknown parameter pin type.")
         };
-        if (node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend or AnimationNodeKind.StateMachine or AnimationNodeKind.BlendSpace && pin == "pose") return AnimationPinType.Pose;
+        if (node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend or AnimationNodeKind.StateMachine or AnimationNodeKind.BlendSpace or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive or AnimationNodeKind.CachePose && pin == "pose") return AnimationPinType.Pose;
         throw new AnimationGraphValidationException("output_pin", node.Id, "Unknown output pin or wrong direction.");
     }
     private static AnimationPinType InputPin(AnimationGraphNode node, string pin)
     {
-        if (node.Kind == AnimationNodeKind.Blend && pin is "a" or "b" || node.Kind == AnimationNodeKind.Output && pin == "pose") return AnimationPinType.Pose;
-        if (node.Kind == AnimationNodeKind.Blend && pin == "weight" || node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace && pin == "speed") return AnimationPinType.Float;
+        if (node.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive && pin is "a" or "b" || node.Kind is AnimationNodeKind.Output or AnimationNodeKind.CachePose && pin == "pose") return AnimationPinType.Pose;
+        if (node.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive && pin == "weight" || node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace && pin == "speed") return AnimationPinType.Float;
         throw new AnimationGraphValidationException("input_pin", node.Id, "Unknown input pin or wrong direction.");
     }
     public static IReadOnlyList<AnimationGraphDependency> Dependencies(AnimationGraphDefinition d)
@@ -159,5 +163,5 @@ public static class AnimationGraphValidation
             .Concat(ClipIds(d).Select(id=>new AnimationGraphDependency(id,false)))
             .OrderBy(x => x.Id).ToArray());
     }
-    public static Guid[] ClipIds(AnimationGraphDefinition d)=>d.Nodes.SelectMany(n=>n.Kind==AnimationNodeKind.Clip?new[]{n.ClipId}:n.BlendSpace?.Samples.Select(s=>s.ClipId)??Enumerable.Empty<Guid>()).Distinct().Order().ToArray();
+    public static Guid[] ClipIds(AnimationGraphDefinition d)=>d.Nodes.SelectMany(n=>n.Kind==AnimationNodeKind.Clip?new[]{n.ClipId}:n.BlendSpace?.Samples.Select(s=>s.ClipId)??(n.Layer is{ReferenceClip:var id}&&id!=Guid.Empty?new[]{id}:Enumerable.Empty<Guid>())).Distinct().Order().ToArray();
 }

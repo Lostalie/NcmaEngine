@@ -132,6 +132,7 @@ internal static unsafe partial class Program
         TestAnimatorRootScenes(renderer,ref frame,native,output);
         TestAnimatorInterruptions(renderer,ref frame,native,output);
         TestBlendSpaceScenes(renderer,ref frame,native,output);
+        TestLayerScenes(renderer,ref frame,native,output);
     }
     private static byte[] ChangeGraphIndex(byte[] bytes,Guid graph,bool generation=false)
     {

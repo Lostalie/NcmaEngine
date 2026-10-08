@@ -15,7 +15,7 @@ public sealed class AnimationGraphCanvas
     public void Load(AnimationGraphDefinition graph) { if (_graph?.AssetId != graph.AssetId) _selection.Clear(); _graph = AnimationGraphEdits.CopyDraft(graph); _selection.RemoveWhere(id => !graph.Nodes.Any(n => n.Id == id)); }
     public void Select(Guid id, bool toggle = false) { if (_graph?.Nodes.Any(n => n.Id == id) != true) throw new ArgumentException("Unknown node."); if (!toggle) _selection.Clear(); if (toggle && _selection.Contains(id)) _selection.Remove(id); else { if (_selection.Count >= 64) throw new ArgumentException("Selection budget."); _selection.Add(id); } }
     public AnimationGraphNodeBox[] Boxes => _graph?.Nodes.Select(n => new AnimationGraphNodeBox(n.Id, new((float)n.X,(float)n.Y), new(200, 72 + Math.Max(0, Inputs(n).Length - 1)*24))).ToArray() ?? [];
-    private static string[] Inputs(AnimationGraphNode n) => n.Kind switch { AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace => ["speed"], AnimationNodeKind.Blend => ["a","b","weight"], AnimationNodeKind.Output => ["pose"], _ => [] };
+    private static string[] Inputs(AnimationGraphNode n) => n.Kind switch { AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace => ["speed"], AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive => ["a","b","weight"], AnimationNodeKind.Output or AnimationNodeKind.CachePose => ["pose"], _ => [] };
     public AnimationGraphPin[] Pins { get {
         if (_graph is null) return []; var pins = new List<AnimationGraphPin>();
         foreach (var n in _graph.Nodes) {

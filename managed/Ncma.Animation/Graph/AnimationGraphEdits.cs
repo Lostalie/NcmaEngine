@@ -28,6 +28,7 @@ public static class AnimationGraphEdits
         foreach (var n in d.Nodes) { Id(n.Id); AnimationGraphCodec.Text(n.Name); if (!Enum.IsDefined(n.Kind)) throw new ArgumentException("Draft node kind.");
             AnimationGraphCodec.Scalar(n.X, -65536, 65536); AnimationGraphCodec.Scalar(n.Y, -65536, 65536); AnimationGraphCodec.Scalar(n.Speed, 0, 8); AnimationGraphCodec.Scalar(n.Weight, 0, 1);
             if(n.BlendSpace is{} space){Id(space.Id);if(space.AxisX is null||space.Dimensions is not (1 or 2)||space.Samples is null||space.Samples.Length>BlendSpaceProgram.MaximumSamples||space.Samples.Any(s=>s is null))throw new ArgumentException("Bounded space draft.");AnimationGraphCodec.Scalar(space.CycleSeconds,.001,600);foreach(var axis in new[]{space.AxisX,space.AxisY}.Where(a=>a is not null)){AnimationGraphCodec.Text(axis!.Name);AnimationGraphCodec.Text(axis.Unit);AnimationGraphCodec.Scalar(axis.Minimum,-1000000,1000000);AnimationGraphCodec.Scalar(axis.Maximum,-1000000,1000000);}foreach(var s in space.Samples){Id(s.Id);AnimationGraphCodec.Scalar(s.X,-1000000,1000000);AnimationGraphCodec.Scalar(s.Y,-1000000,1000000);}}
+            if(n.Layer is{} layer){AnimationBoneMaskProgram.Validate(layer.Mask);Id(layer.Mask.Id);AnimationGraphCodec.Scalar(layer.ReferenceTime,0,600);}
         }
         foreach (var p in d.Parameters) { Id(p.Id); AnimationGraphCodec.Text(p.Name); if (!Enum.IsDefined(p.Kind)) throw new ArgumentException("Draft parameter kind."); AnimationGraphCodec.Scalar(p.FloatDefault, -1000000, 1000000); }
         foreach (var l in d.Links) { Id(l.Id); AnimationGraphCodec.Text(l.FromPin, 16); AnimationGraphCodec.Text(l.ToPin, 16); }
@@ -36,7 +37,7 @@ public static class AnimationGraphEdits
             if (t.Priority is < 0 or > 255) throw new ArgumentException("Draft priority."); foreach (var c in t.Conditions) { if (!Enum.IsDefined(c.Comparison)) throw new ArgumentException("Draft comparison."); AnimationGraphCodec.Scalar(c.FloatValue, -1000000, 1000000); } }
         foreach(var e in d.Events){Id(e.Id);AnimationGraphCodec.Text(e.Name);AnimationGraphCodec.Scalar(e.Time,double.Epsilon,600);if(e.ClipId==Guid.Empty)throw new ArgumentException("Event clip UUID.");}
         if (JsonSerializer.SerializeToUtf8Bytes(d, Json).Length > AnimationGraphCodec.MaxBytes) throw new ArgumentException("Draft bytes exceeded.");
-        return d with { Nodes = d.Nodes.Select(n=>n.BlendSpace is{} s?n with{BlendSpace=s with{Samples=s.Samples.Select(p=>p with{}).ToArray()}}:n).ToArray(), Parameters = d.Parameters.ToArray(), Links = d.Links.ToArray(), States = d.States.ToArray(),
+        return d with { Nodes = d.Nodes.Select(n=>n with{BlendSpace=n.BlendSpace is{} s?s with{Samples=s.Samples.Select(p=>p with{}).ToArray()}:null,Layer=n.Layer is{} l?l with{Mask=l.Mask with{Bones=l.Mask.Bones.ToArray()}}:null}).ToArray(), Parameters = d.Parameters.ToArray(), Links = d.Links.ToArray(), States = d.States.ToArray(),
             Events=d.Events.Select(e=>e with{}).ToArray(),Transitions = d.Transitions.Select(t => t with { Conditions = t.Conditions.ToArray() }).ToArray() };
     }
     public static AnimationGraphDefinition Apply(AnimationGraphDefinition source, JsonElement operations, bool requireComplete = true)

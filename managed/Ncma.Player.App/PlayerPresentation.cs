@@ -39,7 +39,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         var snapshot=play.Document.CaptureSnapshot();
         if(snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
-            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
+            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
         }
         _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play,
             interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators); _camera = camera ?? Guid.Empty;

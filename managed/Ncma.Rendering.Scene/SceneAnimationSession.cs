@@ -41,6 +41,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     private double _previewSeconds;
     private readonly IRootMotionPresentation? _rootMotion;
     private readonly SceneAnimatorRuntime? _animators;
+    private readonly bool _hasNonGraph;
     private double _previewDebt;
     public Guid WorldId {get;}
     public AnimationSceneCosts Costs {get;private set;}
@@ -87,6 +88,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                 _characters.Add(instance);bones=checked(bones+rig.Rig.BoneCount);palettes=checked(palettes+instance.Bindings.BindingCount);
             }
             if(bones>32768||palettes>32768)throw new ArgumentException("Scene pose/palette capacity.");
+            _hasNonGraph=_characters.Any(c=>c.GraphPose is null);
             _locals=new PoseTrs[bones];_models=new Matrix4x4[bones];_bindingMatrices=new Matrix4x4[palettes];_palette=new GpuSkinPalette[palettes];
         }catch{Dispose();throw;}
     }
@@ -158,7 +160,9 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
             _samples[i]=new(c.Rig,clip,times);
         }
         if(active==0){Costs=new(0,0,0,0,0,Costs.PoseGeneration);return;}
-        _kernel.Sample(_samples.AsSpan(0,_characters.Count),_locals,_models);
+        // Graph recipes populate their complete local/model pose; a bind-pose prepass would be overwritten.
+        // Mixed clip/graph scenes retain their original complete bounded prepass.
+        if(_hasNonGraph)_kernel.Sample(_samples.AsSpan(0,_characters.Count),_locals,_models);
         foreach(var c in _characters) if(c.Active && c.GraphPose is { } pose) {
             AnimationGraphFrame frame; int count;
             if(_play is null){frame=c.PreviewGraph!.Frame;count=c.PreviewGraph.CopyCommittedPlan(pose.Plan);}
