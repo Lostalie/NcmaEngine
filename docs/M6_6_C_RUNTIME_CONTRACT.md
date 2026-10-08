@@ -42,5 +42,5 @@ UI与MCP用同一个服务和全页case/resource/audience审阅；UI结果可分
 realstdio点提案/双审批事务、几何权重页默认拒绝/撤销/TTL、queued revoke/re-pair以及实际ImGui/GPU预览。
 16×256最大扫描通过；运行时暖采样零分配由A/B及保留测试验证，不代表工具扫描零分配。
 纯空间图也可创建状态与Clip依赖事件，不依赖不存在的Clip节点。
-完整顺序Debug/Release通过，101部署hash/journal已核对，见交付报告；D联合门禁未完成。
+完整顺序Debug/Release通过，101部署hash/journal已核对，见交付报告；后续D联合自动门禁也通过，见M6_6_D_DELIVERY_REPORT.md。
 人工可见UI/MCP、用户FBX、目标环境、完整性能及1h门禁继续开放。

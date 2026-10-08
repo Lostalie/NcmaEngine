@@ -53,12 +53,15 @@ internal static unsafe partial class Program
         var config=new Ncma.Application.ProjectConfiguration(1,f.Project,"Packed BlendSpace","start.ncmascene","gameplay.dll","Direct3D11",[],AssetPackage:"assets/game.ncpak");string project=Path.Combine(moved,"game.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(config,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
         var report=Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",Path.Combine(moved,"result.json")]),pluginRoot:Path.Combine(moved,"no-native-plugins"),visible:false);
         Check(report.ExitCode==0&&report.Tick==8&&report.Modules.Length==0&&report.ShutdownErrors.Length==0,"Formal source-free strict v3 BlendSpace Headless Player: "+report.Reason);
-        TestBlendSpaceInterruptionSource(f,graph,node,end);
-        Check(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"Space API validation");File.WriteAllText(Path.Combine(output,"blendspace-scene-results.json"),JsonSerializer.Serialize(new{schema=1,realNca=true,unequalDurations=true,phaseCycles=16,primaryEvents=true,rootPrimary=true,mixedPoseRootStrip=true,uniqueJolt=true,gpuMaxError=maxError,headlessActors=new[]{0,1,8,32},reload=true,manualAccepted=false}));
+        TestBlendSpaceSchedulesAndFaults(f,graph,Document,physics,kernel,output);
+        var interrupted=TestBlendSpaceInterruptionSource(f,graph,node,end);
+        var joint=interrupted with{Events=interrupted.Events.GroupBy(e=>e.ClipId).Select(g=>g.First()).ToArray()};
+        TestAnimatorJointAcceptance(renderer,ref frame,native,output,f,joint,Document,physics,kernel,"m6-6-d","M6.6-D");
+        Check(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"Space API validation");File.WriteAllText(Path.Combine(output,"blendspace-scene-results.json"),JsonSerializer.Serialize(new{schema=2,realNca=true,unequalDurations=true,phaseCycles=16,primaryEvents=true,rootPrimary=true,mixedPoseRootStrip=true,uniqueJolt=true,gpuMaxError=maxError,headlessActors=new[]{0,1,8,32},reload=true,jointPassed=true,actualCacheWarmIterations=1024,actualCacheAllocation=0,manualAccepted=false}));
         Console.WriteLine("PASS M6.6-B actual NCA unequal-duration space/primary events/root/unique Jolt/shared skin-shadow/TRS GPU oracle/128 quanta/Headless32/reload");
     }
 
-    private static void TestBlendSpaceInterruptionSource(SkinFixture f,AnimationGraphDefinition graph,AnimationGraphNode space,AnimationGraphNode output)
+    private static AnimationGraphDefinition TestBlendSpaceInterruptionSource(SkinFixture f,AnimationGraphDefinition graph,AnimationGraphNode space,AnimationGraphNode output)
     {
         var flag=new AnimationParameter(Guid.NewGuid(),"Switch",AnimationParameterKind.Bool,0,0,false);
         var clip=AnimationGraphNode.Create(Guid.NewGuid(),"Right",AnimationNodeKind.Clip) with{ClipId=f.Manifest.Clips[0],Loop=true,Speed=1};
@@ -83,5 +86,10 @@ internal static unsafe partial class Program
         }
         var plan=instance.ReadDebug(instance.Frame.Context).Instructions.ToArray();var untouched=new[]{new AnimationLocalTransform(new(7,8,9),Quaternion.Identity,1),new AnimationLocalTransform(new(7,8,9),Quaternion.Identity,1)};
         var bad=(AnimationPoseInstruction[])plan.Clone();bad[^1]=bad[^1] with{Weight=float.NaN};Reject(()=>source.Evaluate(bad,instance.Frame.Output,frozen,instance.Frame.FrozenPoseGeneration,untouched));Check(untouched.All(v=>v.Position==new Vector3(7,8,9)),"Invalid whole pose leaves copied destination unchanged");
+        for(int i=0;i<512;i++){instance.SetBool(flag.Id,i%2==0);var t=instance.Prepare(instance.Frame.Context,.125);instance.Commit(t,instance.Frame.Context with{Tick=instance.Frame.Context.Tick+1});}
+        long allocated=GC.GetAllocatedBytesForCurrentThread();
+        for(int i=0;i<1024;i++){instance.SetBool(flag.Id,i%2==0);var t=instance.Prepare(instance.Frame.Context,.125);instance.Commit(t,instance.Frame.Context with{Tick=instance.Frame.Context.Tick+1});}
+        Check(GC.GetAllocatedBytesForCurrentThread()==allocated,"Actual NCA whole-space interruption warm1024 allocates zero");
+        return graph;
     }
 }

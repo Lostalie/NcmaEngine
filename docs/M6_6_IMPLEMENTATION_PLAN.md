@@ -43,7 +43,7 @@ AI与UI使用同一prepare/采样扫描：有界闭合坐标请求和主源/权�
 测试shared edits、GUI stamped gestures、完整review分页、真实stdio/闭合schema/撤销/TTL/重新配对/
 排队失效/冲突/Undo/资源变更/只读Play，完整双配置提交。
 
-## D：联合回归与交付
+## D：联合回归与交付（完整双配置自动候选通过）
 
 0/1/8/32Editor/Player/Headless，搬移NCP1图与实际NCA闭包，不同render frame rate/fixed step；
 独立CPU权重/TRS/GPU/root oracle、循环及source事件唯一、反复中断、fault/reload/close-retention/
@@ -51,3 +51,6 @@ Stop/new-Play、resource baselines、成本证据与完整Debug/Release/smokes/f
 核对Release安装hash/journal/可恢复备份，提交推送并核对SHA。
 仅A–D相应证据完成后标M6.6自动候选完成；不宣称真实用户素材/可见第三方MCP/目标机器/性能/1h验收，
 不提前声称M6.7分层缓存或M6.8Montage实现。
+
+2026-10-08：A/B/C/D分别按授权完整双配置通过；C远端29ef3ac已核对，D见M6_6_D_DELIVERY_REPORT.md。
+仅自动候选完成，人工/用户素材/目标环境/性能/1h门禁保持开放。
