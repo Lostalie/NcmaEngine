@@ -131,6 +131,7 @@ internal static unsafe partial class Program
         Console.WriteLine("PASS M6.3-B real NCA graph/pinned closure/package/headless/reload/preview/native blend/32 Editor cycles/fault/close retention");
         TestAnimatorRootScenes(renderer,ref frame,native,output);
         TestAnimatorInterruptions(renderer,ref frame,native,output);
+        TestBlendSpaceScenes(renderer,ref frame,native,output);
     }
     private static byte[] ChangeGraphIndex(byte[] bytes,Guid graph,bool generation=false)
     {

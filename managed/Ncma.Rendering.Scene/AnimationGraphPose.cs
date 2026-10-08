@@ -36,6 +36,8 @@ internal sealed class AnimationGraphPose
             } else if (instruction.Operation == AnimationPoseOperation.Blend && instruction.CacheGeneration==0 && instruction.SourceA >= 0 && instruction.SourceA < i && instruction.SourceB >= 0 && instruction.SourceB < i) {
                 _blend[0] = new(_rig, instruction.SourceA * _rig.BoneCount, instruction.SourceB * _rig.BoneCount, instruction.Weight);
                 _kernel.Blend(_blend, _scratch.AsSpan(0, count * _rig.BoneCount), _temporary, _models);
+            } else if(instruction.Operation==AnimationPoseOperation.RootSource&&instruction.CacheGeneration==0&&instruction.SourceA>=0&&instruction.SourceA<i&&instruction.SourceB>=0&&instruction.SourceB<i&&Plan[instruction.SourceB].Operation==AnimationPoseOperation.Clip&&instruction.ClipId==Guid.Empty&&instruction.Previous==0&&instruction.Current==0&&instruction.Duration==0&&!instruction.Loop&&instruction.Weight==0) {
+                _blend[0]=new(_rig,instruction.SourceA*_rig.BoneCount,instruction.SourceA*_rig.BoneCount,0);_kernel.Blend(_blend,_scratch.AsSpan(0,count*_rig.BoneCount),_temporary,_models);
             } else if(instruction.Operation==AnimationPoseOperation.Frozen&&instruction.CacheGeneration!=0&&instruction.CacheGeneration==frozenGeneration&&instruction.SourceA==-1&&instruction.SourceB==-1&&instruction.ClipId==Guid.Empty&&instruction.Previous==0&&instruction.Current==0&&instruction.Duration==0&&!instruction.Loop&&instruction.Weight==0) {
                 for(int b=0;b<Frozen.Length;b++){var v=Frozen[b];_scratch[offset+b]=new(v.Position,v.Rotation,new Vector3(v.Scale));}
                 _blend[0]=new(_rig,offset,offset,0);_kernel.Blend(_blend,_scratch.AsSpan(0,count*_rig.BoneCount),_temporary,_models);

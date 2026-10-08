@@ -39,7 +39,7 @@ public static class AnimationGraphSequence
                 case AnimationSequenceAssertionKind.Transition:
                     if (assertion.Value != 0 || assertion.SubjectId != Guid.Empty && !program.Transitions.Any(ts => ts.Any(t => t.Id == assertion.SubjectId))) throw new ArgumentException("Exact transition assertion."); break;
                 case AnimationSequenceAssertionKind.EventCount:
-                    if (assertion.SubjectId != Guid.Empty && !program.EventTracks.Any(ms => ms.Any(m => m.Id == assertion.SubjectId)) ||
+                    if (assertion.SubjectId != Guid.Empty && !program.EventTracks.Values.Any(ms => ms.Any(m => m.Id == assertion.SubjectId)) ||
                         !double.IsFinite(assertion.Value) || assertion.Value != Math.Truncate(assertion.Value) || assertion.Value is < 0 or > AnimationProgram.MaximumEventsPerQuantum)
                         throw new ArgumentException("Bounded event assertion."); break;
                 case AnimationSequenceAssertionKind.Parameter:

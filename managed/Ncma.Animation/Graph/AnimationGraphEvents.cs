@@ -19,11 +19,11 @@ public sealed record AnimationGraphDebugFrame(AnimationGraphFrame Frame, ulong C
 internal static class AnimationEventCompilation
 {
     internal const int MaxMarkers = 4096, MaxEvents = 256;
-    internal static (AnimationEventMarker[][] Tracks, string Hash) Compile(AnimationProgram.Node[] nodes,
+    internal static (Dictionary<Guid,AnimationEventMarker[]> Tracks, string Hash) Compile(IReadOnlyList<AnimationClipDescriptor> descriptors,
         IReadOnlyList<AnimationEventMarker> input)
     {
         if (input.Count > MaxMarkers) throw new ArgumentException("Animation event marker budget.");
-        var clips = nodes.Where(n => n.Kind == AnimationNodeKind.Clip).ToDictionaryByClip();
+        var clips = descriptors.ToDictionary(c=>c.Id,c=>c.Duration);
         var seen = new HashSet<Guid>();
         var owned = new AnimationEventMarker[input.Count];
         for (int i = 0; i < input.Count; i++) {
@@ -34,8 +34,6 @@ internal static class AnimationEventCompilation
         }
         string hash = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(owned.OrderBy(m => m.Id).ToArray())));
         var byClip = owned.GroupBy(m => m.ClipId).ToDictionary(g => g.Key, g => g.OrderBy(m => m.Time).ThenBy(m => m.Id).ToArray());
-        return (nodes.Select(n => n.Kind == AnimationNodeKind.Clip && byClip.TryGetValue(n.Clip, out var track) ? track : Array.Empty<AnimationEventMarker>()).ToArray(), hash);
+        foreach(Guid id in clips.Keys)byClip.TryAdd(id,[]);return (byClip,hash);
     }
-    private static Dictionary<Guid, double> ToDictionaryByClip(this IEnumerable<AnimationProgram.Node> nodes)
-    { var result = new Dictionary<Guid, double>(); foreach (var node in nodes) result.TryAdd(node.Clip, node.Duration); return result; }
 }

@@ -65,7 +65,7 @@ internal sealed class AnimationRuntimeInspectionService(EditorSessionOwner owner
         if(input.ValueKind!=JsonValueKind.Object||input.EnumerateObject().Any(p=>!allowed.Contains(p.Name))||input.EnumerateObject().Select(p=>p.Name).Distinct().Count()!=input.EnumerateObject().Count())throw Invalid();
         Guid Id(string key){if(!input.TryGetProperty(key,out var v)||v.ValueKind!=JsonValueKind.String||!Guid.TryParseExact(v.GetString(),"D",out Guid id)||id==Guid.Empty||v.GetString()!=id.ToString("D"))throw Invalid();return id;}
         int Count(string key,int fallback,int min,int max){if(!input.TryGetProperty(key,out var v))return fallback;if(v.ValueKind!=JsonValueKind.Number||!v.TryGetInt32(out int n)||n<min||n>max)throw Invalid();return n;}
-        Guid play=Id("playSessionId"),world=Id("worldId"),actor=Id("objectId");int offset=Count("offset",0,0,768),limit=Count("limit",16,1,32);ulong? tick=null;
+        Guid play=Id("playSessionId"),world=Id("worldId"),actor=Id("objectId");int offset=Count("offset",0,0,AnimationGraphCodec.MaxPlanInstructions-1),limit=Count("limit",16,1,32);ulong? tick=null;
         if(input.TryGetProperty("expectedTick",out var t)){if(t.ValueKind!=JsonValueKind.Number||!t.TryGetUInt64(out ulong n)||n>9007199254740991)throw Invalid();tick=n;}
         if(!Active()||!_grant!.Bindings.Any(b=>b.ObjectId==actor))throw new EditRejectedException("animator_not_visible");
         if(play!=_grant.PlaySessionId||world!=_grant.WorldId)throw new EditCommandRejectedException("animator_snapshot_stale");

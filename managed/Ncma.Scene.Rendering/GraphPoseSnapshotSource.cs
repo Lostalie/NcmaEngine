@@ -45,6 +45,8 @@ public sealed class GraphPoseSnapshotSource : IAnimationPoseSnapshotSource
                     for(int b=0;b<BoneCount;b++)local[b]=Mix(_scratch[row.SourceA*BoneCount+b],_scratch[row.SourceB*BoneCount+b],row.Weight);break;
                 case AnimationPoseOperation.Frozen:
                     Neutral(row);if(row.SourceA!=-1||row.SourceB!=-1||row.Weight!=0||row.CacheGeneration==0||row.CacheGeneration!=frozenGeneration||frozen.Length!=BoneCount)throw new ArgumentException("Exact immutable frozen pose generation.");frozen.CopyTo(local);foreach(var v in local)if(!float.IsFinite(v.Position.LengthSquared())||!float.IsFinite(v.Scale)||v.Scale<=0||!float.IsFinite(v.Rotation.LengthSquared())||Math.Abs(v.Rotation.LengthSquared()-1)>1e-4)throw new ArgumentException("Invalid frozen TRS.");break;
+                case AnimationPoseOperation.RootSource:
+                    Neutral(row);if(row.CacheGeneration!=0||row.Weight!=0||row.SourceA<0||row.SourceA>=i||row.SourceB<0||row.SourceB>=i||plan[row.SourceB].Operation!=AnimationPoseOperation.Clip)throw new ArgumentException("Backward complete primary source required.");_scratch.AsSpan(row.SourceA*BoneCount,BoneCount).CopyTo(local);break;
                 default:throw new ArgumentException("Closed pose operation required.");
             }
         }

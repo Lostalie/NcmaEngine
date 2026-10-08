@@ -14,7 +14,7 @@ internal sealed class GraphRootMotionRecipe
     internal GraphRootMotionRecipe(IReadOnlyDictionary<Guid, RootMotionTrack> tracks, int maximumInstructions)
     {
         ArgumentNullException.ThrowIfNull(tracks);
-        if (tracks.Count is < 1 or > 128 || maximumInstructions is < 1 or > 3 * AnimationGraphCodec.MaxNodes + 1)
+        if (tracks.Count is < 1 or > 128 || maximumInstructions is < 1 or > AnimationGraphCodec.MaxPlanInstructions)
             throw new ArgumentException("Bounded graph root recipe required.");
         _tracks = new(tracks.Count);
         int keys = 0, root = -1;
@@ -57,6 +57,9 @@ internal sealed class GraphRootMotionRecipe
                     float yaw = MathF.IEEERemainder(a.Yaw + MathF.IEEERemainder(b.Yaw - a.Yaw, 2 * MathF.PI) * row.Weight, 2 * MathF.PI);
                     result = new(Vector3.Lerp(a.Translation, b.Translation, row.Weight), yaw);
                     break;
+                case AnimationPoseOperation.RootSource:
+                    if(row.CacheGeneration!=0||row.ClipId!=Guid.Empty||row.Duration!=0||row.Previous!=0||row.Current!=0||row.Loop||row.Weight!=0||row.SourceA<0||row.SourceA>=i||row.SourceB<0||row.SourceB>=i||plan[row.SourceB].Operation!=AnimationPoseOperation.Clip)throw new ArgumentException("Exact backward BlendSpace primary root source required.");
+                    result=_scratch[row.SourceB];break;
                 case AnimationPoseOperation.Frozen:
                     if(row.CacheGeneration==0||row.CacheGeneration>9007199254740991UL||row.ClipId!=Guid.Empty||row.Previous!=0||row.Current!=0||row.Duration!=0||row.Loop||row.SourceA!=-1||row.SourceB!=-1||row.Weight!=0)throw new ArgumentException("Exact frozen pose row required.");
                     // Frozen visual source owns no advancing clip interval; only the target contributes root motion.

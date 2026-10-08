@@ -7,17 +7,18 @@ public readonly record struct AnimationClipDescriptor(Guid Id, Guid SkeletonId, 
 public sealed class AnimationProgram
 {
     internal sealed record Node(Guid Id, AnimationNodeKind Kind, int A, int B, int Parameter,
-        int ScalarParameter, Guid Clip, double Duration, bool Loop, double Speed, double Weight);
+        int ScalarParameter, Guid Clip, double Duration, bool Loop, double Speed, double Weight,Space? Space=null);
+    internal sealed record Space(BlendSpaceProgram Weights,BlendSpaceSample[] Samples,double[] Durations,int X,int Y,int PhaseLeader);
     internal sealed record Condition(int Parameter, AnimationComparison Comparison, double Value);
     internal sealed record Transition(Guid Id, int From, int To, double Duration, double? ExitTime, Condition[] Conditions);
     internal readonly Node[] Nodes;
     internal readonly AnimationParameter[] Parameters;
     internal readonly Guid[] States;
-    internal readonly int[] StateRoots, StatePrimaryClips;
+    internal readonly int[] StateRoots, StatePrimarySources;
     internal readonly Transition[][] Transitions;
     internal readonly Dictionary<Guid, int> ParameterIndices;
     internal readonly int Output, Entry, Machine;
-    internal readonly AnimationEventMarker[][] EventTracks;
+    internal readonly Dictionary<Guid,AnimationEventMarker[]> EventTracks;
     public string EventContentHash { get; }
     public const int MaximumEventsPerQuantum = AnimationEventCompilation.MaxEvents;
     public Guid AssetId { get; }
@@ -28,7 +29,7 @@ public sealed class AnimationProgram
     public int NodeCount => Nodes.Length;
     public int ParameterCount => Parameters.Length;
     public int StateCount => States.Length;
-    public int MaximumPlanInstructions => 3 * NodeCount + 1;
+    public int MaximumPlanInstructions => 3 * NodeCount + 1+10*Nodes.Count(n=>n.Space is not null);
     private AnimationProgram(AnimationGraphDefinition d, IReadOnlyList<AnimationClipDescriptor> clips, ulong generation,
         IReadOnlyList<AnimationEventMarker> events)
     {
@@ -48,29 +49,32 @@ public sealed class AnimationProgram
         var clipMap = clips.ToDictionary(c => c.Id); var input = d.Links.ToDictionary(l => (l.To, l.ToPin), l => ids[l.From]);
         int Pin(Guid id, string pin) => input.TryGetValue((id, pin), out int index) ? index : -1;
         int Scalar(Guid id, string pin) { int source = Pin(id, pin); return source < 0 ? -1 : ParameterIndices[d.Nodes[source].ParameterId]; }
+        Space? PrepareSpace(AnimationGraphNode n){if(n.BlendSpace is not{} s)return null;var weights=new BlendSpaceProgram(s);var samples=weights.CopyDefinition().Samples;
+            int leader=s.SyncGroup==Guid.Empty?ids[n.Id]:d.Nodes.Where(other=>other.BlendSpace?.SyncGroup==s.SyncGroup).Select(other=>other.Id).Order().Select(id=>ids[id]).First();
+            return new(weights,samples,samples.Select(sample=>clipMap[sample.ClipId].Duration).ToArray(),ParameterIndices[s.AxisX.ParameterId],s.AxisY is{} y?ParameterIndices[y.ParameterId]:-1,leader);}
         Nodes = d.Nodes.Select(n => new Node(n.Id, n.Kind, Pin(n.Id, n.Kind == AnimationNodeKind.Output ? "pose" : "a"),
             Pin(n.Id, "b"), n.Kind == AnimationNodeKind.Parameter ? ParameterIndices[n.ParameterId] : -1,
-            Scalar(n.Id, n.Kind == AnimationNodeKind.Clip ? "speed" : "weight"), n.ClipId,
-            n.Kind == AnimationNodeKind.Clip ? clipMap[n.ClipId].Duration : 0, n.Loop, n.Speed, n.Weight)).ToArray();
+            Scalar(n.Id, n.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace ? "speed" : "weight"), n.ClipId,
+            n.Kind == AnimationNodeKind.Clip ? clipMap[n.ClipId].Duration : n.BlendSpace?.CycleSeconds??0, n.Loop, n.Speed, n.Weight,PrepareSpace(n))).ToArray();
         Output = Array.FindIndex(Nodes, n => n.Kind == AnimationNodeKind.Output);
-        (EventTracks, EventContentHash) = AnimationEventCompilation.Compile(Nodes, events);
+        (EventTracks, EventContentHash) = AnimationEventCompilation.Compile(clips, events);
         Machine = Array.FindIndex(Nodes, n => n.Kind == AnimationNodeKind.StateMachine);
         States = d.States.Select(s => s.Id).ToArray(); StateRoots = d.States.Select(s => ids[s.PoseNode]).ToArray();
-        StatePrimaryClips = StateRoots.Select(Primary).ToArray(); Entry = Array.IndexOf(States, d.EntryState);
+        StatePrimarySources = StateRoots.Select(Primary).ToArray(); Entry = Array.IndexOf(States, d.EntryState);
         var stateIds = States.Select((id, i) => (id, i)).ToDictionary(x => x.id, x => x.i);
         Transitions = States.Select(id => d.Transitions.Where(t => t.From == id).OrderBy(t => t.Priority).ThenBy(t => t.Id)
             .Select(t => new Transition(t.Id, stateIds[t.From], stateIds[t.To], t.Duration, t.ExitTime,
                 t.Conditions.Select(c => new Condition(ParameterIndices[c.ParameterId], c.Comparison, Parameters[ParameterIndices[c.ParameterId]].Kind switch {
                     AnimationParameterKind.Float => c.FloatValue, AnimationParameterKind.Int => c.IntValue, _ => c.BoolValue ? 1 : 0
                 })).ToArray())).ToArray()).ToArray();
-        int Primary(int node) => Nodes[node].Kind == AnimationNodeKind.Clip ? node : Primary(Nodes[node].A);
+        int Primary(int node) => Nodes[node].Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace ? node : Primary(Nodes[node].A);
     }
     public static AnimationProgram Compile(AnimationGraphDefinition definition, ulong skeletonGeneration,
         IReadOnlyList<AnimationClipDescriptor> clips, IReadOnlyList<AnimationEventMarker>? events = null)
     {
         ArgumentNullException.ThrowIfNull(clips);
         var copy = AnimationGraphCodec.Decode(AnimationGraphCodec.Encode(definition));
-        if (skeletonGeneration == 0 || clips.Count > AnimationGraphCodec.MaxNodes) throw new ArgumentException("Bounded committed resource generation required.");
+        if (skeletonGeneration == 0 || clips.Count > AnimationGraphCodec.MaxClipDependencies) throw new ArgumentException("Bounded committed resource generation required.");
         var required = AnimationGraphValidation.Dependencies(copy).Where(d => !d.IsSkeleton).Select(d => d.Id).ToHashSet();
         var seen = new HashSet<Guid>();
         foreach (var c in clips) {
@@ -83,6 +87,7 @@ public sealed class AnimationProgram
         return new(copy, clips.ToArray(), skeletonGeneration, events is null?copy.Events:copy.Events.Concat(events).ToArray());
     }
     public IReadOnlyList<AnimationParameter> DescribeParameters() => Array.AsReadOnly((AnimationParameter[])Parameters.Clone());
+    public BlendSpaceDefinition[] CopyBlendSpaces()=>Nodes.Where(n=>n.Space is not null).Select(n=>n.Space!.Weights.CopyDefinition()).ToArray();
 }
 
 public sealed record AnimationGraphDiagnostic(string Code, Guid Subject, string Field, string Expected, string Actual);
@@ -92,7 +97,7 @@ public static class AnimationGraphDiagnostics
     public static IReadOnlyList<AnimationGraphDiagnostic> Validate(AnimationGraphDefinition definition)
     {
         try { AnimationGraphValidation.Validate(definition); return Array.Empty<AnimationGraphDiagnostic>(); }
-        catch (AnimationGraphValidationException e) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic(e.Code, e.Subject, "graph", "valid_graph_v2", "rejected") }); }
+        catch (AnimationGraphValidationException e) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic(e.Code, e.Subject, "graph", "valid_graph_v3", "rejected") }); }
         catch (ArgumentException) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic("invalid_data", definition?.AssetId ?? Guid.Empty, "graph", "bounded_valid_data", "rejected") }); }
     }
 }

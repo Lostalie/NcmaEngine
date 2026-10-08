@@ -41,7 +41,7 @@ internal sealed class GraphRootMotionSet : IDisposable
                     rig.ModelId != model.Id || mesh.ModelId != model.Id || mesh.SkeletonId != rig.Id || model.Generation != rig.Generation || mesh.Generation != rig.Generation)
                     throw new ArgumentException("Exact graph/skin/model/rig generation required for root extraction.");
                 var skeleton = ModelPayloadCodec.DecodeSkeleton(rig.CopyData()); var selected = new Dictionary<Guid, RootMotionTrack>(); RootMotionTrack? anchor = null;
-                foreach (Guid id in d.Nodes.Where(n => n.Kind == AnimationNodeKind.Clip).Select(n => n.ClipId).Distinct()) {
+                foreach (Guid id in AnimationGraphValidation.ClipIds(d)) {
                     var clip = (RuntimeDataAsset)_lease.Require(id, AssetKind.Clip);
                     if (clip.ModelId != model.Id || clip.SkeletonId != rig.Id || clip.Generation != rig.Generation) throw new ArgumentException("Exact graph root clip closure required.");
                     if (!tracks.TryGetValue((id, root.RootBoneIndex), out var track)) {

@@ -63,7 +63,7 @@ internal sealed unsafe partial class EditorPresenter
             var matches=_animCanvas.Search(_animSearch);_animOffset=Math.Clamp(_animOffset,0,Math.Max(0,(matches.Length-1)/16*16));
             foreach(var n in d.Nodes.Where(n=>matches.Contains(n.Id)).Skip(_animOffset).Take(16))Add(GuiItemKind.SelectionButton,51,1000+AnimRow(n.Id),(_animCanvas.Selection.Contains(n.Id)?"[x] ":"")+n.Name,new("anim_select",Operation:new GraphIntent(author.Stamp,n.Id)));
             AnimButton(14,"上一页节点","anim_previous",enabled:_animOffset>0);Line();AnimButton(15,"下一页节点","anim_next",enabled:_animOffset+16<matches.Length);
-            foreach(var kind in Enum.GetValues<AnimationNodeKind>())AnimButton(20+(ulong)kind,"+ "+kind,"anim_add_node",kind,author.HasDraft&&writable);
+            foreach(var kind in Enum.GetValues<AnimationNodeKind>())AnimButton(20+(ulong)kind,"+ "+kind,"anim_add_node",kind,author.HasDraft&&writable&&kind!=AnimationNodeKind.BlendSpace);
             AnimButton(26,"删除选中节点及关联边","anim_delete",enabled:author.HasDraft&&_animCanvas.Selection.Length>0);AnimButton(27,"自动排列","anim_arrange",enabled:author.HasDraft&&d.Nodes.Length is >0 and <=64);
             foreach(string section in new[]{"parameter","state","transition","link","event"})AnimButton(30+(ulong)Array.IndexOf(new[]{"parameter","state","transition","link","event"},section),"查看 / 编辑 "+section,"anim_section",section);
             Add(GuiItemKind.Checkbox,50,35,"允许从已提交姿态中断过渡",new("anim_interruptions",Operation:new GraphIntent(author.Stamp)),number:d.InterruptTransitions?1:0,max:1,enabled:author.HasDraft&&writable&&d.Nodes.Any(n=>n.Kind==AnimationNodeKind.StateMachine));

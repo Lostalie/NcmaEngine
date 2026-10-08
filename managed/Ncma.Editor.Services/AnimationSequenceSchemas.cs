@@ -25,7 +25,7 @@ public static class AnimationSequenceSchemas
         var propose=Closed(new(){["graphId"]=Id(),["caseId"]=Id(),["test"]=test});
         var proposal=Closed(new(){["caseId"]=Id(),["graphId"]=Id(),["caseHash"]=Text(64),["graphHash"]=Text(64),["eventHash"]=Text(64),["steps"]=Number(1,256),["executionApproved"]=Const(false)});
         var context=Closed(new(){["sessionId"]=Id(),["worldId"]=Id(),["tick"]=Number(0,256)});
-        var frame=Closed(new(){["instanceId"]=Id(),["graphId"]=Id(),["context"]=context,["stateId"]=Id(),["fromStateId"]=Id(),["transitionId"]=Id(),["transitionWeight"]=Number(0,1,false),["output"]=Number(0,768),["instructionCount"]=Number(1,769),["frozenPoseGeneration"]=Number(0,256)});
+        var frame=Closed(new(){["instanceId"]=Id(),["graphId"]=Id(),["context"]=context,["stateId"]=Id(),["fromStateId"]=Id(),["transitionId"]=Id(),["transitionWeight"]=Number(0,1,false),["output"]=Number(0,Ncma.Animation.AnimationGraphCodec.MaxPlanInstructions-1),["instructionCount"]=Number(1,Ncma.Animation.AnimationGraphCodec.MaxPlanInstructions),["frozenPoseGeneration"]=Number(0,256)});
         var timeline=Closed(new(){["frame"]=frame,["sequence"]=Number(1,256),["eventCount"]=Number(0,256),["root"]=Nullable(Closed(new(){["translation"]=Vector(),["yaw"]=Number(-Math.PI,Math.PI,false)}))});
         var receipt=Closed(new(){["instanceId"]=Id(),["graphId"]=Id(),["context"]=context.DeepClone(),["sequence"]=Number(1,256),["stateId"]=Id(),["nodeId"]=Id(),["markerId"]=Id(),["clipId"]=Id(),["unwrappedTime"]=Number(0,2048,false),["name"]=Text()});
         var summary=Closed(new(){["passed"]=Bool(),["steps"]=Number(1,256),["events"]=Number(0,8192),["checks"]=Number(0,64)});

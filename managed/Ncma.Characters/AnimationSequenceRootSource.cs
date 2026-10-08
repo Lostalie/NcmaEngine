@@ -20,7 +20,7 @@ public sealed class AnimationSequenceRootSource:IAnimationSequenceRootSource
         if(graph.ContentHash!=program.ContentHash||rig.Generation!=program.ResourceGeneration)throw new ArgumentException("Exact graph/root publication.");
         GraphId=program.AssetId;SkeletonId=program.SkeletonId;GraphContentHash=program.ContentHash;ResourceGeneration=program.ResourceGeneration;RootBoneIndex=rootBoneIndex;
         var skeleton=ModelPayloadCodec.DecodeSkeleton(rig.CopyData());var tracks=new Dictionary<Guid,RootMotionTrack>();int keys=0;RootMotionTrack? anchor=null;
-        foreach(Guid id in graph.CopyDefinition().Nodes.Where(n=>n.Kind==AnimationNodeKind.Clip).Select(n=>n.ClipId).Distinct()) {
+        foreach(Guid id in AnimationGraphValidation.ClipIds(graph.CopyDefinition())) {
             if(tracks.Count>=128)throw new ArgumentException("Independent root track budget.");
             var clip=(RuntimeDataAsset)assets.Require(id,AssetKind.Clip);if(clip.ModelId!=rig.ModelId||clip.SkeletonId!=rig.Id||clip.Generation!=rig.Generation)throw new ArgumentException("Exact root clip closure.");
             var track=new RootMotionTrack(skeleton,ModelPayloadCodec.DecodeClip(clip.CopyData()),rootBoneIndex);keys=checked(keys+track.KeyCount);if(keys>262144)throw new ArgumentException("Independent root key budget.");

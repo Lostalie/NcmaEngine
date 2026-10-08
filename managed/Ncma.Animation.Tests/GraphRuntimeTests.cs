@@ -24,7 +24,7 @@ internal static class GraphRuntimeTests
             Reject(() => AnimationProgram.Compile(d, 1, [Clips(d)[0], Clips(d)[0]]));
             Reject(() => AnimationProgram.Compile(d, 1, [Clips(d)[0] with { Duration = double.NaN }]));
             var diagnostic = AnimationGraphDiagnostics.Validate(d with { AssetId = Guid.Empty }).Single();
-            Check(diagnostic.Code == "identity" && diagnostic.Expected == "valid_graph_v2" && diagnostic.Actual == "rejected");
+            Check(diagnostic.Code == "identity" && diagnostic.Expected == "valid_graph_v3" && diagnostic.Actual == "rejected");
         }));
         cases.Add(("M6.2 pending/committed parameters, scalar blend, abort and token identity", () => {
             var d = GraphTests.Mixed(); var p = Compile(d); var c = Context(); var i = new AnimationGraphInstance(p, c); Guid parameter = d.Parameters[0].Id;

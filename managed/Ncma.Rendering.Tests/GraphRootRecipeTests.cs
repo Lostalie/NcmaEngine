@@ -23,6 +23,9 @@ internal static unsafe partial class Program
         Check(Vector3.Distance(recipe.Evaluate(plan, 2).Translation, new(.1f, 0, 0)) < 1e-6f, "Graph root crossing/blend oracle");
         Check(Vector3.Distance(recipe.Evaluate(plan, 3).Translation, new(-.05f, 0, 0)) < 1e-6f, "Graph nested root oracle");
         Check(Vector3.Distance(recipe.Evaluate(plan, 0).Translation, new(.2f, 0, 0)) < 1e-6f, "Graph root output is not implicitly last");
+        var primaryPlan=plan.Append(new AnimationPoseInstruction(AnimationPoseOperation.RootSource,Guid.NewGuid(),Guid.Empty,0,0,0,false,3,1,0)).ToArray();
+        Check(Vector3.Distance(recipe.Evaluate(primaryPlan,4).Translation,new(-.2f,0,0))<1e-6f,"BlendSpace root aliases only the primary clip interval, not mixed pose displacement");
+        foreach(var invalid in new[]{primaryPlan[^1] with{SourceB=3},primaryPlan[^1] with{SourceA=4},primaryPlan[^1] with{Weight=.5f},primaryPlan[^1] with{ClipId=right},primaryPlan[^1] with{CacheGeneration=1}}){var broken=(AnimationPoseInstruction[])primaryPlan.Clone();broken[^1]=invalid;Reject(()=>recipe.Evaluate(broken,0));}
         tracks.Clear(); // Caller dictionary is not live recipe storage.
         Check(recipe.Evaluate(plan, 2).Translation.X > 0, "Graph root tracks were not copied");
         var bad = (AnimationPoseInstruction[])plan.Clone(); bad[3] = bad[3] with { SourceB = 3 };
@@ -38,7 +41,7 @@ internal static unsafe partial class Program
         }
         Reject(() => recipe.Evaluate([], 0)); Reject(() => recipe.Evaluate(plan, plan.Length));
         Reject(() => new GraphRootMotionRecipe(new Dictionary<Guid, RootMotionTrack>(), 1));
-        Reject(() => new GraphRootMotionRecipe(new Dictionary<Guid, RootMotionTrack> { [right] = new(skeleton, new(2, source.Clips[0]), 0) }, 770));
+        Reject(() => new GraphRootMotionRecipe(new Dictionary<Guid, RootMotionTrack> { [right] = new(skeleton, new(2, source.Clips[0]), 0) }, AnimationGraphCodec.MaxPlanInstructions + 1));
         Task.Run(() => Reject(() => recipe.Evaluate(plan, 2))).GetAwaiter().GetResult();
         Check(Math.Abs(recipe.Evaluate(plan, 3).Translation.X + .05f) < 1e-6f, "Rejected root candidate contaminated the next evaluation");
 

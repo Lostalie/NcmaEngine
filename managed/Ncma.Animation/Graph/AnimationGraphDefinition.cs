@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Ncma.Animation;
 
 // Persistent authoring DTOs only. Runtime clocks, World/native handles and executable expressions are absent.
-public enum AnimationNodeKind { Clip, Blend, Parameter, StateMachine, Output }
+public enum AnimationNodeKind { Clip, Blend, Parameter, StateMachine, Output, BlendSpace }
 public enum AnimationParameterKind { Float, Int, Bool, Trigger }
 public enum AnimationPinType { Pose, Float, Int, Bool, Trigger }
 public enum AnimationComparison { Equal, NotEqual, Greater, GreaterOrEqual, Less, LessOrEqual, Triggered }
@@ -22,6 +22,7 @@ public sealed record AnimationGraphNode(
     [property: JsonRequired] bool Loop, [property: JsonRequired] double Speed,
     [property: JsonRequired] double Weight)
 {
+    [JsonRequired] public BlendSpaceDefinition? BlendSpace {get;init;}
     public static AnimationGraphNode Create(Guid id, string name, AnimationNodeKind kind) =>
         new(id, name, kind, 0, 0, Guid.Empty, Guid.Empty, false, 0, 0);
 }

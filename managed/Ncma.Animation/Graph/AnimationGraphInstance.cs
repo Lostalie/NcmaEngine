@@ -2,7 +2,7 @@ namespace Ncma.Animation;
 
 public readonly record struct AnimationStepContext(Guid SessionId, Guid WorldId, ulong Tick);
 public readonly record struct AnimationEvaluationToken(Guid InstanceId, ulong Sequence, ulong SourceTick);
-public enum AnimationPoseOperation { Clip, Blend, Frozen }
+public enum AnimationPoseOperation { Clip, Blend, Frozen, RootSource }
 // TRS sampling/mixing recipe only, never native pointers or direct World writes.
 public readonly record struct AnimationPoseInstruction(AnimationPoseOperation Operation, Guid NodeId, Guid ClipId,
     double Previous, double Current, double Duration, bool Loop, int SourceA, int SourceB, float Weight, ulong CacheGeneration=0);
@@ -20,6 +20,9 @@ public sealed class AnimationGraphInstance
     private AnimationStepContext _context;
     private readonly double[] _requested, _committedParameters, _times, _candidateTimes;
     private readonly int[] _slots;
+    private readonly int[] _primaryRows;
+    private readonly bool[] _phaseAdvanced;
+    private readonly double[] _phasePrevious;
     private readonly bool[] _consume;
     private readonly AnimationPoseInstruction[] _plan, _committedPlan;
     private int _state, _from = -1, _nextState, _nextFrom, _count, _committedCount, _output, _committedOutput;
@@ -52,6 +55,7 @@ public sealed class AnimationGraphInstance
         };
         _requested.CopyTo(_committedParameters, 0);
         _times = new double[(program.StateCount + 1) * program.NodeCount]; _candidateTimes = new double[_times.Length]; _slots = new int[_times.Length];
+        _primaryRows=new int[_times.Length];_phaseAdvanced=new bool[_times.Length];_phasePrevious=new double[_times.Length];
         _plan = new AnimationPoseInstruction[program.MaximumPlanInstructions]; _committedPlan = new AnimationPoseInstruction[_plan.Length];
         Build(0, false); PublishPlan();
     }
@@ -147,8 +151,8 @@ public sealed class AnimationGraphInstance
     private bool Exit(AnimationProgram.Transition transition)
     {
         if (!transition.ExitTime.HasValue) return true;
-        int primary = _program.StatePrimaryClips[_state]; var node = _program.Nodes[primary];
-        double previous = _times[(_state + 1) * _program.NodeCount + primary];
+        int primary = _program.StatePrimarySources[_state]; var node = _program.Nodes[primary];
+        double previous = _times[(_state + 1) * _program.NodeCount + (node.Space?.PhaseLeader??primary)];
         double current = Next(previous, node.Duration, node.Loop, _delta * Speed(node)); double exit = transition.ExitTime.Value;
         if (!node.Loop) return current / node.Duration >= exit;
         if (exit == 0 && previous == 0) return true;
@@ -167,7 +171,7 @@ public sealed class AnimationGraphInstance
     }
     private void Build(double delta, bool transitions)
     {
-        _delta = delta; _count = 0; Array.Fill(_slots, -1); Array.Clear(_consume); _times.CopyTo(_candidateTimes, 0);
+        _delta = delta; _count = 0; Array.Fill(_slots, -1);Array.Fill(_primaryRows,-1);Array.Clear(_phaseAdvanced); Array.Clear(_consume); _times.CopyTo(_candidateTimes, 0);
         _nextState = _state; _nextFrom = _from; _nextElapsed = _elapsed; _nextDuration = _duration; _nextTransition = _transition;
         _nextFrozenGeneration=_frozenGeneration;_cacheChanged=false;
         // At most one selection per quantum. A completed transition becomes eligible on the next quantum.
@@ -194,11 +198,11 @@ public sealed class AnimationGraphInstance
     private void CollectEvents()
     {
         _eventCount = 0;
-        int primary = _nextState < 0 ? Primary(_program.Output) : _program.StatePrimaryClips[_nextState];
+        int primary = _nextState < 0 ? Primary(_program.Output) : _program.StatePrimarySources[_nextState];
         int context = _nextState < 0 ? 0 : _nextState + 1;
-        int slot = _slots[context * _program.NodeCount + primary];
+        int slot = _primaryRows[context * _program.NodeCount + primary];
         if (slot < 0) throw new InvalidOperationException("Target event source missing from prepared plan.");
-        var clip = _plan[slot]; var markers = _program.EventTracks[primary];
+        var clip = _plan[slot]; var markers = _program.EventTracks[clip.ClipId];
         if (markers.Length == 0 || clip.Current <= clip.Previous) return;
         double first = clip.Loop ? Math.Floor(clip.Previous / clip.Duration) : 0;
         double last = clip.Loop ? Math.Floor(clip.Current / clip.Duration) : 0;
@@ -211,7 +215,7 @@ public sealed class AnimationGraphInstance
             _events[_eventCount++] = new(_identity, _program.AssetId, _context with { Tick = _context.Tick + 1 }, _sequence,
                 _nextState < 0 ? Guid.Empty : _program.States[_nextState], clip.NodeId, marker.Id, marker.ClipId, at, marker.Name);
         }
-        int Primary(int index) => _program.Nodes[index].Kind == AnimationNodeKind.Clip ? index : Primary(_program.Nodes[index].A);
+        int Primary(int index) => _program.Nodes[index].Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace ? index : Primary(_program.Nodes[index].A);
     }
     private int Evaluate(int index, int context)
     {
@@ -222,6 +226,19 @@ public sealed class AnimationGraphInstance
             case AnimationNodeKind.Clip:
                 double previous = _candidateTimes[at]; double current = Next(previous, node.Duration, node.Loop, _delta * Speed(node));
                 _candidateTimes[at] = current; result = Add(new(AnimationPoseOperation.Clip, node.Id, node.Clip, previous, current, node.Duration, node.Loop, -1, -1, 0)); break;
+            case AnimationNodeKind.BlendSpace:
+                var space=node.Space!;int phaseAt=context*_program.NodeCount+space.PhaseLeader;
+                if(!_phaseAdvanced[phaseAt]){_phasePrevious[phaseAt]=_candidateTimes[phaseAt];_candidateTimes[phaseAt]=Next(_phasePrevious[phaseAt],node.Duration,node.Loop,_delta*Speed(node));_phaseAdvanced[phaseAt]=true;}
+                // Reentry resets the candidate before evaluation; every active peer shares this exact interval.
+                double finish=_candidateTimes[phaseAt],start=_phasePrevious[phaseAt];
+                var weights=space.Weights.Evaluate(_requested[space.X],space.Y<0?0:_requested[space.Y]);
+                int pose=-1,root=-1;double total=0;
+                for(int i=0;i<weights.Count;i++){var contribution=i==0?weights.A:i==1?weights.B:weights.C;int sample=0;while(space.Samples[sample].Id!=contribution.SampleId)sample++;double duration=space.Durations[sample];
+                    int row=Add(new(AnimationPoseOperation.Clip,contribution.SampleId,contribution.ClipId,start/node.Duration*duration,finish/node.Duration*duration,duration,node.Loop,-1,-1,0));
+                    if(contribution.SampleId==weights.PrimarySample)root=row;
+                    total+=contribution.Weight;pose=pose<0?row:Add(new(AnimationPoseOperation.Blend,node.Id,Guid.Empty,0,0,0,false,pose,row,(float)(contribution.Weight/total)));}
+                if(root<0)throw new InvalidOperationException("Prepared primary sample missing.");_primaryRows[at]=root;
+                result=Add(new(AnimationPoseOperation.RootSource,node.Id,Guid.Empty,0,0,0,false,pose,root,0));break;
             case AnimationNodeKind.Blend:
                 double weight = node.ScalarParameter < 0 ? node.Weight : _requested[node.ScalarParameter]; AnimationGraphCodec.Scalar(weight, 0, 1);
                 int a = Evaluate(node.A, context), b = Evaluate(node.B, context);
@@ -233,6 +250,7 @@ public sealed class AnimationGraphInstance
                     Guid.Empty, 0, 0, 0, false, source, target, (float)(_nextElapsed / _nextDuration))); } break;
             default: throw new InvalidOperationException("Scalar parameter nodes cannot be pose instructions.");
         }
+        if(node.Kind==AnimationNodeKind.Clip)_primaryRows[at]=result;
         _slots[at] = result; return result;
     }
 }
