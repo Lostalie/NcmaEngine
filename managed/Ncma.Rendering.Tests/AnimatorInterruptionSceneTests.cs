@@ -111,7 +111,7 @@ internal static unsafe partial class Program
             }
             Check(kernel.Statistics.Rigs==0&&renderer.SkinStats.Meshes==0,"Independent preview resource drain");
         }
-        foreach(int count in new[]{0,8,32}) {
+        foreach(int count in new[]{0,1,8,32}) {
             var d=Document(count,false);var ids=d.World.GetObjects().Where(o=>o.Has<AnimatorData>()).Select(o=>o.PersistentId).ToArray();
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
             using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));
@@ -131,6 +131,7 @@ internal static unsafe partial class Program
             }finally{play.Stop();}
         }
         Check(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"Interrupted DX11 API validation");
+        TestAnimatorJointAcceptance(renderer,ref frame,native,output,f,graph,Document,physics,kernel);
         File.WriteAllText(Path.Combine(output,"animator-interruption-results.json"),JsonSerializer.Serialize(new{schema=1,realNca=true,repeatedInterruptions=128,cacheOracle=true,gpuSkinMaxError=maxError,rootStripped=true,frozenRootSource="zero",uniqueJolt=true,headlessActors=new[]{0,8,32},nativeSnapshotWarmIterations=1024,numericAllocation=0,independentPreview=true,failedCandidate=true,reload=true,manualAccepted=false}));
         Console.WriteLine("PASS M6.5-B pinned NCA 128 interruptions/cache/native GPU oracle/root-strip/Jolt/Headless isolation/fault/reload");
     }

@@ -59,7 +59,7 @@ public sealed class AnimationGraphSequences:IDisposable
     private static AnimationSequenceReview Copy(AnimationSequenceReview r)=>r with{Resources=r.Resources.ToArray(),Audience=r.Audience.ToArray()};
     public Guid[] Pending {get{Verify();return _cases.Keys.Order().ToArray();}}
     public AnimationSequenceCase CaseCopy(Guid id){Current();var c=Required(id);return c.Input with{Writes=c.Input.Writes.ToArray(),Assertions=c.Input.Assertions.ToArray()};}
-    public Guid ProposeLocal(AnimationSequenceCase input){Current();Guid id=Guid.NewGuid();Store(id,input,false);return id;}
+    public Guid ProposeLocal(AnimationSequenceCase input){Current();Guid id=Guid.NewGuid();Store(id,AnimationSequenceCodec.Decode(AnimationSequenceCodec.Encode(input)),false);return id;}
     private void Store(Guid id,AnimationSequenceCase input,bool agent)
     {
         Current();if(id==Guid.Empty||_retired.Contains(id)||_retired.Count>=256)throw new EditRejectedException("sequence_case_retired");

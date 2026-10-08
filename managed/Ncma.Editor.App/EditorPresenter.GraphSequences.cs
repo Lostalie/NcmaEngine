@@ -11,6 +11,7 @@ internal sealed unsafe partial class EditorPresenter
     private Guid _animSequenceSelected;
     private JsonTextPages _animSequenceJson=new(AnimationSequenceCodec.Encode(new(.1,3,[],[])).GetRawText());
     private int _animSequencePage,_animSequenceReviewPage,_animSequenceResultPage;
+    private string _animSequenceResultSection="timeline";
     private AnimationSequenceReview? _animSequenceReview;
     private string[] _animSequenceReviewRows=[];
     private readonly HashSet<int> _animSequenceVisited=[];
@@ -43,9 +44,14 @@ internal sealed unsafe partial class EditorPresenter
         }
         if(_animSequenceResult is{} result) {
             Add(GuiItemKind.Label,55,label++,$"独立检查 passed={result.Passed}，{result.Timeline.Count}量子；未运行碰撞或Live Play。");
-            foreach(var step in result.Timeline.Skip(_animSequenceResultPage*8).Take(8))Add(GuiItemKind.Label,55,label++,$"#{step.Frame.Context.Tick} state={step.Frame.StateId:D} transition={step.Frame.TransitionId:D}\nweight={step.Frame.TransitionWeight:F3} frozen={step.Frame.FrozenPoseGeneration} events={step.Events.Count} rootX={step.Root?.Translation.X:F5} yaw={step.Root?.Yaw:F5}");
-            foreach(var check in result.Checks.Take(8))Add(GuiItemKind.Label,55,label++,$"断言 {check.Index}: step={check.Step} {check.Code}");
-            AnimSequenceButton(14,"上一页结果","anim_sequence_result_previous",_animSequenceResultPage>0);Line();AnimSequenceButton(15,"下一页结果","anim_sequence_result_next",(_animSequenceResultPage+1)*8<result.Timeline.Count);
+            AnimSequenceButton(18,"状态/根意图","anim_sequence_timeline");Line();AnimSequenceButton(19,"提交事件","anim_sequence_events");Line();AnimSequenceButton(20,"全部断言","anim_sequence_checks");
+            string[] rows=_animSequenceResultSection switch {
+                "events"=>result.Timeline.SelectMany(t=>t.Events).Select(e=>$"#{e.Context.Tick} marker={e.MarkerId:D}\n{e.UnwrappedTime:F4}s {e.Name} state={e.StateId:D}").ToArray(),
+                "checks"=>result.Checks.Select(c=>$"断言 {c.Index}: step={c.Step} {c.Code}").ToArray(),
+                _=>result.Timeline.Select(step=>$"#{step.Frame.Context.Tick} state={step.Frame.StateId:D} transition={step.Frame.TransitionId:D}\nweight={step.Frame.TransitionWeight:F3} frozen={step.Frame.FrozenPoseGeneration} events={step.Events.Count} rootX={step.Root?.Translation.X:F5} yaw={step.Root?.Yaw:F5}").ToArray()};
+            _animSequenceResultPage=Math.Clamp(_animSequenceResultPage,0,Math.Max(0,(rows.Length-1)/8));
+            foreach(string row in rows.Skip(_animSequenceResultPage*8).Take(8))Add(GuiItemKind.Label,55,label++,row);
+            AnimSequenceButton(14,"上一页结果","anim_sequence_result_previous",_animSequenceResultPage>0);Line();AnimSequenceButton(15,"下一页结果","anim_sequence_result_next",(_animSequenceResultPage+1)*8<rows.Length);
         }
         AnimSequenceButton(16,"撤销全部序列执行批准","anim_sequence_revoke");AnimSequenceButton(17,"关闭序列面板","anim_sequence_toggle");End();
     }
@@ -74,6 +80,7 @@ internal sealed unsafe partial class EditorPresenter
             case "anim_sequence_checked":if(e.Value is not (0 or 1))throw new ArgumentException("Boolean reviewed.");_animSequenceReviewed=e.Value==1;break;
             case "anim_sequence_approve":var review=_animSequenceReview??throw new EditRejectedException("sequence_review_missing");if(_animSequenceVisited.Count!=Math.Max(1,(_animSequenceReviewRows.Length+14)/15))throw new EditRejectedException("sequence_review_incomplete");service.Approve(review,review.Fingerprint,_animSequenceReviewed);_animSequenceReview=null;_animSequenceReviewed=false;break;
             case "anim_sequence_result_previous":_animSequenceResultPage--;break;case "anim_sequence_result_next":_animSequenceResultPage++;break;
+            case "anim_sequence_timeline":_animSequenceResultSection="timeline";_animSequenceResultPage=0;break;case "anim_sequence_events":_animSequenceResultSection="events";_animSequenceResultPage=0;break;case "anim_sequence_checks":_animSequenceResultSection="checks";_animSequenceResultPage=0;break;
             case "anim_sequence_revoke":service.Revoke();_animSequenceReview=null;_animSequenceResult=null;_animSequenceReviewed=false;break;
             default:throw new ArgumentException("Sequence UI intent.");
         }

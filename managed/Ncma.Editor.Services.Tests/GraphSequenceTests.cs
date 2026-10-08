@@ -11,6 +11,29 @@ internal static class GraphSequenceTests
     private static AnimationSequenceCase Case()=>new(.1,3,[],[new(1,AnimationSequenceAssertionKind.EventCount,Guid.Empty,0)]);
     internal static IEnumerable<(string,Action)> Cases(string output,string repository)
     {
+        yield return("M6.5-D trusted local typed cases obey the same 48KiB wire budget",()=>{
+            using var f=new GraphInspectionTests.Fixture(output,repository,authoring:true);var w=f.Writer!;var a=new AnimationParameter(Guid.NewGuid(),"X",AnimationParameterKind.Float,0,0,false);var b=a with{Id=Guid.NewGuid(),Name="Y"};
+            w.ApproveFileWrite(w.Stamp,w.Path!,f.Graph,true);w.Begin(w.Stamp);w.ApplyDraft(AnimationGraphEdits.Operations(new{op="parameter.upsert",parameter=a},new{op="parameter.upsert",parameter=b}));Guid p=w.PrepareLocal();var review=w.CaptureReview(p);w.Approve(review,review.Fingerprint,review.Graph,true);w.CommitLocal(p);w.Sequences.PrepareTrusted();
+            var test=new AnimationSequenceCase(.1,256,Enumerable.Range(1,256).SelectMany(i=>new[]{new AnimationSequenceWrite(i,a.Id,AnimationParameterKind.Float,1000000),new(i,b.Id,AnimationParameterKind.Float,1000000)}).ToArray(),Enumerable.Range(1,64).Select(i=>new AnimationSequenceAssertion(i,AnimationSequenceAssertionKind.Parameter,a.Id,1000000)).ToArray());
+            Check(System.Text.Encoding.UTF8.GetByteCount(AnimationSequenceCodec.Encode(test).GetRawText())>48*1024);Reject(()=>w.Sequences.ProposeLocal(test));Check(w.Sequences.Pending.Length==0);
+        });
+        yield return("M6.5-D queued real stdio sequence rechecks revoked authority before execution",()=>{
+            using var f=new GraphInspectionTests.Fixture(output,repository,authoring:true);var s=f.Writer!.Sequences;s.PrepareTrusted();f.ApproveUi();Guid id=Guid.NewGuid();
+            Check(!f.Call(AnimationSequenceSchemas.Propose,new{graphId=f.Graph,caseId=id,test=AnimationSequenceCodec.Encode(Case())},Guid.NewGuid()).GetProperty("isError").GetBoolean());var review=s.CaptureReview(id);s.Approve(review,review.Fingerprint,true);
+            var request=new{jsonrpc="2.0",id=987654,method="tools/call",@params=new{name=AnimationSequenceSchemas.Run,arguments=new{contractVersion=2,requestId=Guid.NewGuid(),sessionId=f.Owner.Edit!.SessionId,expectedRevision=f.Owner.Edit.Revision,input=new{graphId=f.Graph,caseId=id,section="timeline",offset=0,limit=8}}}};
+            f.Client.StandardInput.WriteLine(JsonSerializer.Serialize(request,Ncma.Editor.Protocol.Wire.Json));f.Client.StandardInput.Flush();var pending=f.Client.StandardOutput.ReadLineAsync();var watch=System.Diagnostics.Stopwatch.StartNew();
+            while(f.Owner.Endpoint!.View.QueueCount==0){if(watch.ElapsedMilliseconds>10000)throw new TimeoutException("Sequence request was not queued.");Thread.Sleep(1);}
+            Check(!pending.IsCompleted,"No analysis on IO thread");byte[] before=f.Owner.Document.CaptureBytes();s.Revoke();f.Owner.Endpoint.Pump();Check(pending.Wait(10000));
+            using var response=JsonDocument.Parse(pending.Result!);Check(response.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&f.Owner.Document.World.Tick==0);
+            Reject(()=>s.RunLocal(id));
+        });
+        yield return("M6.5-D sequence root opt-out/assertion outcomes and retired-ID bound",()=>{
+            using var f=new GraphInspectionTests.Fixture(output,repository,authoring:true);var s=f.Writer!.Sequences;
+            Reject(()=>s.PrepareTrusted(true,int.MaxValue));s.PrepareTrusted(false);Reject(()=>s.ProposeLocal(new(.1,1,[],[new(1,AnimationSequenceAssertionKind.RootX,Guid.Empty,0)])));
+            Guid id=s.ProposeLocal(Case());var noRoot=s.RunLocal(id);Check(!noRoot.RootMotionSupported&&noRoot.Timeline.All(t=>t.Root is null));s.Cancel(id);s.PrepareTrusted();
+            id=s.ProposeLocal(new(.1,1,[],[new(1,AnimationSequenceAssertionKind.RootX,Guid.Empty,999)]));Check(!s.RunLocal(id).Passed&&s.RunLocal(id).Checks.Single().Code=="assertion_failed");s.Cancel(id);
+            for(int i=2;i<256;i++){id=s.ProposeLocal(Case());s.Cancel(id);}Reject(()=>s.ProposeLocal(Case()));Check(s.Pending.Length==0&&f.Owner.Document.World.Tick==0);
+        });
         yield return("M6.5-C stamped event-track draft drag/cancel/save and independent sequence UI",()=>{
             using var f=new GraphInspectionTests.Fixture(output,repository,authoring:true);var w=f.Writer!;
             f.ApproveUi();f.Click(40,8);f.Build();f.Click(24,12);f.Build();f.Click(24,48);f.Build();Check(f.View.GraphWorkspaceActive);
@@ -23,7 +46,7 @@ internal static class GraphSequenceTests
             Click(50,9);Check(w.Capture()!.Events.Length==0&&before.SequenceEqual(File.ReadAllBytes(f.File)));
             Click(50,8);Click(50,44);Click(50,602,.1);Click(50,10);Click(50,52,1);Click(50,53);Click(50,54);
             Check(AnimationGraphCodec.Decode(File.ReadAllBytes(f.File)).Events.Single().Time==.1&&f.Owner.Edit!.State.UndoCount==1&&scene.SequenceEqual(f.Owner.Document.CaptureBytes()));
-            Click(50,60);Click(55,2);Click(55,6);Click(55,7);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("passed=True")&&f.Owner.Document.World.Tick==0);
+            Click(50,60);Click(55,2);Text(55,5,AnimationSequenceCodec.Encode(new(.1,3,[],[new(1,AnimationSequenceAssertionKind.EventCount,Guid.Empty,0)])).GetRawText());Click(55,6);Click(55,7);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("passed=False")&&f.Owner.Document.World.Tick==0);Click(55,19);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("marker="));Click(55,20);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("assertion_failed"));
             Click(55,16);Click(55,17);
             Check(!f.View.Items.ToArray().Any(i=>i.WidgetHigh==55));
         });

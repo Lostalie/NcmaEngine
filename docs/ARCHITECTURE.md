@@ -173,7 +173,7 @@ M4.2新增Physics module1.2查询独立Character API1.0：实际Jolt CharacterVi
 | 候选 C# FBX 独立播放/暂停/片段/Undo/Redo | 已实现有界预览服务/完整报告分页及控件；可见窗口人工验收未完成 |
 | 动画图类型/引脚/连线及基础合法性检查 | 当前M6.5-C严格v2含事件/中断策略，v1已拒绝；有界C# Clip/Blend/Parameter/Output编译与提交式状态机 |
 | 动画图作者工作区/共享事务/获批MCP | M6.4自动候选：类型引脚、复制草稿、参数/状态/条件、checked保存及Undo/Redo、双人工批准propose/transaction、独立真实NCA/GPU预览；人工/高级节点未验收 |
-| 图过渡中断/提交事件/debug | M6.5-A/B/C双配置自动候选通过；持久事件/策略、轨道UI、精确获批独立序列MCP；D联合门禁待完成，非live控制/推理服务，见C契约/交付 |
+| 图过渡中断/提交事件/debug | M6.5 A–D双配置自动候选完成；持久事件/策略、轨道UI、精确获批独立序列MCP、32actor与正式Player联合通过；非live控制/推理服务，人工/素材/目标/性能/长稳开放，见C契约与D交付 |
 | BlendSpace、Montage、IK、重定向、动画压缩 | 未实现完整功能 |
 | 场景 SkinnedMesh/ClipPlayback 与 DX11 GPU 蒙皮 | M3.5 已实现；验收范围见交付记录 |
 | Animator 图 / CharacterMotor | M6.3-A/B/C/D完整双配置自动候选通过；真实图根/唯一Jolt/skin-shadow及精确获批运行MCP，人工/素材/性能/长稳未验收；M4独立动作策略不变 |

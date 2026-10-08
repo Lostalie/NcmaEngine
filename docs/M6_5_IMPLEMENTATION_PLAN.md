@@ -5,7 +5,8 @@
 本文件不授予live控制，不宣称完整M6.5、真实用户FBX、人工MCP、性能或长稳验收完成。
 A基础随C/D完整Debug/Release回归通过（graph/pose/clock45）；见M6_3_CD_DELIVERY_REPORT.md。
 B可中断过渡自动候选完整Debug/Release通过；证据见M6_5_B_DELIVERY_REPORT.md。
-C持久事件/策略作者工具、获批序列MCP完整Debug/Release自动候选通过；D联合验收尚未完成。
+C持久事件/策略作者工具、获批序列MCP完整Debug/Release自动候选通过并推送b293393；D联合完整双配置通过。
+M6.5 A–D自动候选完成；人工、真实素材、目标环境、完整性能与1小时长稳仍开放，见D交付。
 
 ## A：提交事件、调试和隔离序列基础（本次）
 
@@ -47,8 +48,10 @@ MCP 序列检查需可信主机批准精确编译程序和事件指纹、资源 
 当前格式严格v2，必需events/interruptTransitions；v1拒绝无兼容。实际NCA资源准备、
 根意图与审批细节见M6_5_C_RUNTIME_CONTRACT.md，结果见M6_5_C_DELIVERY_REPORT.md。
 
-## D：联合回归与剩余门禁（未完成）
+## D：联合回归与剩余门禁（完整双配置自动候选通过）
 
 Editor/Player/Headless 32 actors、过渡事件、实际姿态/共享 skin-shadow、fail-stop/Stop/reload、
 部署包身份和双配置完整回归。保留 M6.3-C/D 依赖与人工、目标环境、性能、1 小时长稳开放状态。
 只有 A–D 相应证据满足才将 M6.5 自动候选标为完整；A 通过不等于 M6.5 已完成或已有活动 AI 工具。
+新增0/1/8/32 Editor+unique Jolt+GPU、16组source-free正式Player和queued sequence撤销，
+详细证据见M6_5_D_DELIVERY_REPORT.md。D不关闭人工/目标/性能/长稳门禁。
