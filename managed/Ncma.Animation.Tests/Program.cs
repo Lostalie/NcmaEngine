@@ -21,6 +21,7 @@ GraphInterruptionTests.Add(cases);
 GraphEventFormatTests.Add(cases);
 BlendSpaceTests.Add(cases,args.Length==3?Path.GetFullPath(args[1]):Directory.GetCurrentDirectory());
 BlendSpaceRuntimeTests.Add(cases);
+BlendSpaceSequenceTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));

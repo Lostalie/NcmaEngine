@@ -88,6 +88,7 @@ public sealed class AnimationProgram
     }
     public IReadOnlyList<AnimationParameter> DescribeParameters() => Array.AsReadOnly((AnimationParameter[])Parameters.Clone());
     public BlendSpaceDefinition[] CopyBlendSpaces()=>Nodes.Where(n=>n.Space is not null).Select(n=>n.Space!.Weights.CopyDefinition()).ToArray();
+    public (Guid NodeId,BlendSpaceDefinition Definition)[] CopyBlendSpaceNodes()=>Nodes.Where(n=>n.Space is not null).Select(n=>(n.Id,n.Space!.Weights.CopyDefinition())).ToArray();
 }
 
 public sealed record AnimationGraphDiagnostic(string Code, Guid Subject, string Field, string Expected, string Actual);

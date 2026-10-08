@@ -224,9 +224,9 @@ M6.5-B固定预算、提交边界姿态缓存的可中断过渡已通过完整De
 只读精确runtime MCP。完整门禁见[M6.5-B交付](M6_5_B_DELIVERY_REPORT.md)；
 持久事件/策略作者工具与获批独立序列MCP为C，严格v2完整双配置自动候选通过；D联合完整双配置也通过，
 M6.5 A–D自动候选完成，见[M6.5-D交付](M6_5_D_DELIVERY_REPORT.md)。
-M6.6 A/B完整Debug/Release自动候选通过：严格v3替代v2、准备期1D/2D拓扑、实际NCA共享相位、
-主贡献事件/root与全混合pose stripping、中断缓存/搬移NCP1 Player。C作者与AI权重扫描、D联合验收未完成，
-见[M6.6方案](M6_6_IMPLEMENTATION_PLAN.md)与[B交付](M6_6_B_DELIVERY_REPORT.md)。
+M6.6 A/B/C完整Debug/Release自动候选通过：严格v3替代v2、准备期1D/2D拓扑、实际NCA共享相位、
+主贡献事件/root与全混合pose stripping、中断缓存/搬移NCP1 Player、typed采样编辑与精确获批AI权重扫描。
+D联合验收未完成，见[M6.6方案](M6_6_IMPLEMENTATION_PLAN.md)与[C交付](M6_6_C_DELIVERY_REPORT.md)。
 并非内置推理接入或真实用户素材/人工/目标/性能/长稳验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
 性能/长稳门禁仍开放。M6.1 进度见 [契约](M6_1_GRAPH_CONTRACT.md) 与 [交付](M6_1_DELIVERY_REPORT.md)。

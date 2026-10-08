@@ -45,9 +45,11 @@ internal sealed unsafe partial class EditorPresenter
         if(_animSequenceResult is{} result) {
             Add(GuiItemKind.Label,55,label++,$"独立检查 passed={result.Passed}，{result.Timeline.Count}量子；未运行碰撞或Live Play。");
             AnimSequenceButton(18,"状态/根意图","anim_sequence_timeline");Line();AnimSequenceButton(19,"提交事件","anim_sequence_events");Line();AnimSequenceButton(20,"全部断言","anim_sequence_checks");
+            AnimSequenceButton(21,"空间权重/主源（含inactive节点）","anim_sequence_weights");
             string[] rows=_animSequenceResultSection switch {
                 "events"=>result.Timeline.SelectMany(t=>t.Events).Select(e=>$"#{e.Context.Tick} marker={e.MarkerId:D}\n{e.UnwrappedTime:F4}s {e.Name} state={e.StateId:D}").ToArray(),
                 "checks"=>result.Checks.Select(c=>$"断言 {c.Index}: step={c.Step} {c.Code}").ToArray(),
+                "weights"=>result.Timeline.SelectMany(t=>t.Spaces).Select(s=>$"#{s.Step} space={s.SpaceId:D}\nprimary={s.Weights.PrimarySample:D} count={s.Weights.Count} projected={s.Weights.Projected}\nA={s.Weights.A.Weight:F5} B={s.Weights.B.Weight:F5} C={s.Weights.C.Weight:F5}").ToArray(),
                 _=>result.Timeline.Select(step=>$"#{step.Frame.Context.Tick} state={step.Frame.StateId:D} transition={step.Frame.TransitionId:D}\nweight={step.Frame.TransitionWeight:F3} frozen={step.Frame.FrozenPoseGeneration} events={step.Events.Count} rootX={step.Root?.Translation.X:F5} yaw={step.Root?.Yaw:F5}").ToArray()};
             _animSequenceResultPage=Math.Clamp(_animSequenceResultPage,0,Math.Max(0,(rows.Length-1)/8));
             foreach(string row in rows.Skip(_animSequenceResultPage*8).Take(8))Add(GuiItemKind.Label,55,label++,row);
@@ -81,6 +83,7 @@ internal sealed unsafe partial class EditorPresenter
             case "anim_sequence_approve":var review=_animSequenceReview??throw new EditRejectedException("sequence_review_missing");if(_animSequenceVisited.Count!=Math.Max(1,(_animSequenceReviewRows.Length+14)/15))throw new EditRejectedException("sequence_review_incomplete");service.Approve(review,review.Fingerprint,_animSequenceReviewed);_animSequenceReview=null;_animSequenceReviewed=false;break;
             case "anim_sequence_result_previous":_animSequenceResultPage--;break;case "anim_sequence_result_next":_animSequenceResultPage++;break;
             case "anim_sequence_timeline":_animSequenceResultSection="timeline";_animSequenceResultPage=0;break;case "anim_sequence_events":_animSequenceResultSection="events";_animSequenceResultPage=0;break;case "anim_sequence_checks":_animSequenceResultSection="checks";_animSequenceResultPage=0;break;
+            case "anim_sequence_weights":_animSequenceResultSection="weights";_animSequenceResultPage=0;break;
             case "anim_sequence_revoke":service.Revoke();_animSequenceReview=null;_animSequenceResult=null;_animSequenceReviewed=false;break;
             default:throw new ArgumentException("Sequence UI intent.");
         }

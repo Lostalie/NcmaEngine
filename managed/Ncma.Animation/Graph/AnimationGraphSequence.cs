@@ -5,7 +5,12 @@ public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Para
 public sealed record AnimationSequenceWrite(int Step, Guid ParameterId, AnimationParameterKind Kind, double Value);
 public sealed record AnimationSequenceAssertion(int Step, AnimationSequenceAssertionKind Kind, Guid SubjectId, double Value);
 public sealed record AnimationSequenceCase(double FixedDelta, int Steps, AnimationSequenceWrite[] Writes, AnimationSequenceAssertion[] Assertions);
-public sealed record AnimationSequenceStep(AnimationGraphFrame Frame, ulong Sequence, IReadOnlyList<AnimationGraphEvent> Events,AnimationSequenceRootIntent? Root=null);
+public sealed record AnimationSequenceSpace(ulong Step,Guid NodeId,Guid SpaceId,BlendSpaceWeights Weights);
+public sealed record AnimationSequenceStep(AnimationGraphFrame Frame, ulong Sequence, IReadOnlyList<AnimationGraphEvent> Events,AnimationSequenceRootIntent? Root=null)
+{
+    // Parameter-space inspection includes inactive nodes: it does NOT claim live pose/GPU evaluation.
+    public IReadOnlyList<AnimationSequenceSpace> Spaces {get;init;}=Array.Empty<AnimationSequenceSpace>();
+}
 public sealed record AnimationSequenceCheck(int Index, int Step, bool Passed, string Code);
 public sealed record AnimationSequenceResult(Guid GraphId, string GraphContentHash, string EventContentHash,
     ulong MetadataGeneration, bool ResourcesPrepared, bool RootMotionSupported,
@@ -59,6 +64,7 @@ public static class AnimationGraphSequence
         var context = new AnimationStepContext(Guid.NewGuid(), Guid.NewGuid(), 0);
         var instance = new AnimationGraphInstance(program, context,poseSource); var timeline = new AnimationSequenceStep[input.Steps];
         var plan=new AnimationPoseInstruction[program.MaximumPlanInstructions];
+        var spaces=program.Nodes.Where(n=>n.Space is not null).Select(n=>(NodeId:n.Id,Program:n.Space!.Weights,Definition:n.Space.Weights.CopyDefinition())).OrderBy(n=>n.NodeId).ToArray();
         var checks = new AnimationSequenceCheck[assertions.Length]; var events = new AnimationGraphEvent[AnimationProgram.MaximumEventsPerQuantum]; int total = 0;
         for (int step = 1; step <= input.Steps; step++) {
             if (byStep.TryGetValue(step, out var changes)) foreach (var write in changes) Apply(instance, write);
@@ -68,7 +74,8 @@ public static class AnimationGraphSequence
             if (total > MaxOutputEvents) throw new ArgumentException("Animation sequence output budget.");
             AnimationSequenceRootIntent? root=null;
             if(rootSource is not null){int n=instance.CopyCommittedPlan(plan);root=rootSource.Evaluate(plan.AsSpan(0,n),instance.Frame.Output);if(!float.IsFinite(root.Value.Translation.LengthSquared())||root.Value.Translation.LengthSquared()>1e6f||Math.Abs(root.Value.Translation.Y)>1e-6||!float.IsFinite(root.Value.Yaw)||Math.Abs(root.Value.Yaw)>Math.PI)throw new ArgumentException("Bounded numerical root intent required.");}
-            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root);
+            var spaceRows=spaces.Select(s=>new AnimationSequenceSpace(context.Tick,s.NodeId,s.Definition.Id,s.Program.Evaluate(instance.CommittedParameter(s.Definition.AxisX.ParameterId),s.Definition.AxisY is{} y?instance.CommittedParameter(y.ParameterId):0))).ToArray();
+            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root){Spaces=Array.AsReadOnly(spaceRows)};
             for (int at = 0; at < assertions.Length; at++) {
                 var assertion = assertions[at]; if (assertion.Step != step) continue;
                 bool passed = assertion.Kind switch {

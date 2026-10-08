@@ -27,7 +27,7 @@ public static class AnimationGraphEdits
         void Id(Guid id) { if (id == Guid.Empty || !ids.Add(id)) throw new ArgumentException("Distinct draft UUIDs required."); }
         foreach (var n in d.Nodes) { Id(n.Id); AnimationGraphCodec.Text(n.Name); if (!Enum.IsDefined(n.Kind)) throw new ArgumentException("Draft node kind.");
             AnimationGraphCodec.Scalar(n.X, -65536, 65536); AnimationGraphCodec.Scalar(n.Y, -65536, 65536); AnimationGraphCodec.Scalar(n.Speed, 0, 8); AnimationGraphCodec.Scalar(n.Weight, 0, 1);
-            if(n.BlendSpace is{} space){Id(space.Id);if(space.Samples is null||space.Samples.Length>BlendSpaceProgram.MaximumSamples||space.Samples.Any(s=>s is null))throw new ArgumentException("Bounded space draft.");foreach(var s in space.Samples){Id(s.Id);AnimationGraphCodec.Scalar(s.X,-1000000,1000000);AnimationGraphCodec.Scalar(s.Y,-1000000,1000000);}}
+            if(n.BlendSpace is{} space){Id(space.Id);if(space.AxisX is null||space.Dimensions is not (1 or 2)||space.Samples is null||space.Samples.Length>BlendSpaceProgram.MaximumSamples||space.Samples.Any(s=>s is null))throw new ArgumentException("Bounded space draft.");AnimationGraphCodec.Scalar(space.CycleSeconds,.001,600);foreach(var axis in new[]{space.AxisX,space.AxisY}.Where(a=>a is not null)){AnimationGraphCodec.Text(axis!.Name);AnimationGraphCodec.Text(axis.Unit);AnimationGraphCodec.Scalar(axis.Minimum,-1000000,1000000);AnimationGraphCodec.Scalar(axis.Maximum,-1000000,1000000);}foreach(var s in space.Samples){Id(s.Id);AnimationGraphCodec.Scalar(s.X,-1000000,1000000);AnimationGraphCodec.Scalar(s.Y,-1000000,1000000);}}
         }
         foreach (var p in d.Parameters) { Id(p.Id); AnimationGraphCodec.Text(p.Name); if (!Enum.IsDefined(p.Kind)) throw new ArgumentException("Draft parameter kind."); AnimationGraphCodec.Scalar(p.FloatDefault, -1000000, 1000000); }
         foreach (var l in d.Links) { Id(l.Id); AnimationGraphCodec.Text(l.FromPin, 16); AnimationGraphCodec.Text(l.ToPin, 16); }
@@ -56,6 +56,12 @@ public static class AnimationGraphEdits
                 case "transition.upsert": Closed(op, "op", "transition"); var transition = Decode<AnimationTransition>(op, "transition"); d = d with { Transitions = Upsert(d.Transitions, transition, t => t.Id) }; break;
                 case "event.upsert":Closed(op,"op","marker");var marker=Decode<AnimationEventMarker>(op,"marker");d=d with{Events=Upsert(d.Events,marker,e=>e.Id)};break;
                 case "event.delete":Closed(op,"op","id");d=d with{Events=Delete(d.Events,Uuid(op,"id"),e=>e.Id)};break;
+                case "blendspace.sample.upsert":
+                    Closed(op,"op","nodeId","sample");var spaceNode=SpaceNode(d,Uuid(op,"nodeId"));var point=Decode<BlendSpaceSample>(op,"sample");
+                    d=d with{Nodes=Upsert(d.Nodes,spaceNode with{BlendSpace=spaceNode.BlendSpace! with{Samples=Upsert(spaceNode.BlendSpace.Samples,point,s=>s.Id)}},n=>n.Id)};break;
+                case "blendspace.sample.delete":
+                    Closed(op,"op","nodeId","sampleId");var deleteSpace=SpaceNode(d,Uuid(op,"nodeId"));
+                    d=d with{Nodes=Upsert(d.Nodes,deleteSpace with{BlendSpace=deleteSpace.BlendSpace! with{Samples=Delete(deleteSpace.BlendSpace.Samples,Uuid(op,"sampleId"),s=>s.Id)}},n=>n.Id)};break;
                 case "graph.interruptions":Closed(op,"op","enabled");var enabled=op.GetProperty("enabled");if(enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))throw new ArgumentException("Boolean interruption policy.");d=d with{InterruptTransitions=enabled.GetBoolean()};break;
                 case "graph.rename": Closed(op, "op", "name"); d = d with { Name = op.GetProperty("name").GetString() ?? throw new ArgumentException("Graph name.") }; break;
                 case "graph.entry": Closed(op, "op", "stateId"); d = d with { EntryState = Uuid(op, "stateId", empty: true) }; break;
@@ -84,6 +90,7 @@ public static class AnimationGraphEdits
     }
     private static AnimationGraphDefinition DeleteState(AnimationGraphDefinition d, Guid id) => d with {
         States = Delete(d.States, id, s => s.Id), Transitions = d.Transitions.Where(t => t.From != id && t.To != id).ToArray(), EntryState = d.EntryState == id ? Guid.Empty : d.EntryState };
+    private static AnimationGraphNode SpaceNode(AnimationGraphDefinition d,Guid id)=>d.Nodes.SingleOrDefault(n=>n.Id==id&&n.Kind==AnimationNodeKind.BlendSpace&&n.BlendSpace is not null)??throw new ArgumentException("Exact BlendSpace node required.");
     private static T[] Upsert<T>(T[] values, T value, Func<T, Guid> id) => values.Any(v => id(v) == id(value)) ? values.Select(v => id(v) == id(value) ? value : v).ToArray() : [.. values, value];
     private static T[] Delete<T>(T[] values, Guid target, Func<T, Guid> id) => values.Any(v => id(v) == target) ? values.Where(v => id(v) != target).ToArray() : throw new ArgumentException("Unknown graph element.");
     private static T Decode<T>(JsonElement op, string field) where T : class => JsonSerializer.Deserialize<T>(op.GetProperty(field).GetRawText(), Json) ?? throw new ArgumentException("Graph value required.");

@@ -32,7 +32,7 @@ root采用该BlendSpace主贡献源（不是叠加多个源），进入既有唯
 测试不同duration同相位、group、循环/边界/reentry/Abort/weight-source变更、32实例零分配、
 真实NCA/native pose/GPU/共享skin-shadow/root-strip与已有事件/中断安全边界；双配置提交。
 
-## C：作者工作区与同期AI工具
+## C：作者工作区与同期AI工具（完整双配置自动候选通过）
 
 UI显示轴/点/预编译三角形/当前权重/主源，定位同一UUID；采样点拖动、轴/范围/单位/cycle/group/clip
 修改走shared closed semantic edits、draft、精确file/NCA审阅与唯一Undo/Redo。
