@@ -24,6 +24,7 @@ BlendSpaceRuntimeTests.Add(cases);
 BlendSpaceSequenceTests.Add(cases);
 LayerGraphTests.Add(cases);
 LayerSequenceTests.Add(cases);
+MontageDataTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));
