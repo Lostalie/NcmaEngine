@@ -71,6 +71,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private Ncma.Rendering.Scene.SceneRenderSession? _editScene, _playScene;
     private Ncma.Animation.Native.PoseKernel? _poseKernel;
     private Ncma.Characters.CharacterPlayRuntime? _characterRuntime;
+    private Ncma.Characters.ScenePlayRuntime? _sceneRuntime;
     private Guid _editAssets, _playAssets, _playSession;
     private CompiledRenderGraph? _graph;
     private uint _viewWidth, _viewHeight;
@@ -128,7 +129,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
             validateComposition: Ncma.Characters.CharacterComponents.RequireComposition,
-            composePreparedPlay:(play,assets)=>_characterRuntime=Ncma.Characters.CharacterPlayRuntime.Compose(play,_physics,assets),
+            composePreparedPlay:(play,assets)=>{_sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics,assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;},
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         if (project is not null) {
@@ -225,7 +226,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity || _playScene?.WorldId!=play.Document.World.Identity) {
                 var snapshot = play.Document.CaptureSnapshot();
                 var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play,
-                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime);
+                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime,animators:_sceneRuntime?.Animators);
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }
@@ -235,7 +236,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         if(!snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId)))return null;
         if(_poseKernel is null) {
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
-            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))));
+            _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
         }
         return _poseKernel;
     }

@@ -34,6 +34,17 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     private readonly SceneWorld _facade;
     private readonly WorldRunner _runner;
     private ICoupledStepParticipant? _coupled;
+    private readonly List<IPlayCompositionLifetime> _compositionLifetimes = [];
+    private byte[]? _compositionStartup;
+    internal void AttachCompositionLifetime(IPlayCompositionLifetime lifetime)
+    {
+        Control();
+        if (State != PlayState.Stopped || _compositionLifetimes.Count >= 16 || _compositionLifetimes.Contains(lifetime)) throw new InvalidOperationException("Register bounded host lifetimes before Start.");
+        _compositionStartup ??= _document.CaptureBytes();
+        _compositionLifetimes.Add(lifetime);
+    }
+    internal void DetachCompositionLifetime(IPlayCompositionLifetime lifetime)
+    { Control(); if (State != PlayState.Stopped) throw new InvalidOperationException("Stop before releasing host ownership."); _compositionLifetimes.Remove(lifetime); }
     private readonly FrameTimePolicy _policy;
     private readonly PlayAdvanceMode _advanceMode;
     private bool _ownsFacade;
@@ -130,6 +141,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         try
         {
             _coupled?.Start();
+            foreach (var lifetime in _compositionLifetimes) lifetime.Start();
             var snapshot = _document.CaptureSnapshot();
             var prepared = new List<Instance>();
             // Constructors/Export setters cannot mutate the live Play World.
@@ -248,11 +260,11 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     {
         Control(); ArgumentNullException.ThrowIfNull(createBehaviour);
         if (State is not (PlayState.Running or PlayState.Paused)) throw new InvalidOperationException("Reload requires active Play.");
-        if (_coupled is not null)
+        if (_coupled is not null || _compositionLifetimes.Count != 0)
         {
             // Coupled reload is an explicit restart, not a reload over live numerical resources.
             Stop();
-            try { _coupled.RebuildStartup(); Start(createBehaviour); return Pause(); }
+            try { if (_coupled is not null) _coupled.RebuildStartup(); else _document.RestoreBytes(_compositionStartup!); Start(createBehaviour); return Pause(); }
             catch (Exception error) { if (State == PlayState.Stopped) SetFault(error); throw; }
         }
         Pause();
@@ -304,7 +316,10 @@ public sealed class PlaySession : IDisposable, IGameplayContext
             if (_facade.IsInPhase) _facade.AbortPhase();
             errors = Cleanup();
             if (_coupled is not null) _phase = "coupled_shutdown";
-            try { _coupled?.Stop(); }
+            try {
+                for (int i = _compositionLifetimes.Count - 1; i >= 0; i--) _compositionLifetimes[i].Stop();
+                _coupled?.Stop();
+            }
             catch (Exception error) { SetFault(error); throw new AggregateException("Coupled shutdown failed; resources remain owned. Retry Stop.", errors.Append(error)); }
             _facade.Restored(); _facade.SetContext(null); _input.Clear(resetSequence: true); _render.Clear(); _stepInput = null;
             _runner.ResetFault();

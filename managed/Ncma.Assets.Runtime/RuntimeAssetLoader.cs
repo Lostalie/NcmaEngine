@@ -27,14 +27,15 @@ public static class RuntimeAssetLoader
             foreach (string path in Scan(root, cancellation))
             {
                 if (path.EndsWith(".journal", StringComparison.Ordinal)) throw new ArgumentException("Runtime assets require completed authoring recovery.");
-                if (!path.EndsWith(".ncmeta", StringComparison.Ordinal) && !path.EndsWith(".ncmaterial", StringComparison.Ordinal) && !path.EndsWith(".ncmatset", StringComparison.Ordinal)) continue;
+                if (!path.EndsWith(".ncmeta", StringComparison.Ordinal) && !path.EndsWith(".ncmaterial", StringComparison.Ordinal) && !path.EndsWith(".ncmatset", StringComparison.Ordinal) && !path.EndsWith(".ncmaanim", StringComparison.Ordinal)) continue;
                 using var file = new RuntimeReadPin(root, path); byte[] bytes = file.Read(AssetRecordCodec.MaxBytes, cancellation);
                 Charge(bytes.Length);
                 if (path.EndsWith(".ncmeta", StringComparison.Ordinal)) { records.Add(AssetRecordCodec.Decode(bytes)); continue; }
                 RuntimeAsset asset;
                 if (path.EndsWith(".ncmaterial", StringComparison.Ordinal)) { var d = MaterialCodec.Decode(bytes); string hash = Hash(MaterialCodec.Encode(d)); asset = new RuntimeMaterialAsset(d, Token(hash), hash); }
+                else if (path.EndsWith(".ncmaanim", StringComparison.Ordinal)) { var d = Ncma.Animation.AnimationGraphCodec.Decode(bytes); string hash = Hash(Ncma.Animation.AnimationGraphCodec.Encode(d)); asset = new RuntimeAnimationGraphAsset(d, Token(hash), hash); }
                 else { var d = MaterialCodec.DecodeSet(bytes); string hash = Hash(MaterialCodec.Encode(d)); asset = new RuntimeMaterialSetAsset(d.AssetId, Token(hash), hash, d.Materials, null); }
-                if (!authored.TryAdd(asset.Id, asset)) throw new ArgumentException("Duplicate authoring material UUID.");
+                if (!authored.TryAdd(asset.Id, asset)) throw new ArgumentException("Duplicate authoring asset UUID.");
             }
             var catalog = new AssetCatalog(records); var loaded = new HashSet<Guid>(); var visited = new HashSet<AssetRef>();
             foreach (var asset in authored.Values)
@@ -48,7 +49,12 @@ public static class RuntimeAssetLoader
                 CheckTexture(d.NormalTexture, TextureSemantic.Normal);
                 CheckTexture(d.MetallicTexture, TextureSemantic.Data); CheckTexture(d.RoughnessTexture, TextureSemantic.Data); CheckTexture(d.AOTexture, TextureSemantic.Data);
             }
-            return new(new(assets, pins, diagnostics, project));
+            var state = new RuntimeAssetState(assets, pins, diagnostics, project);
+            using (var validation = new RuntimeAssetLease(state)) {
+                state.References++;
+                foreach (var graph in assets.Values.OfType<RuntimeAnimationGraphAsset>()) _ = graph.PrepareProgram(validation);
+            }
+            return new(state);
 
             void CheckTexture(Guid id, TextureSemantic semantic)
             {
@@ -70,6 +76,8 @@ public static class RuntimeAssetLoader
                     if (author is RuntimeMaterialSetAsset set) for (int i = 0; i < set.SlotCount; i++) Resolve(new(new(set.MaterialAt(i)), AssetKind.Material));
                     if (author is RuntimeMaterialAsset material)
                         foreach (Guid texture in material.Definition.TextureIds.Where(id => id != Guid.Empty)) Resolve(new(new(texture), AssetKind.Texture));
+                    if (author is RuntimeAnimationGraphAsset graph)
+                        foreach (var dependency in Ncma.Animation.AnimationGraphValidation.Dependencies(graph.CopyDefinition())) Resolve(new(new(dependency.Id), dependency.IsSkeleton ? AssetKind.Skeleton : AssetKind.Clip));
                     return;
                 }
                 if (!catalog.TryResolve(request, out var descriptor, out var code))

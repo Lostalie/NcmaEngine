@@ -3,6 +3,7 @@ using Ncma.Assets;
 using Ncma.Runtime;
 
 namespace Ncma.Scene.Rendering;
+using Vector3 = System.Numerics.Vector3;
 
 public readonly record struct SceneRenderDiagnostic(Guid ObjectId, string Code, Guid AssetId = default);
 // Prepared off-frame by the asset service, never by a render tick. Generation/hash identify immutable data.
@@ -43,6 +44,13 @@ public static class SceneRenderValidation
         {
             var components = obj.Components.ToDictionary(c => c.TypeId, StringComparer.Ordinal);
             bool mesh = components.ContainsKey(StaticMeshData.TypeId), skin = components.ContainsKey(SkinnedMeshData.TypeId);
+            if (components.TryGetValue(Ncma.Animation.AnimatorData.TypeId, out var animatorComponent)) {
+                var animator = Registry.Decode<Ncma.Animation.AnimatorData>(animatorComponent);
+                if (!skin || components.ContainsKey(Ncma.Animation.ClipPlaybackData.TypeId) || components.ContainsKey(Ncma.Animation.ActionDefinitionData.TypeId) || components.ContainsKey(Ncma.Animation.RootMotionData.TypeId))
+                    throw new ArgumentException("Animator requires skin and excludes clip/action/root playback; graph root motion is not wired yet.");
+                if (Registry.Decode<SkinnedMeshData>(components[SkinnedMeshData.TypeId]).SkeletonId != animator.SkeletonId) throw new ArgumentException("Animator skin skeleton mismatch.");
+                _ = Resolve(obj.Id, animator.GraphId, AssetKind.AnimationGraph);
+            }
             bool spatial = mesh || skin || components.ContainsKey(CameraData.TypeId) || components.ContainsKey(DirectionalLightData.TypeId);
             if(components.ContainsKey(Ncma.Animation.ActionDefinitionData.TypeId) && (!components.ContainsKey(Ncma.Animation.RootMotionData.TypeId) || !components.ContainsKey("ncma.combat.health")))
                 throw new ArgumentException("Action definition requires explicit root-motion character and health.");

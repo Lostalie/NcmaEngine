@@ -37,7 +37,8 @@ internal static class AssetInspectionTests
             using var f = new Fixture(); var descriptors = AssetInspectionSchemas.Descriptors();
             Check(descriptors.Select(d => d.Name).SequenceEqual(new[] { "ncma.assets.list", "ncma.assets.inspect", "ncma.assets.validate" }));
             f.Service.ApproveForPairedClients([f.Root, f.Sub, f.Dependency]);
-            string[] golden = ["A62283FF1AEAFA6E66BD40DE187F61DD8C50F10A3125F38FC9C1D1AA21EE3C5C", "4D6024BEB9DD12947550AD5B3E1D804D3AFF0C16971D9E2ACC22037346FBF2BC", "EAB19A6CFDF820675FF7AC023E9D6FE406C2256F9AAAB4F9C28B6EC2B2C01509"];
+            // Additive AnimationGraph asset kind; schemas remain closed/default-denied.
+            string[] golden = ["12A4FA159403258F1B4A881B7402518B6FF8B147358DFAA7402002CFC6F53260", "8B0E26AA24EBBC13DF8E7B3D2811AD471256B7D5481D40568B35B6D179F506AD", "EAB19A6CFDF820675FF7AC023E9D6FE406C2256F9AAAB4F9C28B6EC2B2C01509"];
             var hashes = descriptors.Select(d => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(d, Wire.Json)))).ToArray();
             Console.WriteLine("Asset descriptor golden: " + string.Join(" ", hashes));
             Check(hashes.SequenceEqual(golden));

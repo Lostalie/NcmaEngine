@@ -213,7 +213,9 @@ M6.5–M6.8同期扩充功能工具，不等M6.9首次接入。M6.2编译/提交
 完整Debug/Release，图/pose32、Editor72，见[交付](M6_2_DELIVERY_REPORT.md)；后续图写入/真实角色接线/
 高级工具未实现，M6.1不因此获得新权限。
 M6.3-A独立数值pose-blend1.0完整双配置通过（图/pose35、Editor72），原pose表冻结，使用同一context/rig；
-[A交付](M6_3_A_DELIVERY_REPORT.md)仅证明数值扩展，B/C/D资产/角色/GPU接线仍未完成。
+[A交付](M6_3_A_DELIVERY_REPORT.md)仅证明数值扩展。[B交付](M6_3_B_DELIVERY_REPORT.md)完整双配置自动候选
+通过，Animator固定真实NCA/图package、共享Editor/Player/Headless、提交式实例与数值/GPU场景接线；
+C根运动权威与D完整图GPU/获批运行观察联合门禁仍未完成，节点工作区/图写入未实现。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
 性能/长稳门禁仍开放。M6.1 进度见 [契约](M6_1_GRAPH_CONTRACT.md) 与 [交付](M6_1_DELIVERY_REPORT.md)。
 M6.1 完整顺序Debug/Release已通过，10项新增图专项随25项pose/clock候选测试通过；仅资产/验证基础，

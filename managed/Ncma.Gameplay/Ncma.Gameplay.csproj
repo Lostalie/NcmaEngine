@@ -11,5 +11,6 @@
     <InternalsVisibleTo Include="Ncma.Editor.Services" />
     <InternalsVisibleTo Include="Ncma.Gameplay.Tests" />
     <InternalsVisibleTo Include="Ncma.Movement" />
+    <InternalsVisibleTo Include="Ncma.Scene.Rendering" />
   </ItemGroup>
 </Project>

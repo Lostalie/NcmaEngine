@@ -110,6 +110,7 @@ internal static unsafe partial class Program
     }
     private static void TestSkinnedScenes(RendererSession renderer,ref ulong frame,string repository,string native,string output) {
         native=Path.GetDirectoryName(native)!;
+        TestAnimatorScenes(renderer,ref frame,Path.Combine(native,"NcmaNative.dll"),output);
         TestGpuSkinNumerics(renderer,ref frame,repository,native,output);
         TestAnimatedShadow(renderer,ref frame,native,output);
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));

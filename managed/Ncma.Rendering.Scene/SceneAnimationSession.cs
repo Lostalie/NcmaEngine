@@ -23,6 +23,8 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         internal readonly SkinInfluenceBounds InfluenceBounds;
         internal readonly int BoneOffset;internal readonly Vector3 BindRoot;
         internal ClipClock? Clock;internal bool Active;internal Vector3 RootDisplacement;
+        internal AnimationGraphPose? GraphPose; internal AnimationGraphInstance? PreviewGraph;
+        internal AnimatorData? AnimatorSource;
         internal Character(GameObject obj,SkinnedMeshData source,PoseRig rig,SkeletonPayload skeleton,MeshPayload mesh,int offset)
         {Id=obj.PersistentId;Object=obj;Source=source;Rig=rig;Bindings=new(mesh,rig.BoneCount);Upload=SkinUploadData.Prepare(mesh);InfluenceBounds=new(mesh);BoneOffset=offset;BindRoot=skeleton.Bones[0].BindLocal.Position;}
     }
@@ -38,13 +40,16 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     private Ncma.Assets.Runtime.RuntimeAssetLease? _assets;private PlaySession? _play;private bool _disposed;
     private double _previewSeconds;
     private readonly IRootMotionPresentation? _rootMotion;
+    private readonly SceneAnimatorRuntime? _animators;
+    private double _previewDebt;
     public Guid WorldId {get;}
     public AnimationSceneCosts Costs {get;private set;}
     internal IReadOnlyList<Character> Characters=>_characters;
-    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel,IRootMotionPresentation? rootMotion=null)
+    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null)
     {
-        _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();_rootMotion=rootMotion;
+        _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();_rootMotion=rootMotion;_animators=animators;
         try{
+            animators?.VerifyPresentation(world,prepared.Assets);
             _assets=prepared.Assets.AcquireLease();var registry=RenderComponentRegistry.CreateRegistry();int bones=0,palettes=0;
             foreach(var obj in startup.Objects){var component=obj.Components.SingleOrDefault(c=>c.TypeId==SkinnedMeshData.TypeId);if(component is null)continue;
                 var source=registry.Decode<SkinnedMeshData>(component);
@@ -65,6 +70,12 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                         var clip=kernel.CreateClip(nativeRig,ModelPayloadCodec.DecodeClip(data.CopyData()));_leases.Add(clip);_clips.Add(id,clip);}
                 }
                 var live=world.FindObject(obj.Id);var instance=new Character(live,source,rig.Rig,rig.Skeleton,mesh.CopyPayload(),bones);
+                if (live.Has<AnimatorData>()) {
+                    var settings = live.Get<AnimatorData>(); var graph = (Ncma.Assets.Runtime.RuntimeAnimationGraphAsset)_assets.Require(settings.GraphId,AssetKind.AnimationGraph);
+                    if (settings.SkeletonId != graph.CopyDefinition().SkeletonId || settings.SkeletonId != source.SkeletonId) throw new ArgumentException("Graph presentation skeleton mismatch.");
+                    var program = graph.PrepareProgram(_assets);
+                    instance.AnimatorSource = settings; instance.GraphPose = new(program,rig.Rig,_clips,kernel); instance.PreviewGraph = new(program,new(Guid.NewGuid(),WorldId,0));
+                }
                 if(live.Has<ClipPlaybackData>() && (rootMotion is null || !live.Has<RootMotionData>())){var settings=live.Get<ClipPlaybackData>();instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
                 _characters.Add(instance);bones=checked(bones+rig.Rig.BoneCount);palettes=checked(palettes+instance.Bindings.BindingCount);
             }
@@ -78,6 +89,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     {
         try{
             if(!c.Object.Has<SkinnedMeshData>())return false;var current=c.Object.Get<SkinnedMeshData>();
+            if(c.Object.Has<AnimatorData>() != c.AnimatorSource.HasValue || c.AnimatorSource is { } source && c.Object.Get<AnimatorData>() != source) throw new InvalidOperationException("Animator references changed; explicit preparation required.");
             if(current.CharacterId!=c.Source.CharacterId||current.MeshId!=c.Source.MeshId||current.SkeletonId!=c.Source.SkeletonId||current.MaterialSetId!=c.Source.MaterialSetId)throw new InvalidOperationException("Animation asset references changed; explicit off-frame preparation required.");
             return true;
         }catch(InvalidOperationException){throw;}catch(ArgumentException){return false;}
@@ -85,6 +97,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     public void Attach(PlaySession play)
     {
         Verify();ArgumentNullException.ThrowIfNull(play);if(_play is not null||play.Document.World!=_world)throw new ArgumentException("Attach animation at its prepared committed Play boundary.");
+        if (_characters.Any(c=>c.GraphPose is not null) && _animators is null) throw new ArgumentException("Graph presentation requires the shared committed Animator runtime.");
         play.AddCommittedObserver(this);_play=play;
         if(_characters.Any(c=>c.Object.Has<RootMotionData>()) && _rootMotion is null)throw new ArgumentException("Root motion Play presentation requires its sole committed motion source.");
     }
@@ -105,9 +118,18 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         }
     }
     public void AdvancePreview(double deltaSeconds)
-    {Verify();if(_play is not null||!double.IsFinite(deltaSeconds)||deltaSeconds is <0 or >.25)throw new ArgumentException("Independent Edit preview has a bounded clock, never Play tick.");_previewSeconds+=deltaSeconds;}
+    {
+        Verify();if(_play is not null||!double.IsFinite(deltaSeconds)||deltaSeconds is <0 or >.25)throw new ArgumentException("Independent Edit preview has a bounded clock, never Play tick.");_previewSeconds+=deltaSeconds;
+        _previewDebt += deltaSeconds;
+        while (_previewDebt + 1e-12 >= 1.0/60) {
+            foreach (var c in _characters) if(c.PreviewGraph is { } graph) {
+                var context=graph.Frame.Context; var token=graph.Prepare(context,1.0/60); graph.Commit(token,context with {Tick=context.Tick+1});
+            }
+            _previewDebt=Math.Max(0,_previewDebt-1.0/60);
+        }
+    }
     public void SetPreviewTime(double seconds)
-    {Verify();if(_play is not null||!double.IsFinite(seconds)||seconds is <0 or >600)throw new ArgumentException("Edit preview time range.");_previewSeconds=seconds;}
+    {Verify();if(_play is not null||!double.IsFinite(seconds)||seconds is <0 or >600)throw new ArgumentException("Edit preview time range.");if(_characters.Any(c=>c.GraphPose is not null))throw new NotSupportedException("Graph preview seeking is not implemented; sequential preview only.");_previewSeconds=seconds;}
     public void Evaluate(float alpha,bool paused)
     {
         Verify();if(!float.IsFinite(alpha)||alpha is <0 or >1)throw new ArgumentException("Animation alpha range.");long start=Stopwatch.GetTimestamp();int active=0;
@@ -122,7 +144,14 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
             _samples[i]=new(c.Rig,clip,times);
         }
         if(active==0){Costs=new(0,0,0,0,0,Costs.PoseGeneration);return;}
-        _kernel.Sample(_samples.AsSpan(0,_characters.Count),_locals,_models);double sampled=Stopwatch.GetElapsedTime(start).TotalMilliseconds;start=Stopwatch.GetTimestamp();int offset=0;
+        _kernel.Sample(_samples.AsSpan(0,_characters.Count),_locals,_models);
+        foreach(var c in _characters) if(c.Active && c.GraphPose is { } pose) {
+            AnimationGraphFrame frame; int count;
+            if(_play is null){frame=c.PreviewGraph!.Frame;count=c.PreviewGraph.CopyCommittedPlan(pose.Plan);}
+            else {frame=_animators!.ReadFrame(c.Id);count=_animators.CopyCommittedPlan(c.Id,pose.Plan);}
+            pose.Evaluate(count,frame.Output,paused || _play is null ? 1 : alpha,_locals.AsSpan(c.BoneOffset,c.Rig.BoneCount),_models.AsSpan(c.BoneOffset,c.Rig.BoneCount));
+        }
+        double sampled=Stopwatch.GetElapsedTime(start).TotalMilliseconds;start=Stopwatch.GetTimestamp();int offset=0;
         foreach(var c in _characters)if(c.Active){
             c.RootDisplacement=_models[c.BoneOffset].Translation-c.BindRoot;
             if(_play is not null && c.Object.Has<RootMotionData>())_rootMotion!.RemoveRoot(c.Id,_models.AsSpan(c.BoneOffset,c.Rig.BoneCount));

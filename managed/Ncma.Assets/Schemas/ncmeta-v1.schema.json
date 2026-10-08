@@ -28,7 +28,7 @@
   "$defs": {
     "uuid": {"type": "string", "format": "uuid", "not": {"const": "00000000-0000-0000-0000-000000000000"}},
     "hash": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
-    "kind": {"enum": ["character", "staticMesh", "skinnedMesh", "skeleton", "clip", "texture", "material", "materialSet", "prefab", "overrideSet"]}
+    "kind": {"enum": ["character", "staticMesh", "skinnedMesh", "skeleton", "clip", "texture", "material", "materialSet", "prefab", "overrideSet", "animationGraph"]}
   },
   "$comment": "AssetRecordCodec additionally enforces duplicate-free JSON/UUIDs/source keys, portable paths, unique dependencies, nonblank/control-free text and the 4 MiB UTF-8 budget. JSON Schema alone is not the parser or a filesystem authorization."
 }

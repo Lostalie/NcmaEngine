@@ -6,7 +6,7 @@ M6.3按可独立验证的四个切片落实真实资产、数值、场景/角色
 
 ## A 数值混合扩展
 
-状态：自动候选完整Debug/Release已通过，见 [A交付记录](M6_3_A_DELIVERY_REPORT.md)。B/C/D仍未实现。
+状态：自动候选完整Debug/Release已通过，见 [A交付记录](M6_3_A_DELIVERY_REPORT.md)。B也已通过，C/D仍未完成。
 
 在现有NcmaAnimationKernel同一context/rig上增设独立pose-blend1.0导出，原pose1.0的72字节表、
 request和stats保持原样。输入固定TRS、opaque rig、source offsets和weight；输出复制TRS/模型矩阵。
@@ -19,6 +19,10 @@ C# PoseKernel通过显式blendSupport启用，既有消费者默认不启用；�
 非有限/scale/weight/offset、stale/foreign/线程、32×1024与warm分配。A不声称场景图或GPU混合已实现。
 
 ## B 固定资产和场景图
+
+状态：完整顺序Debug-final/Release自动候选通过，见 [B交付记录](M6_3_B_DELIVERY_REPORT.md) 与
+[B运行契约](M6_3_B_RUNTIME_CONTRACT.md)。Animator与clip/action互斥；B暂不允许Animator + RootMotion，
+后者属于C。包含真实NCA、明确NCP1图路由、正式Headless Player和既有数值/GPU场景接线；不称完整M6.3。
 
 为Animator持久绑定注册纯值组件，明确Graph/Skeleton UUID；与同对象ClipPlayback/ActionDefinition
 互斥。准备从可信已批准图副本出发，使用RuntimeAssetLease解析精确clip/model/skeleton generation，

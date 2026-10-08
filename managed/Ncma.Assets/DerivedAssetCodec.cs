@@ -20,7 +20,7 @@ public static class DerivedAssetCodec
         int length = HeaderBytes;
         foreach (var block in blocks)
         {
-            if (block is null || block.AssetId == Guid.Empty || !Enum.IsDefined(block.Kind) || block.Data is null ||
+            if (block is null || block.AssetId == Guid.Empty || !Enum.IsDefined(block.Kind) || block.Kind > AssetKind.OverrideSet || block.Data is null ||
                 block.Data.Length is < 1 or > MaxBlockBytes || owned.Count >= MaxBlocks || !ids.Add(block.AssetId))
                 throw new ArgumentException("Invalid derived block identity/kind/budget.");
             length = checked(length + EntryBytes + block.Data.Length);

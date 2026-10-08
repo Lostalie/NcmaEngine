@@ -14,7 +14,7 @@ public readonly record struct AssetId
     public override string ToString() => Value.ToString("D");
 }
 
-public enum AssetKind { Character, StaticMesh, SkinnedMesh, Skeleton, Clip, Texture, Material, MaterialSet, Prefab, OverrideSet }
+public enum AssetKind { Character, StaticMesh, SkinnedMesh, Skeleton, Clip, Texture, Material, MaterialSet, Prefab, OverrideSet, AnimationGraph }
 public readonly record struct AssetRef(AssetId Id, AssetKind ExpectedKind);
 public sealed record AssetDiagnostic(string Code, Guid? AssetId, string Path, string Message);
 

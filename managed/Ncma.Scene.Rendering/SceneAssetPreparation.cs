@@ -49,6 +49,8 @@ public static class SceneAssetPreparation
                         var material = Registry.Decode<MaterialOverrideData>(component); if (material.MaterialId != Guid.Empty) Add(material.MaterialId, AssetKind.Material); break;
                     case Ncma.Animation.ClipPlaybackData.TypeId:
                         Add(Registry.Decode<Ncma.Animation.ClipPlaybackData>(component).ClipId, AssetKind.Clip); break;
+                    case Ncma.Animation.AnimatorData.TypeId:
+                        var animator = Registry.Decode<Ncma.Animation.AnimatorData>(component); Add(animator.GraphId, AssetKind.AnimationGraph); Add(animator.SkeletonId, AssetKind.Skeleton); break;
                     case Ncma.Animation.ActionDefinitionData.TypeId:
                         var action=Registry.Decode<Ncma.Animation.ActionDefinitionData>(component);
                         foreach(Guid id in new[]{action.IdleClip,action.RunClip,action.AttackClip,action.DodgeClip})Add(id,AssetKind.Clip);break;
@@ -67,6 +69,7 @@ public static class SceneAssetPreparation
         using var lease = prepared.AcquireLease();
         using var view = new PreparedSceneAssetLease(lease.AcquireLease());
         _ = SceneRenderValidation.Inspect(scene, view.Metadata, true);
+        ValidateAnimators(scene,lease);
         foreach (var reference in References(scene)) if (reference.ExpectedKind is AssetKind.StaticMesh or AssetKind.SkinnedMesh)
             _ = lease.RequireMesh(reference.Id.Value, reference.ExpectedKind);
         return RuntimeAssetPackage.Encode(lease);
@@ -80,11 +83,20 @@ public static class SceneAssetPreparation
         {
             var result = new PreparedSceneAssetLease(lease);
             _ = SceneRenderValidation.Inspect(scene, result.Metadata, strictMissing);
+            ValidateAnimators(scene,lease);
             // A present model-root reference is malformed even in Editor's missing-resource mode.
             foreach (var reference in References(scene)) if (reference.ExpectedKind is AssetKind.StaticMesh or AssetKind.SkinnedMesh &&
                 lease.TryResolve(reference.Id.Value, reference.ExpectedKind, out _)) _ = lease.RequireMesh(reference.Id.Value, reference.ExpectedKind);
             return result;
         }
         catch { lease.Dispose(); throw; }
+    }
+    private static void ValidateAnimators(SceneDocumentSnapshot scene,RuntimeAssetLease lease)
+    {
+        foreach (var obj in scene.Objects) foreach(var component in obj.Components.Where(c=>c.TypeId==Ncma.Animation.AnimatorData.TypeId)) {
+            var binding=Registry.Decode<Ncma.Animation.AnimatorData>(component);
+            if (lease.TryResolve(binding.GraphId,AssetKind.AnimationGraph,out var graph) && ((RuntimeAnimationGraphAsset)graph!).CopyDefinition().SkeletonId!=binding.SkeletonId)
+                throw new ArgumentException("Animator graph skeleton binding mismatch.");
+        }
     }
 }

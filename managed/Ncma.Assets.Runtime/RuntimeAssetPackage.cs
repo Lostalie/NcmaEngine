@@ -29,6 +29,7 @@ public static class RuntimeAssetPackage
             byte[] bytes; string encoding; Guid model = Guid.Empty, rig = Guid.Empty;
             switch (asset) {
                 case RuntimeMeshAsset mesh: bytes = ModelPayloadCodec.Encode(mesh.CopyPayload()); encoding = "mesh"; model = mesh.ModelId; rig = mesh.SkeletonId; break;
+                case RuntimeAnimationGraphAsset graph: bytes = graph.CopyData(); encoding = "animgraph"; break;
                 case RuntimeDataAsset data: bytes = data.CopyData(); encoding = "data"; model = data.ModelId; rig = data.SkeletonId; break;
                 case RuntimeMaterialAsset material: bytes = MaterialCodec.Encode(material.Definition); encoding = "material"; break;
                 case RuntimeMaterialSetAsset { ImportedSlotsOnly: true } slots: bytes = ModelPayloadCodec.Encode(new MaterialSlotsPayload(slots.CopyImportedNames())); encoding = "slots"; break;
@@ -71,6 +72,8 @@ public static class RuntimeAssetPackage
             byte[] data = bytes.AsSpan(16 + indexBytes + offset, entry.Length).ToArray();
             if (entry.Hash != Hash(data)) throw new ArgumentException("Runtime package checksum.");
             RuntimeAsset asset = entry.Encoding switch {
+                "animgraph" when entry.Kind == AssetKind.AnimationGraph && entry.ModelId == Guid.Empty && entry.SkeletonId == Guid.Empty =>
+                    new RuntimeAnimationGraphAsset(data, entry.Generation, entry.Hash),
                 "mesh" when entry.Kind is AssetKind.StaticMesh or AssetKind.SkinnedMesh && entry.ModelId != Guid.Empty =>
                     new RuntimeMeshAsset(entry.AssetId, entry.Kind, entry.Generation, entry.Hash, data, entry.ModelId, entry.SkeletonId),
                 "data" when entry.Kind is AssetKind.Character or AssetKind.StaticMesh or AssetKind.Skeleton or AssetKind.Clip && entry.ModelId != Guid.Empty =>
@@ -92,6 +95,14 @@ public static class RuntimeAssetPackage
         }
         if (offset != payloadBytes) throw new ArgumentException("Runtime package trailing payload.");
         ValidateClosure(assets);
+        var validationState = new RuntimeAssetState(assets, [], diagnostics, project);
+        using (var validation = new RuntimeAssetLease(validationState)) {
+            validationState.References++;
+            foreach (var graph in assets.Values.OfType<RuntimeAnimationGraphAsset>()) {
+                if (Hash(graph.CopyData()) != graph.ContentHash) throw new ArgumentException("Noncanonical graph package data.");
+                _ = graph.PrepareProgram(validation);
+            }
+        }
         return (index, assets, diagnostics);
     }
     private static void ValidateClosure(Dictionary<Guid, RuntimeAsset> assets)

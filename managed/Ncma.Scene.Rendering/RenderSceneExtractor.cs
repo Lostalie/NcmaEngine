@@ -3,6 +3,8 @@ using Ncma.Assets;
 using Ncma.Runtime;
 
 namespace Ncma.Scene.Rendering;
+using Vector3 = System.Numerics.Vector3;
+using GameObject = Ncma.Runtime.GameObject;
 
 // Copied immutable values only. These records contain no World, GameObject, lease or native address.
 public readonly record struct SceneCameraView(Guid ObjectId, Matrix4x4 ViewProjection, Vector3 Position, CameraData Data);

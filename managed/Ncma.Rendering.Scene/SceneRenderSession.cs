@@ -42,7 +42,7 @@ public sealed class SceneRenderSession : IDisposable
     { Verify();_resources.CaptureCharacterVertices(_renderer,objectId,output); }
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false,
-        Ncma.Animation.IRootMotionPresentation? rootMotion=null)
+        Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null)
     {
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
@@ -51,7 +51,7 @@ public sealed class SceneRenderSession : IDisposable
         try {
             if(startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId))) {
                 if(poseKernel is null)throw new ArgumentException("Skinned scenes require the trusted numerical pose plugin.");
-                _animation = new(world,assets,startup,poseKernel,rootMotion);
+                _animation = new(world,assets,startup,poseKernel,rootMotion,animators);
             }
             _resources = SceneGpuResources.Prepare(cache, assets, startup,renderer,_animation);
             if(play is not null)_animation?.Attach(play);
