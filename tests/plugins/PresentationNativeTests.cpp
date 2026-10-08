@@ -45,7 +45,8 @@ int main(int argc, char** argv)
     assert(ncma_plugin_get_api(1,4,&guiApi,sizeof(guiApi),&error)==NCMA_BUFFER_TOO_SMALL);
     assert(ncma_plugin_get_api(1,5,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==5);
     assert(ncma_plugin_get_api(1,6,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==6);
-    assert(ncma_plugin_get_api(1,7,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_ABI_MISMATCH);
+    assert(ncma_plugin_get_api(1,7,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==7);
+    assert(ncma_plugin_get_api(1,8,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_ABI_MISMATCH);
     assert(getPlatform(1, 0, &api, sizeof(api), &error) == NCMA_OK);
     uint64_t platform = 0, w = 0;
     assert(api.module.initialize(nullptr, 0, &platform, &error) == NCMA_OK);
@@ -189,6 +190,18 @@ int main(int argc, char** argv)
     if(gui->chromeMask&1){BOOL dark=TRUE;assert(SUCCEEDED(DwmGetWindowAttribute(hwnd,DWMWA_USE_IMMERSIVE_DARK_MODE,&dark,sizeof(dark)))&&dark==FALSE);}
     assert(NcmaChrome::Apply(nullptr,true)==0);
     std::cout<<"PASS bounded copied canvas and theme; invalid batch leaves frame recoverable, no mutation intents\\n";
+    // Additive1.7 uses the unchanged item/table layout and preflights primitives before ImGui.
+    canvas[3].kind=NCMA_GUI_CANVAS_RECT;canvas[3].text_length=0;canvas[3].minimum=canvas[3].maximum=4;
+    canvas[3].rect[0]=.1f;canvas[3].rect[1]=.1f;canvas[3].rect[2]=.4f;canvas[3].rect[3]=.4f;frame.frame++;
+    assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);
+    canvas[3].rect[2]=0;assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_INVALID_ARGUMENT);
+    canvas[3].rect[2]=.4f;canvas[3].minimum=canvas[3].maximum=17;assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_INVALID_ARGUMENT);
+    canvas[3].minimum=canvas[3].maximum=4;assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK);
+    frame.frame++;assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);canvas[3].kind=NCMA_GUI_CANVAS_TEXT;canvas[3].minimum=canvas[3].maximum=14;canvas[3].label_length=5;canvas[3].label_offset=0;
+    assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK);
+    frame.frame++;assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);canvas[3].kind=NCMA_GUI_CANVAS_INPUT;canvas[3].rect[0]=10;canvas[3].rect[1]=10;canvas[3].rect[2]=100;canvas[3].rect[3]=100;canvas[3].enabled=0;
+    assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK&&count==0);
+    std::cout<<"PASS GUI1.7 copied text/rect/pointer presentation;1.0..1.6 queries retained\n";
     assert(Destroy(gm, g, &error) == NCMA_OK && Shutdown(gm, &error) == NCMA_OK);
     assert(api.destroy_window(platform, w, &error) == NCMA_OK && api.module.shutdown(platform, &error) == NCMA_OK);
     FreeLibrary(platformLibrary);

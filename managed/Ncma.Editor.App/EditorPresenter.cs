@@ -78,7 +78,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public void ShowRenderDiagnostics(IReadOnlyList<Ncma.Scene.Rendering.SceneRenderDiagnostic>? diagnostics) {
         _renderDiagnostics=diagnostics?.Take(4).Select(d=>$"Render: {d.Code}; object={d.ObjectId}; asset={d.AssetId}").ToArray()??[];
     }
-    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelUi();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
+    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelGraph();CancelUi();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
     private static string BoundMessage(string message, int limit) {
         if (message.Length <= limit) return message;
         if (char.IsHighSurrogate(message[limit - 1])) limit--;
@@ -157,6 +157,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         if(workspaceStyle){ArrangeWorkspace(w,h);WorkspaceToolbar(w);}
         else if(header)Toolbar(w);
         if(workspaceStyle&&_uiMode&&_ui is not null)return BuildUi(frameId);
+        if(workspaceStyle&&_graphMode&&_graphAuthor is not null)return BuildGraphEditor(frameId);
         // User-approved slice changes only the header. Preserve side/status/viewport geometry,
         // existing preference field meanings and the remaining scene controls below the header.
         ulong labelId = 10000;
@@ -541,6 +542,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 var stamp = _page.Stamp;
                 if(ApplyLayout(action,e))continue;
                 if(ApplyUi(action,e,text))continue;
+                if(ApplyGraphEditor(action,e,text))continue;
                 if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "export")
                 {
                     if (e.Phase == 1) {

@@ -130,6 +130,12 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     }
     public void SetPreviewTime(double seconds)
     {Verify();if(_play is not null||!double.IsFinite(seconds)||seconds is <0 or >600)throw new ArgumentException("Edit preview time range.");if(_characters.Any(c=>c.GraphPose is not null))throw new NotSupportedException("Graph preview seeking is not implemented; sequential preview only.");_previewSeconds=seconds;}
+    public AnimationGraphFrame PreviewFrame(Guid objectId) { Verify();if(_play is not null)throw new InvalidOperationException("Not an independent preview.");return _characters.Single(c=>c.Id==objectId).PreviewGraph?.Frame??throw new ArgumentException("Preview graph missing."); }
+    public void ControlPreview(Guid objectId,Guid parameter,AnimationParameterKind kind,double value)
+    {
+        Verify();if(_play is not null||!double.IsFinite(value))throw new ArgumentException("Independent preview control only.");var graph=_characters.Single(c=>c.Id==objectId).PreviewGraph??throw new ArgumentException("Preview graph missing.");
+        switch(kind){case AnimationParameterKind.Float:graph.SetFloat(parameter,value);break;case AnimationParameterKind.Int:if(value!=Math.Truncate(value)||value<int.MinValue||value>int.MaxValue)throw new ArgumentException("Int preview value.");graph.SetInt(parameter,(int)value);break;case AnimationParameterKind.Bool:if(value is not (0 or 1))throw new ArgumentException("Bool preview value.");graph.SetBool(parameter,value==1);break;case AnimationParameterKind.Trigger:if(value!=1)throw new ArgumentException("Trigger preview value.");graph.SetTrigger(parameter);break;default:throw new ArgumentException("Preview parameter kind.");}
+    }
     public void Evaluate(float alpha,bool paused)
     {
         Verify();if(!float.IsFinite(alpha)||alpha is <0 or >1)throw new ArgumentException("Animation alpha range.");long start=Stopwatch.GetTimestamp();int active=0;

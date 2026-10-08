@@ -172,7 +172,7 @@ internal sealed unsafe partial class EditorPresenter
     }
     private bool ApplyUi(ActionView action,GuiEvent e,string text)
     {
-        if(action.Kind=="ui_switch") { if(e.Phase==3){CancelInteraction();_uiMode=!_uiMode;_activeMenu=-1;if(_uiTest){_uiTest=false;_uiPreview?.ResetRuntime();}SynchronizeUi();}return true; }
+        if(action.Kind=="ui_switch") { if(e.Phase==3){CancelInteraction();_graphMode=false;_uiMode=!_uiMode;_activeMenu=-1;if(_uiTest){_uiTest=false;_uiPreview?.ResetRuntime();}SynchronizeUi();}return true; }
         if(!action.Kind.StartsWith("ui_",StringComparison.Ordinal))return false;
         var ui=_ui??throw new InvalidOperationException("Project UI authoring unavailable.");var intent=(UiIntent)action.Operation!;
         var current=ui.Stamp;

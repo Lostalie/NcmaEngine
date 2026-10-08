@@ -4,7 +4,7 @@ using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Rendering;
 namespace Ncma.Gui;
-public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton, ToolbarBegin, ToolbarButton, ToolbarBrand, ToolbarDivider, ToolbarEnd, MenuButton, MenuBrand, CachedImage, OverlayBegin, Splitter, SelectionButton }
+public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton, ToolbarBegin, ToolbarButton, ToolbarBrand, ToolbarDivider, ToolbarEnd, MenuButton, MenuBrand, CachedImage, OverlayBegin, Splitter, SelectionButton, CanvasInput, CanvasText, CanvasRect }
 [StructLayout(LayoutKind.Sequential)]
 public struct GuiFrame { public uint StructSize, ItemCount, TextBytes, Reserved; public ulong Frame, ViewGeneration, DocumentGeneration, Revision; }
 [StructLayout(LayoutKind.Sequential)]
@@ -137,6 +137,7 @@ public sealed unsafe class GuiSession : IDisposable
         if(Module.AbiMinor<4)foreach(var item in items)if(item.Kind>14)throw new NotSupportedException("GUI toolbar requires ABI1.4.");
         if(Module.AbiMinor<5)foreach(var item in items)if(item.Kind>19||item.Kind==(uint)GuiItemKind.Theme&&item.Value==3)throw new NotSupportedException("Workspace menu/theme requires ABI1.5.");
         if(Module.AbiMinor<6)foreach(var item in items)if(item.Kind>21)throw new NotSupportedException("Cached UI image requires ABI1.6.");
+        if(Module.AbiMinor<7)foreach(var item in items)if(item.Kind>25)throw new NotSupportedException("Graph canvas requires ABI1.7.");
         if (frame.ItemCount != items.Length || frame.TextBytes != text.Length) throw new ArgumentException("GUI view length mismatch.");
         PluginError error = default; GuiStats stats = default; uint count = 0;
         fixed (GuiItem* input = items) fixed (byte* source = text) fixed (GuiEvent* events = _events) fixed (byte* outputText = _text)

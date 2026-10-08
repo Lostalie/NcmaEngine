@@ -16,9 +16,26 @@ internal static class M36WorkflowTests
 {
     private static void Check(bool value,string label){if(!value)throw new InvalidOperationException(label);}
     private static void Reject(Action action){try{action();}catch(Exception e)when(e is ArgumentException or InvalidOperationException or IOException){return;}throw new InvalidOperationException("Expected rejection.");}
-    private static void Wait(EditorAssetWorkflow flow,EditorSessionOwner owner,Func<bool> finished)
+    private static void Wait(EditorAssetWorkflow flow,EditorSessionOwner owner,Func<bool> finished,bool refreshAssets=true)
     {
-        var watch=Stopwatch.StartNew();while(watch.Elapsed<TimeSpan.FromSeconds(45)){owner.RefreshAssets();flow.Pump();if(finished())return;Thread.Sleep(10);}throw new InvalidOperationException("Workflow timeout: "+flow.Code);
+        var watch=Stopwatch.StartNew();while(watch.Elapsed<TimeSpan.FromSeconds(45)){if(refreshAssets)owner.RefreshAssets();flow.Pump();if(finished())return;Thread.Sleep(10);}throw new InvalidOperationException("Workflow timeout: "+flow.Code);
+    }
+    private static void PreparePlacement(EditorAssetWorkflow flow,EditorSessionOwner owner,EditorWorkspace workspace,Guid root,AssetKind kind,Vector3 position)
+    {
+        // Undo/Redo publications can still deliver delayed watcher events. A revision change
+        // correctly rejects the old plan; this trusted fixture explicitly requests a fresh one,
+        // never retries a commit or relaxes the production stale-plan check.
+        for(int attempt=0;attempt<8;attempt++){
+            owner.Assets!.Refresh(owner.Assets.Generation,force:true);flow.PreparePlacement(workspace.Stamp,root,kind,position);
+            if(attempt==0)owner.Assets!.Clock.Advance(); // deterministic stale-preparation oracle, no concurrent file scan
+            // Metadata scans request transaction-style DELETE leases, incompatible with the
+            // background immutable reader. Pump completion only; refresh before each new request.
+            Wait(flow,owner,()=>flow.PlacementPlan is not null||!flow.PreparingPlacement&&flow.Code=="asset_placement_stale",refreshAssets:false);
+            if(attempt==0)Check(flow.PlacementPlan is null&&flow.Code=="asset_placement_stale","Stale preparation must be rejected before retry.");
+            if(flow.PlacementPlan is not null)return;
+            Check(flow.Code=="asset_placement_stale","Unexpected placement preparation rejection: "+flow.Code);
+        }
+        throw new InvalidOperationException("Placement fixture exceeded bounded watcher-revision retries.");
     }
     public static void Run(string repository,string plugins,string output)
     {
@@ -55,7 +72,7 @@ internal static class M36WorkflowTests
             // Same session history owns both metadata and scene commands.
             workspace.History(workspace.Stamp,false);owner.RefreshAssets();Check(flow.Count==0,"Asset Undo did not restore catalog");
             workspace.History(workspace.Stamp,true);owner.RefreshAssets();Check(flow.Count==1,"Asset Redo did not restore catalog");
-            flow.PreparePlacement(workspace.Stamp,modelId,AssetKind.StaticMesh,new(1,2,-3));Wait(flow,owner,()=>flow.PlacementPlan is not null);
+            PreparePlacement(flow,owner,workspace,modelId,AssetKind.StaticMesh,new(1,2,-3));
             var placement=flow.PlacementPlan!;objectId=placement.Objects[0];placement.Objects[0]=Guid.NewGuid();placement.Operations[0]=new{op="create",objectId=Guid.NewGuid(),name="Tampered"};
             flow.CommitPlacement(placement.PlanId);Check(owner.Document.World.FindObject(objectId).Get<StaticMeshData>().MeshId==meshId,"Owned placement plan was modified by caller");
             Check(owner.Document.World.FindObject(objectId).Get<TransformData>().Position==new System.Numerics.Vector3(1,2,-3),"Placement not baked into flat transform");
@@ -79,7 +96,7 @@ internal static class M36WorkflowTests
             }
             flow.Assign(workspace.Stamp,objectId,materials,AssetKind.MaterialSet);
             Check(owner.Document.World.FindObject(objectId).Get<StaticMeshData>().MaterialSetId==materials,"Typed material set assignment");
-            flow.PreparePlacement(workspace.Stamp,modelId,AssetKind.StaticMesh,Vector3.Zero);Wait(flow,owner,()=>flow.PlacementPlan is not null);
+            PreparePlacement(flow,owner,workspace,modelId,AssetKind.StaticMesh,Vector3.Zero);
             var stale=flow.PlacementPlan!;workspace.CreateObject(workspace.Stamp);Reject(()=>flow.CommitPlacement(stale.PlanId));workspace.History(workspace.Stamp,false);
             workspace.Save(workspace.Stamp,scenePath);
             workspace.PlayControl(workspace.Stamp,"start");Reject(()=>flow.PrepareSource(workspace.Stamp,"assets/Hero.fbx",6,false));Reject(()=>flow.Assign(workspace.Stamp,objectId,meshId,AssetKind.StaticMesh));workspace.PlayControl(workspace.Stamp,"stop");
@@ -88,7 +105,7 @@ internal static class M36WorkflowTests
             Wait(flow,owner,()=>flow.Job?.State is ImportJobState.Ready or ImportJobState.Failed);Check(flow.Job!.State==ImportJobState.Ready,flow.Job.Code);
             flow.PrepareCommit(flow.Job.JobId);Wait(flow,owner,()=>flow.Prepared is not null);var hero=flow.Prepared!;
             flow.CommitImport(workspace.Stamp,hero.Ticket,true);owner.RefreshAssets();
-            flow.PreparePlacement(workspace.Stamp,hero.Record.AssetId,AssetKind.Character,new(0,0,-3));Wait(flow,owner,()=>flow.PlacementPlan is not null);var heroPlacement=flow.PlacementPlan!;heroObject=heroPlacement.Objects[0];flow.CommitPlacement(heroPlacement.PlanId);
+            PreparePlacement(flow,owner,workspace,hero.Record.AssetId,AssetKind.Character,new(0,0,-3));var heroPlacement=flow.PlacementPlan!;heroObject=heroPlacement.Objects[0];flow.CommitPlacement(heroPlacement.PlanId);
             var character=owner.Document.World.FindObject(heroObject);Check(character.Has<SkinnedMeshData>()&&character.Has<ClipPlaybackData>(),"Character placement missing skin/clip components");
             var clip=hero.Record.Subassets.First(s=>s.Kind==AssetKind.Clip&&!s.Tombstone);flow.Assign(workspace.Stamp,heroObject,clip.AssetId,AssetKind.Clip);
             Check(owner.Document.World.FindObject(heroObject).Get<ClipPlaybackData>().ClipId==clip.AssetId,"Typed clip selection");Reject(()=>flow.Assign(workspace.Stamp,objectId,clip.AssetId,AssetKind.Clip));

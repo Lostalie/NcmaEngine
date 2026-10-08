@@ -36,6 +36,9 @@ GPU资源后clip/rig，最后资产/模块。正式场景将M6.2采样/混合计
 
 ## C 唯一角色运动权威
 
+状态：B 已推送并核对远端，C 开始实施；细分接线顺序和门禁见
+[C 实施方案](M6_3_C_IMPLEMENTATION_PLAN.md)。内部根配方候选不代表已开放 Animator + RootMotion。
+
 图参数/动作输入由C#游戏逻辑或可信主机在安全边界提出；AI只有复制观察，不获live输入控制。
 Animator的Prepare与现有Movement/Character协调器同量子：先准备所有图/根意图，再一次Jolt执行，
 唯一Transform/Health权威发布，World成功commit后消费图token/trigger/clock。准备错误可丢弃未提交候选，

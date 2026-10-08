@@ -12,18 +12,19 @@ internal static class GraphInspectionTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("Graph MCP assertion failed."); }
     private static void Reject(Action action) { try { action(); } catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException or JsonException) { return; } throw new Exception("Invalid graph review accepted."); }
-    private sealed class Clock : TimeProvider
+    internal sealed class Clock : TimeProvider
     {
         internal long Now;
         public override long TimestampFrequency => 1000;
         public override long GetTimestamp() => Now;
     }
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
         internal readonly string Root, File;
         internal readonly EditorSessionOwner Owner = new("Graph inspection");
         internal readonly EditorWorkspace Workspace;
         internal readonly AnimationGraphInspections Graphs;
+        internal readonly EditorAnimationGraphWorkspace? Writer;
         internal readonly EditorPresenter View;
         internal readonly Guid Graph = Guid.NewGuid(), Clip = Guid.NewGuid(), Rig = Guid.NewGuid();
         internal readonly Clock Time = new();
@@ -31,14 +32,17 @@ internal static class GraphInspectionTests
         private readonly Task<string> _errors;
         private ulong _frame;
         private int _id;
-        internal Fixture(string output, string repository)
+        internal Fixture(string output, string repository, bool authoring=false)
         {
-            Root = Path.Combine(output, "m6-2-graph-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(Root, "assets")); File = Path.Combine(Root, "assets/test.ncmaanim");
+            Guid project=Guid.NewGuid();
+            if(authoring){var sample=Ncma.Samples.ActionSample.Create(Path.Combine(output,"m6-4-mcp"),Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),0);Root=sample.Root;project=sample.ProjectId;var record=Ncma.Assets.AssetRecordCodec.Decode(System.IO.File.ReadAllBytes(Path.Combine(Root,"assets/procedural.fbx.ncmeta")));Rig=record.Subassets.Single(s=>s.Kind==Ncma.Assets.AssetKind.Skeleton).AssetId;Clip=record.Subassets.First(s=>s.Kind==Ncma.Assets.AssetKind.Clip).AssetId;}
+            else Root = Path.Combine(output, "m6-2-graph-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(Root, "assets")); File = Path.Combine(Root, "assets/test.ncmaanim");
             var clip = AnimationGraphNode.Create(Guid.NewGuid(), "approved clip", AnimationNodeKind.Clip) with { ClipId = Clip, Speed = 1, Loop = true };
             var end = AnimationGraphNode.Create(Guid.NewGuid(), "Output", AnimationNodeKind.Output);
             var d = new AnimationGraphDefinition(1, Graph, "Approved graph", Rig, Guid.Empty, [], [clip, end], [new(Guid.NewGuid(), clip.Id, "pose", end.Id, "pose")], [], []);
-            System.IO.File.WriteAllBytes(File, AnimationGraphCodec.Encode(d)); Workspace = new(Owner); Graphs = new(Workspace, Root, Time);
-            View = new(Workspace, null, Root, filePicker: kind => kind == Ncma.Platform.LocalFileKind.OpenAnimationGraph ? File : null, workspaceStyle: true); View.AttachGraphReads(Graphs);
+            System.IO.File.WriteAllBytes(File, AnimationGraphCodec.Encode(d)); Workspace = new(Owner);
+            if(authoring){Writer=new(Workspace,Root,project,Time);Owner.ConfigureAssets(Root,project,1,graphScope:Writer.Scope);Graphs=Writer.Reads;}else Graphs = new(Workspace, Root, Time);
+            View = new(Workspace, null, Root, filePicker: kind => kind == Ncma.Platform.LocalFileKind.OpenAnimationGraph ? File : null, workspaceStyle: true);if(Writer is not null)View.AttachGraphAuthoring(Writer);else View.AttachGraphReads(Graphs);
             Owner.ConfigureEndpoint(true, Root);
             var launch = new ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
             launch.ArgumentList.Add(Path.Combine(repository, "out/managed/editor-mcp/Ncma.Editor.Mcp.dll")); launch.ArgumentList.Add("--descriptor"); launch.ArgumentList.Add(Owner.Endpoint!.DescriptorPath);
@@ -72,13 +76,13 @@ internal static class GraphInspectionTests
         }
         internal CapabilityResult Direct(Guid graph, Guid? request = null) => Owner.Edit!.Invoke(new(2, request ?? Guid.NewGuid(), Owner.Edit.SessionId, Owner.Edit.Revision,
             "ncma.animgraph.inspect", JsonSerializer.SerializeToElement(new { graphId = graph, section = "nodes" })));
-        internal JsonElement Call(string name, object input, Guid request) => Send(new { jsonrpc = "2.0", id = ++_id, method = "tools/call", @params = new { name, arguments = new {
-            contractVersion = 2, requestId = request, sessionId = Owner.Edit!.SessionId, expectedRevision = Owner.Edit.Revision, input } } }).GetProperty("result");
+        internal JsonElement Call(string name, object input, Guid request, ulong? revision=null) => Send(new { jsonrpc = "2.0", id = ++_id, method = "tools/call", @params = new { name, arguments = new {
+            contractVersion = 2, requestId = request, sessionId = Owner.Edit!.SessionId, expectedRevision = revision??Owner.Edit.Revision, input } } }).GetProperty("result");
         internal void ApproveUi() { Build(); Click(40, 2); Build(); Click(40, 3, 1); Build(); Click(40, 4); Build(); }
         public void Dispose()
         {
             Client.StandardInput.Close(); if (!Client.WaitForExit(5000)) throw new TimeoutException("Graph MCP shutdown timeout.");
-            Check(Client.ExitCode == 0 && _errors.GetAwaiter().GetResult().Length == 0); Client.Dispose(); Owner.Dispose();
+            Check(Client.ExitCode == 0 && _errors.GetAwaiter().GetResult().Length == 0); Client.Dispose(); Writer?.Dispose();Owner.Dispose();
         }
     }
     internal static IEnumerable<(string, Action)> Cases(string output, string repository)

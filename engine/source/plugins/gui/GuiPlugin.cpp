@@ -224,13 +224,20 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
             const auto& item = items[i]; std::string label, value;
             expandedText += static_cast<uint64_t>(item.label_length) + item.text_length;
             if (expandedText + frame->item_count * sizeof(NcmaGuiItemV1) > NCMA_GUI_MAX_TEXT_BYTES) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
-            if (item.kind < NCMA_GUI_PANEL_BEGIN || item.kind > NCMA_GUI_SELECTION_BUTTON || item.enabled > 1 ||
+            if (item.kind < NCMA_GUI_PANEL_BEGIN || item.kind > NCMA_GUI_CANVAS_RECT || item.enabled > 1 ||
                 (item.kind!=NCMA_GUI_IMAGE&&item.kind!=NCMA_GUI_CACHED_IMAGE&&(item.reserved[0] || item.reserved[1] || item.reserved[2] || item.reserved[3])) ||
                 !std::isfinite(item.value) || !std::isfinite(item.minimum) || !std::isfinite(item.maximum) || item.minimum > item.maximum ||
                 !Text(text, frame->text_bytes, item.label_offset, item.label_length, label, 4096) ||
                 !Text(text, frame->text_bytes, item.text_offset, item.text_length, value, 1023))
                 return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
             for (float number : item.rect) if (!std::isfinite(number)) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
+            if(item.kind==NCMA_GUI_CANVAS_INPUT&&(item.rect[2]<=0||item.rect[3]<=0||item.rect[2]>16384||item.rect[3]>16384))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+            if(item.kind==NCMA_GUI_CANVAS_TEXT||item.kind==NCMA_GUI_CANVAS_RECT){
+                if(!canvases||item.value<0||item.value>UINT32_MAX||std::floor(item.value)!=item.value||item.minimum<0||item.minimum>32)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+                for(float number:item.rect)if(number< -64||number>64)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+                if(item.kind==NCMA_GUI_CANVAS_TEXT&&(item.minimum<8||item.minimum>32))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+                if(item.kind==NCMA_GUI_CANVAS_RECT&&(item.minimum>16||item.rect[2]<=0||item.rect[3]<=0))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+            }
             if(item.kind==NCMA_GUI_SPLITTER&&((item.value!=0&&item.value!=1)||item.rect[2]<=0||item.rect[3]<=0||item.rect[2]>16384||item.rect[3]>16384))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
             if (item.kind == NCMA_GUI_PANEL_BEGIN || item.kind==NCMA_GUI_TOOLBAR_BEGIN) {
                 if (panels || item.rect[2] <= 0 || item.rect[3] <= 0 || item.rect[2] > 16384 || item.rect[3] > 16384) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
@@ -271,7 +278,7 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
                 }
                 if (lines[i].empty() || lines[i].size() % 4 || (segments += static_cast<uint32_t>(lines[i].size() / 4)) > 32768)
                     return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
-            } else if (canvases && !(canvases==2&&item.kind==NCMA_GUI_CACHED_IMAGE)) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
+            } else if (canvases && !(canvases==2&&item.kind==NCMA_GUI_CACHED_IMAGE) && item.kind!=NCMA_GUI_CANVAS_RECT && item.kind!=NCMA_GUI_CANVAS_TEXT && item.kind!=NCMA_GUI_CANVAS_INPUT) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
             if(item.kind==NCMA_GUI_IMAGE||item.kind==NCMA_GUI_CACHED_IMAGE) {
                 if(++imageCount>64||item.rect[2]<=0||item.rect[3]<=0||item.rect[2]>16384||item.rect[3]>16384||!label.empty()||!value.empty()||!gui->rendererHandle)
                     return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
@@ -426,9 +433,17 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
                 }
                 case NCMA_GUI_TOOLBAR_DIVIDER:
                     ImGui::GetWindowDrawList()->AddLine({item.rect[0],item.rect[1]},{item.rect[0],item.rect[1]+item.rect[3]},IM_COL32(42,67,91,255));break;
+                case NCMA_GUI_CANVAS_TEXT: {
+                    ImGui::GetWindowDrawList()->AddText(ImGui::GetFont(),static_cast<float>(item.minimum),{canvasOrigin.x+item.rect[0]*canvasSize.x,canvasOrigin.y+item.rect[1]*canvasSize.y},static_cast<ImU32>(item.value),labels[i].c_str());break;
+                }
+                case NCMA_GUI_CANVAS_RECT: {
+                    const ImVec2 a{canvasOrigin.x+item.rect[0]*canvasSize.x,canvasOrigin.y+item.rect[1]*canvasSize.y};
+                    ImGui::GetWindowDrawList()->AddRectFilled(a,{a.x+item.rect[2]*canvasSize.x,a.y+item.rect[3]*canvasSize.y},static_cast<ImU32>(item.value),static_cast<float>(item.minimum));break;
+                }
+                case NCMA_GUI_CANVAS_INPUT:
                 case NCMA_GUI_CACHED_IMAGE: {
                     ImGui::SetCursorScreenPos({item.rect[0],item.rect[1]});
-                    ImGui::GetWindowDrawList()->AddImage(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(imageViews[i])),{item.rect[0],item.rect[1]},{item.rect[0]+item.rect[2],item.rect[1]+item.rect[3]});
+                    if(item.kind==NCMA_GUI_CACHED_IMAGE)ImGui::GetWindowDrawList()->AddImage(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(imageViews[i])),{item.rect[0],item.rect[1]},{item.rect[0]+item.rect[2],item.rect[1]+item.rect[3]});
                     ImGui::InvisibleButton("##ui_canvas",{item.rect[2],item.rect[3]},ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonMiddle);
                     if(item.enabled) {
                         const auto& io=ImGui::GetIO();std::array<char,128> coordinates{};
@@ -602,5 +617,5 @@ extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major, ui
     if(minor<=3)return NcmaPlugin::CopyApi(major, minor, output, capacity, error, api, 3);
     NcmaGuiApiV1_4 toolbar{api,ConfigureToolbarIcon};toolbar.base.module.struct_size=sizeof(toolbar);toolbar.base.module.minor=4;
     if(minor>=5)toolbar.base.module.minor=minor;
-    return NcmaPlugin::CopyApi(major,minor,output,capacity,error,toolbar,6);
+    return NcmaPlugin::CopyApi(major,minor,output,capacity,error,toolbar,7);
 }

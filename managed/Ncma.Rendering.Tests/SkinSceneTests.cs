@@ -181,14 +181,17 @@ internal static unsafe partial class Program
             }
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
             using var scene=new SceneRenderSession(renderer,cache,d.World,prepared,d.CaptureSnapshot(),poseKernel:kernel);
-            for(int i=0;i<4;i++){scene.Animation?.SetPreviewTime(i*.03);if(scene.Submit(frame++,256,256,cam,target:target))renderer.Present();renderer.WaitIdle();}
+            const int warmFrames=32;
+            // Warm the same advancing-preview path that is measured, not the distinct seek API.
+            // Cold lazy/runtime initialization is not cached-frame cost; the measured gate stays exactly zero.
+            for(int i=0;i<warmFrames;i++){scene.Animation?.AdvancePreview(1.0/60);if(scene.Submit(frame++,256,256,cam,target:target))renderer.Present();renderer.WaitIdle();}
             ulong uploads=renderer.SceneStats.UploadedBytes,creates=renderer.SceneStats.MeshCreates;var before=renderer.SkinStats;ulong calls=renderer.SubmitCalls;
             long bytes=GC.GetAllocatedBytesForCurrentThread();long start=System.Diagnostics.Stopwatch.GetTimestamp();
             for(int i=0;i<8;i++){scene.Animation?.AdvancePreview(1.0/60);if(scene.Submit(frame++,256,256,cam,target:target))renderer.Present();renderer.WaitIdle();}
             double elapsed=System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;bytes=GC.GetAllocatedBytesForCurrentThread()-bytes;renderer.WaitIdle();var after=renderer.SkinStats;
-            Check(bytes==0,"Animation cached frame allocated "+bytes);Check(uploads==renderer.SceneStats.UploadedBytes&&creates==renderer.SceneStats.MeshCreates,"Animation frame uploaded CPU vertices");
+            Check(bytes==0,$"Animation cached frame allocated {bytes}; count={count}, differentMesh={different}, warmFrames={warmFrames}");Check(uploads==renderer.SceneStats.UploadedBytes&&creates==renderer.SceneStats.MeshCreates,"Animation frame uploaded CPU vertices");
             Check(after.Batches-before.Batches==(count==0?0ul:8ul)&&after.PaletteBytes-before.PaletteBytes==(ulong)count*2*128*8,"Bounded palette upload counters");
-            rows.Add(new{count,differentMesh=different,frames=8,forcedGpuDrain=true,allocatedBytes=bytes,totalMilliseconds=elapsed,pose=scene.Animation?.Costs,skinAbiMilliseconds=scene.SkinAbiMilliseconds,skinBackpressureFrames=scene.SkinBackpressureFrames,
+            rows.Add(new{count,differentMesh=different,warmFrames,frames=8,forcedGpuDrain=true,allocatedBytes=bytes,totalMilliseconds=elapsed,pose=scene.Animation?.Costs,skinAbiMilliseconds=scene.SkinAbiMilliseconds,skinBackpressureFrames=scene.SkinBackpressureFrames,
                 sceneAbiCalls=renderer.SubmitCalls-calls,skinAbiCalls=after.Batches-before.Batches,paletteBytes=after.PaletteBytes-before.PaletteBytes,immutableVertexUploadBytes=renderer.SceneStats.UploadedBytes-uploads,
                 skinGpuSampleValid=after.GpuSampleValid,skinGpuMilliseconds=count==0?(double?)null:after.GpuMilliseconds,nativeSkinCpuMilliseconds=count==0?(double?)null:after.CpuMilliseconds,skinResidentBytes=after.ResidentBytes,
                 validationErrors=renderer.Stats.ValidationErrors,validationWarnings=renderer.Stats.ValidationWarnings});

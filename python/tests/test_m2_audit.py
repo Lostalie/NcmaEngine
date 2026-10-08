@@ -121,7 +121,7 @@ class M2AuditTests(unittest.TestCase):
         data["resourceKernels"].append({"id": "ncma.pose", "abiVersion": 1,
                                        "path": "plugins/NcmaAnimationKernel.dll", "lazy": True})
         data["modules"] = [{"id": name, "abiMajor": 1, "abiMinor": minor}
-                           for name, minor in (("ncma.platform", 0), ("ncma.renderer", 1), ("ncma.gui", 6), ("ncma.physics", 1))]
+                            for name, minor in (("ncma.platform", 0), ("ncma.renderer", 1), ("ncma.gui", 7), ("ncma.physics", 1))]
         (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
         log = base / "out/user/logs/editor-candidate.jsonl"
         log.parent.mkdir(parents=True)

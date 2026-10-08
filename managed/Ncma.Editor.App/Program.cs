@@ -83,6 +83,8 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private EditorPresenter? _presenter;
     private EditorUiWorkspace? _uiWorkspace;
     private EditorUiPreview? _uiPreview;
+    private EditorAnimationGraphWorkspace? _animationGraphs;
+    private EditorAnimationGraphPreview? _graphPreview;
     private FbxPreviewSession? _fbxPreview;
     private ActionPreviewSession? _animationPreview;
     private EditorPreferencesStore? _preferences;
@@ -109,7 +111,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
             new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]),
-            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 6, ["ncma.platform", "ncma.renderer"]) ]);
+            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 7, ["ncma.platform", "ncma.renderer"]) ]);
         // Explicit optional shared solver module; only bound Play creates numerical resources.
         _physics = new(plugins, project?.Configuration.PhysicsEnabled == true,characterSupport:project?.Configuration.PhysicsEnabled == true);
         var physics = _physics.Inspect();
@@ -140,8 +142,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             {
                 _assetWorkflow=new(workspace,project.Root,project.Configuration.ProjectId,1);
                 _uiWorkspace=new(workspace,project.Root);
-                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope,_uiWorkspace.Scope); // Exact human approvals only; Agent cannot manufacture grants.
+                _animationGraphs=new(workspace,project.Root,project.Configuration.ProjectId);
+                _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope,_uiWorkspace.Scope,_animationGraphs.Scope); // Exact human approvals only; Agent cannot manufacture grants.
                 if(_renderer is not null)_uiPreview=new(_renderer,plugins);
+                if(_renderer is not null)_graphPreview=new(_renderer,()=>_poseKernel??=new(Path.Combine(plugins,"NcmaAnimationKernel.dll"),Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(plugins,"NcmaAnimationKernel.dll"))))));
                 if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
                     _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _assetWorkflow.IsSourceApproved);
             }
@@ -156,7 +160,8 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             _filePicker=new();
             _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow,workspaceStyle:true,projectName:project?.Configuration.Name);
             _presenter.AttachCharacters(characters);
-            if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
+            if(_animationGraphs is not null)_presenter.AttachGraphAuthoring(_animationGraphs,_graphPreview);
+            else if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
             if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));
             if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
@@ -209,6 +214,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         // Trusted preparation boundary BEFORE simulation/render; snapshots only on explicit resource/session changes.
         SynchronizeSceneResources();
         _presenter?.SynchronizeUi();
+        _presenter?.SynchronizeGraph();
     }
     private static RenderConfiguration ClearConfiguration(RenderConfiguration c) => c with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false};
     private void SynchronizeSceneResources() {
@@ -263,11 +269,13 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     public void AdvancePlay(FrameContext frame) {
         if (_editor!.Play is { State: Ncma.Gameplay.PlayState.Running } play) play.AdvanceFrame(frame.DeltaSeconds);
         if(_editor.Play is null&&_presenter?.EditPreviewPaused!=true)_editScene?.Animation?.AdvancePreview(Math.Clamp(frame.DeltaSeconds,0,.25));
+        _presenter?.AdvanceGraphPreview(Math.Clamp(frame.DeltaSeconds,0,.25));
         _fbxPreview?.Tick(Math.Min(frame.DeltaSeconds, 1));
         _animationPreview?.Tick(Math.Min(frame.DeltaSeconds,1));
     }
     public void Present(FrameContext frame)
     {
+        if(_renderer is not null&&_state.Minimized==0&&_state.FramebufferWidth>0&&_state.FramebufferHeight>0)_renderer.Resize(_state.FramebufferWidth,_state.FramebufferHeight);
         _items[0].Rect[0] = 0; _items[0].Rect[1] = 0; _items[0].Rect[2] = Math.Min(Math.Max(_state.Width, 1), 320); _items[0].Rect[3] = Math.Max(_state.Height, 1);
         int inputBytes=Encoding.UTF8.GetBytes(_presentationText.AsSpan(),_text.AsSpan(_labels.Length));
         _items[3].TextOffset=_labelsLength; _items[3].TextLength=(uint)inputBytes;
@@ -278,10 +286,12 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         if (_presenter is not null) {
             description = _presenter.Build(frame.FrameId,_state.Width,_state.Height);
             bool uiActive=_presenter.UiWorkspaceActive;
+            bool graphActive=_presenter.GraphWorkspaceActive;
+            if(graphActive&&_renderer is not null&&_state.Minimized==0)description=_presenter.AttachGraphPreview(frame.FrameId);
             if(uiActive&&_renderer is not null&&_state.Minimized==0&&_state.FramebufferWidth>0&&_state.FramebufferHeight>0){
                 if(_uiPreview!.Prepared&&!_uiPreview.RecoveryRequired&&_uiPreview.Acquire(frame.FrameId) is {} token)description=_presenter.AttachUiImage(token);
             }
-            if(!uiActive&&!ReferencePreview&&_renderer is not null) {
+            if(!uiActive&&!graphActive&&!ReferencePreview&&_renderer is not null) {
                 if(_state.Minimized==0&&_state.FramebufferWidth>0&&_state.FramebufferHeight>0) {
                     var area=_presenter.Viewport;
                     uint targetWidth=Math.Clamp((uint)Math.Ceiling(area.Width*_state.FramebufferWidth/Math.Max(_state.Width,1)),1,4096);
@@ -298,7 +308,6 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if (stats.EventOverflow != 0) _presenter.CancelInteraction();
         } else stats = _gui!.Draw(description, _items, _text.AsSpan(0,_labels.Length+inputBytes));
         if (_renderer is not null && _state.Minimized == 0 && _state.FramebufferWidth > 0 && _state.FramebufferHeight > 0) {
-            _renderer.Resize(_state.FramebufferWidth,_state.FramebufferHeight);
             var logical = _presenter?.Viewport ?? (320f,40f,Math.Max(1,_state.Width-320f),Math.Max(1,_state.Height-40f));
             uint x=Math.Min(_state.FramebufferWidth-1,(uint)Math.Ceiling(logical.Item1*_state.FramebufferWidth/Math.Max(_state.Width,1)));
             uint y=Math.Min(_state.FramebufferHeight-1,(uint)Math.Ceiling(logical.Item2*_state.FramebufferHeight/Math.Max(_state.Height,1)));
@@ -313,8 +322,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                 else _configuration=configurations.Length==1?configurations[0].Get<RenderConfiguration>():RenderConfiguration.Default(_editor.Edit.SessionId);
                 _configurationRevision=configurationWorld.Revision; _configurationWorld=configurationWorld.Identity;
             }
-            if(_presenter?.UiWorkspaceActive==true){
-                _renderService!.Configure(ClearConfiguration(_configuration),_state.FramebufferWidth,_state.FramebufferHeight);_renderService.Submit(frame.FrameId,0,0);
+            if(_presenter?.UiWorkspaceActive==true||_presenter?.GraphWorkspaceActive==true){
+                // A 3D graph-preview target submission already began/cleared the same renderer frame.
+                // GUI composes its target into that frame; never submit a second frame or wait for it.
+                if(_presenter?.GraphPreviewSubmitted!=true){_renderService!.Configure(ClearConfiguration(_configuration),_state.FramebufferWidth,_state.FramebufferHeight);_renderService.Submit(frame.FrameId,0,0);}
             } else if (!ReferencePreview) {
                 var scene=_editor.Play is null?_editScene:_playScene;
                 if(_editor.Play?.State==Ncma.Gameplay.PlayState.Faulted)scene=null; // Invalid coupled snapshots are never rendered as synchronized.
@@ -378,9 +389,11 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _playScene?.Dispose(); _playScene = null;
         _editScene?.Dispose(); _editScene = null;
         _sceneCache?.Dispose(); _sceneCache = null;
+        _graphPreview?.Dispose();_graphPreview=null;
         _poseKernel?.Dispose(); _poseKernel = null;
         _assetWorkflow?.Dispose(); _assetWorkflow = null;
         _uiWorkspace?.Dispose();_uiWorkspace=null;
+        _animationGraphs?.Dispose();_animationGraphs=null;
         _editor?.Dispose(); _editor = null;
         _gui?.Dispose(); _gui = null;
         _uiPreview?.Dispose();_uiPreview=null;

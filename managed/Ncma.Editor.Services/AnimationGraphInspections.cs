@@ -26,6 +26,7 @@ public sealed class AnimationGraphInspections
     private EditorEndpoint? _grantEndpoint;
     private long _grantStart;
     private ulong _publication;
+    public ulong PermissionRevision {get;private set;}=1;
     private EditSession Edit => _workspace.Owner.Edit ?? throw new InvalidOperationException("Editor required.");
     public AnimationGraphInspections(EditorWorkspace workspace, string projectRoot, TimeProvider? time = null)
     {
@@ -39,7 +40,14 @@ public sealed class AnimationGraphInspections
         var paths = new AssetProjectPaths(_root);
         if (File.Exists(paths.Resolve(relative + ".journal")) || Directory.Exists(paths.Resolve(relative + ".journal"))) throw new IOException("Graph recovery required.");
         byte[] bytes = UiAuthoringSource.Read(_root, relative, AnimationGraphCodec.MaxBytes); // Shared checked HANDLE-based read, not a UI codec.
-        var candidate = AnimationGraphCodec.Decode(bytes); byte[] canonical = AnimationGraphCodec.Encode(candidate);
+        PublishTrustedDefinition(relative, AnimationGraphCodec.Decode(bytes));
+    }
+    // Explicit host publication, including a reviewed new-file draft. Never a capability input path.
+    public void PublishTrustedDefinition(string relative, AnimationGraphDefinition definition)
+    {
+        _ = Edit.State; if(Edit.State.Frozen||Edit.State.EditBusy||Edit.State.HistoryInvalidated)throw new EditRejectedException("graph_open_busy");
+        relative=AssetPaths.Validate(relative);AnimationGraphCodec.RequireExtension(relative);Revoke();
+        var candidate=AnimationGraphCodec.Decode(AnimationGraphCodec.Encode(definition)); byte[] canonical=AnimationGraphCodec.Encode(candidate);
         Guid[] dependencies = AnimationGraphValidation.Dependencies(candidate).Select(d => d.Id).ToArray();
         using var parsed = JsonDocument.Parse(canonical);
         object[] Rows(string name) => parsed.RootElement.GetProperty(name).EnumerateArray().Select(v => (object)v.Clone()).ToArray();
@@ -79,7 +87,11 @@ public sealed class AnimationGraphInspections
         _grant = displayed with { Dependencies = (Guid[])displayed.Dependencies.Clone(), Audience = (Guid[])displayed.Audience.Clone() };
         _grantEndpoint = _workspace.Owner.Endpoint; _grantStart = _time.GetTimestamp();
     }
-    public void Revoke() { _ = Edit.State; _grant = null; _grantEndpoint = null; }
+    public void Revoke() { _ = Edit.State; if(_grant is not null)PermissionRevision=checked(PermissionRevision+1);_grant = null; _grantEndpoint = null; }
+    internal bool RetainsGrant()
+    {
+        _ = Edit.State;return _grant is not null&&ReferenceEquals(_grantEndpoint,_workspace.Owner.Endpoint)&&_time.GetElapsedTime(_grantStart,_time.GetTimestamp())<TimeSpan.FromSeconds(60)&&_grant.Stamp==_workspace.Stamp&&_grant.Publication==_publication&&_grant.Hash==_hash&&_grantEndpoint!.View.InstanceId==_grant.EndpointId&&_grantEndpoint.AudienceRevision==_grant.AudienceRevision&&Audience(_grantEndpoint).SequenceEqual(_grant.Audience)&&!Edit.State.Frozen&&!Edit.State.HistoryInvalidated;
+    }
     private bool Active()
     {
         _ = Edit.State;

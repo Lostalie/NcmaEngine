@@ -79,7 +79,10 @@ System 热路径目前也有校验/序列化分配，帧预算、类型池与低
 此表列基础场景能力，不是所有模块工具的完整清单。当前另有获批范围的`ncma.assets.list/inspect/validate`
 和`ncma.character.inspect`/`ncma.combat.events`候选；运行时清单以实际`ncma.capabilities.list`为准。
 资产读取权限不来自场景配对，角色观察也不授予动作控制。M6.2另有`ncma.animgraph.inspect/validate`
-候选（精确图/依赖/受众本机审批、缓存结构读取，不准备/执行资源）；动画图修改/UI工具尚未注册。
+候选（精确图/依赖/受众本机审批、缓存结构读取，不准备/执行资源）。M6.4另注册
+`ncma.animgraph.propose`纯内存语义候选和`ncma.animgraph.transaction`精确获批文件事务；
+图文件/真实依赖闭包审批与端点请求授权互相独立，共享Undo/Redo且Play冻结时拒绝。
+UI Agent写工具、图live控制和内置推理服务仍未注册；详见M6_4_EDITOR_GUIDE.md。
 
 所有返回包含 v2 contractVersion/requestId/sessionId/revision/status/code/changed/data/executionRevision/replayed。
 status 为 ok/error/conflict/denied；错误不包含待执行脚本。输入关闭未知/重复字段，组件使用注册 schema。
@@ -128,7 +131,7 @@ AI 不能提交 CLR 类型名、程序集路径、eval/exec 或动态代码作�
 | 领域 | 目标工作 | 当前状态 / 下一步 |
 |---|---|---|
 | 场景与资产 | 创建角色/组件、资源引用、参数、Prefab与依赖检查 | 活动场景共享事务已实现；M3 typed UUID/本机导入/放置及获批资产只读MCP已有候选，Agent导入/Prefab写尚未实现 |
-| 动画 | 图节点/连线、动作片段、过渡、通知、Root Motion测试 | 独立程序化动画MCP、M3/M4角色/根运动及获批观察已有候选；M6.2编译/提交式求值与活动图只读MCP、M6.3-B真实图资产/场景/Headless接线通过自动回归；图根运动权威、获批图运行帧MCP与图修改仍未完成 |
+| 动画 | 图节点/连线、动作片段、过渡、通知、Root Motion测试 | M6.2只读图MCP、M6.3-B真实图接线已有自动候选；M6.4接入共享语义propose/精确人工批准transaction、Undo/Redo和本机独立GPU预览；图根运动权威、获批live图运行帧MCP、Agent预览序列/高级节点及内置推理仍未完成 |
 | UI | Frame、布局/样式、组件实例、交互、画布预览 | M5.1–M5.7托管UI文档/布局/本机事务/画布/共享预览已有候选；UI Agent读写、组件实例/HUD发布尚未实现，旧原生UI模型已删除 |
 | 工具 | 资产报告、验证、构建、测试与结构化诊断 | CLI inspect/FBX 报告/动画 MCP 已实现；受约束构建/测试 Agent 网关未实现 |
 | 引擎扩展 | 定义组件/schema、System、编辑器面板和插件适配器 | 可信值组件注册已实现；生成代码审查、路径限定文件事务、编译/装载未实现 |

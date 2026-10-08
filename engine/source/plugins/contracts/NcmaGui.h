@@ -14,7 +14,13 @@ extern "C" {
 typedef enum NcmaGuiItemKind { NCMA_GUI_PANEL_BEGIN = 1, NCMA_GUI_PANEL_END = 2, NCMA_GUI_LABEL = 3, NCMA_GUI_BUTTON = 4, NCMA_GUI_NUMBER = 5, NCMA_GUI_CHECKBOX = 6, NCMA_GUI_TEXT = 7, NCMA_GUI_SAME_LINE = 8, NCMA_GUI_CANVAS_BEGIN = 9, NCMA_GUI_CANVAS_LINES = 10, NCMA_GUI_CANVAS_END = 11, NCMA_GUI_THEME = 12, NCMA_GUI_IMAGE = 13, NCMA_GUI_ASSET_BUTTON = 14,
     NCMA_GUI_TOOLBAR_BEGIN = 15, NCMA_GUI_TOOLBAR_BUTTON = 16, NCMA_GUI_TOOLBAR_BRAND = 17, NCMA_GUI_TOOLBAR_DIVIDER = 18, NCMA_GUI_TOOLBAR_END = 19,
     NCMA_GUI_MENU_BUTTON = 20, NCMA_GUI_MENU_BRAND = 21, NCMA_GUI_CACHED_IMAGE = 22,
-    NCMA_GUI_OVERLAY_BEGIN = 23, NCMA_GUI_SPLITTER = 24, NCMA_GUI_SELECTION_BUTTON = 25 } NcmaGuiItemKind;
+    NCMA_GUI_OVERLAY_BEGIN = 23, NCMA_GUI_SPLITTER = 24, NCMA_GUI_SELECTION_BUTTON = 25,
+    NCMA_GUI_CANVAS_INPUT = 26, NCMA_GUI_CANVAS_TEXT = 27, NCMA_GUI_CANVAS_RECT = 28 } NcmaGuiItemKind;
+/* ABI1.7 keeps the112-byte table. CanvasInput is an absolute logical bounded invisible
+   pointer rectangle; emits the SAME normalized u/v/wheel and modifier syntax as1.6
+   CachedImage, without a GPU token. CanvasText/Rect require an active canvas; rect is
+   normalized/clipped geometry, value=uint32 color, minimum=font size8..32 or rounding0..16.
+   No graph IDs, connections, gestures or business policy are stored by native GUI. */
 /* ABI1.6 retains112-byte table; CachedImage reserved holds query7 presentation-lease token.
    This is not an old Image/target token. Native retains lease until render/discard; exact
    current frame required. Same copied rectangle/click syntax; no change to old Image. */

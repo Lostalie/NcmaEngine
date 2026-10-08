@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 namespace Ncma.Platform;
 
-public enum LocalFileKind { OpenScene, SaveScene, OpenFbx, OpenUi, SaveUi, OpenAnimationGraph }
+public enum LocalFileKind { OpenScene, SaveScene, OpenFbx, OpenUi, SaveUi, OpenAnimationGraph, SaveAnimationGraph }
 
 // Platform-only trusted local dialog adapter. It selects paths; never loads or mutates documents.
 public sealed class WindowsFilePicker
@@ -27,7 +27,7 @@ public sealed class WindowsFilePicker
         nint buffer=Marshal.AllocHGlobal(32768*2);
         try {
             Marshal.Copy(new byte[32768*2],0,buffer,32768*2);
-            bool fbx=kind==LocalFileKind.OpenFbx,graph=kind==LocalFileKind.OpenAnimationGraph,ui=kind is LocalFileKind.OpenUi or LocalFileKind.SaveUi,save=kind is LocalFileKind.SaveScene or LocalFileKind.SaveUi;
+            bool fbx=kind==LocalFileKind.OpenFbx,graph=kind is LocalFileKind.OpenAnimationGraph or LocalFileKind.SaveAnimationGraph,ui=kind is LocalFileKind.OpenUi or LocalFileKind.SaveUi,save=kind is LocalFileKind.SaveScene or LocalFileKind.SaveUi or LocalFileKind.SaveAnimationGraph;
             var dialog=new Dialog {Size=(uint)Marshal.SizeOf<Dialog>(),Owner=GetActiveWindow(),Filter=graph?"Ncma animation graphs (*.ncmaanim)\0*.ncmaanim\0\0":fbx?"FBX characters (*.fbx)\0*.fbx\0\0":ui?"Ncma UI (*.ncmaui)\0*.ncmaui\0\0":"Ncma scene (*.ncmascene)\0*.ncmascene\0\0",
                 File=buffer,FileMax=32768,FilterIndex=1,DefaultExtension=graph?"ncmaanim":fbx?"fbx":ui?"ncmaui":"ncmascene",Flags=0x80000|0x800|0x8|(save?0x2u:0x1000u)};
             bool selected=save?GetSaveFileNameW(ref dialog):GetOpenFileNameW(ref dialog);

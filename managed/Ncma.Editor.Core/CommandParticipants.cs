@@ -5,6 +5,10 @@ namespace Ncma.Editor.Core;
 
 public sealed record ParticipantMemento(byte[] Before, byte[] After);
 
+// Optional trusted pure proposal validator. MUST NOT read/write files or authorize a grant.
+// Enables endpoint review without invoking the participant's durable Prepare operation.
+public interface IEditCommandProposal { void ValidateProposal(JsonElement input); }
+
 // Trusted composition only. Implementations own their scope/revision validation and durable journal.
 // Core owns the sole history, no filesystem or asset implementation. Publish must be compensatable;
 // an unsuccessful compensation freezes the session for explicit recovery, never claims rollback.

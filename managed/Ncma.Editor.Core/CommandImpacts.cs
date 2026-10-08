@@ -84,6 +84,10 @@ public sealed partial class EditSession
             foreach (var op in ops.EnumerateArray()) candidate = Apply(candidate, op);
             if (request.Input.TryGetProperty("selection", out var chosen)) selection = chosen.ValueKind == JsonValueKind.Null ? null : Uuid(request.Input, "selection");
         }
+        else if (_participants.TryGetValue(request.Capability, out var participant) && participant is IEditCommandProposal proposal) {
+            using (_document.World.ReadOnly()) proposal.ValidateProposal(request.Input);
+            return (new([], [], [], [], false), request.Capability, null); // Independent participant scope owns file/resource authority.
+        }
         else throw new ArgumentException("Not a mutation proposal.");
         byte[] after = [];
         _ = _document.PrepareRestore(candidate, request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));

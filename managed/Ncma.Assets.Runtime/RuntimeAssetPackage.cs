@@ -23,6 +23,7 @@ public static class RuntimeAssetPackage
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) } };
     public static byte[] Encode(RuntimeAssetLease source)
     {
+        if(source.IsAuthoringPreview)throw new ArgumentException("Unsaved authoring previews cannot be packaged.");
         ArgumentNullException.ThrowIfNull(source);
         var entries = new List<RuntimePackageEntry>(); var payloads = new List<byte[]>(); int offset = 0;
         foreach (var asset in source.List()) {

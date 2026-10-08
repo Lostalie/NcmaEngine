@@ -61,11 +61,11 @@ public sealed class EditorSessionOwner : IDisposable
         Verify(); if (_assets is null || _imports is not null || _play is not null) throw new InvalidOperationException("Import tools require idle configured Editor assets.");
         _imports = _assets.CreateImportCoordinator(trustedLaunch, approvedSource);
     }
-    public void ConfigureAssets(string projectRoot, Guid projectId, ulong generation, AssetWriteScope? scope = null,UiWriteScope? uiScope=null)
+    public void ConfigureAssets(string projectRoot, Guid projectId, ulong generation, AssetWriteScope? scope = null,UiWriteScope? uiScope=null,AnimationGraphWriteScope? graphScope=null)
     {
         Verify();
         if (_edit is null || _assets is not null || _play is not null) throw new InvalidOperationException("Asset startup requires a fresh Editor.");
-        _assets = new(projectRoot, projectId, generation, _edit, scope ?? new([], [], [], () => true),uiScope:uiScope);
+        _assets = new(projectRoot, projectId, generation, _edit, scope ?? new([], [], [], () => true),uiScope:uiScope,graphScope:graphScope);
         _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;
         var assets = _assets;
         _assetInspections = new(_edit, projectId, generation, () => !_disposed && ReferenceEquals(_assets, assets),

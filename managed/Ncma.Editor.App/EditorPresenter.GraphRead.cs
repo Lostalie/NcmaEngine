@@ -54,7 +54,7 @@ internal sealed unsafe partial class EditorPresenter
                 CancelInteraction(); string? selected = filePicker?.Invoke(LocalFileKind.OpenAnimationGraph);
                 if (selected is not null) {
                     if (projectRoot is null) throw new EditRejectedException("graph_project_missing");
-                    _graphs.OpenTrustedRelative(Path.GetRelativePath(projectRoot, selected).Replace('\\', '/'));
+                    if(_graphAuthor is not null)_graphAuthor.Open(Path.GetRelativePath(projectRoot, selected).Replace('\\', '/'));else _graphs.OpenTrustedRelative(Path.GetRelativePath(projectRoot, selected).Replace('\\', '/'));
                     var graph = _graphs.LocalCopy(); _graphReviewText = InspectionText.Split(System.Text.Encoding.UTF8.GetString(AnimationGraphCodec.Encode(graph)), 1800).ToArray();
                     _graphPage = 0; _graphReview = null; _graphReviewed = false;
                 } break;
@@ -63,7 +63,7 @@ internal sealed unsafe partial class EditorPresenter
             case "graph_review": _graphReview = _graphs.Capture(); _graphReviewed = false; break;
             case "graph_reviewed": if (value is not (0 or 1)) throw new EditRejectedException("graph_review_value"); _graphReviewed = value == 1; break;
             case "graph_approve": _graphs.Approve(_graphReview ?? throw new EditRejectedException("graph_review_missing"), action.Field, _graphReviewed); _graphReview = null; _graphReviewed = false; break;
-            case "graph_revoke": _graphs.Revoke(); _graphReview = null; _graphReviewed = false; break;
+            case "graph_revoke": if(_graphAuthor is not null)_graphAuthor.Revoke();else _graphs.Revoke(); _graphReview = null; _graphReviewed = false; break;
             default: throw new EditRejectedException("graph_intent_invalid");
         }
         return true;

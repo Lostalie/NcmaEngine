@@ -286,10 +286,10 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
             raise ValueError("Resource-kernel ABI metadata mismatch.")
         modules = {m["id"]: (m["abiMajor"], m["abiMinor"]) for m in data["modules"]}
         # Checked deployment audits the exact previous installation before replacing it.
-        # Only installed GUI1.2..1.5 may precede the current1.6 candidate; no runtime fallback.
+        # Only installed GUI1.2..1.6 may precede the current1.7 candidate; no runtime fallback.
         previous_gui = (modules.get("ncma.gui", (0, 0))[1]
                         if directory == "out/bin" and product == "NcmaEngine-editor" and
-                        modules.get("ncma.gui") in ((1, 2), (1, 3), (1, 4), (1, 5)) else 6)
+                        modules.get("ncma.gui") in ((1, 2), (1, 3), (1, 4), (1, 5), (1, 6)) else 7)
         if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, previous_gui), "ncma.physics": (1, 1)}:
             raise ValueError("Editor module ABI metadata mismatch.")
     elif set(kernel_ids) != ({expected_pose} if product == "NcmaPlayer-dx11-candidate" else set()) or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):

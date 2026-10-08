@@ -116,7 +116,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot identify package source state.' }
 $packageDirty = $packageChanges.Count -gt 0
 $platformModule = @{ id = 'ncma.platform'; abiMajor = 1; abiMinor = 0; capabilities = 0 }
 $rendererModule = @{ id = 'ncma.renderer'; abiMajor = 1; abiMinor = 1; capabilities = 15 }
-Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 6; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
+Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 7; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
 Manifest $playerNull 'NcmaPlayer-null-candidate' @()
 Manifest $playerDx11 'NcmaPlayer-dx11-candidate' @($platformModule, $rendererModule)
 $packageIndex = Join-Path $packageWorkspace "out\verification\m2-7\$Configuration\packages.json"

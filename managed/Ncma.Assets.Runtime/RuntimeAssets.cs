@@ -64,16 +64,17 @@ public sealed class RuntimeDataAsset : RuntimeAsset
     public byte[] CopyData() => (byte[])_data.Clone();
 }
 public sealed record RuntimeAssetDiagnostic(string Code, Guid AssetId);
-internal sealed class RuntimeAssetState(Dictionary<Guid, RuntimeAsset> assets, List<RuntimeReadPin> pins, List<RuntimeAssetDiagnostic> diagnostics, Guid project)
+internal sealed class RuntimeAssetState(Dictionary<Guid, RuntimeAsset> assets, List<RuntimeReadPin> pins, List<RuntimeAssetDiagnostic> diagnostics, Guid project, RuntimeAssetLease? previewParent = null)
 {
     internal readonly Dictionary<Guid, RuntimeAsset> Assets = assets;
     internal readonly List<RuntimeReadPin> Pins = pins;
     internal readonly IReadOnlyList<RuntimeAssetDiagnostic> Diagnostics = diagnostics.AsReadOnly();
     internal readonly Guid Project = project, Identity = Guid.NewGuid();
     internal readonly int Thread = Environment.CurrentManagedThreadId;
+    internal readonly RuntimeAssetLease? PreviewParent = previewParent;
     internal int References = 1;
     internal void Verify() { if (Environment.CurrentManagedThreadId != Thread) throw new InvalidOperationException("Runtime asset leases require the preparation owner thread."); }
-    internal void Release() { Verify(); if (--References == 0) { foreach (var pin in Pins) pin.Dispose(); Pins.Clear(); Assets.Clear(); } }
+    internal void Release() { Verify(); if (--References == 0) { foreach (var pin in Pins) pin.Dispose(); PreviewParent?.Dispose(); Pins.Clear(); Assets.Clear(); } }
 }
 // The owner may close while Play leases survive. Generation file pins end only after the final lease.
 public sealed class RuntimeAssetSnapshot : IDisposable
@@ -91,7 +92,23 @@ public sealed class RuntimeAssetLease : IDisposable
     private RuntimeAssetState State { get { var state = _state ?? throw new ObjectDisposedException(nameof(RuntimeAssetLease)); state.Verify(); return state; } }
     public Guid ProjectId => State.Project;
     public Guid Identity => State.Identity;
-    public int PinnedGenerations => State.Pins.Count;
+    public int PinnedGenerations => State.Pins.Count + (State.PreviewParent?.PinnedGenerations ?? 0);
+    public bool IsAuthoringPreview => State.PreviewParent is not null;
+    // Explicit trusted off-frame fork. Pins and numerical payloads remain immutable; the source
+    // publication/Play never changes. Preview forks cannot be nested or cooked into runtime packages.
+    public RuntimeAssetSnapshot CreateGraphPreview(Ncma.Animation.AnimationGraphDefinition definition)
+    {
+        var source = State; if (IsAuthoringPreview) throw new ArgumentException("Nested authoring previews are forbidden.");
+        var d = Ncma.Animation.AnimationGraphCodec.Decode(Ncma.Animation.AnimationGraphCodec.Encode(definition));
+        if (source.Assets.TryGetValue(d.AssetId, out var old) && old.Kind != AssetKind.AnimationGraph) throw new ArgumentException("Preview graph identity collision.");
+        string hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Ncma.Animation.AnimationGraphCodec.Encode(d)));
+        ulong generation = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(Convert.FromHexString(hash)); if (generation == 0) generation = 1;
+        var graph = new RuntimeAnimationGraphAsset(d, generation, hash);
+        var parent = AcquireLease();
+        RuntimeAssetSnapshot? snapshot = null;
+        try { var assets = new Dictionary<Guid,RuntimeAsset>(source.Assets) { [d.AssetId] = graph }; snapshot = new(new(assets, [], source.Diagnostics.ToList(), source.Project, parent)); using var view = snapshot.AcquireLease(); _ = graph.PrepareProgram(view); return snapshot; }
+        catch { if(snapshot is not null)snapshot.Dispose();else parent.Dispose(); throw; }
+    }
     public IReadOnlyList<RuntimeAssetDiagnostic> Diagnostics => State.Diagnostics;
     public RuntimeAssetLease AcquireLease()
     { var state = State; var lease = new RuntimeAssetLease(state); state.References = checked(state.References + 1); return lease; }
