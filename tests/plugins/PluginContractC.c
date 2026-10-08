@@ -17,6 +17,8 @@ _Static_assert(sizeof(NcmaSkinMeshV5)==56 && sizeof(NcmaSkinPaletteV5)==128 && s
 _Static_assert(sizeof(NcmaSkinBatchV5)==32 && sizeof(NcmaSkinStatsV5)==96 && sizeof(NcmaSkinApiV5)==56, "skin table/counters");
 #include "NcmaPose.h"
 #include "NcmaPoseBlend.h"
+#include "NcmaPoseLayer.h"
+_Static_assert(sizeof(NcmaPoseLayerRequestV1)==40 && sizeof(NcmaPoseLayerStatsV1)==24 && sizeof(NcmaPoseLayerApiV1)==32,"independent pose layer layouts");
 _Static_assert(sizeof(NcmaPoseBlendRequestV1)==32 && sizeof(NcmaPoseBlendStatsV1)==24 && sizeof(NcmaPoseBlendApiV1)==32,"independent pose blend layouts");
 _Static_assert(sizeof(NcmaPoseTrsV1)==40 && sizeof(NcmaPoseKeyV1)==48 && sizeof(NcmaPoseBoneV1)==44,"pose TRS/key/bone layout");
 _Static_assert(sizeof(NcmaPoseRequestV1)==40 && sizeof(NcmaPoseMatrixV1)==64 && sizeof(NcmaPoseApiV1)==72,"pose batch/table layout");

@@ -1,5 +1,6 @@
 #include "contracts/NcmaPose.h"
 #include "contracts/NcmaPoseBlend.h"
+#include "contracts/NcmaPoseLayer.h"
 #include "PluginSupport.h"
 #include <Eigen/Geometry>
 #include <array>
@@ -31,6 +32,7 @@ struct Context {
  std::array<NcmaPoseMatrixV1,NCMA_POSE_MAX_OUTPUT> model{};
  NcmaPoseStatsV1 stats{48,32,0,0,0,0,0};
  NcmaPoseBlendStatsV1 blendStats{24,32,0,0};
+ NcmaPoseLayerStatsV1 layerStats{24,32,0,0};
 };
 std::mutex Gate; std::unordered_map<uint64_t,std::shared_ptr<Context>> Contexts; uint64_t Next=1;
 uint64_t NewId() { std::scoped_lock lock(Gate);Require(Next!=UINT64_MAX,NCMA_BUSY);return Next++; }
@@ -114,6 +116,32 @@ uint32_t NCMA_CALL Mix(uint64_t id,const NcmaPoseBlendRequestV1* input,uint32_t 
  std::copy_n(c->local.data(),end,local);std::copy_n(c->model.data(),end,model);c->blendStats.blend_calls++;c->blendStats.blended_bones+=end;return NCMA_OK;});}
 uint32_t NCMA_CALL MixStats(uint64_t id,NcmaPoseBlendStatsV1* output,NcmaErrorV1* error) {return Run(error,[&]()->uint32_t{auto c=Find(id);Require(output);*output=c->blendStats;return NCMA_OK;});}
 const NcmaPoseBlendApiV1 BlendApi{32,1,0,32,Mix,MixStats};
+uint32_t NCMA_CALL Layer(uint64_t id,const NcmaPoseLayerRequestV1* input,uint32_t count,
+ const NcmaPoseTrsV1* poses,uint32_t poseCount,const float* masks,uint32_t maskCount,
+ NcmaPoseTrsV1* local,NcmaPoseMatrixV1* model,uint32_t capacity,NcmaErrorV1* error) {return Run(error,[&]()->uint32_t{
+ auto c=Find(id);Require(count&&count<=32&&input&&poses&&poseCount&&poseCount<=65536&&masks&&maskCount&&maskCount<=32768&&local&&model&&capacity&&capacity<=32768);
+ const void* buffers[]{input,poses,masks,local,model};const uint64_t sizes[]{static_cast<uint64_t>(count)*40,static_cast<uint64_t>(poseCount)*40,static_cast<uint64_t>(maskCount)*4,static_cast<uint64_t>(capacity)*40,static_cast<uint64_t>(capacity)*64};
+ for(int a=0;a<5;a++)for(int b=a+1;b<5;b++)Require(!Overlap(buffers[a],sizes[a],buffers[b],sizes[b]));Busy busy(*c);
+ std::array<NcmaPoseLayerRequestV1,32> requests{};std::copy_n(input,count,requests.data());uint32_t end=0;
+ for(uint32_t i=0;i<count;i++){const auto& p=requests[i];Require(c->rigs.contains(p.rig),NCMA_INVALID_HANDLE);const auto& r=c->rigs.at(p.rig);auto bones=r.bones.size();
+ Require(!p.reserved&&p.mode<=1&&std::isfinite(p.weight)&&p.weight>=0&&p.weight<=1&&p.output_offset==end&&bones<=capacity-end&&
+ p.source_a<=poseCount&&bones<=poseCount-p.source_a&&p.source_b<=poseCount&&bones<=poseCount-p.source_b&&p.mask_offset<=maskCount&&bones<=maskCount-p.mask_offset);
+ Require(p.mode==0?p.reference==0:p.reference<=poseCount&&bones<=poseCount-p.reference);
+ for(uint32_t b=0;b<bones;b++){ValidTrs(poses[p.source_a+b]);ValidTrs(poses[p.source_b+b]);if(p.mode==1)ValidTrs(poses[p.reference+b]);float mask=masks[p.mask_offset+b];Require(std::isfinite(mask)&&mask>=0&&mask<=1);}end+=static_cast<uint32_t>(bones);}
+ for(uint32_t i=0;i<count;i++){const auto& p=requests[i];const auto& r=c->rigs.at(p.rig);
+ for(uint32_t b=0;b<r.bones.size();b++){const auto& a=poses[p.source_a+b];const auto& v=poses[p.source_b+b];float w=p.weight*masks[p.mask_offset+b];NcmaPoseTrsV1 t{};
+ if(p.mode==0){t=Blend(a,v,w);for(int axis=0;axis<3;axis++)t.position[axis]=static_cast<float>(static_cast<double>(a.position[axis])+(static_cast<double>(v.position[axis])-a.position[axis])*w);}
+ else{const auto& ref=poses[p.reference+b];for(int axis=0;axis<3;axis++){t.position[axis]=static_cast<float>(static_cast<double>(a.position[axis])+(static_cast<double>(v.position[axis])-ref.position[axis])*w);t.scale[axis]=static_cast<float>(static_cast<double>(a.scale[axis])*(1+(static_cast<double>(v.scale[axis])/ref.scale[axis]-1)*w));}
+ Eigen::Quaternionf base(a.rotation[3],a.rotation[0],a.rotation[1],a.rotation[2]),reference(ref.rotation[3],ref.rotation[0],ref.rotation[1],ref.rotation[2]),layer(v.rotation[3],v.rotation[0],v.rotation[1],v.rotation[2]);
+ auto delta=(reference.normalized().conjugate()*layer.normalized()).normalized();auto q=(base.normalized()*Eigen::Quaternionf::Identity().slerp(w,delta)).normalized();for(int axis=0;axis<4;axis++)t.rotation[axis]=q.coeffs()[axis];}
+ ValidTrs(t);uint32_t at=p.output_offset+b;c->local[at]=t;Eigen::Quaternionf q(t.rotation[3],t.rotation[0],t.rotation[1],t.rotation[2]);Eigen::Matrix4f m=Eigen::Matrix4f::Identity();m.block<3,3>(0,0)=q.normalized().toRotationMatrix()*t.scale[0];m.block<3,1>(0,3)=Eigen::Map<const Eigen::Vector3f>(t.position);
+ if(r.bones[b].parent>=0)m=Eigen::Map<const Eigen::Matrix4f>(c->model[p.output_offset+static_cast<uint32_t>(r.bones[b].parent)].column_major)*m;
+ Require(m.allFinite()&&m.block<3,3>(0,0).col(0).norm()>=.000001f);Eigen::Map<Eigen::Matrix4f>(c->model[at].column_major)=m;}}
+ Require(c->layerStats.layer_calls<UINT64_MAX&&end<=UINT64_MAX-c->layerStats.layered_bones,NCMA_BUSY);
+ std::copy_n(c->local.data(),end,local);std::copy_n(c->model.data(),end,model);c->layerStats.layer_calls++;c->layerStats.layered_bones+=end;return NCMA_OK;});}
+uint32_t NCMA_CALL LayerStats(uint64_t id,NcmaPoseLayerStatsV1* output,NcmaErrorV1* error){return Run(error,[&]()->uint32_t{auto c=Find(id);Require(output);*output=c->layerStats;return NCMA_OK;});}
+const NcmaPoseLayerApiV1 LayerApi{32,1,0,32,Layer,LayerStats};
 }
 uint32_t NCMA_CALL ncma_pose_get_api(uint32_t major,uint32_t minor,void* output,uint32_t bytes,NcmaErrorV1* error) {return NcmaPlugin::CopyApi(major,minor,output,bytes,error,Api);}
 uint32_t NCMA_CALL ncma_pose_get_blend_api(uint32_t major,uint32_t minor,void* output,uint32_t bytes,NcmaErrorV1* error) {return NcmaPlugin::CopyApi(major,minor,output,bytes,error,BlendApi);}
+uint32_t NCMA_CALL ncma_pose_get_layer_api(uint32_t major,uint32_t minor,void* output,uint32_t bytes,NcmaErrorV1* error) {return NcmaPlugin::CopyApi(major,minor,output,bytes,error,LayerApi);}
