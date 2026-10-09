@@ -52,7 +52,7 @@ public static class RuntimeAssetLoader
             var state = new RuntimeAssetState(assets, pins, diagnostics, project);
             using (var validation = new RuntimeAssetLease(state)) {
                 state.References++;
-                foreach (var graph in assets.Values.OfType<RuntimeAnimationGraphAsset>()) _ = graph.PrepareProgram(validation);
+                foreach (var graph in assets.Values.OfType<RuntimeAnimationGraphAsset>()) graph.ValidateProgram(validation);
             }
             return new(state);
 

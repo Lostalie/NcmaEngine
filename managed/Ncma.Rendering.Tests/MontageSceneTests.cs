@@ -26,7 +26,7 @@ internal static unsafe partial class Program
     private static void TestMontageScenes(RendererSession renderer,ref ulong frame,string native,string output)
     {
         native=Path.GetDirectoryName(native)!;string path=Path.Combine(native,"NcmaAnimationKernel.dll");
-        using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
+        using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
         using var physics=new PhysicsService(Path.Combine(native,"m2/plugins"),characterSupport:true);
         var f=new SkinFixture(output);Guid slot=Guid.NewGuid(),attack=Guid.NewGuid(),recovery=Guid.NewGuid();var basis=AnimatorGraph(f);
         var montage=new AnimationMontageDefinition(1,Guid.NewGuid(),"Persistent montage",basis.SkeletonId,[new(slot,"Body",attack,10,true,true,.05,.1)],
@@ -94,6 +94,7 @@ internal static unsafe partial class Program
             byte[] before=d.CaptureBytes();play.Start(_=>throw new Exception("Injected factory"));try{Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==0,"Slot failure cannot publish managed tick");Check(before.SequenceEqual(d.CaptureBytes()),"Failed Slot candidate leaves committed World");Reject(()=>runtime.Animators!.ReadMontageFrame(id));Reject(()=>runtime.Characters!.InspectRootMotion(id));Check(runtime.Characters!.Status.NumericalExecutionStarted==(fault==2),"Irreversible solver remains fail-stop, not rollback");}finally{play.Stop();}
         }
         TestAnimatorJointAcceptance(renderer,ref frame,native,output,f,graph,Document,physics,kernel,"m6-8-b2b2","M6.8-B2b-2");
+        TestM6FinalAcceptance(renderer,ref frame,native,output,f,graph,Document,kernel);
         Check(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"Slot DX11 validation");
         File.WriteAllText(Path.Combine(output,"m6-8-b2b2-montage-results.json"),JsonSerializer.Serialize(new{schema=1,graphVersion=graph.Version,persistentMontage=true,rows=evidence,maxGpuVertexError=maximumError,manualAccepted=false}));
         Console.WriteLine("PASS M6.8-B2b-2 persistent Slot/actual NCA/1-8-32/root/terminal Notify/GPU oracle/Reload");

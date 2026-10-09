@@ -30,7 +30,13 @@ public static class RuntimeAssetPackage
             byte[] bytes; string encoding; Guid model = Guid.Empty, rig = Guid.Empty;
             switch (asset) {
                 case RuntimeMeshAsset mesh: bytes = ModelPayloadCodec.Encode(mesh.CopyPayload()); encoding = "mesh"; model = mesh.ModelId; rig = mesh.SkeletonId; break;
-                case RuntimeAnimationGraphAsset graph: bytes = graph.CopyData(); encoding = "animgraph"; break;
+                case RuntimeAnimationGraphAsset graph:
+                    // Author layout is not runtime state. Normalize only presentation coordinates;
+                    // preserve every semantic UUID/node/link/policy and derive a runtime content identity.
+                    if (Hash(graph.CopyData()) != graph.ContentHash) throw new ArgumentException("Runtime package noncanonical graph publication.");
+                    var definition = graph.CopyDefinition();
+                    bytes = Ncma.Animation.AnimationGraphCodec.Encode(definition with { Nodes = definition.Nodes.Select(n => n with { X = 0, Y = 0 }).ToArray() });
+                    encoding = "animgraph"; break;
                 case RuntimeDataAsset data: bytes = data.CopyData(); encoding = "data"; model = data.ModelId; rig = data.SkeletonId; break;
                 case RuntimeMaterialAsset material: bytes = MaterialCodec.Encode(material.Definition); encoding = "material"; break;
                 case RuntimeMaterialSetAsset { ImportedSlotsOnly: true } slots: bytes = ModelPayloadCodec.Encode(new MaterialSlotsPayload(slots.CopyImportedNames())); encoding = "slots"; break;
@@ -40,8 +46,10 @@ public static class RuntimeAssetPackage
             }
             if (entries.Count >= MaxAssets || bytes.Length > MaxBytes - 16 - offset) throw new ArgumentException("Runtime package budget.");
             string hash = Hash(bytes);
-            if (hash != asset.ContentHash) throw new ArgumentException("Runtime package noncanonical payload.");
-            entries.Add(new(asset.Id, asset.Kind, asset.Generation, hash, encoding, model, rig, offset, bytes.Length)); payloads.Add(bytes); offset += bytes.Length;
+            if (asset is not RuntimeAnimationGraphAsset && hash != asset.ContentHash) throw new ArgumentException("Runtime package noncanonical payload.");
+            ulong generation = asset.Generation;
+            if (asset is RuntimeAnimationGraphAsset) { generation = BinaryPrimitives.ReadUInt64LittleEndian(Convert.FromHexString(hash)); if (generation == 0) generation = 1; }
+            entries.Add(new(asset.Id, asset.Kind, generation, hash, encoding, model, rig, offset, bytes.Length)); payloads.Add(bytes); offset += bytes.Length;
         }
         var index = new RuntimePackageIndex(1, source.ProjectId, entries.ToArray());
         byte[] table = JsonSerializer.SerializeToUtf8Bytes(index, Json);
@@ -101,7 +109,8 @@ public static class RuntimeAssetPackage
             validationState.References++;
             foreach (var graph in assets.Values.OfType<RuntimeAnimationGraphAsset>()) {
                 if (Hash(graph.CopyData()) != graph.ContentHash) throw new ArgumentException("Noncanonical graph package data.");
-                _ = graph.PrepareProgram(validation);
+                if (graph.CopyDefinition().Nodes.Any(n => n.X != 0 || n.Y != 0)) throw new ArgumentException("Runtime package cannot contain editor layout coordinates.");
+                graph.ValidateProgram(validation);
             }
         }
         return (index, assets, diagnostics);

@@ -247,7 +247,13 @@ M6.8-C2远端 fcc4e8a 已核对。M6.9自动候选完成：有界C#计划账本�
 方案及边界见[M6.9方案](M6_9_IMPLEMENTATION_PLAN.md)、[契约](M6_9_RUNTIME_CONTRACT.md)；
 最终顺序无Skip Debug(second)/Release(first)12native/22managed、Editor123/Player56/Python43、
 101哈希/journal Complete已核验；提交推送状态以Git回执为准，
-见[M6.9交付](M6_9_DELIVERY_REPORT.md)。M6.10尚未执行，M7未启动。
+见[M6.9交付](M6_9_DELIVERY_REPORT.md)。M6.9远端0978400已核对；按用户要求先完成M6.10再进入M7。
+M6.10自动候选闭环：精确publication惰性编译复用，运行包剥离作者布局、typed语义/NCA闭包，
+12非法包/24初始化前Player拒绝、完整120量子调度轨迹、128shared cycles/32Reload/32fail-stop，
+0/1/8/32组合绘制/成本及真实搬移apphost通过。最终完整顺序无Skip Debug(second)/Release(first)
+各12native/22managed、Editor123/Player56/Python43/checkeddeploy、101hashes/Complete journal通过，
+详见[方案](M6_10_IMPLEMENTATION_PLAN.md)、[契约](M6_10_RUNTIME_CONTRACT.md)、[交付](M6_10_DELIVERY_REPORT.md)。
+提交推送以Git回执为准，核对远端后进入M7；此前M7未启动。人工/用户素材/目标/性能/1h仍开放。
 正式Montage Player自动路径通过，不据此标记整个M6或人工/目标验收完成。
 并非内置推理接入或真实用户素材/人工/目标/性能/长稳验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/

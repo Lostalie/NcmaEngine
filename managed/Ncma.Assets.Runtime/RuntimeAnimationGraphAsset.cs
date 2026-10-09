@@ -5,6 +5,8 @@ namespace Ncma.Assets.Runtime;
 public sealed class RuntimeAnimationGraphAsset : RuntimeAsset
 {
     private readonly AnimationGraphDocument _document;
+    private Guid _preparedPublication;
+    private AnimationProgram? _preparedProgram;
     internal RuntimeAnimationGraphAsset(byte[] bytes, ulong generation, string hash)
         : this(AnimationGraphCodec.Decode(bytes), generation, hash) { }
     internal RuntimeAnimationGraphAsset(AnimationGraphDefinition definition, ulong generation, string hash)
@@ -18,9 +20,17 @@ public sealed class RuntimeAnimationGraphAsset : RuntimeAsset
     public AnimationGraphDefinition CopyDefinition() => _document.CopyDefinition();
     public byte[] CopyData() => _document.CopyBytes();
     // Trusted OFF-frame preparation, using actual retained NCA/package bytes, not supplied descriptors.
-    public AnimationProgram PrepareProgram(RuntimeAssetLease lease)
+    public AnimationProgram PrepareProgram(RuntimeAssetLease lease) => PrepareProgram(lease, retain: true);
+    // Package/catalog preflight validates ALL included graphs, including unused ones. Do not
+    // retain compiled programs just because a package carries an unused animation asset.
+    internal void ValidateProgram(RuntimeAssetLease lease) => _ = PrepareProgram(lease, retain: false);
+    private AnimationProgram PrepareProgram(RuntimeAssetLease lease, bool retain)
     {
+        ArgumentNullException.ThrowIfNull(lease);
         if (!ReferenceEquals(lease.Require(Id, AssetKind.AnimationGraph), this)) throw new ArgumentException("Graph lease identity mismatch.");
+        // One immutable program per exact publication, not playback state or an asset lease.
+        // Require above retains disposed/foreign/owner-thread rejection even on cache hits.
+        if (retain && _preparedPublication == lease.Identity && _preparedProgram is { } prepared) return prepared;
         var graph = CopyDefinition();
         var skeleton = (RuntimeDataAsset)lease.Require(graph.SkeletonId, AssetKind.Skeleton);
         var root = (RuntimeDataAsset)lease.Require(skeleton.ModelId, AssetKind.Character);
@@ -38,6 +48,7 @@ public sealed class RuntimeAnimationGraphAsset : RuntimeAsset
         }
         var program = AnimationProgram.Compile(graph, skeleton.Generation, clips,skeleton:layout);
         if ((long)program.MaximumPlanInstructions * bones > 65536) throw new ArgumentException("Graph numerical scratch budget exceeded.");
+        if (retain) { _preparedPublication = lease.Identity; _preparedProgram = program; }
         return program;
     }
     public static AnimationSkeletonDescriptor DescribeSkeleton(RuntimeDataAsset skeleton)
