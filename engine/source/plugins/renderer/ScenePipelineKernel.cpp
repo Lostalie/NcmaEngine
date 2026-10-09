@@ -50,14 +50,19 @@ float4 PSTone(Full i):SV_TARGET{float3 c=BaseTex.SampleLevel(S,i.uv,0).rgb*Setti
 }
 ScenePipelineKernel::~ScenePipelineKernel(){backend.DestroyGraphicsPipeline(geometry);backend.DestroyGraphicsPipeline(shadowPipeline);backend.DestroyGraphicsPipeline(tone);
  backend.DestroyBuffer(constants);backend.DestroySampler(sampler);backend.DestroySampler(shadowSampler);for(auto t:{white,normal,hdr,depth,shadow})backend.DestroyTexture(t);}
-bool ScenePipelineKernel::Initialize(const NcmaScenePipelineDescriptionV4& d,std::string& e){
+std::string_view ScenePipelineKernel::ShaderSource(){return shader;}
+Rhi::GraphicsPipelineHandle ScenePipelineKernel::PrepareTone(const NcmaShaderPairV1& pair,std::string& e){
+ Rhi::GraphicsPipelineDescription p{};p.VertexBytecode={pair.vertex,pair.vertex_bytes};p.PixelBytecode={pair.pixel,pair.pixel_bytes};
+ p.Cull=Rhi::CullMode::None;p.DebugName="Scene.RegisteredTone.v1";return backend.CreateGraphicsPipeline(p,e);
+}
+bool ScenePipelineKernel::Initialize(const NcmaScenePipelineDescriptionV4& d,std::string& e,const NcmaShaderPairV1* pair){
  width=d.width;height=d.height;resolution=d.shadow_resolution;
  const std::string variant=resolution?std::string(shader):"#define NCMA_NO_SCENE_SHADOW\n"+std::string(shader);
  Rhi::GraphicsPipelineDescription p{};p.VertexShaderSource=variant;p.PixelShaderSource=variant;p.Cull=Rhi::CullMode::None;p.DepthTest=true;p.DepthWrite=true;
  p.VertexLayout={{"POSITION",0,Rhi::VertexFormat::Float3,0},{"NORMAL",0,Rhi::VertexFormat::Float3,12},{"TEXCOORD",0,Rhi::VertexFormat::Float2,24},{"TANGENT",0,Rhi::VertexFormat::Float4,32}};
  p.DebugName="Scene.HDR.v4";geometry=backend.CreateGraphicsPipeline(p,e);if(!geometry)return false;
  if(resolution){p.VertexEntryPoint="VSShadowAlpha";p.PixelEntryPoint="PSShadow";p.DebugName="Scene.Shadow.v4";shadowPipeline=backend.CreateGraphicsPipeline(p,e);if(!shadowPipeline)return false;}
- p.VertexEntryPoint="VSTone";p.PixelEntryPoint="PSTone";p.VertexLayout.clear();p.DepthTest=false;p.DepthWrite=false;p.DebugName="Scene.Tone.v4";tone=backend.CreateGraphicsPipeline(p,e);if(!tone)return false;
+ p.VertexEntryPoint="VSTone";p.PixelEntryPoint="PSTone";p.VertexLayout.clear();p.DepthTest=false;p.DepthWrite=false;p.DebugName="Scene.Tone.v4";tone=pair?PrepareTone(*pair,e):backend.CreateGraphicsPipeline(p,e);if(!tone)return false;
  Rhi::BufferDescription b{};b.Size=400;b.Usage=Rhi::BufferUsage::Constant;b.Memory=Rhi::MemoryUsage::CpuToGpu;constants=backend.CreateBuffer(b,nullptr,e);if(!constants)return false;
  Rhi::SamplerDescription s{};s.Filter=Rhi::SamplerFilter::Nearest;sampler=backend.CreateSampler(s,e);if(!sampler)return false;
  if(resolution){s.AddressU=s.AddressV=Rhi::SamplerAddressMode::ClampToBorder;for(float& c:s.BorderColor)c=1;shadowSampler=backend.CreateSampler(s,e);if(!shadowSampler)return false;}

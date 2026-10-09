@@ -116,7 +116,11 @@ namespace NcmaEngine::Rhi
 
     bool Validate(const GraphicsPipelineDescription& description, std::string& error)
     {
-        if (description.VertexShaderSource.empty() || description.PixelShaderSource.empty() ||
+        const bool compiled = !description.VertexBytecode.empty() || !description.PixelBytecode.empty();
+        if (compiled ? description.VertexBytecode.empty() || description.PixelBytecode.empty() ||
+            description.VertexBytecode.size() > 1048576 || description.PixelBytecode.size() > 1048576 ||
+            !description.VertexShaderSource.empty() || !description.PixelShaderSource.empty() :
+            description.VertexShaderSource.empty() || description.PixelShaderSource.empty() ||
             description.VertexEntryPoint.empty() || description.PixelEntryPoint.empty())
         {
             error = "Graphics pipelines require vertex and pixel shader source and entry points";

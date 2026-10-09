@@ -274,11 +274,12 @@ M6.1 完整顺序Debug/Release已通过，10项新增图专项随25项pose/clock
 
 **状态：M6.10最终双配置及提交推送完成，远端74be5b4已核对；M7进入方案／源码基线核对。
 M7.1-A纯C# Shader描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过。
-M7.1-B真实编译／反射41项及完整顺序Debug/Release/checked deployment通过；C GPU接入及M7.2–M7.7仍未实现。本版本只实现DX11。**
+M7.1-B41项及完整门禁通过；C1同一实际目录默认／用户Tone24项、native故障与修正后完整顺序Debug/Release/checked deployment通过；C2–C4及M7.2–M7.7未实现。本版本只实现DX11。**
 
 小阶段顺序与验收见[M7总方案](M7_IMPLEMENTATION_PLAN.md)、[M7.1详细方案](M7_1_IMPLEMENTATION_PLAN.md)。
 M7.1-A边界/最终验证记录见[契约](M7_1_A_RUNTIME_CONTRACT.md)、[交付](M7_1_A_DELIVERY_REPORT.md)，不冒称已执行shader。
 M7.1-B真实SM5编译／闭合反射、cache/owner/off-frame/原子失败与最终证据见[契约](M7_1_B_RUNTIME_CONTRACT.md)、[交付](M7_1_B_DELIVERY_REPORT.md)，未接入新GPU管线或Agent编译权限。
+M7.1-C1闭合Tone实际GPU接入、同源默认／用户像素、PBR联合oracle、故障与最终交付见[契约](M7_1_C1_RUNTIME_CONTRACT.md)、[交付](M7_1_C1_DELIVERY_REPORT.md)。B状态是历史切片；C1不授予Agent编译／源码／GPU写权限，不包含C2–C4或正式默认入口切换。
 已核对现有局部VS反射/固定操作契约/PBR-PCSS及GPU last-valid无sample-frame ID的限制，不冒称完整shader/IBL/后处理框架。
 
 - 完成DX11 Shader编译/反射、绑定验证、资源更新及网格/GPU蒙皮/材质/HDR/UI合成，补齐本版本缺口。

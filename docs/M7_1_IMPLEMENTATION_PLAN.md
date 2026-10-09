@@ -1,6 +1,6 @@
 # M7.1 Shader契约、真实反射和绑定验证
 
-状态：A70项、B41项真实编译／反射自动候选及各自最终完整顺序Debug/Release/checked deployment通过；C未实现。
+状态：A70项、B41项及各自最终完整门禁通过；C1真实注册Tone24项、native故障与修正后完整顺序Debug/Release/checked deployment通过；C2–C4未实现，整个C尚未完成。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)。
 见[B契约](M7_1_B_RUNTIME_CONTRACT.md)、[B交付](M7_1_B_DELIVERY_REPORT.md)。
 见[A契约](M7_1_A_RUNTIME_CONTRACT.md)、[A交付](M7_1_A_DELIVERY_REPORT.md)。M6.10远端`74be5b4`核对后才建立方案，方案`09e0608`已推送。
 
@@ -30,6 +30,8 @@ Shader警告视为错误，诊断截断明确报告；失败不替换active shad
 错误输入语义、常量偏移、纹理资源种类、stage或容量、缺失入口/编译警告，以及完整批次末行错均应原子拒绝。
 
 ## C：同一目录接入默认与用户管线（B验证后）
+
+执行切片见[C详细计划](M7_1_C_IMPLEMENTATION_PLAN.md)：C1真实Tone，C2 Geometry/Shadow/Skin，C3纯2D，C4正式宿主/运行包与联合门禁。
 
 把已有官方2D/3D/skin shader描述和编译结果纳入同一注册目录；用户trusted模块使用同样服务与validator。
 C#依据反射检查mesh/material/pass输入、依赖与输出，普通用户选择preset/参数/Feature，不处理API寄存器。

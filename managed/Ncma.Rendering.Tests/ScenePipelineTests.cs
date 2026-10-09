@@ -41,6 +41,26 @@ internal static unsafe partial class Program
             for(int c=0;c<3;c++) pbrError=Math.Max(pbrError,Math.Abs(lit[(y*256+x)*4+c]-(int)MathF.Round(expected[c]*255)));
         }
         Check(pbrError<=2,"Independent CPU GGX/HDR/ACES/sRGB scene oracle mismatch: "+pbrError);
+        {
+            var catalog=DefaultSceneTone.CopyCatalog(renderer);var rows=catalog.CopyPage(0);
+            var v=catalog.Require(DefaultSceneTone.VertexId,rows.Single(r=>r.Stage==ShaderStage.Vertex).ContentHash);
+            var p=catalog.Require(DefaultSceneTone.PixelId,rows.Single(r=>r.Stage==ShaderStage.Pixel).ContentHash);
+            var pixel=p.CopyDefinition();pixel=pixel with{AssetId=Guid.NewGuid(),Name="Actual PBR BGR Tone",Source=pixel.Source.Replace("return float4(c,1);","return float4(c.bgr,1);",StringComparison.Ordinal)};
+            pixel=pixel with{SourceHash=ShaderContractCodec.HashSource(pixel.Source)};
+            var userCatalog=ShaderCatalog.Create(ShaderProfile.Scene3D,[v.CopyDefinition(),p.CopyDefinition(),pixel]);
+            var registered=RegisteredSceneTone.Prepare(renderer,userCatalog,v,p,()=>true);
+            using var registeredScene=new ScenePipelineSession(renderer,new Scene3DPipeline(shadows:false),256,256,registered);
+            registeredScene.Submit(frame++,geometry,[],lighting,lightVP,shadow,target);renderer.CaptureTarget(target,changed);renderer.Present();
+            int error=0;for(int i=0;i<lit.Length;i++)error=Math.Max(error,Math.Abs(lit[i]-changed[i]));
+            Check(error<=1,"Registered default Tone changed existing actual PBR oracle image: "+error);
+            var userTone=RegisteredSceneTone.Prepare(renderer,userCatalog,v,ShaderDescriptor.Prepare(pixel),()=>true);
+            Check(registered.CopyMetadata().CatalogHash==userTone.CopyMetadata().CatalogHash,"Default/user PBR stages not in the same registered catalog");
+            registeredScene.ReplaceTone(userTone);registeredScene.Submit(frame++,geometry,[],lighting,lightVP,shadow,target);renderer.CaptureTarget(target,changed);renderer.Present();
+            int userError=0;for(int i=0;i<lit.Length;i++)userError=Math.Max(userError,Math.Abs(changed[i]-lit[(i/4)*4+(i%4==3?3:2-i%4)]));
+            Check(userError<=1,"User registered Tone failed actual PBR full-image channel oracle: "+userError);
+            File.WriteAllText(Path.Combine(output,"registered-tone-pbr.json"),JsonSerializer.Serialize(new{schema=1,actualPbrGeometry=true,defaultMaxError=error,userMaxError=userError,pbrIndependentOracleMaxError=pbrError,validationErrors=renderer.Stats.ValidationErrors,validationWarnings=renderer.Stats.ValidationWarnings,geometryShaderRegistered=false}));
+            Console.WriteLine($"PASS M7.1-C1 actual PBR geometry/default-user Tone full-image oracle: default={error},user={userError}; geometry shader registration pending C2");
+        }
         using var pipeline = new ScenePipelineSession(renderer,new Scene3DPipeline(),256,256);
         pipeline.Submit(frame++,geometry,casters,lighting,lightVP,shadow,target);renderer.CaptureTarget(target,shaded);
         Reject(()=>pipeline.Dispose()); Reject(()=>mesh.Resource.Dispose()); renderer.Present();

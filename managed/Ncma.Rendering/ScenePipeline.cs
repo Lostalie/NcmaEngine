@@ -57,13 +57,16 @@ public sealed class ScenePipelineSession : IDisposable
     internal GpuMeshKey Key;
     internal ScenePassV4[] Operations;
     public CompiledRenderGraph Plan { get; private set; }
+    public RegisteredSceneTone? RegisteredTone { get; private set; }
     public bool Shadows => Plan.Resources.Any(r => r.Role == RenderRole.SceneShadow);
-    public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height)
+    public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height, RegisteredSceneTone? tone = null)
     {
         Owner = renderer ?? throw new ArgumentNullException(nameof(renderer)); ArgumentNullException.ThrowIfNull(pipeline);
         Plan = pipeline.Build(width, height).Compile(RenderCapabilities.SceneDx11); if (!Plan.RequiresSceneService) throw new ArgumentException("Scene graph required.");
-        Operations = Plan.SceneOperations; renderer.CreateScene(this, Plan.Resources.SingleOrDefault(r => r.Role == RenderRole.SceneShadow)?.Width ?? 0);
+        Operations = Plan.SceneOperations; renderer.CreateScene(this, Plan.Resources.SingleOrDefault(r => r.Role == RenderRole.SceneShadow)?.Width ?? 0, tone); RegisteredTone = tone;
     }
+    public void ReplaceTone(RegisteredSceneTone tone)
+    { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.ReplaceTone(this, tone); RegisteredTone = tone; }
     public void Submit(ulong frame, ReadOnlySpan<SceneGpuDraw> geometry, ReadOnlySpan<SceneGpuDraw> casters, ResourceLighting lighting, Matrix4x4 lightViewProjection,
         SceneShadowSettings shadow, GpuViewTarget? target = null, Vector4 viewport = default, Vector4 clear = default)
     { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.SubmitScene(this, frame, geometry, casters, lighting, lightViewProjection, shadow, target, viewport, clear); }
@@ -88,9 +91,10 @@ public sealed unsafe partial class RendererSession
         if (api.Size != 48 || api.Version != 4 || api.Caps != 7 || api.Create == 0 || api.Destroy == 0 || api.Submit == 0 || api.Stats == 0) throw new ArgumentException("Scene service v4 contract.");
         _destroyScene = Marshal.GetDelegateForFunctionPointer<DestroyMesh>(api.Destroy); _submitScene = Marshal.GetDelegateForFunctionPointer<SubmitSceneV4>(api.Submit); _sceneStats = Marshal.GetDelegateForFunctionPointer<SceneStatsV4>(api.Stats); _createScene = Marshal.GetDelegateForFunctionPointer<CreateSceneV4>(api.Create);
     }
-    internal void CreateScene(ScenePipelineSession session, uint resolution)
+    internal void CreateScene(ScenePipelineSession session, uint resolution, RegisteredSceneTone? tone = null)
     {
-        EnsureScenePipeline(); _scenePipelines.Add(session); SceneDescriptionV4 d = new() { Size = 16, Width = session.Plan.Width, Height = session.Plan.Height, Resolution = resolution }; GpuMeshKey key = default; PluginError error = default;
+        EnsureScenePipeline(); if (tone is not null) { CreateRegisteredScene(session, resolution, tone); return; }
+        _scenePipelines.Add(session); SceneDescriptionV4 d = new() { Size = 16, Width = session.Plan.Width, Height = session.Plan.Height, Resolution = resolution }; GpuMeshKey key = default; PluginError error = default;
         try { PluginModule.Check(Module.Id, "create_scene_pipeline", _createScene!(Module.Context, Handle, &d, &key, &error), error); session.Key = key; } catch { _scenePipelines.Remove(session); throw; }
     }
     internal void DestroyScene(ScenePipelineSession session)

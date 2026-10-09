@@ -624,7 +624,13 @@ namespace NcmaEngine::Rhi
 
         Microsoft::WRL::ComPtr<ID3DBlob> vertexBytecode;
         Microsoft::WRL::ComPtr<ID3DBlob> pixelBytecode;
-        if (!CompileShader(description.VertexShaderSource, description.VertexEntryPoint, "vs_5_0", vertexBytecode, error) ||
+        if (!description.VertexBytecode.empty()) {
+            HRESULT copied = D3DCreateBlob(description.VertexBytecode.size(), &vertexBytecode);
+            if (SUCCEEDED(copied)) copied = D3DCreateBlob(description.PixelBytecode.size(), &pixelBytecode);
+            if (FAILED(copied)) { error = HResultError("Shader preparation bytecode copy", copied); return {}; }
+            std::memcpy(vertexBytecode->GetBufferPointer(), description.VertexBytecode.data(), description.VertexBytecode.size());
+            std::memcpy(pixelBytecode->GetBufferPointer(), description.PixelBytecode.data(), description.PixelBytecode.size());
+        } else if (!CompileShader(description.VertexShaderSource, description.VertexEntryPoint, "vs_5_0", vertexBytecode, error) ||
             !CompileShader(description.PixelShaderSource, description.PixelEntryPoint, "ps_5_0", pixelBytecode, error))
             return {};
 

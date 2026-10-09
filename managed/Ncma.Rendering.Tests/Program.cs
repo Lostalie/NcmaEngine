@@ -319,6 +319,7 @@ internal static unsafe partial class Program
             return Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
             if (args.Length == 3 && args[0] == "--shader-compile-tests") return ShaderCompileTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--registered-tone-tests") return RegisteredToneTests(args[1], args[2]);
             TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
             TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
             if(args.Length is not (3 or 4 or 6))return 2;
@@ -353,6 +354,7 @@ internal static unsafe partial class Program
             Console.WriteLine("PASS graph validation/cache/capabilities");
 
             ShaderCompileTests(root,output);
+            RegisteredToneTests(root, Path.Combine(output, "registered-tone"));
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");

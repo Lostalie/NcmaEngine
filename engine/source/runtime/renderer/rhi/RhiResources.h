@@ -7,6 +7,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <span>
 
 namespace NcmaEngine::Rhi
 {
@@ -130,6 +131,9 @@ namespace NcmaEngine::Rhi
     {
         std::string_view VertexShaderSource;
         std::string_view PixelShaderSource;
+        // Native-private compiled preparation. Borrowed synchronously; never serialized.
+        std::span<const std::uint8_t> VertexBytecode;
+        std::span<const std::uint8_t> PixelBytecode;
         std::string VertexEntryPoint = "VSMain";
         std::string PixelEntryPoint = "PSMain";
         std::vector<VertexAttribute> VertexLayout;
