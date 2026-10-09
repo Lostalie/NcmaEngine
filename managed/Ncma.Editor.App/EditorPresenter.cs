@@ -477,6 +477,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         BuildCharacterDebug(w,h,ref labelId);
         BuildGraphReads(w,h,ref labelId);
         BuildAnimationRuntime(w,h,ref labelId);
+        BuildWorkflows(w,h,ref labelId);
         if(workspaceStyle)WorkspaceSplitters();
         _frame = new() { StructSize = (uint)Marshal.SizeOf<GuiFrame>(), Frame = frameId, ViewGeneration = _generation,
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
@@ -564,6 +565,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyCharacterAction(action,e.Value))continue;
                 if(ApplyGraphRead(action,e.Value))continue;
                 if(ApplyAnimationRuntime(action,e.Value))continue;
+                if(ApplyWorkflow(action,e.Value))continue;
                 switch (action.Kind)
                 {
                     case "workspace_menu": int nextMenu=_activeMenu==action.Index?-1:action.Index;CancelInteraction();_activeMenu=nextMenu;break;

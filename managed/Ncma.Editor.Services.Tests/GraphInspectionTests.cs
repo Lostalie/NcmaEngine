@@ -21,7 +21,7 @@ internal static class GraphInspectionTests
     internal sealed class Fixture : IDisposable
     {
         internal readonly string Root, File;
-        internal readonly EditorSessionOwner Owner = new("Graph inspection");
+        internal readonly EditorSessionOwner Owner;
         internal readonly EditorWorkspace Workspace;
         internal readonly AnimationGraphInspections Graphs;
         internal readonly EditorAnimationGraphWorkspace? Writer;
@@ -34,6 +34,7 @@ internal static class GraphInspectionTests
         private int _id;
         internal Fixture(string output, string repository, bool authoring=false)
         {
+            Owner = new("Graph inspection", workflowTime: Time);
             Guid project=Guid.NewGuid();
             if(authoring){var sample=Ncma.Samples.ActionSample.Create(Path.Combine(output,"m6-4-mcp"),Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),0);Root=sample.Root;project=sample.ProjectId;var record=Ncma.Assets.AssetRecordCodec.Decode(System.IO.File.ReadAllBytes(Path.Combine(Root,"assets/procedural.fbx.ncmeta")));Rig=record.Subassets.Single(s=>s.Kind==Ncma.Assets.AssetKind.Skeleton).AssetId;Clip=record.Subassets.First(s=>s.Kind==Ncma.Assets.AssetKind.Clip).AssetId;}
             else Root = Path.Combine(output, "m6-2-graph-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(Root, "assets")); File = Path.Combine(Root, "assets/test.ncmaanim");

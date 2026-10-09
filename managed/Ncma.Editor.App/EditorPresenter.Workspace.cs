@@ -111,6 +111,7 @@ internal sealed unsafe partial class EditorPresenter
         if(menu==2||menu==5||all)Add(GuiItemKind.Button,24,46,_uiMode?"场景工作区":"UI 创作工作区",new("ui_switch"),enabled:_ui is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,47,"动画图检查 / 只读 MCP 审批",new("graph_toggle"),enabled:_graphs is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,49,"动画图运行观察 / MCP 审批",new("animruntime_toggle"),enabled:_animationRuntime is not null);
+        if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,70,"AI 工作流审批 / 回执",new("wf_toggle"),enabled:workspace.Owner.Workflows is not null);
         if(menu==2||menu==5||all)Add(GuiItemKind.Button,24,48,"动画图创作工作区",new("anim_switch"),enabled:_graphAuthor is not null);
         if(menu==6||all){Add(GuiItemKind.Label,3,labelId++,"NcmaEngine · C# runtime / native plugins");Add(GuiItemKind.Label,3,labelId++,"AI 推理服务与 Vulkan 绘制未实现。");}
         Add(GuiItemKind.Button,24,45,"关闭菜单",new("workspace_close_menu"));End();

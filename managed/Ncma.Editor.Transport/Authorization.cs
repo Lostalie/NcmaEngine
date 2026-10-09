@@ -98,6 +98,10 @@ public sealed partial class EditorEndpoint
         if (Wire.Utf8.GetByteCount(envelope.GetRawText()) > EditSession.MaxInputBytes || request.Capability is null ||
             request.Capability.Length > 128 || request.RequestId == Guid.Empty) return new("invalid_envelope");
         string fingerprint = Fingerprint(request);
+        string? restriction = CheckMonitor(c.Id, request);
+        if (restriction is not null) return new("ok", JsonSerializer.SerializeToElement(new CapabilityResult(2,
+            request.RequestId, _sessionId, _edit.Revision, "error", restriction, false,
+            JsonSerializer.SerializeToElement(new { message = restriction }), _edit.Revision), Wire.Json));
         bool mutation = _edit.Describe().Any(d => d.Name == request.Capability && d.Risk != MutationRisk.ReadOnly);
         if (mutation)
         {
@@ -118,6 +122,7 @@ public sealed partial class EditorEndpoint
             while (_routeOrder.Count > 256) { var id = _routeOrder.Dequeue(); _routes.Remove(id); Retire(id); }
         }
         if (mutation && result.Code == "permission_denied") Propose(c, request, fingerprint);
+        ObserveMonitor(c.Id, request, result);
         Record(c, request, result, watch.Elapsed.TotalMilliseconds, permissions != CapabilityPermissions.ReadOnly);
         var json = JsonSerializer.SerializeToElement(result, Wire.Json);
         if (Wire.Utf8.GetByteCount(json.GetRawText()) > 256 * 1024) return new("item_too_large");

@@ -17,6 +17,8 @@ public sealed class EditorSessionOwner : IDisposable
     private readonly RuntimeSessionOwner _runtime;
     private bool _disposed, _busy;
     private EditSession? _edit;
+    private EditorWorkflows? _workflows;
+    private readonly TimeProvider? _workflowTime;
     private EditorEndpoint? _endpoint;
     private AssetProjectAuthoring? _assets;
     private AssetInspectionService? _assetInspections;
@@ -33,9 +35,10 @@ public sealed class EditorSessionOwner : IDisposable
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null,
         Action<SceneDocumentSnapshot>? validateComposition = null, Func<PlaySession, IDisposable?>? composePlay = null, Action? beforePlayStop = null,
-        Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? composePreparedPlay = null)
+        Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? composePreparedPlay = null, TimeProvider? workflowTime = null)
     {
         _compositionPolicy = validateComposition;
+        _workflowTime = workflowTime;
         _composePlay = composePlay;
         if(composePlay is not null&&composePreparedPlay is not null)throw new ArgumentException("Choose one Play composition contract.");
         _composePreparedPlay=composePreparedPlay;
@@ -49,6 +52,7 @@ public sealed class EditorSessionOwner : IDisposable
     }
     public SceneDocument Document { get { Verify(); return _document; } }
     public EditSession? Edit { get { Verify(); return _edit; } }
+    public EditorWorkflows? Workflows { get { Verify(); return _workflows; } }
     public EditorEndpoint? Endpoint { get { Verify(); return _endpoint; } }
     public PlaySession? Play { get { Verify(); return _play; } }
     public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
@@ -113,6 +117,7 @@ public sealed class EditorSessionOwner : IDisposable
         if (_play is not null) throw new InvalidOperationException("Stop Play before activating Editor.");
         if (_edit is not null) throw new InvalidOperationException("Editor is already activated.");
         _edit = new(_document); RefreshCatalog();
+        _workflows = new(_edit, _workflowTime);
     }
     public void RefreshCatalog() { Verify(); _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); }
     public void ConfigureEndpoint(bool enabled, string projectRoot)
@@ -121,8 +126,10 @@ public sealed class EditorSessionOwner : IDisposable
         if (_edit is null) throw new InvalidOperationException("Editor required.");
         // Prepare the replacement first; failure preserves the previous endpoint.
         var candidate = enabled ? new EditorEndpoint(_edit, projectRoot) : null;
+        if (candidate is not null) candidate.AttachRequestMonitor(_workflows!);
         try { _endpoint?.Dispose(); } catch { candidate?.Dispose(); throw; }
         _endpoint = candidate;
+        _workflows!.Bind(candidate);
         _assetInspections?.Revoke(); // A replacement endpoint never inherits old asset-read approval.
     }
     public int LoadGameplay(string path)
@@ -191,6 +198,7 @@ public sealed class EditorSessionOwner : IDisposable
         try { StopPlay(); } catch (Exception e) { errors.Add(e); }
         if (_play is not null) throw new AggregateException(errors);
         _edit?.SetFrozen(true);
+        _workflows?.Close();
         try { _renderAssets?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _renderAssets = null;
         try { _assets?.Dispose(); } catch (Exception e) { errors.Add(e); }

@@ -242,7 +242,12 @@ C2 typed隔离请求/断言/输出、同源精确用例MCP及前景UI完整顺�
 12native/22managed、core115/Editor113/Player56/Python43/checkeddeploy、101hashes/Complete journal，
 见[C2契约](M6_8_C2_RUNTIME_CONTRACT.md)及[交付](M6_8_C2_DELIVERY_REPORT.md)。
 M6.8 A/B/C自动候选闭环；人工/素材/目标/性能/1h仍开放，不标整个M6正式完成。
-提交推送核对远端后再推进M6.9，M6.9/M6.10尚未完成，M7未启动。
+M6.8-C2远端 fcc4e8a 已核对。M6.9自动候选完成：有界C#计划账本、原工具独立审批的精确ticket、
+取消/deadline/有限修复/回执、前台完整分页审批；不嵌套调用或自批准，不接推理。
+方案及边界见[M6.9方案](M6_9_IMPLEMENTATION_PLAN.md)、[契约](M6_9_RUNTIME_CONTRACT.md)；
+最终顺序无Skip Debug(second)/Release(first)12native/22managed、Editor123/Player56/Python43、
+101哈希/journal Complete已核验；提交推送状态以Git回执为准，
+见[M6.9交付](M6_9_DELIVERY_REPORT.md)。M6.10尚未执行，M7未启动。
 正式Montage Player自动路径通过，不据此标记整个M6或人工/目标验收完成。
 并非内置推理接入或真实用户素材/人工/目标/性能/长稳验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
