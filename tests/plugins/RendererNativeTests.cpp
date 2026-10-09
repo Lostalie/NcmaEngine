@@ -33,7 +33,7 @@ int main(int argc,char** argv) {
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,10,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,11,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");
@@ -88,6 +88,30 @@ int main(int argc,char** argv) {
         testWaitTimeout=true;Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->backend->GetLiveResourceCount()==toneResourceCount&&renderer->scenePipelines.contains(registeredKey.value),"Tone drain failure retains old stage and retires candidate");testWaitTimeout=false;
         Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==toneResourceCount,"Tone atomic replacement resource baseline");
         Check(DestroyScenePipeline(renderModule,handle,registeredKey,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"Registered Tone drain complete");shaderRequest=originalRequest; }
+        {NcmaShaderStagesApiV1 stages{};
+         Check(latest.query_scene_render(renderModule,10,&stages,55,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==56,"Short registered stages table");
+         Check(latest.query_scene_render(renderModule,10,&stages,56,&error)==NCMA_OK&&stages.version==1&&stages.capabilities==3&&stages.copy_source&&stages.create_scene&&stages.replace_scene&&stages.create_skin&&stages.replace_skin,"Registered stages query10/API1");
+         uint8_t unchanged=0x77;uint32_t required=123;Check(stages.copy_source(renderModule,handle,1,&unchanged,1,&required,&error)==NCMA_BUFFER_TOO_SMALL&&required==123&&unchanged==0x77,"Skin source short output atomic");
+         Check(stages.copy_source(renderModule,handle,2,&unchanged,1,&required,&error)==NCMA_INVALID_ARGUMENT,"Unknown source kind");
+         auto code=[&](std::string_view source,const char* entry,uint32_t stage){NcmaShaderCompileV1 request=originalRequest;request.source=reinterpret_cast<const uint8_t*>(source.data());request.source_bytes=static_cast<uint32_t>(source.size());request.entry=entry;request.entry_bytes=static_cast<uint32_t>(std::strlen(entry));request.stage=stage;
+          NcmaShaderOutputV1 result{};std::array<NcmaShaderRowV1,256> rows{};std::vector<uint8_t> bytes(1048576);Check(shaders.compile(renderModule,handle,&request,&result,rows.data(),256,bytes.data(),1048576,&error)==NCMA_OK,"Actual registered stage compilation");bytes.resize(result.bytecode_bytes);return bytes;};
+         const auto text=Rendering::ScenePipelineKernel::ShaderSource();
+         auto gv=code(text,"VSMain",0),gp=code(text,"PSMain",1),sv=code(text,"VSShadowAlpha",0),sp=code(text,"PSShadow",1),tv=code(text,"VSTone",0),tp=code(text,"PSTone",1);
+         auto pairFor=[](const std::vector<uint8_t>& v,const std::vector<uint8_t>& p){return NcmaShaderPairV1{32,1,static_cast<uint32_t>(v.size()),static_cast<uint32_t>(p.size()),v.data(),p.data()};};
+         NcmaSceneShadersV1 stageGroup{104,1,pairFor(gv,gp),pairFor(sv,sp),pairFor(tv,tp)};NcmaScenePipelineDescriptionV4 description{16,256,256,256};NcmaGpuResourceV3 key{123,456};
+         auto bad=stageGroup;bad.version=2;Check(stages.create_scene(renderModule,handle,&description,&bad,&key,&error)==NCMA_ABI_MISMATCH&&key.value==123&&renderer->backend->GetLiveResourceCount()==0,"Wrong group ABI unpublished");
+         bad=stageGroup;bad.tone.pixel=tv.data();bad.tone.pixel_bytes=static_cast<uint32_t>(tv.size());Check(stages.create_scene(renderModule,handle,&description,&bad,&key,&error)==NCMA_INVALID_ARGUMENT&&key.value==123&&renderer->backend->GetLiveResourceCount()==0,"Last stage wrong before ANY GPU publication");
+         std::string forged{text};for(size_t at=0;(at=forged.find("ShadowParameters",at))!=std::string::npos;at+=16)forged.replace(at,16,"ForgedLastMember");
+         auto forgedPs=code(forged,"PSMain",1);bad=stageGroup;bad.geometry.pixel=forgedPs.data();bad.geometry.pixel_bytes=static_cast<uint32_t>(forgedPs.size());
+         Check(stages.create_scene(renderModule,handle,&description,&bad,&key,&error)==NCMA_INVALID_ARGUMENT&&key.value==123,"Actual last geometry cbuffer member rejected");
+         testTonePreparationThrow=true;Check(stages.create_scene(renderModule,handle,&description,&stageGroup,&key,&error)==NCMA_INTERNAL_ERROR&&key.value==123&&renderer->backend->GetLiveResourceCount()==0&&renderer->scenePipelines.empty(),"Group creation diagnostic exception releases ALL programs/resources");testTonePreparationThrow=false;
+         Check(stages.create_scene(renderModule,handle,&description,&stageGroup,&key,&error)==NCMA_OK,"Actual full registered group creation");auto count=renderer->backend->GetLiveResourceCount();auto creates=renderer->sceneStats.creates;
+         testTonePreparationThrow=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==count&&!renderer->failed,"Group diagnostic exception retains old whole group");testTonePreparationThrow=false;
+         testWaitTimeout=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->backend->GetLiveResourceCount()==count,"Whole-group drain failure retains old and frees all candidates");testWaitTimeout=false;
+         renderer->active=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_BUSY,"Group active frame rejection");renderer->active=false;
+         Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_OK&&renderer->sceneStats.creates==creates&&renderer->backend->GetLiveResourceCount()==count,"Whole-group replacement no target rebuild");
+         Check(DestroyScenePipeline(renderModule,handle,key,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"Registered whole group closes");
+        }
         Check(latest.query_scene_render(renderModule,1,&scene,47,&error)==NCMA_BUFFER_TOO_SMALL && error.required_bytes==48,"Short scene service table");
         Check(latest.query_scene_render(renderModule,1,&scene,sizeof(scene),&error)==NCMA_OK && scene.version==1 && scene.capabilities==1,"Scene service negotiation");
         const float vertices[36]{-0.8f,-0.7f,.5f,0,0,1,0,0,1,0,0,1, .6f,-.7f,.5f,0,0,1,1,0,1,0,0,1, -.8f,.7f,.5f,0,0,1,0,1,1,0,0,1};
@@ -271,6 +295,22 @@ int main(int argc,char** argv) {
         float validWeight=1;std::memcpy(gpuSkinVertices.data()+64,&validWeight,4);uint32_t badJoint=1;std::memcpy(gpuSkinVertices.data()+48,&badJoint,4);
         Check(skinApi.create(renderModule,handle,&skinDesc,&skinMesh,&error)==NCMA_INVALID_ARGUMENT&&skinMesh.value==123,"Mesh-local joint range rejected");
         badJoint=0;std::memcpy(gpuSkinVertices.data()+48,&badJoint,4);
+        {NcmaShaderStagesApiV1 stages{};Check(latest.query_scene_render(renderModule,10,&stages,56,&error)==NCMA_OK,"Skin registered stages negotiation");
+         auto skinCode=[&](std::string_view source){NcmaShaderCompileV1 request=originalRequest;request.source=reinterpret_cast<const uint8_t*>(source.data());request.source_bytes=static_cast<uint32_t>(source.size());request.entry="CSMain";request.entry_bytes=6;request.stage=2;
+          NcmaShaderOutputV1 result{};std::array<NcmaShaderRowV1,256> rows{};std::vector<uint8_t> bytes(1048576);Check(shaders.compile(renderModule,handle,&request,&result,rows.data(),256,bytes.data(),1048576,&error)==NCMA_OK,"Actual skin registered compile");bytes.resize(result.bytecode_bytes);return bytes;};
+         auto text=Rendering::SkinKernel::ShaderSource();auto bytes=skinCode(text);NcmaComputeShaderV1 program{24,1,static_cast<uint32_t>(bytes.size()),0,bytes.data()};NcmaGpuMeshV1 key{123,456};
+         auto bad=program;bad.reserved=1;Check(stages.create_skin(renderModule,handle,&skinDesc,&bad,&key,&error)==NCMA_INVALID_ARGUMENT&&key.value==123,"Skin reserved before publication");
+         std::string wrongThreads{text};auto at=wrongThreads.find("numthreads(64,1,1)");Check(at!=std::string::npos,"Skin group fixture");wrongThreads.replace(at,18,"numthreads(32,1,1)");auto threadBytes=skinCode(wrongThreads);bad=program;bad.bytecode=threadBytes.data();bad.bytes=static_cast<uint32_t>(threadBytes.size());
+         Check(stages.create_skin(renderModule,handle,&skinDesc,&bad,&key,&error)==NCMA_INVALID_ARGUMENT&&key.value==123&&!renderer->skinKernel,"Actual wrong threadgroup rejected before GPU");
+         std::string wrongLayout{text};at=wrongLayout.find("float3 p;float3 n;");Check(at!=std::string::npos,"Skin layout fixture");wrongLayout.replace(at,18,"float3 n;float3 p;");auto layoutBytes=skinCode(wrongLayout);bad=program;bad.bytecode=layoutBytes.data();bad.bytes=static_cast<uint32_t>(layoutBytes.size());
+         Check(stages.create_skin(renderModule,handle,&skinDesc,&bad,&key,&error)==NCMA_INVALID_ARGUMENT&&key.value==123&&!renderer->skinKernel,"Same-stride wrong actual nested member offsets rejected");
+         testTonePreparationThrow=true;Check(stages.create_skin(renderModule,handle,&skinDesc,&program,&key,&error)==NCMA_INTERNAL_ERROR&&key.value==123&&!renderer->skinKernel&&renderer->backend->GetLiveResourceCount()==resourceCount,"Registered skin diagnostic creation atomic");testTonePreparationThrow=false;
+         Check(stages.create_skin(renderModule,handle,&skinDesc,&program,&key,&error)==NCMA_OK&&renderer->skinKernel->Matches(program),"Registered actual compute first kernel creation");auto count=renderer->backend->GetLiveResourceCount();auto creates=renderer->skinStats.creates;
+         testTonePreparationThrow=true;Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_INTERNAL_ERROR&&renderer->skinKernel->Matches(program)&&renderer->backend->GetLiveResourceCount()==count&&!renderer->failed,"Compute diagnostic exception preserves program/resources");testTonePreparationThrow=false;
+         testWaitTimeout=true;Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->skinKernel->Matches(program),"Compute drain failure retains exact program");testWaitTimeout=false;
+         Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_OK&&renderer->skinStats.creates==creates&&renderer->backend->GetLiveResourceCount()==count,"Registered compute replaces no mesh/palette resources");
+         Check(skinApi.destroy(renderModule,handle,key,&error)==NCMA_OK&&!renderer->skinKernel&&renderer->backend->GetLiveResourceCount()==resourceCount,"Last registered skin resource closes");
+        }
         Check(skinApi.create(renderModule,handle,&skinDesc,&skinMesh,&error)==NCMA_OK,"Actual compute skin source/output create");
         NcmaMeshDescriptionV1 mixedStaticDesc{48,1,3,3,144,12,48,0,reinterpret_cast<const uint8_t*>(vertices),indices};NcmaGpuMeshV1 mixedStatic{};
         Check(scene.create_mesh(renderModule,handle,&mixedStaticDesc,&mixedStatic,&error)==NCMA_OK,"Mixed static/skin source");

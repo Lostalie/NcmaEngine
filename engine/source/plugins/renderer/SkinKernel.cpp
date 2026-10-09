@@ -38,10 +38,18 @@ bool SkinInstance::Initialize(Rhi::D3D11RenderBackend& b,StaticMesh& mesh,const 
  if(!Ok(b.GetDevice()->CreateUnorderedAccessView(b.BorrowBuffer(mesh.vertices),&ua,&output),error))return false;
  bytes=mesh.bytes+d.mesh.vertex_bytes;return true;
 }
-bool SkinKernel::Initialize(std::string& error){
+std::string_view SkinKernel::ShaderSource(){return SkinShader;}
+Microsoft::WRL::ComPtr<ID3D11ComputeShader> SkinKernel::PrepareShader(const NcmaComputeShaderV1& d,std::string& error){
+ Microsoft::WRL::ComPtr<ID3D11ComputeShader> result;if(!Ok(backend.GetDevice()->CreateComputeShader(d.bytecode,d.bytes,nullptr,&result),error))return {};return result;
+}
+bool SkinKernel::Initialize(std::string& error,const NcmaComputeShaderV1* registered){
+ if(registered){shader=PrepareShader(*registered,error);if(!shader)return false;registeredCode.assign(registered->bytecode,registered->bytecode+registered->bytes);}
+ else {
  Microsoft::WRL::ComPtr<ID3DBlob> code,diagnostic;HRESULT hr=D3DCompile(SkinShader.data(),SkinShader.size(),"Ncma.Skin.v5",nullptr,nullptr,"CSMain","cs_5_0",D3DCOMPILE_WARNINGS_ARE_ERRORS,0,&code,&diagnostic);
  if(FAILED(hr)){error=diagnostic?std::string(static_cast<const char*>(diagnostic->GetBufferPointer()),diagnostic->GetBufferSize()):"Skin shader compilation failed.";return false;}
- auto* device=backend.GetDevice();if(!Ok(device->CreateComputeShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&shader),error))return false;
+ if(!Ok(backend.GetDevice()->CreateComputeShader(code->GetBufferPointer(),code->GetBufferSize(),nullptr,&shader),error))return false;
+ }
+ auto* device=backend.GetDevice();
  D3D11_BUFFER_DESC d{};d.ByteWidth=16;d.Usage=D3D11_USAGE_DEFAULT;d.BindFlags=D3D11_BIND_CONSTANT_BUFFER;if(!Ok(device->CreateBuffer(&d,nullptr,&constants),error))return false;
  for(auto& slot:slots){d.ByteWidth=32768*128;d.BindFlags=D3D11_BIND_SHADER_RESOURCE;d.MiscFlags=D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;d.StructureByteStride=128;
   if(!Ok(device->CreateBuffer(&d,nullptr,&slot.buffer),error))return false;

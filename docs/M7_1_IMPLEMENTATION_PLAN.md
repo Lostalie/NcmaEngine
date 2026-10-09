@@ -1,6 +1,6 @@
 # M7.1 Shader契约、真实反射和绑定验证
 
-状态：A70项、B41项及各自最终完整门禁通过；C1真实注册Tone24项、native故障与修正后完整顺序Debug/Release/checked deployment通过；C2–C4未实现，整个C尚未完成。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)。
+状态：A70/B41/C1 24及各自最终完整门禁通过；C2真实注册Geometry/Shadow/Skin40项/native故障/实际FBX与NCA联合、最终顺序无Skip Debug/Release/checked deployment通过。C3/C4未实现，整个C尚未完成。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)。
 见[B契约](M7_1_B_RUNTIME_CONTRACT.md)、[B交付](M7_1_B_DELIVERY_REPORT.md)。
 见[A契约](M7_1_A_RUNTIME_CONTRACT.md)、[A交付](M7_1_A_DELIVERY_REPORT.md)。M6.10远端`74be5b4`核对后才建立方案，方案`09e0608`已推送。
 

@@ -546,12 +546,13 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
 #include "UiTargetServices.inl"
 #include "ShaderServices.inl"
 #include "ShaderPipelineServices.inl"
+#include "ShaderStagesServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>9)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>10)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):sizeof(NcmaShaderPipelineApiV1);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):sizeof(NcmaShaderStagesApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -565,7 +566,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==6) {const NcmaUiApiV1 ui{sizeof(ui),1,7,CreateUiRenderer,CreateUiImage,CreateUiList,DestroyUi,SubmitUi,UiStats};std::memcpy(output,&ui,sizeof(ui));}
         else if(version==7) {const NcmaUiTargetApiV1 ui{sizeof(ui),1,7,CreateUiTarget,DestroyUiTarget,SubmitUiTarget,CaptureUiTarget,AcquireUiTarget,ReleaseUiTarget,UiTargetStats};std::memcpy(output,&ui,sizeof(ui));}
         else if(version==8) {const NcmaShaderApiV1 shader{sizeof(shader),1,1,CompileShader,ValidateShaderPreparation};std::memcpy(output,&shader,sizeof(shader));}
-        else {const NcmaShaderPipelineApiV1 shader{sizeof(shader),1,1,CopyToneSource,CreateRegisteredScene,ReplaceRegisteredTone};std::memcpy(output,&shader,sizeof(shader));}
+        else if(version==9) {const NcmaShaderPipelineApiV1 shader{sizeof(shader),1,1,CopyToneSource,CreateRegisteredScene,ReplaceRegisteredTone};std::memcpy(output,&shader,sizeof(shader));}
+        else {const NcmaShaderStagesApiV1 shader{sizeof(shader),1,3,CopyStageSource,CreateRegisteredStages,ReplaceRegisteredStages,CreateRegisteredSkin,ReplaceRegisteredSkin};std::memcpy(output,&shader,sizeof(shader));}
         return NCMA_OK;
     });
 }

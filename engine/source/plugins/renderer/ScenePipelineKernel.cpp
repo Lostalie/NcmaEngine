@@ -55,14 +55,25 @@ Rhi::GraphicsPipelineHandle ScenePipelineKernel::PrepareTone(const NcmaShaderPai
  Rhi::GraphicsPipelineDescription p{};p.VertexBytecode={pair.vertex,pair.vertex_bytes};p.PixelBytecode={pair.pixel,pair.pixel_bytes};
  p.Cull=Rhi::CullMode::None;p.DebugName="Scene.RegisteredTone.v1";return backend.CreateGraphicsPipeline(p,e);
 }
-bool ScenePipelineKernel::Initialize(const NcmaScenePipelineDescriptionV4& d,std::string& e,const NcmaShaderPairV1* pair){
+bool ScenePipelineKernel::PrepareShaders(const NcmaSceneShadersV1& shaders,Programs& result,std::string& e){
+ Rhi::GraphicsPipelineDescription p{};p.Cull=Rhi::CullMode::None;p.DepthTest=p.DepthWrite=true;
+ p.VertexLayout={{"POSITION",0,Rhi::VertexFormat::Float3,0},{"NORMAL",0,Rhi::VertexFormat::Float3,12},{"TEXCOORD",0,Rhi::VertexFormat::Float2,24},{"TANGENT",0,Rhi::VertexFormat::Float4,32}};
+ p.VertexBytecode={shaders.geometry.vertex,shaders.geometry.vertex_bytes};p.PixelBytecode={shaders.geometry.pixel,shaders.geometry.pixel_bytes};p.DebugName="Scene.RegisteredGeometry.v1";
+ result.geometry=backend.CreateGraphicsPipeline(p,e);if(!result.geometry)return false;
+ if(resolution){p.VertexBytecode={shaders.shadow.vertex,shaders.shadow.vertex_bytes};p.PixelBytecode={shaders.shadow.pixel,shaders.shadow.pixel_bytes};p.DebugName="Scene.RegisteredShadow.v1";result.shadow=backend.CreateGraphicsPipeline(p,e);if(!result.shadow)return false;}
+ result.tone=PrepareTone(shaders.tone,e);return static_cast<bool>(result.tone);
+}
+bool ScenePipelineKernel::Initialize(const NcmaScenePipelineDescriptionV4& d,std::string& e,const NcmaShaderPairV1* pair,const NcmaSceneShadersV1* shaders){
  width=d.width;height=d.height;resolution=d.shadow_resolution;
  const std::string variant=resolution?std::string(shader):"#define NCMA_NO_SCENE_SHADOW\n"+std::string(shader);
  Rhi::GraphicsPipelineDescription p{};p.VertexShaderSource=variant;p.PixelShaderSource=variant;p.Cull=Rhi::CullMode::None;p.DepthTest=true;p.DepthWrite=true;
  p.VertexLayout={{"POSITION",0,Rhi::VertexFormat::Float3,0},{"NORMAL",0,Rhi::VertexFormat::Float3,12},{"TEXCOORD",0,Rhi::VertexFormat::Float2,24},{"TANGENT",0,Rhi::VertexFormat::Float4,32}};
+ if(shaders){Programs candidate{};struct Scope{ScenePipelineKernel& scene;Programs& candidate;~Scope(){scene.ReleasePrograms(candidate);}} retained{*this,candidate};if(!PrepareShaders(*shaders,candidate,e))return false;PublishShaders(candidate);}
+ else {
  p.DebugName="Scene.HDR.v4";geometry=backend.CreateGraphicsPipeline(p,e);if(!geometry)return false;
  if(resolution){p.VertexEntryPoint="VSShadowAlpha";p.PixelEntryPoint="PSShadow";p.DebugName="Scene.Shadow.v4";shadowPipeline=backend.CreateGraphicsPipeline(p,e);if(!shadowPipeline)return false;}
  p.VertexEntryPoint="VSTone";p.PixelEntryPoint="PSTone";p.VertexLayout.clear();p.DepthTest=false;p.DepthWrite=false;p.DebugName="Scene.Tone.v4";tone=pair?PrepareTone(*pair,e):backend.CreateGraphicsPipeline(p,e);if(!tone)return false;
+ }
  Rhi::BufferDescription b{};b.Size=400;b.Usage=Rhi::BufferUsage::Constant;b.Memory=Rhi::MemoryUsage::CpuToGpu;constants=backend.CreateBuffer(b,nullptr,e);if(!constants)return false;
  Rhi::SamplerDescription s{};s.Filter=Rhi::SamplerFilter::Nearest;sampler=backend.CreateSampler(s,e);if(!sampler)return false;
  if(resolution){s.AddressU=s.AddressV=Rhi::SamplerAddressMode::ClampToBorder;for(float& c:s.BorderColor)c=1;shadowSampler=backend.CreateSampler(s,e);if(!shadowSampler)return false;}

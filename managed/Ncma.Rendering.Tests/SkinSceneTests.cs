@@ -62,13 +62,14 @@ internal static unsafe partial class Program
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
         string importPath=Path.Combine(native,"NcmaImportKernel.dll");
         var rows=new List<object>();
+        var skinCatalog=DefaultSkinShader.CopyCatalog(renderer);var registeredSkin=RegisteredSkinShader.Prepare(renderer,skinCatalog,DefaultSkinShader.Select(skinCatalog),()=>true);
         foreach(string fixture in new[]{"blender_279_sausage_6100_ascii.fbx","blender_279_sausage_7400_binary.fbx"}) {
             using var importer=new ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath))));
             string source=Path.Combine(repository,"tests/assets/fbx",fixture);var imported=importer.LoadAndCopy(source,30);
             using var cpu=new Ncma.ImportedCharacterResource(Path.Combine(native,"NcmaNative.dll"),source);using var rig=kernel.CreateRig(new(imported.Bones));
             var models=new Matrix4x4[rig.BoneCount];var locals=new PoseTrs[rig.BoneCount];var reference=new float[cpu.SampleFloatCount];double max=0,normalDegrees=0;
             var payloads=imported.Meshes.Select(m=>new MeshPayload(true,rig.BoneCount,m.Vertices,[],m.Indices,m.TriangleMaterials,m.Bindings,m.Materials.Length)).ToArray();
-            var gpu=payloads.Select(p=>renderer.CreateSkinnedMesh(SkinUploadData.Prepare(p))).ToArray();
+            var gpu=payloads.Select(p=>renderer.CreateSkinnedMesh(SkinUploadData.Prepare(p),registeredSkin)).ToArray();
             try {
                 for(int c=0;c<imported.Clips.Length;c++) {
                     using var clip=kernel.CreateClip(rig,new(rig.BoneCount,imported.Clips[c]));

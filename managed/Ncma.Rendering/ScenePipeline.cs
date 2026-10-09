@@ -58,15 +58,21 @@ public sealed class ScenePipelineSession : IDisposable
     internal ScenePassV4[] Operations;
     public CompiledRenderGraph Plan { get; private set; }
     public RegisteredSceneTone? RegisteredTone { get; private set; }
+    public RegisteredSceneShaders? RegisteredShaders { get; private set; }
     public bool Shadows => Plan.Resources.Any(r => r.Role == RenderRole.SceneShadow);
-    public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height, RegisteredSceneTone? tone = null)
+    public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height, RegisteredSceneTone? tone = null, RegisteredSceneShaders? shaders = null)
     {
         Owner = renderer ?? throw new ArgumentNullException(nameof(renderer)); ArgumentNullException.ThrowIfNull(pipeline);
         Plan = pipeline.Build(width, height).Compile(RenderCapabilities.SceneDx11); if (!Plan.RequiresSceneService) throw new ArgumentException("Scene graph required.");
-        Operations = Plan.SceneOperations; renderer.CreateScene(this, Plan.Resources.SingleOrDefault(r => r.Role == RenderRole.SceneShadow)?.Width ?? 0, tone); RegisteredTone = tone;
+        if(tone is not null&&shaders is not null)throw new ArgumentException("Choose one complete group or Tone-only preparation.");
+        Operations = Plan.SceneOperations;uint resolution=Plan.Resources.SingleOrDefault(r => r.Role == RenderRole.SceneShadow)?.Width ?? 0;
+        if(shaders is not null)renderer.InstallSceneShaders(this,resolution,shaders,true);else renderer.CreateScene(this,resolution,tone);
+        RegisteredTone = tone;RegisteredShaders=shaders;
     }
     public void ReplaceTone(RegisteredSceneTone tone)
-    { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.ReplaceTone(this, tone); RegisteredTone = tone; }
+    { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.ReplaceTone(this, tone); RegisteredTone = tone;RegisteredShaders=null; }
+    public void ReplaceShaders(RegisteredSceneShaders shaders)
+    { ObjectDisposedException.ThrowIf(Key.Value == 0, this);Owner.InstallSceneShaders(this,Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0,shaders,false);RegisteredShaders=shaders;RegisteredTone=null; }
     public void Submit(ulong frame, ReadOnlySpan<SceneGpuDraw> geometry, ReadOnlySpan<SceneGpuDraw> casters, ResourceLighting lighting, Matrix4x4 lightViewProjection,
         SceneShadowSettings shadow, GpuViewTarget? target = null, Vector4 viewport = default, Vector4 clear = default)
     { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.SubmitScene(this, frame, geometry, casters, lighting, lightViewProjection, shadow, target, viewport, clear); }

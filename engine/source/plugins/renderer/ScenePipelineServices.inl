@@ -1,12 +1,12 @@
 // Private numerical GPU batch service. No World, UUID resolver, authoring policy or clock.
-uint32_t CreateScenePipelinePrepared(uint64_t context,uint64_t handle,const NcmaScenePipelineDescriptionV4* input,NcmaGpuResourceV3* output,NcmaErrorV1* error,const NcmaShaderPairV1* pair) noexcept {
+uint32_t CreateScenePipelinePrepared(uint64_t context,uint64_t handle,const NcmaScenePipelineDescriptionV4* input,NcmaGpuResourceV3* output,NcmaErrorV1* error,const NcmaShaderPairV1* pair,const NcmaSceneShadersV1* shaders=nullptr) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{
   auto valid=ResourceReady(context,handle,error);if(valid)return valid;if(!input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);const auto d=*input;
   uint64_t bytes=static_cast<uint64_t>(d.width)*d.height*12+static_cast<uint64_t>(d.shadow_resolution)*d.shadow_resolution*4+408;
   if(d.struct_size!=16||!d.width||!d.height||d.width>4096||d.height>4096||(d.shadow_resolution&&(d.shadow_resolution<256||d.shadow_resolution>2048))||
      (d.shadow_resolution&(d.shadow_resolution-1))||renderer->scenePipelines.size()>=8||bytes>512ull*1024*1024-renderer->sceneStats.resident_bytes)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
   BusyScope busyScope;std::string message;auto candidate=std::make_unique<Rendering::ScenePipelineKernel>(*renderer->backend);
-  if(!candidate->Initialize(d,message,pair))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
+  if(!candidate->Initialize(d,message,pair,shaders))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
 #ifdef NCMA_RENDERER_TEST_WAIT
   if(testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
 #endif

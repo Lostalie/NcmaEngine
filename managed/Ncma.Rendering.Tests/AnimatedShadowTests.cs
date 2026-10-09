@@ -15,10 +15,12 @@ internal static unsafe partial class Program
         var payload=ModelPayloadCodec.DecodeMesh(blocks[m.Meshes[0].Mesh]);var skeleton=ModelPayloadCodec.DecodeSkeleton(blocks[m.Skeleton!.Value]);
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
         using var rig=kernel.CreateRig(skeleton);using var clip=kernel.CreateClip(rig,ModelPayloadCodec.DecodeClip(blocks[m.Clips[0]]));
-        using var skin=renderer.CreateSkinnedMesh(SkinUploadData.Prepare(payload));using var ground=renderer.CreateStaticMesh(Quad());
+        var skinCatalog=DefaultSkinShader.CopyCatalog(renderer);var registeredSkin=RegisteredSkinShader.Prepare(renderer,skinCatalog,DefaultSkinShader.Select(skinCatalog),()=>true);
+        using var skin=renderer.CreateSkinnedMesh(SkinUploadData.Prepare(payload),registeredSkin);using var ground=renderer.CreateStaticMesh(Quad());
         using var cache=new RenderResourceCache(renderer);var definition=MaterialDefinition.Default(Guid.NewGuid()) with{BaseColor=new(.6f,.25f,.1f,1),Metallic=.1f,Roughness=.6f};
         using var material=cache.AcquireMaterial(Version(definition),definition,_=>null,true,true,out _);
-        using var target=renderer.CreateViewTarget(256,256);using var pipeline=new ScenePipelineSession(renderer,new Scene3DPipeline(),256,256);
+        var sceneCatalog=DefaultSceneShaders.CopyCatalog(renderer);var registeredScene=RegisteredSceneShaders.Prepare(renderer,sceneCatalog,DefaultSceneShaders.Select(sceneCatalog),()=>true);
+        using var target=renderer.CreateViewTarget(256,256);using var pipeline=new ScenePipelineSession(renderer,new Scene3DPipeline(),256,256,shaders:registeredScene);
         using var plain=new ScenePipelineSession(renderer,new Scene3DPipeline(shadows:false),256,256);
         var camera=new SceneCameraView(Guid.Empty,Matrix4x4.CreateOrthographic(4,4,.1f,50),Vector3.Zero,CameraData.Default);
         var toLight=Vector3.Normalize(new Vector3(1,0,1));var lighting=new ResourceLighting(Vector3.Zero,toLight,new(1,1,1,3));var lightVP=Ncma.Rendering.Scene.ShadowVolume.Create(camera,toLight);
@@ -55,7 +57,7 @@ internal static unsafe partial class Program
             File.WriteAllBytes(Path.Combine(output,"skin-shadow-"+time.ToString(System.Globalization.CultureInfo.InvariantCulture)+".png"),Png(256,256,gpuImage));
             rows.Add(new{time,maximumChannelError=error,shadowPixels=dark});
         }
-        File.WriteAllText(Path.Combine(output,"skin-shadow.json"),JsonSerializer.Serialize(new{maximumError,rows,validationErrors=renderer.Stats.ValidationErrors,validationWarnings=renderer.Stats.ValidationWarnings}));
+        File.WriteAllText(Path.Combine(output,"skin-shadow.json"),JsonSerializer.Serialize(new{maximumError,rows,registeredGeometry=true,registeredShadow=true,registeredSkin=true,validationErrors=renderer.Stats.ValidationErrors,validationWarnings=renderer.Stats.ValidationWarnings}));
         Console.WriteLine("PASS GPU animated main+off-camera shadow inclusive endpoints, mixed weights/helper/nonuniform object transforms vs CPU image oracle");
     }
 }

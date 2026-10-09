@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁/checked deployment通过；C1同一目录实际Tone24项、native故障及修正后完整顺序Debug/Release/checked deployment通过；C2–C4、M7.2–M7.7未实现。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁/checked deployment通过；C1实际Tone24项和C2实际Geometry/Shadow/Skin40项/native故障/FBX与NCA联合、各自最终顺序Debug/Release/checked deployment通过；C3/C4、M7.2–M7.7未实现。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -19,14 +19,14 @@ C#拥有组合／配置／资产／编辑事务／审批，C++仅GPU执行／资
 - 已有：`managed/Ncma.Rendering/RenderGraph.cs`有界编译、依赖/尺寸/role/操作验证；
   `ScenePipeline.cs`的Feature/Geometry/Tone接口。现有操作/shader契约仍固定，不能称通用自定义shader框架。
 - 已有：`D3D11RenderBackend.cpp`的D3DCompile及无输入layout分支的局部VS signature检查。
-  B候选新增独立完整常量/SRV/sampler/stage反射准备服务；C1新增闭合Tone实际GPU接入。Geometry/Shadow/Skin/纯2D注册和正式宿主切换仍未实现。
+  B候选新增独立完整常量/SRV/sampler/stage反射准备服务；C1闭合Tone、C2闭合Geometry/Shadow/Skin实际GPU接入。纯2D注册、正式宿主默认切换和shader运行包仍未实现。
 - 已有：`ScenePipelineKernel.cpp`真实纹理PBR/普通PCF及近似PCSS，不能把当前ambient常量称IBL。
 - 未实现：可发布typed shader运行资产与通用跨阶段受控绑定，IBL，完整后处理栈与用户定制GPU模块；B完整闭合反射准备不代表GPU接入。
 - 未实现：带origin frame/device generation的完整GPU成本证据。现有ResolveTiming是DONOTFLUSH
   last-valid query，没有采样帧ID；不能按当前提交帧归属或把重复观察算独立样本。
 - 现有RenderPipelineService配置更换用同步WaitIdle安全退役，不冒称已有异步retirement/device-loss恢复。
 
-## M7.1 Shader与绑定契约（A/B/C1自动闭环，C2–C4未实现）
+## M7.1 Shader与绑定契约（A/B/C1/C2自动闭环，C3/C4未实现）
 
 详见[M7.1方案](M7_1_IMPLEMENTATION_PLAN.md)。先A纯C#受控描述/验证，再B薄native真实编译/反射，
 最后C同一个注册目录接入官方默认与用户管线。shader源代码与普通数据事务分权限，不开任意Agent执行。

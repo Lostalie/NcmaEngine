@@ -1,5 +1,5 @@
 // Owner-thread bounded GPU numerics; no character policy or World.
-uint32_t NCMA_CALL CreateSkin(uint64_t context,uint64_t handle,const NcmaSkinMeshV5* input,NcmaGpuMeshV1* output,NcmaErrorV1* error) noexcept {
+uint32_t CreateSkinPrepared(uint64_t context,uint64_t handle,const NcmaSkinMeshV5* input,NcmaGpuMeshV1* output,NcmaErrorV1* error,const NcmaComputeShaderV1* registered) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{
   auto valid=ResourceReady(context,handle,error);if(valid)return valid;if(!input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);const auto d=*input;const auto& m=d.mesh;
   uint64_t bytes=static_cast<uint64_t>(m.vertex_count)*128+m.index_bytes,extra=renderer->skinKernel?0:Rendering::SkinKernel::ResidentBytes;
@@ -17,13 +17,20 @@ uint32_t NCMA_CALL CreateSkin(uint64_t context,uint64_t handle,const NcmaSkinMes
   }
   for(auto index:indices)if(index>=m.vertex_count)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Skin index.");
   BusyScope scope;std::string message;auto mesh=std::make_unique<Rendering::StaticMesh>(*renderer->backend);auto skin=std::make_unique<Rendering::SkinInstance>();std::unique_ptr<Rendering::SkinKernel> kernel;
-  if(!renderer->skinKernel){kernel=std::make_unique<Rendering::SkinKernel>(*renderer->backend);if(!kernel->Initialize(message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
+  if(registered&&renderer->skinKernel&&!renderer->skinKernel->Matches(*registered))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"skin_existing_program_requires_explicit_replace");
+  if(!renderer->skinKernel){kernel=std::make_unique<Rendering::SkinKernel>(*renderer->backend);if(!kernel->Initialize(message,registered))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
   auto owned=d;owned.mesh.vertices=vertices.data();owned.mesh.indices=indices.data();if(!skin->Initialize(*renderer->backend,*mesh,owned,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
+ #ifdef NCMA_RENDERER_TEST_WAIT
+  if(registered&&testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
+ #endif
   Validation(*renderer);uint64_t id=0x534b000000000000ull|nextMesh++;uint64_t meshBytes=mesh->bytes;
   renderer->meshes.emplace(id,std::move(mesh));try{renderer->skins.emplace(id,std::move(skin));}catch(...){renderer->meshes.erase(id);throw;}
   if(kernel)renderer->skinKernel=std::move(kernel);renderer->skinStats.resident_bytes+=bytes+extra;renderer->skinStats.creates++;
   renderer->meshStats.resident_bytes+=meshBytes;renderer->meshStats.uploaded_bytes+=m.vertex_bytes+m.index_bytes;renderer->meshStats.mesh_creates++;*output={id,handle};return NCMA_OK;
  });
+}
+uint32_t NCMA_CALL CreateSkin(uint64_t context,uint64_t handle,const NcmaSkinMeshV5* input,NcmaGpuMeshV1* output,NcmaErrorV1* error) noexcept {
+ return CreateSkinPrepared(context,handle,input,output,error,nullptr);
 }
 uint32_t NCMA_CALL DestroySkin(uint64_t context,uint64_t handle,NcmaGpuMeshV1 key,NcmaErrorV1* error) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=Instance(context,handle,error);if(valid)return valid;

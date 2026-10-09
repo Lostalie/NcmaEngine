@@ -5,7 +5,7 @@ C不是单个枚举／仅加载bytecode：按以下可测试切片推进，每�
 
 ## C1：真实 Scene Tone 替换（自动候选完成）
 
-24项真实定向及修正后完整顺序无Skip Debug/Release、checked deployment/hash/journal通过；见[契约](M7_1_C1_RUNTIME_CONTRACT.md)和[交付](M7_1_C1_DELIVERY_REPORT.md)。C2–C4仍未实现。
+24项真实定向及修正后完整顺序无Skip Debug/Release、checked deployment/hash/journal通过；见[契约](M7_1_C1_RUNTIME_CONTRACT.md)和[交付](M7_1_C1_DELIVERY_REPORT.md)。C1交付不包含C2–C4；C2最新状态见下节。
 
 默认Tone使用现有实际HLSL，供可信准备代码取得复制；C#建立同一个ShaderCatalog并编译默认和用户定义。
 Scene Tone固定HDR纹理、sampler、400字节场景常量布局和SV_VertexID全屏三角形；闭合反射与实际跨阶段签名、输出检查后进入GPU。
@@ -15,7 +15,9 @@ Scene Tone固定HDR纹理、sampler、400字节场景常量布局和SV_VertexID�
 实际绘制默认和用户Tone，与独立解析像素oracle匹配；错stage／资源／cbuffer／签名／输出／末行／容量／owner／idle／wait故障拒绝。
 纯2D未使用Scene Tone时无场景资源；现有M6静态/skin-shadow/Player/MCP原测试全部保留。
 
-## C2：Geometry／Shadow和Skin
+## C2：Geometry／Shadow和Skin（自动候选完成）
+
+执行／契约见[C2方案](M7_1_C2_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C2_RUNTIME_CONTRACT.md)、[交付](M7_1_C2_DELIVERY_REPORT.md)。真实定向40项/native故障/完整渲染联合和最终顺序无Skip Debug/Release/checked deployment/hash/journal通过；C3/C4仍未实现。
 
 注册同源官方Scene geometry/shadow及compute skin描述与闭包；核对实际mesh layout、材质角色、skin stride/dispatch布局，
 同一目录和validated模块供trusted用户替换；实际静态/动画/阴影reference与独立oracle及API0/0。
