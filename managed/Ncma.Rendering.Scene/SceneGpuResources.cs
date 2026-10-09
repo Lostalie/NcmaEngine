@@ -25,7 +25,7 @@ public sealed class SceneGpuResources : IDisposable
     public IReadOnlyList<SceneRenderDiagnostic> Diagnostics { get; private set; } = [];
     private void Verify() { if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("GPU resources require owner thread."); ObjectDisposedException.ThrowIf(_disposed, this); }
     public static SceneGpuResources Prepare(RenderResourceCache cache, PreparedSceneAssetLease prepared, SceneDocumentSnapshot scene,
-        RendererSession? renderer = null, SceneAnimationSession? animation = null)
+        RendererSession? renderer = null, SceneAnimationSession? animation = null,RegisteredSkinShader? skinShader=null)
     {
         ArgumentNullException.ThrowIfNull(cache); ArgumentNullException.ThrowIfNull(prepared); ArgumentNullException.ThrowIfNull(scene);
         var result = new SceneGpuResources(); var diagnostics = new List<SceneRenderDiagnostic>();
@@ -50,7 +50,7 @@ public sealed class SceneGpuResources : IDisposable
                     if (character is null || renderer is null) { diagnostics.Add(new(obj.Id, "gpu_skin_unprepared", data.MeshId)); continue; }
                     upload = character.Upload.Attributes;
                     result._leases.EnsureCapacity(result._leases.Count+1);
-                    var gpu = renderer.CreateSkinnedMesh(character.Upload); result._leases.Add(gpu);
+                    var gpu = skinShader is null?renderer.CreateSkinnedMesh(character.Upload):renderer.CreateSkinnedMesh(character.Upload,skinShader); result._leases.Add(gpu);
                     result._animated.Add(obj.Id, (gpu, character.Upload.Ranges.ToArray()));
                 } else if (!uploads.TryGetValue(source.Id, out upload!)) { upload = MeshUploadData.PrepareStatic(source.CopyPayload()); uploads.Add(source.Id, upload); }
                 if (skin is null && !result._meshes.ContainsKey(source.Id))

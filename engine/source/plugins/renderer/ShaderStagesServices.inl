@@ -32,10 +32,16 @@ bool SameBindings(ID3D11ShaderReflection* actual,ID3D11ShaderReflection* expecte
 }
 uint32_t ValidateCode(const uint8_t* bytes,uint32_t size,std::string_view source,const char* entry,const char* target,bool skin,NcmaErrorV1* error){
  if(!Code(bytes,size))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"registered_stage_bytecode_budget");
- ComPtr<ID3DBlob> reference;ComPtr<ID3D11ShaderReflection> actual,expected;
- if(FAILED(D3DCompile(source.data(),source.size(),"Ncma.ClosedStage.v1",nullptr,nullptr,entry,target,ShaderCompilation::Flags,0,&reference,nullptr)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_contract");
+ ComPtr<ID3D11ShaderReflection> actual,expected;
+ for(const auto& cached:renderer->shaderReferences)if(cached.source==source&&cached.entry==entry&&cached.target==target){expected=cached.reflection;break;}
+ if(!expected){
+  if(renderer->shaderReferences.size()>=10)return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_reference_budget");
+  ComPtr<ID3DBlob> reference;
+  if(FAILED(D3DCompile(source.data(),source.size(),"Ncma.ClosedStage.v1",nullptr,nullptr,entry,target,ShaderCompilation::Flags,0,&reference,nullptr)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_contract");
+  if(FAILED(D3DReflect(reference->GetBufferPointer(),reference->GetBufferSize(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_reflection");
+  renderer->shaderReferences.push_back({std::string(source),entry,target,expected});
+ }
  if(FAILED(D3DReflect(bytes,size,__uuidof(ID3D11ShaderReflection),&actual)))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"registered_stage_bytecode");
- if(FAILED(D3DReflect(reference->GetBufferPointer(),reference->GetBufferSize(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_reflection");
  const char* reason=nullptr;if(!SameBindings(actual.Get(),expected.Get(),reason))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,reason);
  if(skin){
   UINT x=0,y=0,z=0;if(actual->GetThreadGroupSize(&x,&y,&z)!=64||x!=64||y!=1||z!=1)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"registered_skin_dispatch");

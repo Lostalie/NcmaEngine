@@ -18,6 +18,8 @@ public sealed class SceneRenderSession : IDisposable
     private readonly SceneAnimationSession? _animation;
     private readonly Ncma.Gameplay.PlaySession? _play;
     private readonly bool _interpolateTransforms;
+    private readonly SceneRuntimeShaders? _shaders;
+    public SceneRuntimeShaders? PreparedShaders => _shaders;
     private readonly World _world;
     private ulong _submittedFrame,_submittedPose;
     private readonly Guid _publication;
@@ -48,7 +50,7 @@ public sealed class SceneRenderSession : IDisposable
     { Verify();_resources.CaptureCharacterVertices(_renderer,objectId,output); }
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false,
-        Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false)
+        Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false,SceneRuntimeShaders? shaders=null)
     {
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
@@ -56,11 +58,18 @@ public sealed class SceneRenderSession : IDisposable
         _publication=assets.Assets.Identity;
         _interpolateTransforms=interpolateTransforms;
         try {
+            bool hasSkin=startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId));
+            bool hasGeometry=hasSkin||startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==StaticMeshData.TypeId));
+            if(hasGeometry) {
+                _shaders=shaders??SceneRuntimeShaders.PrepareDefault(renderer,hasSkin,()=>!_disposed);
+                if(_shaders.Unshadowed.Package.Skinning!=hasSkin)throw new ArgumentException("Scene shader skin closure mismatch.");
+                _shaders.Unshadowed.VerifyFor(renderer);_shaders.Shadowed.VerifyFor(renderer);
+            } else if(shaders is not null)throw new ArgumentException("Empty scene must not prepare scene shaders.");
             if(startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId))) {
                 if(poseKernel is null)throw new ArgumentException("Skinned scenes require the trusted numerical pose plugin.");
                 _animation = new(world,assets,startup,poseKernel,rootMotion,animators,previewInterruptions);
             }
-            _resources = SceneGpuResources.Prepare(cache, assets, startup,renderer,_animation);
+            _resources = SceneGpuResources.Prepare(cache, assets, startup,renderer,_animation,_shaders?.Unshadowed.Skin);
             if(play is not null)_animation?.Attach(play);
         } catch { _resources?.Dispose(); _animation?.Dispose(); cache.Trim(); throw; }
     }
@@ -91,7 +100,8 @@ public sealed class SceneRenderSession : IDisposable
         uint w = Math.Max(1, (uint)(width * camera.Data.ViewportWidth)), h = Math.Max(1, (uint)(height * camera.Data.ViewportHeight));
         if (_pipeline is null || _width != w || _height != h || _shadows != shadows)
         {
-            var candidate = new ScenePipelineSession(_renderer, _pipelineFactory(exposure, ambient, shadows), w, h);
+            var programs=(shadows?_shaders?.Shadowed:_shaders?.Unshadowed)?.Scene??throw new InvalidOperationException("Scene shaders were not prepared.");
+            var candidate = new ScenePipelineSession(_renderer, _pipelineFactory(exposure, ambient, shadows), w, h,shaders:programs);
             try { _pipeline?.Dispose(); } catch { candidate.Dispose(); throw; }
             _pipeline = candidate; _width = w; _height = h; _exposure = exposure; _ambient = ambient; _shadows = shadows;
         }

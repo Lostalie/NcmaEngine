@@ -31,8 +31,8 @@ try {
     // Trusted sample startup, before any canvas/image creation or event/render loop. C4 owns
     // formal Editor/Player defaults and shader package loading; this is the independent UI demo.
     bool preparing = true;
-    var shaderCatalog = DefaultUiShaders.CopyCatalog(renderer);
-    renderer.CreateUiShaders(RegisteredUiShaders.Prepare(renderer, shaderCatalog, DefaultUiShaders.Select(shaderCatalog), () => preparing));
+    var shaders = renderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Flat2D,false,false,() => preparing);
+    renderer.CreateUiShaders(shaders.Ui!);
     preparing = false;
     using var canvas = UiCanvas.Create(new(UiCodec.Decode(UiCodec.Encode(d))), renderer, textService, new Dictionary<Guid, FontAsset> { [fontId] = asset });
     var input = new UiWindowInput(); ulong frame = 1, renderedRevision = ulong.MaxValue; uint width = 640, height = 400; int value = 100;

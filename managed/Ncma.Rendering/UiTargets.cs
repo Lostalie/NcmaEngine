@@ -53,7 +53,7 @@ public sealed unsafe partial class RendererSession
     public UiRenderTarget CreateUiTarget(uint width,uint height)
     {
         EnsureUiTargets();UiTargetDescription d=new(){Size=16,Width=width,Height=height};UiGpuKey k=default;PluginError error=default;
-        PluginModule.Check(Module.Id,"create_ui_target",_createUiTarget!(Module.Context,Handle,&d,&k,&error),error);return new(this,k,width,height);
+        PluginModule.Check(Module.Id,"create_ui_target",_createUiTarget!(Module.Context,Handle,&d,&k,&error),error);_uiKernelReady=true;return new(this,k,width,height);
     }
     internal void ReleaseUiTarget(UiGpuKey key,bool lease)
     {

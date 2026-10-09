@@ -15,7 +15,9 @@ C4 按以下三个可独立回归的切片执行；每片完整顺序无 Skip De
 - 必须明确 GpuValidated=false：此片不解析完整RDEF资源/输入输出语义，不校验DXBC内部checksum或证明指令安全；实际native闭合反射/链接/资源创建仍是B的必要门禁。包括错输出signature但结构正确的包不能被误称GPU可执行。
 - 真实默认UI、用户UI、Scene有/无shadow及有/无skin六种编译产物、损坏/预算/最后条目/重算hash后的结构拒绝、复制隔离、独立进程预检。
 
-## C4-B：正式宿主和 GPU admission（待执行）
+## C4-B：正式宿主和 GPU admission（自动候选完成）
+
+42项实际包反射/像素/compute/拒绝测试及最终顺序无Skip Debug second/Release first、checked部署/hash/journal通过，见[B契约](M7_1_C4B_RUNTIME_CONTRACT.md)、[B交付](M7_1_C4B_DELIVERY_REPORT.md)。共享SceneRenderSession/UiCanvas已接入；官方首次Cook仍在启动准备阶段，项目文件选择和发布包留给C4-C。
 
 - 独立运行描述/bytecode不反向伪造源或ShaderDefinition；加载后必须走同一实际原生闭合反射、完整组验证和C1–C3原子创建/替换，再建立exact renderer/owner/lifetime准备对象。
 - 必要时新增独立版本查询用于完整off-frame预验证，保持现有表冻结；不能以自报的BindingContractHash替代实际DXBC反射。

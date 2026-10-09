@@ -37,6 +37,7 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
     private UiCanvas(UiDocument document, RendererSession renderer, TextService? text)
     {
         ArgumentNullException.ThrowIfNull(document); _definition = document.Capture(); _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer)); _text = text;
+        renderer.PrepareDefaultUiShaders();
         Runtime = new(document, this); _white = renderer.CreateUiImage(1, 1, new byte[] { 255, 255, 255, 255 });
     }
     public static UiCanvas Create(UiDocument document, RendererSession renderer, TextService? text,

@@ -57,7 +57,7 @@ public sealed unsafe partial class RendererSession
         PluginError error = default; UiGpuKey key = default;
         fixed (byte* bytes = rgba) { UiImageDescription d = new() { Size = 24, Width = width, Height = height, Bytes = (uint)rgba.Length, Pixels = bytes };
             PluginModule.Check(Module.Id, "create_ui_image", _uiImage!(Module.Context, Handle, &d, &key, &error), error); }
-        return new(this, key);
+        _uiKernelReady=true;return new(this, key);
     }
     public UiGpuList CreateUiList(ReadOnlySpan<UiVertex> vertices, ReadOnlySpan<UiBatch> batches)
     {

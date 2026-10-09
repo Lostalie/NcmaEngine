@@ -35,7 +35,11 @@ public static class DefaultUiShaders
 
 public sealed class RegisteredUiShaders:RegisteredShaderPreparation
 {
-    internal CompiledShader Vertex { get; } internal CompiledShader Pixel { get; }
+    internal CompiledShader? Vertex { get; } internal CompiledShader? Pixel { get; }
+    private readonly RuntimeShaderPackage? _runtime;
+    internal RegisteredUiShaders(RendererSession renderer,RuntimeShaderPackage package,Func<bool> allowed):base(renderer,package.ContentHash,allowed){_runtime=package;}
+    internal byte[] CopyVertex()=>_runtime?.CopyBytecode(RuntimeShaderRole.UiVertex)??Vertex!.CopyBytecode();
+    internal byte[] CopyPixel()=>_runtime?.CopyBytecode(RuntimeShaderRole.UiPixel)??Pixel!.CopyBytecode();
     private RegisteredUiShaders(RendererSession renderer,string hash,CompiledShader vertex,CompiledShader pixel,Func<bool> allowed):base(renderer,hash,allowed){Vertex=vertex;Pixel=pixel;}
     public static RegisteredUiShaders Prepare(RendererSession renderer,ShaderCatalog catalog,UiShaderSelection selected,Func<bool> preparationAllowed)
     {
@@ -44,7 +48,7 @@ public sealed class RegisteredUiShaders:RegisteredShaderPreparation
             return new(renderer,catalog.ContentHash,PrepareOne(catalog,selected.Vertex,expected[0],compiler),PrepareOne(catalog,selected.Pixel,expected[1],compiler),preparationAllowed);
         }finally{renderer.EndToneOperation();}
     }
-    public RegisteredStageMetadata[] CopyMetadata()=>[Metadata("ui.vertex",Vertex),Metadata("ui.pixel",Pixel)];
+    public RegisteredStageMetadata[] CopyMetadata()=>_runtime is null?[Metadata("ui.vertex",Vertex!),Metadata("ui.pixel",Pixel!)]:RuntimeShaderPreparation.Metadata(_runtime);
 }
 
 public sealed unsafe partial class RendererSession
@@ -76,10 +80,10 @@ public sealed unsafe partial class RendererSession
     private void InstallUiShaders(RegisteredUiShaders shaders,bool create)
     {
         ArgumentNullException.ThrowIfNull(shaders);BeginToneOperation();try{EnsureUiShaders();shaders.Verify(this);
-            ulong generation=checked(_uiShaderGeneration+1);byte[] vertex=shaders.Vertex.CopyBytecode(),pixel=shaders.Pixel.CopyBytecode();PluginError error=default;
+            ulong generation=checked(_uiShaderGeneration+1);byte[] vertex=shaders.CopyVertex(),pixel=shaders.CopyPixel();PluginError error=default;
             fixed(byte* v=vertex)fixed(byte* p=pixel){ShaderPairNative pair=new(){Size=32,Version=1,VertexBytes=(uint)vertex.Length,PixelBytes=(uint)pixel.Length,Vertex=v,Pixel=p};
                 PluginModule.Check(Module.Id,create?"create_ui_shaders":"replace_ui_shaders",(create?_uiShaderCreate!:_uiShaderReplace!)(Module.Context,Handle,&pair,&error),error);}
-            _registeredUiShaders=shaders;_uiShaderGeneration=generation;
+            _registeredUiShaders=shaders;_uiShaderGeneration=generation;_uiKernelReady=true;
         }finally{EndToneOperation();}
     }
 }

@@ -83,7 +83,9 @@ public abstract class RegisteredShaderPreparation
 }
 public sealed class RegisteredSceneShaders:RegisteredShaderPreparation
 {
-    internal CompiledShader[] Programs { get; }
+    internal CompiledShader[] Programs { get; } = [];
+    private readonly RuntimeShaderPackage? _runtime;
+    internal RegisteredSceneShaders(RendererSession renderer,RuntimeShaderPackage package,Func<bool> allowed):base(renderer,package.ContentHash,allowed){_runtime=package;Shadows=package.Shadows;}
     public bool Shadows { get; }
     private RegisteredSceneShaders(RendererSession renderer,string hash,CompiledShader[] shaders,bool shadows,Func<bool> allowed):base(renderer,hash,allowed){Programs=shaders;Shadows=shadows;}
     public static RegisteredSceneShaders Prepare(RendererSession renderer,ShaderCatalog catalog,SceneShaderSelection selected,Func<bool> preparationAllowed){
@@ -98,19 +100,24 @@ public sealed class RegisteredSceneShaders:RegisteredShaderPreparation
             return new(renderer,catalog.ContentHash,programs,shadows,preparationAllowed);
         }finally{renderer.EndToneOperation();}
     }
-    public RegisteredStageMetadata[] CopyMetadata()=>Programs.Select((s,i)=>Metadata(new[]{"geometry.vertex","geometry.pixel","tone.vertex","tone.pixel","shadow.vertex","shadow.pixel"}[i],s)).ToArray();
-    internal byte[][] CopyCodes()=>Programs.Select(p=>p.CopyBytecode()).Concat(Shadows?Array.Empty<byte[]>():new byte[][]{[],[]}).ToArray();
+    public RegisteredStageMetadata[] CopyMetadata()=>_runtime is null?Programs.Select((s,i)=>Metadata(new[]{"geometry.vertex","geometry.pixel","tone.vertex","tone.pixel","shadow.vertex","shadow.pixel"}[i],s)).ToArray():RuntimeShaderPreparation.Metadata(_runtime).Where(x=>x.Role!="skin.compute").ToArray();
+    internal byte[][] CopyCodes()=>_runtime is null?Programs.Select(p=>p.CopyBytecode()).Concat(Shadows?Array.Empty<byte[]>():new byte[][]{[],[]}).ToArray():
+        new[]{RuntimeShaderRole.GeometryVertex,RuntimeShaderRole.GeometryPixel,RuntimeShaderRole.ToneVertex,RuntimeShaderRole.TonePixel,RuntimeShaderRole.ShadowVertex,RuntimeShaderRole.ShadowPixel}
+        .Select(r=>!Shadows&&(r==RuntimeShaderRole.ShadowVertex||r==RuntimeShaderRole.ShadowPixel)?Array.Empty<byte>():_runtime.CopyBytecode(r)).ToArray();
 }
 public sealed class RegisteredSkinShader:RegisteredShaderPreparation
 {
-    internal CompiledShader Program { get; }
+    internal CompiledShader? Program { get; }
+    private readonly RuntimeShaderPackage? _runtime;
+    internal RegisteredSkinShader(RendererSession renderer,RuntimeShaderPackage package,Func<bool> allowed):base(renderer,package.ContentHash,allowed){_runtime=package;}
+    internal byte[] CopyCode()=>_runtime?.CopyBytecode(RuntimeShaderRole.SkinCompute)??Program!.CopyBytecode();
     private RegisteredSkinShader(RendererSession renderer,string hash,CompiledShader program,Func<bool> allowed):base(renderer,hash,allowed){Program=program;}
     public static RegisteredSkinShader Prepare(RendererSession renderer,ShaderCatalog catalog,ShaderDescriptor selected,Func<bool> preparationAllowed){
         ArgumentNullException.ThrowIfNull(renderer);ArgumentNullException.ThrowIfNull(catalog);ArgumentNullException.ThrowIfNull(preparationAllowed);
         renderer.BeginToneOperation();try{using var compiler=new ShaderCompilerService(renderer,preparationAllowed);return new(renderer,catalog.ContentHash,PrepareOne(catalog,selected,DefaultSkinShader.Definition("void unused(){}"),compiler),preparationAllowed);}
         finally{renderer.EndToneOperation();}
     }
-    public RegisteredStageMetadata CopyMetadata()=>Metadata("skin.compute",Program);
+    public RegisteredStageMetadata CopyMetadata()=>_runtime is null?Metadata("skin.compute",Program!):RuntimeShaderPreparation.Metadata(_runtime).Single(x=>x.Role=="skin.compute");
 }
 
 public sealed unsafe partial class RendererSession
@@ -148,7 +155,7 @@ public sealed unsafe partial class RendererSession
     }
     public GpuMesh CreateSkinnedMesh(SkinUploadData data,RegisteredSkinShader shader){
         ArgumentNullException.ThrowIfNull(data);ArgumentNullException.ThrowIfNull(shader);BeginToneOperation();try{
-            EnsureSkin();EnsureShaderStages();shader.Verify(this);byte[] code=shader.Program.CopyBytecode();var mesh=new GpuMesh(this,default,data.Attributes,data.BindingCount);GpuMeshKey key=default;PluginError error=default;_gpuMeshes.Add(mesh);
+            EnsureSkin();EnsureShaderStages();shader.Verify(this);byte[] code=shader.CopyCode();var mesh=new GpuMesh(this,default,data.Attributes,data.BindingCount);GpuMeshKey key=default;PluginError error=default;_gpuMeshes.Add(mesh);
             try{fixed(byte* c=code)fixed(byte* v=data.Vertices)fixed(uint* i=data.Indices){
                 ComputeShaderNative program=new(){Size=24,Version=1,Bytes=(uint)code.Length,Code=c};
                 SkinDescription d=new(){Mesh=new(){Size=56,Layout=3,VertexCount=(uint)data.VertexCount,IndexCount=(uint)data.Indices.Length,VertexBytes=(uint)data.Vertices.Length,IndexBytes=checked((uint)data.Indices.Length*4),Stride=80,Vertices=v,Indices=i},Bindings=(uint)data.BindingCount};
@@ -158,7 +165,7 @@ public sealed unsafe partial class RendererSession
     }
     // Shared shader applies to ALL existing skin meshes in this renderer, not one GameObject.
     public void ReplaceSkinShader(RegisteredSkinShader shader){
-        ArgumentNullException.ThrowIfNull(shader);BeginToneOperation();try{EnsureShaderStages();shader.Verify(this);byte[] code=shader.Program.CopyBytecode();PluginError error=default;
+        ArgumentNullException.ThrowIfNull(shader);BeginToneOperation();try{EnsureShaderStages();shader.Verify(this);byte[] code=shader.CopyCode();PluginError error=default;
             fixed(byte* c=code){ComputeShaderNative d=new(){Size=24,Version=1,Bytes=(uint)code.Length,Code=c};PluginModule.Check(Module.Id,"replace_registered_skin",_stageReplaceSkin!(Module.Context,Handle,&d,&error),error);}
         }finally{EndToneOperation();}
     }
