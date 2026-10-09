@@ -58,7 +58,7 @@ public sealed class AnimationGraphSequences:IDisposable
     private static Guid[] Audience(EditorEndpoint e)=>e.View.Connections.Where(c=>c.Paired&&c.Connected).Select(c=>c.ConnectionId).Order().ToArray();
     private static AnimationSequenceReview Copy(AnimationSequenceReview r)=>r with{Resources=r.Resources.ToArray(),Audience=r.Audience.ToArray()};
     public Guid[] Pending {get{Verify();return _cases.Keys.Order().ToArray();}}
-    public AnimationSequenceCase CaseCopy(Guid id){Current();var c=Required(id);return c.Input with{Writes=c.Input.Writes.ToArray(),Assertions=c.Input.Assertions.ToArray()};}
+    public AnimationSequenceCase CaseCopy(Guid id){Current();var c=Required(id);return c.Input with{Writes=c.Input.Writes.ToArray(),Assertions=c.Input.Assertions.ToArray(),MontageRequests=c.Input.MontageRequests.ToArray()};}
     public Guid ProposeLocal(AnimationSequenceCase input){Current();Guid id=Guid.NewGuid();Store(id,AnimationSequenceCodec.Decode(AnimationSequenceCodec.Encode(input)),false);return id;}
     private void Store(Guid id,AnimationSequenceCase input,bool agent)
     {
@@ -104,8 +104,10 @@ public sealed class AnimationGraphSequences:IDisposable
             "events"=>result.Timeline.SelectMany(t=>t.Events).Skip(offset).Take(limit).Cast<object>().ToArray(),
             "weights"=>result.Timeline.SelectMany(t=>t.Spaces).Skip(offset).Take(limit).Cast<object>().ToArray(),
             "cache"=>result.Timeline.Skip(offset).Take(limit).Select(t=>(object)t.Cache).ToArray(),
+            "montage"=>result.Timeline.SelectMany(t=>t.MontageSlots).Skip(offset).Take(limit).Cast<object>().ToArray(),
+            "requests"=>result.Timeline.SelectMany(t=>t.MontageReceipts).Skip(offset).Take(limit).Cast<object>().ToArray(),
             "checks"=>result.Checks.Skip(offset).Take(limit).Cast<object>().ToArray(),_=>throw new ArgumentException("Closed sequence section.")};
-        int total=section.GetString() switch{"summary"=>1,"timeline" or "cache"=>result.Timeline.Count,"events"=>result.Timeline.Sum(t=>t.Events.Count),"weights"=>result.Timeline.Sum(t=>t.Spaces.Count),_=>result.Checks.Count};
+        int total=section.GetString() switch{"summary"=>1,"timeline" or "cache"=>result.Timeline.Count,"events"=>result.Timeline.Sum(t=>t.Events.Count),"weights"=>result.Timeline.Sum(t=>t.Spaces.Count),"montage"=>result.Timeline.Sum(t=>t.MontageSlots.Count),"requests"=>result.Timeline.Sum(t=>t.MontageReceipts.Count),_=>result.Checks.Count};
         if(section.GetString()=="summary")rows=rows.Skip(offset).Take(limit).ToArray();
         return new{caseId,graphId=graph,caseHash=Required(caseId).Hash,graphHash=result.GraphContentHash,eventHash=result.EventContentHash,publication=_lease!.Identity,resourcesPrepared=true,rootMotionSupported=result.RootMotionSupported,collisionExecuted=false,livePlay=false,section=section.GetString(),total,offset,nextOffset=offset+limit<total?(int?)(offset+limit):null,items=rows};
     }

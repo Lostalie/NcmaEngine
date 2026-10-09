@@ -20,12 +20,15 @@ internal sealed unsafe partial class EditorPresenter
     {
         if(!_animSequenceOpen||_graphAuthor is null)return;var source=_graphAuthor.Sequences;
         Panel(412,"独立序列分析 / 精确用例审批（不控制Live Play）",width*.1f,height*.1f,width*.8f,height*.78f);
+        // Existing foreground-panel contract: workspace windows must not cover the exact-case review.
+        var overlay=_items[^1];overlay.Value=2;_items[^1]=overlay;
         Add(GuiItemKind.Label,55,label++,"实际NCA -> 独立C#实例；事件只返回数据，根意图没有碰撞结果。\n批准图读取不等于批准用例执行；未接入推理服务。");
         Add(GuiItemKind.Checkbox,55,1,"准备根意图（明确root bone 0）",new("anim_sequence_root",Operation:new GraphIntent(_graphAuthor.Stamp)),number:_animSequenceRoot?1:0,max:1);
         AnimSequenceButton(2,"本机准备精确NCA，不执行","anim_sequence_prepare",!_graphAuthor.HasDraft&&!_page!.State.Frozen);
         if(!source.Prepared){_animSequenceResult=null;_animSequenceReview=null;Add(GuiItemKind.Label,55,label++,"资源未准备或Edit/图/资产身份已变化；旧结果不作为当前结果。");}
         AnimSequenceButton(3,"上一页用例JSON","anim_sequence_previous",_animSequencePage>0);Line();AnimSequenceButton(4,"下一页用例JSON","anim_sequence_next",_animSequencePage+1<_animSequenceJson.Count);
         Add(GuiItemKind.Text,55,5,"闭合测试用例（数据，无代码/路径）",new("anim_sequence_json",Operation:new GraphIntent(_graphAuthor.Stamp)),value:_animSequenceJson.Text(_animSequencePage));
+        BuildMontageSequenceEditor(ref label);
         AnimSequenceButton(6,"加入本机用例（不运行）","anim_sequence_local",source.Prepared);
         foreach(Guid id in source.Pending)Add(GuiItemKind.Button,55,1000+AnimRow(id),"选择用例 "+id.ToString("D"),new("anim_sequence_select",Operation:new GraphIntent(_graphAuthor.Stamp,id)));
         if(source.Prepared&&source.Pending.Contains(_animSequenceSelected)) {
@@ -47,11 +50,14 @@ internal sealed unsafe partial class EditorPresenter
             AnimSequenceButton(18,"状态/根意图","anim_sequence_timeline");Line();AnimSequenceButton(19,"提交事件","anim_sequence_events");Line();AnimSequenceButton(20,"全部断言","anim_sequence_checks");
             AnimSequenceButton(21,"空间权重/主源（含inactive节点）","anim_sequence_weights");
             AnimSequenceButton(22,"提交缓存命中（不是耗时承诺）","anim_sequence_cache");
+            AnimSequenceButton(23,"Slot状态 / 实际穿越区间数","anim_sequence_montage");Line();AnimSequenceButton(24,"Play/Cancel/Jump请求回执","anim_sequence_requests");
             string[] rows=_animSequenceResultSection switch {
                 "events"=>result.Timeline.SelectMany(t=>t.Events).Select(e=>$"#{e.Context.Tick} marker={e.MarkerId:D}\n{e.UnwrappedTime:F4}s {e.Name} state={e.StateId:D}").ToArray(),
                 "checks"=>result.Checks.Select(c=>$"断言 {c.Index}: step={c.Step} {c.Code}").ToArray(),
                 "weights"=>result.Timeline.SelectMany(t=>t.Spaces).Select(s=>$"#{s.Step} space={s.SpaceId:D}\nprimary={s.Weights.PrimarySample:D} count={s.Weights.Count} projected={s.Weights.Projected}\nA={s.Weights.A.Weight:F5} B={s.Weights.B.Weight:F5} C={s.Weights.C.Weight:F5}").ToArray(),
                 "cache"=>result.Timeline.Select(t=>$"#{t.Cache.Tick} cache requests={t.Cache.Requests} hits={t.Cache.Hits} (同一实例/state/candidate)").ToArray(),
+                "montage"=>result.Timeline.SelectMany(t=>t.MontageSlots).Select(s=>$"#{s.Step} Slot={s.Frame.SlotId:D} Section={s.Frame.SectionId:D}\ntime={s.Frame.Time:F5} weight={s.Frame.Weight:F5} active={s.Frame.Active} cancelling={s.Frame.Cancelling} generation={s.Frame.PlaybackGeneration} intervals={s.IntervalCount}").ToArray(),
+                "requests"=>result.Timeline.SelectMany(t=>t.MontageReceipts).Select(r=>$"#{r.Step} requestIndex={r.RequestIndex} (-1=host startup) Slot={r.SlotId:D} {r.Outcome}").ToArray(),
                 _=>result.Timeline.Select(step=>$"#{step.Frame.Context.Tick} state={step.Frame.StateId:D} transition={step.Frame.TransitionId:D}\nweight={step.Frame.TransitionWeight:F3} frozen={step.Frame.FrozenPoseGeneration} events={step.Events.Count} rootX={step.Root?.Translation.X:F5} yaw={step.Root?.Yaw:F5}").ToArray()};
             _animSequenceResultPage=Math.Clamp(_animSequenceResultPage,0,Math.Max(0,(rows.Length-1)/8));
             foreach(string row in rows.Skip(_animSequenceResultPage*8).Take(8))Add(GuiItemKind.Label,55,label++,row);
@@ -63,6 +69,7 @@ internal sealed unsafe partial class EditorPresenter
     private bool ApplyAnimSequence(ActionView action,GuiEvent e,string text)
     {
         if(!action.Kind.StartsWith("anim_sequence_",StringComparison.Ordinal))return false;if(e.Phase!=3)return true;
+        if(ApplyMontageSequenceEditor(action,e,text))return true;
         var service=_graphAuthor!.Sequences;
         switch(action.Kind) {
             case "anim_sequence_toggle":_animSequenceOpen=!_animSequenceOpen;break;
@@ -87,6 +94,8 @@ internal sealed unsafe partial class EditorPresenter
             case "anim_sequence_timeline":_animSequenceResultSection="timeline";_animSequenceResultPage=0;break;case "anim_sequence_events":_animSequenceResultSection="events";_animSequenceResultPage=0;break;case "anim_sequence_checks":_animSequenceResultSection="checks";_animSequenceResultPage=0;break;
             case "anim_sequence_weights":_animSequenceResultSection="weights";_animSequenceResultPage=0;break;
             case "anim_sequence_cache":_animSequenceResultSection="cache";_animSequenceResultPage=0;break;
+            case "anim_sequence_montage":_animSequenceResultSection="montage";_animSequenceResultPage=0;break;
+            case "anim_sequence_requests":_animSequenceResultSection="requests";_animSequenceResultPage=0;break;
             case "anim_sequence_revoke":service.Revoke();_animSequenceReview=null;_animSequenceResult=null;_animSequenceReviewed=false;break;
             default:throw new ArgumentException("Sequence UI intent.");
         }

@@ -1,16 +1,24 @@
 namespace Ncma.Animation;
 
 // Closed, typed checks; no executable assertions, clocks supplied by an Agent, files or live Play.
-public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Parameter, RootX, RootYaw, CacheHits, CacheRequests }
+public enum AnimationSequenceAssertionKind { State, Transition, EventCount, Parameter, RootX, RootYaw, CacheHits, CacheRequests, SlotActive, SlotTime, SlotWeight, SlotSection, MontageOutcome, MontageReceiptCount }
 public sealed record AnimationSequenceWrite(int Step, Guid ParameterId, AnimationParameterKind Kind, double Value);
 public sealed record AnimationSequenceAssertion(int Step, AnimationSequenceAssertionKind Kind, Guid SubjectId, double Value);
-public sealed record AnimationSequenceCase(double FixedDelta, int Steps, AnimationSequenceWrite[] Writes, AnimationSequenceAssertion[] Assertions);
+public sealed record AnimationSequenceMontageRequest(int Step,Guid SlotId,MontageRequestKind Kind,Guid SectionId,int Priority);
+public sealed record AnimationSequenceCase(double FixedDelta, int Steps, AnimationSequenceWrite[] Writes, AnimationSequenceAssertion[] Assertions)
+{
+    public AnimationSequenceMontageRequest[] MontageRequests {get;init;}=[];
+}
+public sealed record AnimationSequenceMontageSlot(ulong Step,MontageSlotFrame Frame,int IntervalCount);
+public sealed record AnimationSequenceMontageReceipt(ulong Step,int RequestIndex,Guid SlotId,MontageRequestOutcome Outcome);
 public sealed record AnimationSequenceSpace(ulong Step,Guid NodeId,Guid SpaceId,BlendSpaceWeights Weights);
 public sealed record AnimationSequenceStep(AnimationGraphFrame Frame, ulong Sequence, IReadOnlyList<AnimationGraphEvent> Events,AnimationSequenceRootIntent? Root=null)
 {
     // Parameter-space inspection includes inactive nodes: it does NOT claim live pose/GPU evaluation.
     public IReadOnlyList<AnimationSequenceSpace> Spaces {get;init;}=Array.Empty<AnimationSequenceSpace>();
     public AnimationCacheStatistics Cache {get;init;}
+    public IReadOnlyList<AnimationSequenceMontageSlot> MontageSlots {get;init;}=Array.Empty<AnimationSequenceMontageSlot>();
+    public IReadOnlyList<AnimationSequenceMontageReceipt> MontageReceipts {get;init;}=Array.Empty<AnimationSequenceMontageReceipt>();
 }
 public sealed record AnimationSequenceCheck(int Index, int Step, bool Passed, string Code);
 public sealed record AnimationSequenceResult(Guid GraphId, string GraphContentHash, string EventContentHash,
@@ -26,9 +34,18 @@ public static class AnimationGraphSequence
         ArgumentNullException.ThrowIfNull(program); ArgumentNullException.ThrowIfNull(input);
         AnimationGraphCodec.Scalar(input.FixedDelta, .001, 1);
         if (input.Steps is < 1 or > MaxSteps || input.Writes is null || input.Assertions is null ||
+            input.MontageRequests is null || input.MontageRequests.Length>AnimationMontagePlayback.MaxRequests ||
             input.Writes.Length > MaxWrites || input.Assertions.Length > MaxAssertions) throw new ArgumentException("Animation sequence budget.");
         // Own and validate the complete request before executing any quantum.
         var writes = input.Writes.ToArray(); var assertions = input.Assertions.ToArray();
+        var requests=input.MontageRequests.ToArray();var montage=program.Montage?.CopyDefinition();
+        foreach(var request in requests){
+            if(request is null||request.Step<1||request.Step>input.Steps||!Enum.IsDefined(request.Kind)||request.Priority is <0 or >255||
+                montage is null||!montage.Slots.Any(s=>s.Id==request.SlotId)||
+                (request.Kind==MontageRequestKind.Cancel?request.SectionId!=Guid.Empty:request.SectionId!=Guid.Empty&&!montage.Sections.Any(s=>s.Id==request.SectionId&&s.SlotId==request.SlotId))||
+                request.Kind==MontageRequestKind.Jump&&request.SectionId==Guid.Empty)throw new ArgumentException("Exact isolated typed Montage request required.");
+        }
+        if(requests.Count(r=>r.Step==1)+program.Nodes.Count(n=>n.PlayOnStart)>AnimationMontagePlayback.MaxRequests)throw new ArgumentException("Startup and first-step requests share the bounded queue.");
         var unique = new HashSet<(int, Guid)>();
         foreach (var write in writes) {
             if (write is null || write.Step < 1 || write.Step > input.Steps || !unique.Add((write.Step, write.ParameterId)) ||
@@ -55,15 +72,25 @@ public static class AnimationGraphSequence
                     if(assertion.SubjectId!=Guid.Empty||!double.IsFinite(assertion.Value)||assertion.Value<0||assertion.Value>4096||Math.Truncate(assertion.Value)!=assertion.Value)throw new ArgumentException("Bounded integral global cache assertion.");break;
                 case AnimationSequenceAssertionKind.RootX:case AnimationSequenceAssertionKind.RootYaw:
                     if(!rootSupported||assertion.SubjectId!=Guid.Empty)throw new ArgumentException("Prepared independent root source required.");AnimationGraphCodec.Scalar(assertion.Value,-1000,1000);break;
+                case AnimationSequenceAssertionKind.SlotSection:
+                    if(montage is null||assertion.Value!=0||!montage.Sections.Any(s=>s.Id==assertion.SubjectId))throw new ArgumentException("Exact Section assertion.");break;
+                case AnimationSequenceAssertionKind.SlotActive:case AnimationSequenceAssertionKind.SlotTime:case AnimationSequenceAssertionKind.SlotWeight:
+                case AnimationSequenceAssertionKind.MontageOutcome:case AnimationSequenceAssertionKind.MontageReceiptCount:
+                    if(montage is null||!montage.Slots.Any(s=>s.Id==assertion.SubjectId))throw new ArgumentException("Exact Slot assertion.");
+                    AnimationGraphCodec.Scalar(assertion.Value,0,assertion.Kind==AnimationSequenceAssertionKind.SlotTime?600:assertion.Kind==AnimationSequenceAssertionKind.MontageReceiptCount?64:assertion.Kind==AnimationSequenceAssertionKind.MontageOutcome?5:1);
+                    if(assertion.Kind==AnimationSequenceAssertionKind.SlotActive&&assertion.Value is not (0 or 1)||
+                        assertion.Kind is AnimationSequenceAssertionKind.MontageOutcome or AnimationSequenceAssertionKind.MontageReceiptCount&&Math.Truncate(assertion.Value)!=assertion.Value)throw new ArgumentException("Integral Slot assertion.");break;
             }
         }
-        return new(input.FixedDelta,input.Steps,writes,assertions);
+        return new(input.FixedDelta,input.Steps,writes,assertions){MontageRequests=requests};
     }
     public static AnimationSequenceResult Run(AnimationProgram program, AnimationSequenceCase input,IAnimationPoseSnapshotSource? poseSource=null,IAnimationSequenceRootSource? rootSource=null)
     {
         input=OwnInput(program,input,rootSource is not null);var writes=input.Writes;var assertions=input.Assertions;
         if(rootSource is not null&&(rootSource.GraphId!=program.AssetId||rootSource.SkeletonId!=program.SkeletonId||rootSource.GraphContentHash!=program.ContentHash||rootSource.ResourceGeneration!=program.ResourceGeneration))throw new ArgumentException("Exact independent root source required.");
         var byStep = writes.GroupBy(w => w.Step).ToDictionary(g => g.Key, g => g.OrderBy(w => w.ParameterId).ToArray());
+        var requests=input.MontageRequests.Select((r,i)=>(Request:r,Index:i)).GroupBy(r=>r.Request.Step).ToDictionary(g=>g.Key,g=>g.ToArray());
+        var montage=program.Montage?.CopyDefinition();var receipts=new MontageReceipt[AnimationMontagePlayback.MaxRequests];
         var context = new AnimationStepContext(Guid.NewGuid(), Guid.NewGuid(), 0);
         var instance = new AnimationGraphInstance(program, context,poseSource); var timeline = new AnimationSequenceStep[input.Steps];
         var plan=new AnimationPoseInstruction[program.MaximumPlanInstructions];
@@ -72,6 +99,8 @@ public static class AnimationGraphSequence
         var checks = new AnimationSequenceCheck[assertions.Length]; var events = new AnimationGraphEvent[AnimationProgram.MaximumEventsPerQuantum]; int total = 0;
         for (int step = 1; step <= input.Steps; step++) {
             if (byStep.TryGetValue(step, out var changes)) foreach (var write in changes) Apply(instance, write);
+            var requestIndices=new Dictionary<Guid,int>();
+            if(requests.TryGetValue(step,out var controls))foreach(var control in controls){Guid id=Guid.NewGuid();requestIndices.Add(id,control.Index);var r=control.Request;instance.RequestMontage(new(id,instance.Frame.InstanceId,context,r.SlotId,r.Kind,r.SectionId,r.Priority));}
             var token = instance.Prepare(context, input.FixedDelta);
             instance.Commit(token, context = context with { Tick = context.Tick + 1 });
             int count = instance.CopyCommittedEvents(context, events); total = checked(total + count);
@@ -79,7 +108,10 @@ public static class AnimationGraphSequence
             AnimationSequenceRootIntent? root=null;
             if(rootSource is not null){int n=instance.CopyCommittedPlan(plan),m=program.Montage is null?0:instance.CopyCommittedMontageIntervals(intervals);root=rootSource.Evaluate(plan.AsSpan(0,n),instance.Frame.Output,intervals.AsSpan(0,m),input.FixedDelta);if(!float.IsFinite(root.Value.Translation.LengthSquared())||root.Value.Translation.LengthSquared()>1e6f||Math.Abs(root.Value.Translation.Y)>1e-6||!float.IsFinite(root.Value.Yaw)||Math.Abs(root.Value.Yaw)>Math.PI)throw new ArgumentException("Bounded numerical root intent required.");}
             var spaceRows=spaces.Select(s=>new AnimationSequenceSpace(context.Tick,s.NodeId,s.Definition.Id,s.Program.Evaluate(instance.CommittedParameter(s.Definition.AxisX.ParameterId),s.Definition.AxisY is{} y?instance.CommittedParameter(y.ParameterId):0))).ToArray();
-            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root){Spaces=Array.AsReadOnly(spaceRows),Cache=instance.CacheStatistics};
+            int intervalCount=montage is null?0:instance.CopyCommittedMontageIntervals(intervals),receiptCount=montage is null?0:instance.CopyCommittedMontageReceipts(receipts);
+            var slotRows=montage is null?Array.Empty<AnimationSequenceMontageSlot>():montage.Slots.Select(s=>new AnimationSequenceMontageSlot(context.Tick,instance.ReadMontageSlot(s.Id),intervals.Take(intervalCount).Count(i=>i.SlotId==s.Id))).ToArray();
+            var receiptRows=receipts.Take(receiptCount).Select(r=>new AnimationSequenceMontageReceipt(context.Tick,requestIndices.TryGetValue(r.RequestId,out int index)?index:-1,r.SlotId,r.Outcome)).ToArray();
+            timeline[step - 1] = new(instance.Frame, token.Sequence, Array.AsReadOnly(events.AsSpan(0, count).ToArray()),root){Spaces=Array.AsReadOnly(spaceRows),Cache=instance.CacheStatistics,MontageSlots=Array.AsReadOnly(slotRows),MontageReceipts=Array.AsReadOnly(receiptRows)};
             for (int at = 0; at < assertions.Length; at++) {
                 var assertion = assertions[at]; if (assertion.Step != step) continue;
                 bool passed = assertion.Kind switch {
@@ -91,6 +123,12 @@ public static class AnimationGraphSequence
                     AnimationSequenceAssertionKind.RootYaw=>root is{} yaw&&Math.Abs(yaw.Yaw-assertion.Value)<1e-5,
                     AnimationSequenceAssertionKind.CacheHits=>timeline[step-1].Cache.Hits==assertion.Value,
                     AnimationSequenceAssertionKind.CacheRequests=>timeline[step-1].Cache.Requests==assertion.Value,
+                    AnimationSequenceAssertionKind.SlotActive=>instance.ReadMontageSlot(assertion.SubjectId).Active==(assertion.Value==1),
+                    AnimationSequenceAssertionKind.SlotTime=>Math.Abs(instance.ReadMontageSlot(assertion.SubjectId).Time-assertion.Value)<1e-8,
+                    AnimationSequenceAssertionKind.SlotWeight=>Math.Abs(instance.ReadMontageSlot(assertion.SubjectId).Weight-assertion.Value)<1e-5,
+                    AnimationSequenceAssertionKind.SlotSection=>instance.ReadMontageSlot(montage!.Sections.Single(s=>s.Id==assertion.SubjectId).SlotId).SectionId==assertion.SubjectId,
+                    AnimationSequenceAssertionKind.MontageOutcome=>receiptRows.Any(r=>r.SlotId==assertion.SubjectId&&(int)r.Outcome==assertion.Value),
+                    AnimationSequenceAssertionKind.MontageReceiptCount=>receiptRows.Count(r=>r.SlotId==assertion.SubjectId)==assertion.Value,
                     _ => throw new ArgumentException("Closed assertion required.")
                 };
                 checks[at] = new(at, step, passed, passed ? "assertion_passed" : "assertion_failed");

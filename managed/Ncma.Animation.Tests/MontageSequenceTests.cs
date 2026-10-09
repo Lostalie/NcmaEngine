@@ -1,0 +1,36 @@
+using System.Text.Json;
+using Ncma.Animation;
+
+internal static class MontageSequenceTests
+{
+    private static void Check(bool v,string reason=""){if(!v)throw new Exception("M6.8-C2 isolated controls: "+reason);}
+    private static void Reject(Action a){try{a();}catch(Exception e)when(e is ArgumentException or InvalidOperationException or JsonException){return;}throw new Exception("Invalid isolated controls accepted.");}
+    private static (AnimationProgram Program,AnimationMontageDefinition Montage) Prepare(bool startup=false,bool interruptible=true){var g=GraphTests.Simple();var m=MontageDataTests.Definition();m=m with{SkeletonId=g.SkeletonId,Slots=[m.Slots[0] with{BlendIn=0,Interruptible=interruptible}],Sections=m.Sections.Select(s=>s with{ClipId=g.Nodes[0].ClipId}).ToArray()};g=MontageGraphTests.Attach(g,m,startup);return(AnimationProgram.Compile(g,1,[new(g.Nodes[0].ClipId,g.SkeletonId,1,1)]),m);}
+    public static void Add(List<(string,Action)> tests)
+    {
+        tests.Add(("M6.8-C2 isolated Play/priority/Jump/Cancel/reentry ordered receipts and closed assertions",()=>{
+            var(p,m)=Prepare();Guid slot=m.Slots[0].Id,recovery=m.Sections.Single(s=>s.Name=="Recovery").Id;var input=new AnimationSequenceCase(.1,8,[],[
+                new(1,AnimationSequenceAssertionKind.SlotActive,slot,1),new(1,AnimationSequenceAssertionKind.SlotTime,slot,.2),new(2,AnimationSequenceAssertionKind.MontageOutcome,slot,3),
+                new(3,AnimationSequenceAssertionKind.SlotSection,recovery,0),new(3,AnimationSequenceAssertionKind.SlotTime,slot,.5),new(4,AnimationSequenceAssertionKind.SlotTime,slot,.5),new(4,AnimationSequenceAssertionKind.SlotWeight,slot,.5),
+                new(5,AnimationSequenceAssertionKind.MontageOutcome,slot,0),new(7,AnimationSequenceAssertionKind.MontageOutcome,slot,5),new(7,AnimationSequenceAssertionKind.MontageReceiptCount,slot,2),new(8,AnimationSequenceAssertionKind.SlotActive,slot,0)]){MontageRequests=[new(1,slot,MontageRequestKind.Play,Guid.Empty,10),new(2,slot,MontageRequestKind.Play,Guid.Empty,9),new(3,slot,MontageRequestKind.Jump,recovery,10),new(4,slot,MontageRequestKind.Cancel,Guid.Empty,10),new(5,slot,MontageRequestKind.Play,Guid.Empty,20),new(6,slot,MontageRequestKind.Play,Guid.Empty,20),new(7,slot,MontageRequestKind.Cancel,Guid.Empty,20),new(7,slot,MontageRequestKind.Jump,recovery,20)]};
+            var owned=AnimationGraphSequence.OwnInput(p,input);input.MontageRequests[0]=input.MontageRequests[0] with{Priority=0};var result=AnimationGraphSequence.Run(p,owned);Check(result.Passed,string.Join(",",result.Checks.Where(c=>!c.Passed).Select(c=>c.Index)));Check(result.Timeline[5].MontageSlots.Single().Frame.PlaybackGeneration==3);Check(result.Timeline[3].MontageSlots.Single().IntervalCount==0&&result.Timeline[2].MontageSlots.Single().IntervalCount==1);
+            Check(result.Timeline.SelectMany(t=>t.MontageReceipts).Select(r=>r.RequestIndex).SequenceEqual(Enumerable.Range(0,8)));var again=AnimationGraphSequence.Run(p,owned);Check(again.Passed&&again.Timeline[0].Frame.InstanceId!=result.Timeline[0].Frame.InstanceId&&again.Timeline[0].Frame.Context.WorldId!=result.Timeline[0].Frame.Context.WorldId&&again.Timeline.SelectMany(t=>t.MontageSlots).SequenceEqual(result.Timeline.SelectMany(t=>t.MontageSlots)));
+            Check(!AnimationGraphSequence.Run(p,owned with{Assertions=[new(1,AnimationSequenceAssertionKind.SlotTime,slot,.9)]}).Passed);
+        }));
+        tests.Add(("M6.8-C2 noninterruptible receipt/startup ordering/whole-input and queue rejection",()=>{
+            var(p,m)=Prepare(true,false);Guid slot=m.Slots[0].Id;var r=new AnimationSequenceMontageRequest(1,slot,MontageRequestKind.Play,Guid.Empty,11);var input=new AnimationSequenceCase(.1,2,[],[new(1,AnimationSequenceAssertionKind.MontageOutcome,slot,4)]){MontageRequests=[r]};var result=AnimationGraphSequence.Run(p,input);Check(result.Passed&&result.Timeline[0].MontageReceipts[0].RequestIndex==-1&&result.Timeline[0].MontageReceipts[1].RequestIndex==0);
+            foreach(var bad in new[]{r with{Step=3},r with{SlotId=Guid.NewGuid()},r with{Kind=(MontageRequestKind)99},r with{Kind=MontageRequestKind.Cancel,SectionId=m.Sections[0].Id},r with{Kind=MontageRequestKind.Jump},r with{SectionId=Guid.NewGuid()},r with{Priority=256}})Reject(()=>AnimationGraphSequence.Run(p,input with{MontageRequests=[r,bad]}));
+            Reject(()=>AnimationGraphSequence.Run(p,input with{MontageRequests=Enumerable.Repeat(r,64).ToArray()}));Reject(()=>AnimationGraphSequence.Run(p,input with{MontageRequests=Enumerable.Repeat(r with{Step=2},65).ToArray()}));
+            foreach(var a in new[]{new AnimationSequenceAssertion(1,AnimationSequenceAssertionKind.SlotActive,slot,.5),new(1,AnimationSequenceAssertionKind.SlotTime,Guid.Empty,0),new(1,AnimationSequenceAssertionKind.SlotSection,slot,0),new(1,AnimationSequenceAssertionKind.MontageOutcome,slot,6),new(1,AnimationSequenceAssertionKind.MontageReceiptCount,slot,.5),new(1,AnimationSequenceAssertionKind.SlotWeight,slot,double.NaN)})Reject(()=>AnimationGraphSequence.Run(p,input with{Assertions=[a]}));
+        }));
+        tests.Add(("M6.8-C2 strict five-field case/no old format/clocks/code/duplicates/case enum",()=>{
+            var(p,m)=Prepare();var input=new AnimationSequenceCase(.1,2,[],[]){MontageRequests=[new(1,m.Slots[0].Id,MontageRequestKind.Play,Guid.Empty,10)]};string json=AnimationSequenceCodec.Encode(input).GetRawText();Check(AnimationSequenceCodec.Encode(AnimationSequenceCodec.Decode(JsonDocument.Parse(json).RootElement)).GetRawText()==json);
+            foreach(string bad in new[]{"{\"fixedDelta\":0.1,\"steps\":2,\"writes\":[],\"assertions\":[]}",json.Replace("\"priority\":10","\"priority\":10,\"tick\":1"),json.Replace("\"priority\":10","\"priority\":10,\"priority\":11"),json.Replace("\"play\"","\"Play\""),json.Insert(1,"\"code\":\"execute\","),json.Replace("\"slotId\"","\"worldId\"")})Reject(()=>AnimationSequenceCodec.Decode(JsonDocument.Parse(bad).RootElement));
+            Reject(()=>AnimationGraphSequence.OwnInput(p,input with{MontageRequests=null!}));
+        }));
+        tests.Add(("M6.8-C2 bounded 16 Slots/256 steps/80 copied receipts independent instances",()=>{
+            var g=GraphTests.Simple();Guid clip=g.Nodes[0].ClipId;var slots=new List<AnimationMontageSlot>();var sections=new List<AnimationMontageSection>();for(int i=0;i<16;i++){Guid slot=Guid.NewGuid(),section=Guid.NewGuid();slots.Add(new(slot,"Slot"+i,section,0,true,false,0,0));sections.Add(new(section,"Loop"+i,slot,clip,0,.5,section));}var m=new AnimationMontageDefinition(1,Guid.NewGuid(),"Budget",g.SkeletonId,slots.ToArray(),sections.ToArray());g=MontageGraphTests.Attach(g,m,true);var p=AnimationProgram.Compile(g,1,[new(clip,g.SkeletonId,1,1)]);
+            var input=new AnimationSequenceCase(.1,256,[],[]){MontageRequests=Enumerable.Range(0,64).Select(_=>new AnimationSequenceMontageRequest(2,slots[0].Id,MontageRequestKind.Play,Guid.Empty,0)).ToArray()};var result=AnimationGraphSequence.Run(p,input);Check(result.Timeline.Sum(t=>t.MontageSlots.Count)==4096&&result.Timeline.Sum(t=>t.MontageReceipts.Count)==80&&result.Timeline.All(t=>t.Frame.Context.Tick==t.Sequence));
+        }));
+    }
+}

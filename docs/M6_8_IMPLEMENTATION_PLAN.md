@@ -57,7 +57,12 @@ C1修复后完整顺序无Skip双配置自动候选通过：12native/22managed�
 Python43/smokes/formats/inspect/3profiles/audits/101hashes/Complete journal。
 Release首轮joint绘制失败保留，同步验收补既有有界GPU drain、保留原完整绘制断言并增tick/背压检查，
 定向和完整双配置重跑通过；无生产等待或性能声明。见M6_8_C1_RUNTIME_CONTRACT.md/M6_8_C1_DELIVERY_REPORT.md。
-提交推送核对远端后再做C2；C2尚未实现，不标整个C完成。
+提交推送核对远端后再做C2。C1远端a80431e已核对；C2完整顺序无Skip双配置自动候选通过，
+严格五字段隔离用例、typed请求/断言与分页回执复用同一精确批准，
+见M6_8_C2_RUNTIME_CONTRACT.md及DELIVERY_REPORT。12native/22managed、core115/Editor113/Player56、
+Python43/smokes/formats/inspect/3profiles/audits/checkeddeploy、101hashes/Complete journal；
+实际前景面板遮挡也已修复/截图检查。M6.8 A/B/C自动候选闭环，人工/素材/目标/性能/1h不关闭。
+提交推送并核对远端SHA后再推进M6.9，不提前启动M7。
 
 ## 完成与开放验收
 

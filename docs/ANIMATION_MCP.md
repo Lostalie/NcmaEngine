@@ -1,5 +1,19 @@
 # 动画 AI 控制：本地 MCP
 
+## 当前 C# 动画图工具与独立预览的区别
+
+正式编辑器 `ncma.animgraph.*` 为精确人工获批的读取/提案/事务/隔离序列，
+不等于下文独立Python内置动作预览。M6.8-C2（完整双配置自动候选通过）扩展
+`ncma.animgraph.sequence.propose/run`：闭合五字段 fixedDelta/steps/writes/assertions/montageRequests，
+旧四字段拒绝。最多64条 Play/Cancel/Jump，由宿主生成隔离instance/session/world/tick，
+不控制live角色、Movement、Jolt、Health、GPU或游戏回调。图读取批准不等于用例执行批准；
+完整用例/实际NCA发布/资源/受众hash审阅、TTL60及每次含缓存读取的重检仍必需。
+run增加 `montage`（Slot状态）和 `requests`（作者数组索引/结果）分页，各次最多8行，
+`livePlay=false`、`collisionExecuted=false`。未接入模型推理或自动配置客户端。
+准确字段/断言/边界与验证状态见[M6.8-C2契约](M6_8_C2_RUNTIME_CONTRACT.md)和[交付](M6_8_C2_DELIVERY_REPORT.md)。
+
+## 独立 Python 内置动作预览
+
 这是可运行的 stdio JSON-RPC MCP 服务，不只是能力清单。M2.5 已升级独立动画 C ABI 2：Python 工具管理协议、参数校验、独立预览时钟/策略/通知消费和有界历史，
 `NcmaNative.dll` 仅提供不可变内置库与 pose/blend/root-motion/Notify 区间复制数值；旧 ABI 1 明确拒绝。
 

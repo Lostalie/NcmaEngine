@@ -29,7 +29,10 @@ B同一个固定步Prepare/Commit/Abort与安全边界请求接入正式runtime�
 C可视轨道和获批语义编辑/隔离序列，测试结束/Combo/打断/取消/重入/Stop/Reload、实际NCA与Player。
 C分C1 typed属性/源时间-Notify轨道/同源语义/完整提案差异与C2 typed隔离控制用例/最终联合验收。
 C1完整双配置通过提交推送核对远端后再做C2；不把C1标为整个C或M6.8完成。
-C1目前完整顺序无Skip双配置自动候选通过，详见M6_8_C1_DELIVERY_REPORT.md；C2尚未实现。
+C1目前完整顺序无Skip双配置自动候选通过且远端a80431e核对；C2完整顺序无Skip双配置
+自动候选通过（12native/22managed、core115/Editor113/Player56/Python43/101hashes/Complete journal）。
+详见M6_8_C2_RUNTIME_CONTRACT.md/M6_8_C2_DELIVERY_REPORT.md；M6.8 A/B/C自动候选闭环，
+人工/素材/目标/性能/1h仍开放。提交推送并核对远端后下一切片M6.9，M6.10仍待执行。
 
 ## M6.9 AI 工作流可靠性
 
