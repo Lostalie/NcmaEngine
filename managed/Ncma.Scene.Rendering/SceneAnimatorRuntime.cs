@@ -22,7 +22,6 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         internal AnimationEvaluationToken? Pending;
         internal AnimatorRuntimeBinding? Binding;
         internal GraphPoseSnapshotSource? PoseSource;
-        internal AnimationMontageProgram? Montage;
     }
     private readonly PlaySession _play;
     private readonly Actor[] _actors;
@@ -78,7 +77,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         _session = _play.SessionId; _world = World.Identity;
         foreach (var actor in _actors) {
             if (World.FindObject(actor.Id).Get<AnimatorData>() != actor.Source) throw new ArgumentException("Animator startup binding changed.");
-            actor.Instance = new(actor.Program, new(_session, _world, World.Tick),actor.PoseSource,_interruptions,actor.Montage); actor.Pending = null;
+            actor.Instance = new(actor.Program, new(_session, _world, World.Tick),actor.PoseSource,_interruptions); actor.Pending = null;
         }
         _claims.Add(World.ClaimComponents<AnimatorData>(_actors.Select(a => a.Id).ToArray(), publishRequired: false, freezeMembership: true));
         _claims.Add(World.ClaimComponents<SkinnedMeshData>(_actors.Select(a => a.Id).ToArray(), publishRequired: false));
@@ -116,18 +115,6 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         return actor;
     }
     public AnimationGraphFrame ReadFrame(Guid objectId) => Read(objectId).Instance!.Frame;
-    // Explicit trusted stopped-host candidate. Not serialized/cooked authoring or Agent live authority.
-    public void BindMontage(Guid objectId,AnimationMontageDefinition definition)
-    {
-        try{
-        World.VerifyWriteAccess();ObjectDisposedException.ThrowIf(_disposed,this);
-        if(_play.State!=PlayState.Stopped||World.IsUpdating||_claims.Count!=0)throw new InvalidOperationException("Bind Montage only before Animator startup.");
-        var actor=_actors.SingleOrDefault(a=>a.Id==objectId)??throw new ArgumentException("Unknown Animator object.");
-        if(actor.Montage is not null)throw new InvalidOperationException("One immutable Montage binding per Animator composition.");
-        var graph=(RuntimeAnimationGraphAsset)_assets!.Require(actor.Source.GraphId,AssetKind.AnimationGraph);
-        actor.Montage=graph.PrepareMontage(_assets,definition);
-        }catch(Exception error){World.RejectStep(error);throw;}
-    }
     public bool RequestMontage(Guid objectId,MontageRequest request)=>Control(objectId).Instance!.RequestMontage(request);
     public MontagePlaybackFrame ReadMontageFrame(Guid objectId)=>Read(objectId).Instance!.ReadMontageFrame();
     public MontageSlotFrame ReadMontageSlot(Guid objectId,Guid slot)=>Read(objectId).Instance!.ReadMontageSlot(slot);
@@ -155,6 +142,13 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         return frame;
     }
     public AnimationGraphDebugFrame ReadDebug(Guid objectId) => Read(objectId).Instance!.ReadDebug(new(_session, _world, World.Tick));
+    internal int CopyPreparedRootIntervals(Guid objectId,AnimationStepContext context,Span<MontageInterval> destination)
+    {
+        VerifyIdentity();if(!World.IsUpdating||context!=new AnimationStepContext(_session,_world,World.Tick))throw new InvalidOperationException("Exact collecting graph root context required.");
+        Actor? actor=null;foreach(var candidate in _actors)if(candidate.Id==objectId){actor=candidate;break;}
+        if(actor is null||actor.Pending is not{} token)throw new InvalidOperationException("Same pending Animator required for root intervals.");
+        return actor.Instance!.CopyPreparedMontageIntervals(token,destination);
+    }
     public int CopyCommittedEvents(Guid objectId, Span<AnimationGraphEvent> destination) => Read(objectId).Instance!.CopyCommittedEvents(new(_session, _world, World.Tick), destination);
     public void VerifyPresentation(World world, RuntimeAssetLease assets)
     {

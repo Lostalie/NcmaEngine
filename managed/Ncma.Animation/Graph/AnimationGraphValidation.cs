@@ -15,7 +15,7 @@ public static class AnimationGraphValidation
     {
         ArgumentNullException.ThrowIfNull(d);
         Require(d.Version == AnimationGraphCodec.CurrentVersion && d.AssetId != Guid.Empty && d.SkeletonId != Guid.Empty && d.AssetId != d.SkeletonId,
-            "identity", d.AssetId, "Strict graph v4 and distinct graph/skeleton UUIDs required; v1/v2/v3 are removed.");
+            "identity", d.AssetId, "Strict graph v5 and distinct graph/skeleton UUIDs required; v1-v4 are removed.");
         AnimationGraphCodec.Text(d.Name, 256);
         Require(d.Parameters is not null && d.Nodes is not null && d.Links is not null && d.States is not null && d.Transitions is not null,
             "collections", d.AssetId, "All graph collections are required.");
@@ -31,6 +31,7 @@ public static class AnimationGraphValidation
             "budget", d.AssetId, "Animation graph collection budget exceeded.");
         var identities = new HashSet<Guid> { d.AssetId, d.SkeletonId };
         void Identity(Guid id) => Require(id != Guid.Empty && identities.Add(id), "duplicate_identity", id, "Graph elements require distinct persistent UUIDs.");
+        if(d.Montage is{} montage){_=AnimationMontageCodec.Encode(montage);Require(montage.SkeletonId==d.SkeletonId,"montage_skeleton",d.AssetId,"Exact graph/Montage skeleton required.");Identity(montage.AssetId);foreach(var slot in montage.Slots)Identity(slot.Id);foreach(var section in montage.Sections)Identity(section.Id);}
         var parameterMap = new Dictionary<Guid, AnimationParameter>(); var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var p in parameters) {
             if (p is null) throw new ArgumentException("Null parameter."); Identity(p.Id); AnimationGraphCodec.Text(p.Name);
@@ -52,6 +53,7 @@ public static class AnimationGraphValidation
                 (n.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace || !n.Loop && n.Speed == 0) &&
                 (n.Kind==AnimationNodeKind.BlendSpace?n.BlendSpace is not null:n.BlendSpace is null) &&
                 (n.Kind is AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive?n.Layer is not null:n.Layer is null) &&
+                (n.Kind==AnimationNodeKind.Slot?n.SlotId!=Guid.Empty&&d.Montage is not null&&d.Montage.Slots.Any(s=>s.Id==n.SlotId):n.SlotId==Guid.Empty&&!n.PlayOnStart) &&
                 (n.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive || n.Weight == 0), "node_fields", n.Id, "Missing or irrelevant kind-specific node fields.");
             if(n.BlendSpace is{} space){Require(++spaces<=AnimationGraphCodec.MaxBlendSpaces,"blendspace_budget",n.Id,"At most16 BlendSpace nodes.");_=new BlendSpaceProgram(space);Identity(space.Id);foreach(var sample in space.Samples)Identity(sample.Id);
                 foreach(var axis in new[]{space.AxisX,space.AxisY}.Where(a=>a is not null))Require(parameterMap.TryGetValue(axis!.ParameterId,out var parameter)&&parameter.Kind==AnimationParameterKind.Float,"blendspace_axis_type",n.Id,"Float axis parameter required.");}
@@ -105,12 +107,18 @@ public static class AnimationGraphValidation
             dependencies[l.To].Add(l.From);
         }
         foreach (var n in nodes) {
-            string[] required = n.Kind switch { AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive => ["a", "b"], AnimationNodeKind.Output or AnimationNodeKind.CachePose => ["pose"], _ => [] };
+            string[] required = n.Kind switch { AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive => ["a", "b"], AnimationNodeKind.Output or AnimationNodeKind.CachePose or AnimationNodeKind.Slot => ["pose"], _ => [] };
             foreach (string pin in required) Require(occupied.Contains((n.Id, pin)), "missing_input", n.Id, "Required pose input is not connected: " + pin);
         }
         var output = nodes.Where(n => n.Kind == AnimationNodeKind.Output).ToArray();
         var machines = nodes.Where(n => n.Kind == AnimationNodeKind.StateMachine).ToArray();
         Require(output.Length == 1, "output", d.AssetId, "Exactly one Output node required.");
+        // Global cooperating clocks evaluate once: Slots form only the final contiguous output chain.
+        var slotNodes=nodes.Where(n=>n.Kind==AnimationNodeKind.Slot).ToArray();
+        Require(d.Montage is null?slotNodes.Length==0:slotNodes.Length==d.Montage.Slots.Length&&slotNodes.Select(n=>n.SlotId).Distinct().Count()==slotNodes.Length,"slot_binding",d.AssetId,"One final Slot node per authored Montage Slot required.");
+        var chain=new HashSet<Guid>();Guid tail=links.Single(l=>l.To==output[0].Id&&l.ToPin=="pose").From;
+        while(nodeMap[tail].Kind==AnimationNodeKind.Slot&&chain.Add(tail))tail=links.Single(l=>l.To==tail&&l.ToPin=="pose").From;
+        Require(chain.Count==slotNodes.Length&&slotNodes.All(n=>links.Count(l=>l.From==n.Id)==1),"slot_chain",d.AssetId,"Slots must be a unique final chain, never state/branch/cache inputs.");
         Require(machines.Length <= 1 && (machines.Length == 0 ? states.Length == 0 && transitions.Length == 0 && d.EntryState == Guid.Empty : states.Length > 0 && stateMap.ContainsKey(d.EntryState)),
             "state_machine", d.AssetId, "Supports zero or one machine with an explicit reachable entry state.");
         Require(!d.InterruptTransitions||machines.Length==1,"interruption_policy",d.AssetId,"Interruptions require a state machine.");
@@ -147,12 +155,12 @@ public static class AnimationGraphValidation
             AnimationParameterKind.Bool => AnimationPinType.Bool, AnimationParameterKind.Trigger => AnimationPinType.Trigger,
             _ => throw new ArgumentException("Unknown parameter pin type.")
         };
-        if (node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend or AnimationNodeKind.StateMachine or AnimationNodeKind.BlendSpace or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive or AnimationNodeKind.CachePose && pin == "pose") return AnimationPinType.Pose;
+        if (node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.Blend or AnimationNodeKind.StateMachine or AnimationNodeKind.BlendSpace or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive or AnimationNodeKind.CachePose or AnimationNodeKind.Slot && pin == "pose") return AnimationPinType.Pose;
         throw new AnimationGraphValidationException("output_pin", node.Id, "Unknown output pin or wrong direction.");
     }
     private static AnimationPinType InputPin(AnimationGraphNode node, string pin)
     {
-        if (node.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive && pin is "a" or "b" || node.Kind is AnimationNodeKind.Output or AnimationNodeKind.CachePose && pin == "pose") return AnimationPinType.Pose;
+        if (node.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive && pin is "a" or "b" || node.Kind is AnimationNodeKind.Output or AnimationNodeKind.CachePose or AnimationNodeKind.Slot && pin == "pose") return AnimationPinType.Pose;
         if (node.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive && pin == "weight" || node.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace && pin == "speed") return AnimationPinType.Float;
         throw new AnimationGraphValidationException("input_pin", node.Id, "Unknown input pin or wrong direction.");
     }
@@ -163,5 +171,5 @@ public static class AnimationGraphValidation
             .Concat(ClipIds(d).Select(id=>new AnimationGraphDependency(id,false)))
             .OrderBy(x => x.Id).ToArray());
     }
-    public static Guid[] ClipIds(AnimationGraphDefinition d)=>d.Nodes.SelectMany(n=>n.Kind==AnimationNodeKind.Clip?new[]{n.ClipId}:n.BlendSpace?.Samples.Select(s=>s.ClipId)??(n.Layer is{ReferenceClip:var id}&&id!=Guid.Empty?new[]{id}:Enumerable.Empty<Guid>())).Distinct().Order().ToArray();
+    public static Guid[] ClipIds(AnimationGraphDefinition d)=>d.Nodes.SelectMany(n=>n.Kind==AnimationNodeKind.Clip?new[]{n.ClipId}:n.BlendSpace?.Samples.Select(s=>s.ClipId)??(n.Layer is{ReferenceClip:var id}&&id!=Guid.Empty?new[]{id}:Enumerable.Empty<Guid>())).Concat(d.Montage?.Sections.Select(s=>s.ClipId)??[]).Distinct().Order().ToArray();
 }

@@ -28,7 +28,7 @@ B2b进一步拆为B2b-1跨段blend积分/fraction与独立root数值准备、B2b
 Notify/package消费者。先验证解析包络、终止区间、actual NCA1/8/32及16Slot528区间/原子输出，
 完整双配置通过提交推送后再切图。B2b-1不向Movement写入、不注册placeholder、不部署半成品v5；
 见M6_8_B2B1_RUNTIME_CONTRACT.md及M6_8_B2B1_DELIVERY_REPORT.md。B2b-1完整双配置自动候选通过；
-B2b-2正式接线、B2b整体和C仍待完成，不将数值准备器作为已接通Movement/pose的证据。
+B2b-2随后完成正式接线并通过完整双配置；B2b-1独立记录仍仅是数值准备证据。C仍待完成。
 
 复用AnimationGraphInstance和SceneAnimatorRuntime的唯一Prepare/Commit/Abort及安全边界控制，
 没有独立World、OnUpdate时钟、solver或Actor网络字段。Slot播放/取消/Section跳转带精确instance/session/world/tick。
@@ -38,6 +38,12 @@ B2b-2正式接线、B2b整体和C仍待完成，不将数值准备器作为已�
 若扩展图格式，严格新格式替代旧格式、保留拒绝文件、不恢复兼容或自动重写。
 
 ## C 作者和 AI 同源工具
+
+B2b-2当前候选正式graph v5/Slot最后链/实际NCA pose-root-Notify/NCP1/startup/Player接通，
+删除B2a外部临时绑定。定向核心109及真实GPU/uniqueJolt/Editor0-1-8-32/16搬移Player通过；
+完整顺序无Skip Debug/Release已通过：12native/22managed、core109/Editor105/Player56、
+Python43/smokes/formats/inspect/3profiles/audits/checkeddeploy。见M6_8_B2B2_RUNTIME_CONTRACT.md及M6_8_B2B2_DELIVERY_REPORT.md。
+前文v4/外部绑定描述只属于已留证据的历史切片，不是当前入口。C typed作者/AI尚未实现。
 
 typed Slot/Section/Notify轨道、引用/区间/时间/优先级/重入规则编辑走原shared closed语义、
 精确文件/资源/受众审阅和唯一history。Agent只提议已审阅素材的编排与隔离用例，不获live攻击/移动/伤害控制。

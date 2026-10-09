@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Ncma.Animation;
 
 // Persistent authoring DTOs only. Runtime clocks, World/native handles and executable expressions are absent.
-public enum AnimationNodeKind { Clip, Blend, Parameter, StateMachine, Output, BlendSpace, LayerOverride, LayerAdditive, CachePose }
+public enum AnimationNodeKind { Clip, Blend, Parameter, StateMachine, Output, BlendSpace, LayerOverride, LayerAdditive, CachePose, Slot }
 public enum AnimationParameterKind { Float, Int, Bool, Trigger }
 public enum AnimationPinType { Pose, Float, Int, Bool, Trigger }
 public enum AnimationComparison { Equal, NotEqual, Greater, GreaterOrEqual, Less, LessOrEqual, Triggered }
@@ -24,6 +24,8 @@ public sealed record AnimationGraphNode(
 {
     [JsonRequired] public BlendSpaceDefinition? BlendSpace {get;init;}
     [JsonRequired] public AnimationLayerDefinition? Layer {get;init;}
+    [JsonRequired] public Guid SlotId {get;init;}
+    [JsonRequired] public bool PlayOnStart {get;init;}
     public static AnimationGraphNode Create(Guid id, string name, AnimationNodeKind kind) =>
         new(id, name, kind, 0, 0, Guid.Empty, Guid.Empty, false, 0, 0);
 }
@@ -55,6 +57,7 @@ public sealed record AnimationGraphDefinition(
 {
     [JsonRequired] public AnimationEventMarker[] Events { get; init; }=[];
     [JsonRequired] public bool InterruptTransitions { get; init; }
+    [JsonRequired] public AnimationMontageDefinition? Montage {get;init;}
 }
 
 // Immutable, owned publication. Mutable authoring DTOs never become a live runtime program.

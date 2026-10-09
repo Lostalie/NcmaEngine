@@ -62,7 +62,7 @@ internal static class GraphTests
         }));
         cases.Add(("M6.1 strict JSON fields/version/enums and removed format rejection", () => {
             var d = Simple(); string json = Encoding.UTF8.GetString(AnimationGraphCodec.Encode(d));
-            foreach (string bad in new[] { json.Replace("\"version\":4", "\"version\":1"),json.Replace("\"version\":4", "\"version\":2"),json.Replace("\"version\":4", "\"version\":3"), json.Replace("\"version\":4,", ""),
+            foreach (string bad in new[] { json.Replace("\"version\":5", "\"version\":1"),json.Replace("\"version\":5", "\"version\":2"),json.Replace("\"version\":5", "\"version\":3"), json.Replace("\"version\":5,", ""),
                 json.Insert(1, "\"version\":2,"), json.Insert(1, "\"worldHandle\":1,"), json.Replace("\"clip\"", "\"Clip\""),
                 json.Replace("\"clip\"", "0"), json.Replace("\"clip\"", "\"clip, blend\""), json.Replace("\"clip\"", "\"inverseKinematics\""),
                 json.Replace("\"loop\":true,", ""), json.Replace("\"x\":0", "\"x\":0,\"x\":1"), json.Replace("\"name\":", "\"Name\":"),

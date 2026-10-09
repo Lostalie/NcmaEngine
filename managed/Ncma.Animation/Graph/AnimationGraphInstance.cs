@@ -2,12 +2,13 @@ namespace Ncma.Animation;
 
 public readonly record struct AnimationStepContext(Guid SessionId, Guid WorldId, ulong Tick);
 public readonly record struct AnimationEvaluationToken(Guid InstanceId, ulong Sequence, ulong SourceTick);
-public enum AnimationPoseOperation { Clip, Blend, Frozen, RootSource, LayerOverride, LayerAdditive }
+public enum AnimationPoseOperation { Clip, Blend, Frozen, RootSource, LayerOverride, LayerAdditive, Slot }
 // TRS sampling/mixing recipe only, never native pointers or direct World writes.
 public readonly record struct AnimationPoseInstruction(AnimationPoseOperation Operation, Guid NodeId, Guid ClipId,
     double Previous, double Current, double Duration, bool Loop, int SourceA, int SourceB, float Weight, ulong CacheGeneration=0)
 {
     public int SourceC {get;init;}=-1;
+    public Guid SlotId {get;init;}
 }
 public readonly record struct AnimationGraphFrame(Guid InstanceId, Guid GraphId, AnimationStepContext Context,
     Guid StateId, Guid FromStateId, Guid TransitionId, float TransitionWeight, int Output, int InstructionCount,ulong FrozenPoseGeneration=0);
@@ -46,7 +47,9 @@ public sealed class AnimationGraphInstance
     private int _cacheRequests,_cacheHits;private AnimationCacheStatistics _committedCache;
     private readonly AnimationMontagePlayback? _montage;
     private MontageEvaluationToken? _montagePending;
-    public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false,AnimationMontageProgram? montage=null)
+    private readonly MontageInterval[] _montageIntervals;
+    private int _montageCount,_baseOutput,_committedBaseOutput;
+    public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false)
     {
         _program = program ?? throw new ArgumentNullException(nameof(program)); RequireContext(context);
         interruptTransitions|=program.InterruptTransitions;
@@ -63,14 +66,10 @@ public sealed class AnimationGraphInstance
         _times = new double[(program.StateCount + 1) * program.NodeCount]; _candidateTimes = new double[_times.Length]; _slots = new int[_times.Length];
         _primaryRows=new int[_times.Length];_phaseAdvanced=new bool[_times.Length];_phasePrevious=new double[_times.Length];
         _plan = new AnimationPoseInstruction[program.MaximumPlanInstructions]; _committedPlan = new AnimationPoseInstruction[_plan.Length];
+        _montageIntervals=new MontageInterval[program.Montage is null?0:AnimationMontagePlayback.MaxIntervals];
+        if(program.Montage is{} montage)_montage=new(montage,context,_identity);
         Build(0, false); PublishPlan();
-        if(montage is not null){
-            if(montage.SkeletonId!=program.SkeletonId||montage.ResourceGeneration!=program.ResourceGeneration)
-                throw new ArgumentException("Montage requires the exact graph skeleton/generation.");
-            foreach(var section in montage.CopyDefinition().Sections)
-                if(section.End>program.ClipDuration(section.ClipId))throw new ArgumentException("Montage requires graph-owned actual Clip durations.");
-            _montage=new(montage,context,_identity);
-        }
+        foreach(var node in program.Nodes)if(node.PlayOnStart)_montage!.Request(new(Guid.NewGuid(),_identity,context,node.SlotId,MontageRequestKind.Play,Guid.Empty,program.Montage!.RequireSlot(node.SlotId).Priority));
     }
     private void Verify() { if (Environment.CurrentManagedThreadId != _owner) throw new InvalidOperationException("Animation graph owner thread required."); }
     private static void RequireContext(AnimationStepContext context)
@@ -96,7 +95,7 @@ public sealed class AnimationGraphInstance
         _sequence++;
         try {
             AnimationGraphCodec.Scalar(fixedDelta, .001, 1);
-            if(_montage is not null)_montagePending=_montage.Prepare(context,fixedDelta,_sequence);
+            _montageCount=0;if(_montage is not null){_montagePending=_montage.Prepare(context,fixedDelta,_sequence);_montageCount=_montage.CopyPreparedIntervals(_montagePending.Value,_montageIntervals);}
             Build(fixedDelta, true); CollectEvents();
         }
         catch {
@@ -124,7 +123,7 @@ public sealed class AnimationGraphInstance
         Array.Copy(_events, _committedEvents, _eventCount); _committedEventCount = _eventCount;
         _committedSequence = token.Sequence; _prepared = false; _outcome = AnimationEvaluationOutcome.Committed;
     }
-    private void PublishPlan() { Array.Copy(_plan, _committedPlan, _count); _committedCount = _count; _committedOutput = _output; }
+    private void PublishPlan() { Array.Copy(_plan, _committedPlan, _count); _committedCount = _count; _committedOutput = _output;_committedBaseOutput=_baseOutput; }
     public int CopyPreparedPlan(AnimationEvaluationToken token, Span<AnimationPoseInstruction> destination)
     { Token(token); if (destination.Length < _count) throw new ArgumentException("Graph plan output capacity."); _plan.AsSpan(0, _count).CopyTo(destination); return _count; }
     public AnimationGraphFrame PreparedFrame(AnimationEvaluationToken token)
@@ -208,7 +207,7 @@ public sealed class AnimationGraphInstance
     }
     private void Build(double delta, bool transitions)
     {
-        _delta = delta; _count = 0; Array.Fill(_slots, -1);Array.Fill(_primaryRows,-1);Array.Clear(_phaseAdvanced); Array.Clear(_consume); _times.CopyTo(_candidateTimes, 0);
+        _delta = delta; _count = 0;_baseOutput=-1; Array.Fill(_slots, -1);Array.Fill(_primaryRows,-1);Array.Clear(_phaseAdvanced); Array.Clear(_consume); _times.CopyTo(_candidateTimes, 0);
         _cacheRequests=_cacheHits=0;
         _nextState = _state; _nextFrom = _from; _nextElapsed = _elapsed; _nextDuration = _duration; _nextTransition = _transition;
         _nextFrozenGeneration=_frozenGeneration;_cacheChanged=false;
@@ -219,7 +218,8 @@ public sealed class AnimationGraphInstance
             if(_from!=-1 && t.Duration>0){
                 if(_frozenGeneration>=9007199254740991UL)throw new ArgumentException("Frozen pose generation budget.");
                 Array.Fill(_candidateFrozen,new AnimationLocalTransform(default,default,float.NaN));
-                _poseSource!.Evaluate(_committedPlan.AsSpan(0,_committedCount),_committedOutput,_frozen,_frozenGeneration,_candidateFrozen);
+                // Global Slots retain their own cooperating state, so never bake/reapply them twice.
+                _poseSource!.Evaluate(_committedPlan.AsSpan(0,_committedCount),_committedBaseOutput,_frozen,_frozenGeneration,_candidateFrozen);
                 foreach(var v in _candidateFrozen)if(!float.IsFinite(v.Position.LengthSquared())||!float.IsFinite(v.Scale)||v.Scale<=0||!float.IsFinite(v.Rotation.LengthSquared())||Math.Abs(v.Rotation.LengthSquared()-1)>1e-4)throw new ArgumentException("Complete finite normalized uniform frozen pose required.");
                 _nextFrozenGeneration=_frozenGeneration+1;_cacheChanged=true;_nextFrom=-2;
             }
@@ -229,6 +229,7 @@ public sealed class AnimationGraphInstance
         }
         if (_nextFrom != -1) { _nextElapsed = Math.Min(_nextDuration, _nextElapsed + delta); }
         _output = Evaluate(_program.Output, 0);
+        if(_baseOutput<0)_baseOutput=_output;
         if (_nextFrom != -1 && _nextElapsed >= _nextDuration) _nextFrom = -1;
     }
     private int Add(AnimationPoseInstruction instruction)
@@ -241,7 +242,7 @@ public sealed class AnimationGraphInstance
         int slot = _primaryRows[context * _program.NodeCount + primary];
         if (slot < 0) throw new InvalidOperationException("Target event source missing from prepared plan.");
         var clip = _plan[slot]; var markers = _program.EventTracks[clip.ClipId];
-        if (markers.Length == 0 || clip.Current <= clip.Previous) return;
+        if(markers.Length>0&&clip.Current>clip.Previous){
         double first = clip.Loop ? Math.Floor(clip.Previous / clip.Duration) : 0;
         double last = clip.Loop ? Math.Floor(clip.Current / clip.Duration) : 0;
         // Integer cycles must remain exactly representable; no cycle counter wrapping or non-progressing loop.
@@ -253,6 +254,12 @@ public sealed class AnimationGraphInstance
             _events[_eventCount++] = new(_identity, _program.AssetId, _context with { Tick = _context.Tick + 1 }, _sequence,
                 _nextState < 0 ? Guid.Empty : _program.States[_nextState], clip.NodeId, marker.Id, marker.ClipId, at, marker.Name);
         }
+        }
+        for(int i=0;i<_montageCount;i++){var interval=_montageIntervals[i];foreach(var marker in _program.EventTracks[interval.ClipId]){
+            if(marker.Time<=interval.Previous||marker.Time>interval.Current)continue;
+            if(_eventCount==_events.Length)throw new ArgumentException("Animation event quantum budget.");
+            _events[_eventCount++]=new(_identity,_program.AssetId,_context with{Tick=_context.Tick+1},_sequence,_nextState<0?Guid.Empty:_program.States[_nextState],_program.SlotNodeId(interval.SlotId),marker.Id,marker.ClipId,marker.Time,marker.Name);
+        }}
         int Primary(int index) => _program.Nodes[index].Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace ? index : Primary(_program.Nodes[index].A);
     }
     private int Evaluate(int index, int context)
@@ -263,6 +270,13 @@ public sealed class AnimationGraphInstance
         switch (node.Kind) {
             case AnimationNodeKind.Output:
             case AnimationNodeKind.CachePose: result = Evaluate(node.A, context); break;
+            case AnimationNodeKind.Slot:
+                int slotBasis=Evaluate(node.A,context);if(_program.Nodes[node.A].Kind!=AnimationNodeKind.Slot)_baseOutput=slotBasis;
+                var slotFrame=_montagePending is{} pending?_montage!.PreparedSlot(pending,node.SlotId):_montage!.ReadSlot(node.SlotId);bool traversed=false;
+                for(int i=0;i<_montageCount;i++)if(_montageIntervals[i].SlotId==node.SlotId){traversed=true;break;}
+                if(!slotFrame.Active&&!traversed){result=slotBasis;break;}
+                int slotSample=Add(new(AnimationPoseOperation.Clip,node.Id,slotFrame.ClipId,slotFrame.Time,slotFrame.Time,_program.ClipDuration(slotFrame.ClipId),false,-1,-1,0));
+                result=Add(new(AnimationPoseOperation.Slot,node.Id,Guid.Empty,0,0,0,false,slotBasis,slotSample,slotFrame.Weight){SlotId=node.SlotId});break;
             case AnimationNodeKind.Clip:
                 double previous = _candidateTimes[at]; double current = Next(previous, node.Duration, node.Loop, _delta * Speed(node));
                 _candidateTimes[at] = current; result = Add(new(AnimationPoseOperation.Clip, node.Id, node.Clip, previous, current, node.Duration, node.Loop, -1, -1, 0)); break;

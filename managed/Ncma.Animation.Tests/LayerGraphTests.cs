@@ -18,9 +18,9 @@ internal static class LayerGraphTests
     private static void Step(AnimationGraphInstance instance){var t=instance.Prepare(instance.Frame.Context,.1);instance.Commit(t,instance.Frame.Context with{Tick=instance.Frame.Context.Tick+1});}
     public static void Add(List<(string,Action)> cases)
     {
-        cases.Add(("M6.7-B strict v4 layers/cache/reference and removed formats/neutral closed fields",()=>{
-            foreach(bool additive in new[]{false,true}){var d=Graph(additive);var bytes=AnimationGraphCodec.Encode(d);Check(AnimationGraphCodec.Decode(bytes).Version==4&&AnimationGraphValidation.ClipIds(d).Length==2);string json=Encoding.UTF8.GetString(bytes);
-                foreach(int old in new[]{1,2,3})Reject(()=>AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(json.Replace("\"version\":4","\"version\":"+old))));Reject(()=>AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(json.Replace(",\"layer\":null",""))));
+        cases.Add(("M6.7-B strict v5 layers/cache/reference and removed formats/neutral closed fields",()=>{
+            foreach(bool additive in new[]{false,true}){var d=Graph(additive);var bytes=AnimationGraphCodec.Encode(d);Check(AnimationGraphCodec.Decode(bytes).Version==AnimationGraphCodec.CurrentVersion&&AnimationGraphValidation.ClipIds(d).Length==2);string json=Encoding.UTF8.GetString(bytes);
+                foreach(int old in new[]{1,2,3,4})Reject(()=>AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(json.Replace("\"version\":5","\"version\":"+old))));Reject(()=>AnimationGraphCodec.Decode(Encoding.UTF8.GetBytes(json.Replace(",\"layer\":null",""))));
                 var n=d.Nodes.Single(v=>v.Layer is not null);Reject(()=>AnimationGraphCodec.Encode(d with{Nodes=d.Nodes.Select(v=>v.Id==n.Id?v with{Layer=v.Layer! with{ReferenceClip=additive?Guid.Empty:d.Nodes[0].ClipId}}:v).ToArray()}));
                 var owned=new AnimationGraphDocument(d);d.Nodes.Single(v=>v.Layer is not null).Layer!.Mask.Bones[0]=new("root/arm",0);Check(owned.CopyBytes().SequenceEqual(bytes));
             }

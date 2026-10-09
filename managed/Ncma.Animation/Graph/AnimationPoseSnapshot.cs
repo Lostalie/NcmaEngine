@@ -21,5 +21,5 @@ public interface IAnimationSequenceRootSource
     string GraphContentHash {get;}
     ulong ResourceGeneration {get;}
     int RootBoneIndex {get;}
-    AnimationSequenceRootIntent Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan,int output);
+    AnimationSequenceRootIntent Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan,int output,ReadOnlySpan<MontageInterval> intervals=default,double fixedDelta=1d/60);
 }

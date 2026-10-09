@@ -82,7 +82,7 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
             if (state.Ground == GroundState.Ground) velocity += new V3(state.GroundVelocity.X, 0, state.GroundVelocity.Z);
             var start = world.FindObject(binding.Id).Get<TransformData>(); float turn = 0;
             if(_graphRoots.Contains(binding.Id)) {
-                long rootTime=ProfileTime;var root=_graphRoots.Prepare(binding.Id,start,_play.SessionId,world);_rootMs+=ProfileElapsed(rootTime);
+                long rootTime=ProfileTime;var root=_graphRoots.Prepare(binding.Id,start,_play.SessionId,world,delta);_rootMs+=ProfileElapsed(rootTime);
                 velocity=new V3(root.Translation.X/h,vertical,root.Translation.Z/h);
                 if(state.Ground==GroundState.Ground)velocity+=new V3(state.GroundVelocity.X,0,state.GroundVelocity.Z);
                 _coordinator.Submit(new(_coordinator.CurrentStep,binding.Id,velocity*h,root.Yaw));continue;

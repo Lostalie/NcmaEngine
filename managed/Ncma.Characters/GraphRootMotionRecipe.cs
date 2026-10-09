@@ -11,6 +11,9 @@ internal sealed class GraphRootMotionRecipe
     private readonly Dictionary<Guid, RootMotionTrack> _tracks;
     private readonly RootMotionDelta[] _scratch;
     private readonly Dictionary<Guid,AnimationLayerBinding> _layers;
+    private readonly AnimationProgram? _program;
+    private readonly MontageRootMotionRecipe? _montage;
+    private readonly MontageRootContribution[] _contributions;
 
     internal GraphRootMotionRecipe(IReadOnlyDictionary<Guid, RootMotionTrack> tracks, int maximumInstructions,AnimationProgram? program=null)
     {
@@ -29,16 +32,24 @@ internal sealed class GraphRootMotionRecipe
         }
         _scratch = new RootMotionDelta[maximumInstructions];
         _layers=program?.CopyLayers().ToDictionary(l=>l.NodeId)??[];
+        _program=program;_contributions=new MontageRootContribution[program?.Montage?.CopyDefinition().Slots.Length??0];
+        if(program?.Montage is{} montage){var ids=montage.CopyDefinition().Sections.Select(s=>s.ClipId).ToHashSet();_montage=new(montage,_tracks.Where(p=>ids.Contains(p.Key)).ToDictionary(p=>p.Key,p=>p.Value));}
     }
 
     // Intervals come from the sole prepared graph token, not a second ClipClock.
     // All rows (including unused branches) must succeed before a result is returned.
-    internal RootMotionDelta Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan, int output)
+    internal RootMotionDelta Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan, int output,ReadOnlySpan<MontageInterval> intervals=default,double fixedDelta=1d/60)
     {
         if (Environment.CurrentManagedThreadId != _owner) throw new InvalidOperationException("Graph root owner thread required.");
         if (plan.IsEmpty || plan.Length > _scratch.Length || output < 0 || output >= plan.Length)
             throw new ArgumentException("Bounded graph root output required.");
         AnimationPoseRecipe.Validate(plan,output);
+        if(_montage is null){if(!intervals.IsEmpty)throw new ArgumentException("No Montage bound to root recipe.");}
+        else{
+            _montage.Evaluate(intervals,fixedDelta,_contributions);uint used=0;
+            foreach(var row in plan)if(row.Operation==AnimationPoseOperation.Slot){_program!.ValidateSlotPose(row,plan[row.SourceB]);int slot=0;while(slot<_contributions.Length&&_contributions[slot].SlotId!=row.SlotId)slot++;if(slot==_contributions.Length||(used&(1u<<slot))!=0)throw new ArgumentException("Each exact Slot consumes root once.");used|=1u<<slot;}
+            foreach(var interval in intervals){bool found=false;foreach(var row in plan)if(row.Operation==AnimationPoseOperation.Slot&&row.SlotId==interval.SlotId){found=true;break;}if(!found)throw new ArgumentException("Traversed root interval has no exact Slot recipe.");}
+        }
         for (int i = 0; i < plan.Length; i++) {
             var row = plan[i];
             if (row.NodeId == Guid.Empty) throw new ArgumentException("Graph root node identity required.");
@@ -63,6 +74,11 @@ internal sealed class GraphRootMotionRecipe
                 case AnimationPoseOperation.RootSource:
                     if(row.CacheGeneration!=0||row.ClipId!=Guid.Empty||row.Duration!=0||row.Previous!=0||row.Current!=0||row.Loop||row.Weight!=0||row.SourceA<0||row.SourceA>=i||row.SourceB<0||row.SourceB>=i||plan[row.SourceB].Operation!=AnimationPoseOperation.Clip)throw new ArgumentException("Exact backward BlendSpace primary root source required.");
                     result=_scratch[row.SourceB];break;
+                case AnimationPoseOperation.Slot:
+                    if(_montage is null)throw new ArgumentException("Exact prepared Montage root required.");
+                    _program!.ValidateSlotPose(row,plan[row.SourceB]);var contribution=default(MontageRootContribution);
+                    foreach(var c in _contributions)if(c.SlotId==row.SlotId){contribution=c;break;}
+                    var basis=_scratch[row.SourceA];result=new(basis.Translation*(1-contribution.Coverage)+contribution.Delta.Translation,MathF.IEEERemainder(basis.Yaw*(1-contribution.Coverage)+contribution.Delta.Yaw,2*MathF.PI));break;
                 case AnimationPoseOperation.LayerOverride:
                 case AnimationPoseOperation.LayerAdditive:
                     // Layers cannot acquire movement authority; both overlay/reference rows were fully validated above.

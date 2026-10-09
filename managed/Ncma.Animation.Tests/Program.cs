@@ -27,6 +27,7 @@ LayerSequenceTests.Add(cases);
 MontageDataTests.Add(cases);
 MontagePlaybackTests.Add(cases);
 MontageGraphTests.Add(cases);
+MontagePersistentGraphTests.Add(cases);
 MontageIntervalWeightTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{

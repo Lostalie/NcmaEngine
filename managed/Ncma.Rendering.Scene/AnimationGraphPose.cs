@@ -8,6 +8,7 @@ using Vector3=System.Numerics.Vector3;
 internal sealed class AnimationGraphPose
 {
     private readonly PoseKernel _kernel;
+    private readonly AnimationProgram _program;
     private readonly PoseRig _rig;
     private readonly IReadOnlyDictionary<Guid, PoseClip> _clips;
     private readonly PoseTrs[] _scratch, _temporary;
@@ -18,7 +19,7 @@ internal sealed class AnimationGraphPose
     internal readonly AnimationLocalTransform[] Frozen;
     internal AnimationGraphPose(AnimationProgram program, PoseRig rig, IReadOnlyDictionary<Guid, PoseClip> clips, PoseKernel kernel)
     {
-        _kernel = kernel; _rig = rig; _clips = clips;
+        _program=program;_kernel = kernel; _rig = rig; _clips = clips;
         int capacity = checked(program.MaximumPlanInstructions * rig.BoneCount);
         if (capacity > 65536) throw new ArgumentException("Graph pose scratch capacity.");
         _scratch = new PoseTrs[capacity]; _temporary = new PoseTrs[rig.BoneCount]; _models = new Matrix4x4[rig.BoneCount];
@@ -39,7 +40,8 @@ internal sealed class AnimationGraphPose
                 _sample[0] = new(_rig, clip, new(Wrap(instruction.Previous), Wrap(instruction.Current), alpha));
                 _kernel.Sample(_sample, _temporary, _models);
                 double Wrap(double time) => instruction.Loop ? time % instruction.Duration : Math.Min(time, instruction.Duration);
-            } else if (instruction.Operation == AnimationPoseOperation.Blend && instruction.CacheGeneration==0 && instruction.SourceA >= 0 && instruction.SourceA < i && instruction.SourceB >= 0 && instruction.SourceB < i) {
+            } else if (instruction.Operation is AnimationPoseOperation.Blend or AnimationPoseOperation.Slot && instruction.CacheGeneration==0 && instruction.SourceA >= 0 && instruction.SourceA < i && instruction.SourceB >= 0 && instruction.SourceB < i) {
+                if(instruction.Operation==AnimationPoseOperation.Slot)_program.ValidateSlotPose(instruction,Plan[instruction.SourceB]);
                 _blend[0] = new(_rig, _layout.Slot(instruction.SourceA) * _rig.BoneCount, _layout.Slot(instruction.SourceB) * _rig.BoneCount, instruction.Weight);
                 _kernel.Blend(_blend, _scratch.AsSpan(0, count * _rig.BoneCount), _temporary, _models);
             } else if(instruction.Operation is AnimationPoseOperation.LayerOverride or AnimationPoseOperation.LayerAdditive){

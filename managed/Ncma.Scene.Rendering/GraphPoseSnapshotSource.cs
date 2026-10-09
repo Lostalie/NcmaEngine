@@ -13,6 +13,7 @@ public sealed class GraphPoseSnapshotSource : IAnimationPoseSnapshotSource
     private readonly Dictionary<Guid,ClipPayload> _clips=[];
     private readonly Dictionary<Guid,AnimationLayerBinding> _layers=[];
     private readonly AnimationPoseScratchLayout _layout;
+    private readonly AnimationProgram _program;
     public Guid GraphId {get;}
     public Guid SkeletonId {get;}
     public string GraphContentHash {get;}
@@ -22,6 +23,7 @@ public sealed class GraphPoseSnapshotSource : IAnimationPoseSnapshotSource
     public GraphPoseSnapshotSource(AnimationProgram program,SkeletonPayload skeleton,IReadOnlyDictionary<Guid,ClipPayload> clips)
     {
         ArgumentNullException.ThrowIfNull(program);ArgumentNullException.ThrowIfNull(clips);
+        _program=program;
         GraphId=program.AssetId;SkeletonId=program.SkeletonId;GraphContentHash=program.ContentHash;ResourceGeneration=program.ResourceGeneration;
         var rig=ModelPayloadCodec.DecodeSkeleton(ModelPayloadCodec.Encode(skeleton));_bind=rig.Bones.Select(b=>Value(b.BindLocal)).ToArray();
         int count=checked(program.MaximumPlanInstructions*BoneCount);if(count>65536||clips.Count is <1 or >128)throw new ArgumentException("Frozen pose numeric scratch/clip budget.");
@@ -46,6 +48,8 @@ public sealed class GraphPoseSnapshotSource : IAnimationPoseSnapshotSource
                     _bind.CopyTo(local);double time=row.Loop?row.Current%row.Duration:row.Current;
                     foreach(var track in clip.Clip.Tracks){var keys=track.Keys;int bone=checked((int)track.Bone);if(time<=keys[0].Time)local[bone]=Value(keys[0].Value);else if(time>=keys[^1].Time)local[bone]=Value(keys[^1].Value);else {int a=0,b=keys.Length-1;while(b-a>1){int m=(a+b)/2;if(keys[m].Time<=time)a=m;else b=m;}local[bone]=Mix(Value(keys[a].Value),Value(keys[b].Value),(float)((time-keys[a].Time)/(keys[b].Time-keys[a].Time)));}}break;
                 case AnimationPoseOperation.Blend:
+                case AnimationPoseOperation.Slot:
+                    if(row.Operation==AnimationPoseOperation.Slot)_program.ValidateSlotPose(row,plan[row.SourceB]);
                     Neutral(row);if(row.CacheGeneration!=0||row.SourceA<0||row.SourceA>=i||row.SourceB<0||row.SourceB>=i||!float.IsFinite(row.Weight)||row.Weight is <0 or >1)throw new ArgumentException("Backward bounded pose blend.");
                     for(int b=0;b<BoneCount;b++)local[b]=Mix(_scratch[_layout.Slot(row.SourceA)*BoneCount+b],_scratch[_layout.Slot(row.SourceB)*BoneCount+b],row.Weight);break;
                 case AnimationPoseOperation.Frozen:

@@ -7,7 +7,7 @@ public readonly record struct AnimationClipDescriptor(Guid Id, Guid SkeletonId, 
 public sealed class AnimationProgram
 {
     internal sealed record Node(Guid Id, AnimationNodeKind Kind, int A, int B, int Parameter,
-        int ScalarParameter, Guid Clip, double Duration, bool Loop, double Speed, double Weight,Space? Space=null,AnimationLayerDefinition? Layer=null);
+        int ScalarParameter, Guid Clip, double Duration, bool Loop, double Speed, double Weight,Space? Space=null,AnimationLayerDefinition? Layer=null,Guid SlotId=default,bool PlayOnStart=false);
     internal sealed record Space(BlendSpaceProgram Weights,BlendSpaceSample[] Samples,double[] Durations,int X,int Y,int PhaseLeader);
     internal sealed record Condition(int Parameter, AnimationComparison Comparison, double Value);
     internal sealed record Transition(Guid Id, int From, int To, double Duration, double? ExitTime, Condition[] Conditions);
@@ -20,6 +20,9 @@ public sealed class AnimationProgram
     private readonly Dictionary<Guid,AnimationLayerBinding> _layers=[];
     private readonly Dictionary<Guid,double> _clipDurations;
     private readonly AnimationCacheLifetime[] _cacheLifetimes;
+    private readonly Dictionary<Guid,Guid> _slotNodes=[];
+    private readonly Dictionary<Guid,AnimationMontageSection[]> _slotSections=[];
+    public AnimationMontageProgram? Montage {get;}
     internal readonly int Output, Entry, Machine;
     internal readonly Dictionary<Guid,AnimationEventMarker[]> EventTracks;
     public string EventContentHash { get; }
@@ -51,6 +54,7 @@ public sealed class AnimationProgram
         Parameters = d.Parameters.ToArray(); ParameterIndices = Parameters.Select((p, i) => (p.Id, i)).ToDictionary(x => x.Id, x => x.i);
         var ids = d.Nodes.Select((n, i) => (n.Id, i)).ToDictionary(x => x.Id, x => x.i);
         var clipMap = clips.ToDictionary(c => c.Id);_clipDurations=clips.ToDictionary(c=>c.Id,c=>c.Duration); var input = d.Links.ToDictionary(l => (l.To, l.ToPin), l => ids[l.From]);
+        if(d.Montage is{} montage){var required=montage.Sections.Select(s=>s.ClipId).ToHashSet();Montage=new(montage,generation,clips.Where(c=>required.Contains(c.Id)).ToArray());foreach(var n in d.Nodes.Where(n=>n.Kind==AnimationNodeKind.Slot))_slotNodes.Add(n.Id,n.SlotId);foreach(var group in montage.Sections.GroupBy(s=>s.SlotId))_slotSections.Add(group.Key,group.ToArray());}
         foreach(var n in d.Nodes.Where(n=>n.Layer is not null)){
             var layer=n.Layer!;if(skeleton is null)throw new ArgumentException("Exact skeleton layout metadata required for layers.");
             var mask=new AnimationBoneMaskProgram(layer.Mask,skeleton.Id,skeleton.ContentHash,skeleton.Bones);var weights=new float[mask.BoneCount];mask.CopyWeights(weights);
@@ -62,10 +66,10 @@ public sealed class AnimationProgram
         Space? PrepareSpace(AnimationGraphNode n){if(n.BlendSpace is not{} s)return null;var weights=new BlendSpaceProgram(s);var samples=weights.CopyDefinition().Samples;
             int leader=s.SyncGroup==Guid.Empty?ids[n.Id]:d.Nodes.Where(other=>other.BlendSpace?.SyncGroup==s.SyncGroup).Select(other=>other.Id).Order().Select(id=>ids[id]).First();
             return new(weights,samples,samples.Select(sample=>clipMap[sample.ClipId].Duration).ToArray(),ParameterIndices[s.AxisX.ParameterId],s.AxisY is{} y?ParameterIndices[y.ParameterId]:-1,leader);}
-        Nodes = d.Nodes.Select(n => new Node(n.Id, n.Kind, Pin(n.Id, n.Kind is AnimationNodeKind.Output or AnimationNodeKind.CachePose ? "pose" : "a"),
+        Nodes = d.Nodes.Select(n => new Node(n.Id, n.Kind, Pin(n.Id, n.Kind is AnimationNodeKind.Output or AnimationNodeKind.CachePose or AnimationNodeKind.Slot ? "pose" : "a"),
             Pin(n.Id, "b"), n.Kind == AnimationNodeKind.Parameter ? ParameterIndices[n.ParameterId] : -1,
             Scalar(n.Id, n.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace ? "speed" : "weight"), n.ClipId,
-            n.Kind == AnimationNodeKind.Clip ? clipMap[n.ClipId].Duration : n.BlendSpace?.CycleSeconds??0, n.Loop, n.Speed, n.Weight,PrepareSpace(n),n.Layer)).ToArray();
+            n.Kind == AnimationNodeKind.Clip ? clipMap[n.ClipId].Duration : n.BlendSpace?.CycleSeconds??0, n.Loop, n.Speed, n.Weight,PrepareSpace(n),n.Layer,n.SlotId,n.PlayOnStart)).ToArray();
         // Precompiled lifetime of named cache aliases in the static DAG; no cross-state/instance cache storage.
         _cacheLifetimes=d.Nodes.Where(n=>n.Kind==AnimationNodeKind.CachePose).Select(n=>{
             var consumers=d.Links.Where(l=>l.From==n.Id).Select(l=>ids[l.To]).Concat(d.States.Where(s=>s.PoseNode==n.Id).Select(_=>ids[d.Nodes.Single(v=>v.Kind==AnimationNodeKind.StateMachine).Id])).ToArray();
@@ -107,6 +111,13 @@ public sealed class AnimationProgram
     public AnimationLayerBinding[] CopyLayers()=>_layers.Values.OrderBy(l=>l.NodeId).Select(l=>l with{Definition=l.Definition with{Mask=l.Definition.Mask with{Bones=l.Definition.Mask.Bones.ToArray()}},Weights=l.Weights.ToArray()}).ToArray();
     public double ClipDuration(Guid id)=>_clipDurations.TryGetValue(id,out var duration)?duration:throw new ArgumentException("Exact bound Clip required.");
     public AnimationCacheLifetime[] CopyCacheLifetimes()=>_cacheLifetimes.ToArray();
+    public Guid SlotNodeId(Guid slot){foreach(var pair in _slotNodes)if(pair.Value==slot)return pair.Key;throw new ArgumentException("Exact compiled Slot required.");}
+    public void ValidateSlotPose(AnimationPoseInstruction row,AnimationPoseInstruction sample)
+    {
+        if(row.Operation!=AnimationPoseOperation.Slot||!_slotNodes.TryGetValue(row.NodeId,out var slot)||slot!=row.SlotId||sample.Operation!=AnimationPoseOperation.Clip||sample.NodeId!=row.NodeId||sample.Previous!=sample.Current||sample.Loop||sample.Duration!=ClipDuration(sample.ClipId))throw new ArgumentException("Exact bound Slot/static sample required.");
+        foreach(var section in _slotSections[slot])if(section.ClipId==sample.ClipId&&sample.Current>=section.Start&&sample.Current<=section.End)return;
+        throw new ArgumentException("Slot sample must belong to an authored Section interval.");
+    }
 }
 
 public sealed record AnimationGraphDiagnostic(string Code, Guid Subject, string Field, string Expected, string Actual);
@@ -116,7 +127,7 @@ public static class AnimationGraphDiagnostics
     public static IReadOnlyList<AnimationGraphDiagnostic> Validate(AnimationGraphDefinition definition)
     {
         try { AnimationGraphValidation.Validate(definition); return Array.Empty<AnimationGraphDiagnostic>(); }
-        catch (AnimationGraphValidationException e) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic(e.Code, e.Subject, "graph", "valid_graph_v4", "rejected") }); }
+        catch (AnimationGraphValidationException e) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic(e.Code, e.Subject, "graph", "valid_graph_v5", "rejected") }); }
         catch (ArgumentException) { return Array.AsReadOnly(new[] { new AnimationGraphDiagnostic("invalid_data", definition?.AssetId ?? Guid.Empty, "graph", "bounded_valid_data", "rejected") }); }
     }
 }

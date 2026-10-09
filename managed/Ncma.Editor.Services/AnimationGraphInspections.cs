@@ -55,7 +55,10 @@ public sealed class AnimationGraphInspections
             ["summary"] = [new { candidate.AssetId, candidate.Name, candidate.SkeletonId, candidate.EntryState, version = candidate.Version,candidate.InterruptTransitions }],
             ["nodes"] = Rows("nodes"), ["parameters"] = Rows("parameters"),
             ["links"] = Rows("links"), ["states"] = Rows("states"), ["transitions"] = Rows("transitions"),
-            ["dependencies"] = AnimationGraphValidation.Dependencies(candidate).Cast<object>().ToArray(),["events"]=Rows("events")
+            ["dependencies"] = AnimationGraphValidation.Dependencies(candidate).Cast<object>().ToArray(),["events"]=Rows("events"),
+            ["montage"]=candidate.Montage is{} m?[new{m.Version,m.AssetId,m.Name,m.SkeletonId}]:[],
+            ["montageSlots"]=candidate.Montage is null?[]:parsed.RootElement.GetProperty("montage").GetProperty("slots").EnumerateArray().Select(v=>(object)v.Clone()).ToArray(),
+            ["montageSections"]=candidate.Montage is null?[]:parsed.RootElement.GetProperty("montage").GetProperty("sections").EnumerateArray().Select(v=>(object)v.Clone()).ToArray()
         };
         ulong publication = checked(_publication + 1); string hash = Convert.ToHexString(SHA256.HashData(canonical));
         _snapshot = candidate; _hash = hash; _dependencies = dependencies; _relative = relative; _rows = rows; _publication = publication;

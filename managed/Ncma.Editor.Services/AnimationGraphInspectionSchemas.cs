@@ -32,8 +32,8 @@ public static class AnimationGraphInspectionSchemas
         var space=Object(new(){["id"]=Uuid(),["dimensions"]=Number(1,2,true),["axisX"]=axis,["axisY"]=Nullable(axis.DeepClone()),["cycleSeconds"]=Number(.001,600),["syncGroup"]=Uuid(),["samples"]=Array(sample,32)});
         var mask=Object(new(){["id"]=Uuid(),["skeletonId"]=Uuid(),["skeletonHash"]=new JsonObject{["type"]="string",["pattern"]="^[0-9A-F]{64}$"},["bones"]=Array(Object(new(){["bonePath"]=Text(4096),["weight"]=Number(0,1)}),1024)});
         var layer=Object(new(){["mask"]=mask,["referenceClip"]=Uuid(),["referenceTime"]=Number(0,600)});
-        var node = Object(new() { ["id"] = Uuid(), ["name"] = Text(), ["kind"] = Values("clip", "blend", "parameter", "stateMachine", "output","blendSpace","layerOverride","layerAdditive","cachePose"),
-            ["x"] = Number(-65536, 65536), ["y"] = Number(-65536, 65536), ["clipId"] = Uuid(), ["parameterId"] = Uuid(), ["loop"] = Bool(), ["speed"] = Number(0, 8), ["weight"] = Number(0, 1),["blendSpace"]=Nullable(space),["layer"]=Nullable(layer) });
+        var node = Object(new() { ["id"] = Uuid(), ["name"] = Text(), ["kind"] = Values("clip", "blend", "parameter", "stateMachine", "output","blendSpace","layerOverride","layerAdditive","cachePose","slot"),
+            ["x"] = Number(-65536, 65536), ["y"] = Number(-65536, 65536), ["clipId"] = Uuid(), ["parameterId"] = Uuid(), ["loop"] = Bool(), ["speed"] = Number(0, 8), ["weight"] = Number(0, 1),["blendSpace"]=Nullable(space),["layer"]=Nullable(layer),["slotId"]=Uuid(),["playOnStart"]=Bool() });
         var parameter = Object(new() { ["id"] = Uuid(), ["name"] = Text(), ["kind"] = Values("float", "int", "bool", "trigger"),
             ["floatDefault"] = Number(), ["intDefault"] = Number(int.MinValue, int.MaxValue, true), ["boolDefault"] = Bool() });
         var link = Object(new() { ["id"] = Uuid(), ["from"] = Uuid(), ["fromPin"] = Text(16), ["to"] = Uuid(), ["toPin"] = Text(16) });
@@ -42,18 +42,21 @@ public static class AnimationGraphInspectionSchemas
             ["floatValue"] = Number(), ["intValue"] = Number(int.MinValue, int.MaxValue, true), ["boolValue"] = Bool() });
         var transition = Object(new() { ["id"] = Uuid(), ["from"] = Uuid(), ["to"] = Uuid(), ["priority"] = Number(0, 255, true), ["duration"] = Number(0, 10),
             ["exitTime"] = Nullable(Number(0, 1)), ["conditions"] = Array(condition, 8) });
-        var summary = Object(new() { ["assetId"] = Uuid(), ["name"] = Text(256), ["skeletonId"] = Uuid(), ["entryState"] = Uuid(), ["version"] = new JsonObject { ["const"] = 4 },["interruptTransitions"]=Bool() });
+        var summary = Object(new() { ["assetId"] = Uuid(), ["name"] = Text(256), ["skeletonId"] = Uuid(), ["entryState"] = Uuid(), ["version"] = new JsonObject { ["const"] = 5 },["interruptTransitions"]=Bool() });
+        var montage=Object(new(){["version"]=new JsonObject{["const"]=1},["assetId"]=Uuid(),["name"]=Text(256),["skeletonId"]=Uuid()});
+        var montageSlot=Object(new(){["id"]=Uuid(),["name"]=Text(),["entrySection"]=Uuid(),["priority"]=Number(0,255,true),["interruptible"]=Bool(),["rootMotion"]=Bool(),["blendIn"]=Number(0,10),["blendOut"]=Number(0,10)});
+        var montageSection=Object(new(){["id"]=Uuid(),["name"]=Text(),["slotId"]=Uuid(),["clipId"]=Uuid(),["start"]=Number(0,600),["end"]=Number(double.Epsilon,600),["nextSection"]=Uuid()});
         var dependency = Object(new() { ["id"] = Uuid(), ["isSkeleton"] = Bool() });
         var marker=Object(new(){["id"]=Uuid(),["clipId"]=Uuid(),["time"]=Number(double.Epsilon,600),["name"]=Text()});
-        var input = Object(new() { ["graphId"] = Uuid(), ["section"] = Values("summary", "nodes", "parameters", "links", "states", "transitions", "dependencies","events"),
+        var input = Object(new() { ["graphId"] = Uuid(), ["section"] = Values("summary", "nodes", "parameters", "links", "states", "transitions", "dependencies","events","montage","montageSlots","montageSections"),
             ["offset"] = Number(0, 4096, true), ["limit"] = Number(1, 32, true) }, "graphId", "section");
         var data = Object(new() { ["graphId"] = Uuid(), ["hash"] = Text(64), ["section"] = Text(32), ["total"] = Number(0, 4096, true),
-            ["nextOffset"] = Nullable(Number(0, 4128, true)), ["items"] = Array(new JsonObject { ["oneOf"] = new JsonArray(node, parameter, link, state, transition, summary, dependency,marker) }) });
+            ["nextOffset"] = Nullable(Number(0, 4128, true)), ["items"] = Array(new JsonObject { ["oneOf"] = new JsonArray(node, parameter, link, state, transition, summary, dependency,marker,montage,montageSlot,montageSection) }) });
         var validation = Object(new() { ["graphId"] = Uuid(), ["hash"] = Text(64), ["valid"] = Bool(), ["validation"] = Values("structural_only"),
             ["resourcesPrepared"] = new JsonObject { ["const"] = false }, ["diagnostics"] = Array(Object(new() { ["code"] = Text(), ["subject"] = Uuid(), ["field"] = Text(), ["expected"] = Text(), ["actual"] = Text() }), 1) });
         return [new("ncma.animgraph.inspect", "Inspect the exact host-reviewed immutable authoring graph and its reviewed UUID dependencies. No files, simulation or pose execution.",
             MutationRisk.ReadOnly, Json(input), Json(Envelope(data))),
-            new("ncma.animgraph.validate", "Read cached strict graph v4 structural validation. Does NOT prepare resources, compile, sample or advance Play.",
+            new("ncma.animgraph.validate", "Read cached strict graph v5 structural validation. Does NOT prepare resources, compile, sample or advance Play.",
                 MutationRisk.ReadOnly, Json(Object(new() { ["graphId"] = Uuid() })), Json(Envelope(validation)))];
     }
 }

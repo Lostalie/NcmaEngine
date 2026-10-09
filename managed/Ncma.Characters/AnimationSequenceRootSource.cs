@@ -29,5 +29,5 @@ public sealed class AnimationSequenceRootSource:IAnimationSequenceRootSource
         }
         _recipe=new(tracks,program.MaximumPlanInstructions,program);
     }
-    public AnimationSequenceRootIntent Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan,int output){var delta=_recipe.Evaluate(plan,output);return new(delta.Translation,delta.Yaw);}
+    public AnimationSequenceRootIntent Evaluate(ReadOnlySpan<AnimationPoseInstruction> plan,int output,ReadOnlySpan<MontageInterval> intervals=default,double fixedDelta=1d/60){var delta=_recipe.Evaluate(plan,output,intervals,fixedDelta);return new(delta.Translation,delta.Yaw);}
 }

@@ -21,7 +21,8 @@ internal static unsafe partial class Program
         SkinFixture fixture,AnimationGraphDefinition source,Func<int,bool,SceneDocument> create,PhysicsService physics,PoseKernel kernel,string evidencePrefix="m6-5-d",string stage="M6.5-D")
     {
         // Autonomous closed conditions exercise the production Player without a test-only Animator control entry.
-        var graph=source with{AssetId=Guid.NewGuid(),Name="Joint persistent interruptions",Events=source.Events.Select(e=>e with{Time=.001}).ToArray(),
+        bool montage=source.Montage is not null;
+        var graph=source with{AssetId=Guid.NewGuid(),Name="Joint persistent animation",Events=montage?source.Events:source.Events.Select(e=>e with{Time=.001}).ToArray(),
             Transitions=source.Transitions.Select(t=>t with{Conditions=t.Conditions.Select(c=>c with{BoolValue=false}).ToArray()}).ToArray()};
         File.WriteAllBytes(Path.Combine(fixture.Root,"assets/joint.ncmaanim"),AnimationGraphCodec.Encode(graph));
         SceneDocument Document(int count,bool root){var d=create(count,root);int index=0;foreach(var o in d.World.GetObjects().Where(o=>o.Has<AnimatorData>())){o.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));o.Set(TransformData.Identity with{Position=new((index%8-3.5f)*2,0,-(index/8)*2)});index++;}foreach(var camera in d.World.GetObjects().Where(o=>o.Has<CameraData>()))camera.Set(camera.Get<CameraData>() with{Projection=CameraProjection.Orthographic,OrthographicHeight=40});return d;}
@@ -39,9 +40,9 @@ internal static unsafe partial class Program
                 for(int step=0;step<8;step++) {
                     Check(play.Step().State==PlayState.Paused,"Joint Editor quantum: "+play.Fault?.Code);
                     var instances=new HashSet<Guid>();
-                    foreach(Guid id in actors){var debug=runtime.Animators!.ReadDebug(id);instances.Add(debug.Frame.InstanceId);Check(debug.SnapshotValid&&debug.Frame.FrozenPoseGeneration==(ulong)step&&debug.Events.Count==1,"Persistent policy/cache and one target receipt per instance");
-                        Check(debug.Events[0].Context.Tick==play.Tick&&debug.Events[0].StateId==debug.Frame.StateId&&runtime.Characters!.InspectRootMotion(id).Tick==play.Tick,"Events, unique movement and graph share committed tick");}
-                    bool submitted=scene.Submit(frame++,256,256,camera,target:target);Check(instances.Count==count&&submitted==(count>0),"Joint actor isolation/native scene submission; empty scene is lightweight");if(submitted)renderer.Present();
+                    foreach(Guid id in actors){var debug=runtime.Animators!.ReadDebug(id);instances.Add(debug.Frame.InstanceId);Check(debug.SnapshotValid&&(montage?runtime.Animators.ReadMontageFrame(id).Context==debug.Frame.Context:debug.Frame.FrozenPoseGeneration==(ulong)step&&debug.Events.Count==1),"Persistent policy and SAME playback owner");
+                        foreach(var receipt in debug.Events)Check(receipt.Context.Tick==play.Tick&&receipt.StateId==debug.Frame.StateId,"Committed event identity");Check(runtime.Characters!.InspectRootMotion(id).Tick==play.Tick,"Unique movement and graph share committed tick");}
+                    bool submitted=scene.Submit(frame++,256,256,camera,target:target);Check(instances.Count==count&&submitted==(count>0),"Joint actor isolation/native scene submission; count="+count+" cycle="+cycle+" step="+step+" instances="+instances.Count+" submitted="+submitted+" diagnostics="+JsonSerializer.Serialize(scene.Diagnostics));if(submitted)renderer.Present();
                     if(submitted)Check(scene.Costs.GeometryDraws==count&&scene.Costs.ShadowDraws==count,"Every joint actor contributes actual geometry and shadow, not merely a prepared palette");
                     Check(count==0?scene.Animation is null&&scene.Plan is null:scene.Animation?.Costs.Characters==count,"All prepared actor palettes share one scene clock; zero actors do not initialize 3D");
                 }
@@ -58,7 +59,7 @@ internal static unsafe partial class Program
         foreach(int count in counts)foreach(bool root in new[]{false,true}) {
             var document=Document(count,root);string moved=Path.Combine(output,evidencePrefix+"-player",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Path.Combine(moved,"assets"));
             byte[] package=SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]);File.WriteAllBytes(Path.Combine(moved,"assets/game.ncpak"),package);
-            if(count>0){using var packed=SceneAssetPreparation.Prepare(moved,fixture.Project,document.CaptureSnapshot(),true,"assets/game.ncpak");var restored=((RuntimeAnimationGraphAsset)packed.Assets.Require(graph.AssetId,Ncma.Assets.AssetKind.AnimationGraph)).CopyDefinition();Check(restored.InterruptTransitions&&AnimationGraphCodec.Encode(restored).SequenceEqual(AnimationGraphCodec.Encode(graph)),"Cook preserves exact current policy/events/space/hash");}
+            if(count>0){using var packed=SceneAssetPreparation.Prepare(moved,fixture.Project,document.CaptureSnapshot(),true,"assets/game.ncpak");var restored=((RuntimeAnimationGraphAsset)packed.Assets.Require(graph.AssetId,Ncma.Assets.AssetKind.AnimationGraph)).CopyDefinition();Check((montage?restored.Montage is not null&&restored.Nodes.Any(n=>n.PlayOnStart):restored.InterruptTransitions)&&AnimationGraphCodec.Encode(restored).SequenceEqual(AnimationGraphCodec.Encode(graph)),"Cook preserves exact current policy/events/Montage/hash");}
             SceneDocumentFiles.Save(document,Path.Combine(moved,"start.ncmascene"));File.Copy(Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),Path.Combine(moved,"gameplay.dll"));
             Guid camera=document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
             var configuration=new Ncma.Application.ProjectConfiguration(1,fixture.Project,"Joint Player","start.ncmascene","gameplay.dll","Direct3D11",[],root,camera,AssetPackage:"assets/game.ncpak");
@@ -76,7 +77,7 @@ internal static unsafe partial class Program
             }
             Check(!Directory.Exists(Path.Combine(moved,"out"))&&Directory.GetFiles(Path.Combine(moved,"assets")).Length==1,"Moved Player does not use source or import cache");
         }
-        File.WriteAllText(Path.Combine(output,evidencePrefix+"-joint-results.json"),JsonSerializer.Serialize(new{schema=2,graphVersion=graph.Version,blendSpace=graph.Nodes.Any(n=>n.BlendSpace is not null),layers=graph.Nodes.Any(n=>n.Layer is not null),cache=graph.Nodes.Any(n=>n.Kind==AnimationNodeKind.CachePose),editorActors=counts,editorCyclesPerCount=2,ticksPerCycle=8,committedTargetEvents=true,interruptions=true,uniqueJolt=true,editUnchanged=true,closeFailureRetention=true,players=playerEvidence,manualAccepted=false}));
+        File.WriteAllText(Path.Combine(output,evidencePrefix+"-joint-results.json"),JsonSerializer.Serialize(new{schema=2,graphVersion=graph.Version,montage,blendSpace=graph.Nodes.Any(n=>n.BlendSpace is not null),layers=graph.Nodes.Any(n=>n.Layer is not null),cache=graph.Nodes.Any(n=>n.Kind==AnimationNodeKind.CachePose),editorActors=counts,editorCyclesPerCount=2,ticksPerCycle=8,committedTargetEvents=true,interruptions=graph.InterruptTransitions,uniqueJolt=true,editUnchanged=true,closeFailureRetention=true,players=playerEvidence,manualAccepted=false}));
         Console.WriteLine("PASS "+stage+" current graph events/interruption/unique Jolt/skin-shadow Editor 0-1-8-32, moved source-free Headless/DX11 Player16 cases");
     }
 }

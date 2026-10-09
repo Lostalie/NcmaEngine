@@ -17,17 +17,6 @@ public sealed class RuntimeAnimationGraphAsset : RuntimeAsset
     }
     public AnimationGraphDefinition CopyDefinition() => _document.CopyDefinition();
     public byte[] CopyData() => _document.CopyBytes();
-    // Trusted off-frame candidate binding only. No standalone Montage file/package registration.
-    // Limit clips to the graph's already retained closure; no hidden resource publication or tick IO.
-    public AnimationMontageProgram PrepareMontage(RuntimeAssetLease lease,AnimationMontageDefinition definition)
-    {
-        var program=PrepareProgram(lease);
-        var owned=AnimationMontageCodec.Decode(AnimationMontageCodec.Encode(definition));
-        if(owned.SkeletonId!=program.SkeletonId)throw new ArgumentException("Montage exact graph skeleton required.");
-        var clips=owned.Sections.Select(s=>s.ClipId).Distinct().Select(id=>
-            new AnimationClipDescriptor(id,program.SkeletonId,program.ResourceGeneration,program.ClipDuration(id))).ToArray();
-        return new(owned,program.ResourceGeneration,clips);
-    }
     // Trusted OFF-frame preparation, using actual retained NCA/package bytes, not supplied descriptors.
     public AnimationProgram PrepareProgram(RuntimeAssetLease lease)
     {

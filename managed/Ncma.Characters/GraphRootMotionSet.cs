@@ -10,12 +10,13 @@ using Vector3 = System.Numerics.Vector3;
 // Exact prepared publication, no ClipClock: every interval comes from the same pending graph token.
 internal sealed class GraphRootMotionSet : IDisposable
 {
-    private sealed class Entry(Guid id, GraphRootMotionRecipe recipe, RootMotionTrack anchor, int capacity)
+    private sealed class Entry(Guid id, GraphRootMotionRecipe recipe, RootMotionTrack anchor, int capacity,bool montage)
     {
         internal readonly Guid Id = id;
         internal readonly GraphRootMotionRecipe Recipe = recipe;
         internal readonly RootMotionTrack Anchor = anchor;
         internal readonly AnimationPoseInstruction[] Plan = new AnimationPoseInstruction[capacity];
+        internal readonly MontageInterval[] Intervals=new MontageInterval[montage?AnimationMontagePlayback.MaxIntervals:0];
         internal AnimationGraphFrame Pending;
         internal Vector3 Start, Desired, Accepted;
         internal float Yaw;
@@ -53,7 +54,7 @@ internal sealed class GraphRootMotionSet : IDisposable
                     if (anchor is not null && !Same(anchor.InitialPlanar, track.InitialPlanar)) throw new ArgumentException("Graph root clips must share their initial planar anchor.");
                     anchor ??= track; selected.Add(id, track);
                 }
-                _entries.Add(obj.PersistentId, new(obj.PersistentId, new(selected, program.MaximumPlanInstructions,program), anchor!, program.MaximumPlanInstructions));
+                _entries.Add(obj.PersistentId, new(obj.PersistentId, new(selected, program.MaximumPlanInstructions,program), anchor!, program.MaximumPlanInstructions,program.Montage is not null));
             }
         } catch { Dispose(); throw; }
     }
@@ -68,10 +69,11 @@ internal sealed class GraphRootMotionSet : IDisposable
     internal bool Contains(Guid id) => _entries.ContainsKey(id);
     internal void Initialize(World world)
     { foreach (var e in _entries.Values) { e.Start = e.Desired = e.Accepted = Vector3.Zero; e.Yaw = 0; e.Pending = default; e.Committed = new(e.Id, world.Tick, Guid.Empty, 0, Vector3.Zero, 0, Vector3.Zero); } }
-    internal RootMotionDelta Prepare(Guid id, TransformData start, Guid session, World world)
+    internal RootMotionDelta Prepare(Guid id, TransformData start, Guid session, World world,double fixedDelta)
     {
         var e = _entries[id]; var frame = _animators!.CopyPreparedRootPlan(id, new(session, world.Identity, world.Tick), e.Plan);
-        var delta = e.Recipe.Evaluate(e.Plan.AsSpan(0, frame.InstructionCount), frame.Output);
+        int count=e.Intervals.Length==0?0:_animators.CopyPreparedRootIntervals(id,new(session,world.Identity,world.Tick),e.Intervals);
+        var delta = e.Recipe.Evaluate(e.Plan.AsSpan(0, frame.InstructionCount), frame.Output,e.Intervals.AsSpan(0,count),fixedDelta);
         e.Pending = frame; e.Start = start.Position; e.Desired = Vector3.Transform(delta.Translation, start.Rotation); e.Yaw = delta.Yaw;
         return new(e.Desired, e.Yaw);
     }
