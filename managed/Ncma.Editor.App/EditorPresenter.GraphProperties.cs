@@ -9,12 +9,14 @@ internal sealed unsafe partial class EditorPresenter
     private void BuildAnimProperties(AnimationGraphDefinition d,bool writable)
     {
         ulong id=600; string section=_animSection;Guid element=_animElement;
+        if(BuildMontageProperties(d,writable))return;
         void Text(string field,string label,string value,int index=-1)=>Add(GuiItemKind.Text,50,id++,label,new("anim_property",Operation:new GraphIntent(_graphAuthor!.Stamp,new GraphProperty(section,element,field,index))),value:value,enabled:writable);
         void Number(string field,string label,double value,double min,double max,int index=-1)=>Add(GuiItemKind.Number,50,id++,label,new("anim_property",Operation:new GraphIntent(_graphAuthor!.Stamp,new GraphProperty(section,element,field,index))),number:value,min:min,max:max,enabled:writable);
         void Bool(string field,string label,bool value,int index=-1)=>Add(GuiItemKind.Checkbox,50,id++,label,new("anim_property",Operation:new GraphIntent(_graphAuthor!.Stamp,new GraphProperty(section,element,field,index))),number:value?1:0,max:1,enabled:writable);
         if(section=="node"){
             var n=d.Nodes.Single(v=>v.Id==element);Text("name","节点名称",n.Name);Number("x","画布 X",n.X,-65536,65536);Number("y","画布 Y",n.Y,-65536,65536);
             if(n.Kind==AnimationNodeKind.Clip)Text("clip","Clip UUID",n.ClipId.ToString("D"));
+            if(n.Kind==AnimationNodeKind.Slot){Text("slot","Slot UUID",n.SlotId.ToString("D"));Bool("startup","独立运行启动时播放",n.PlayOnStart);}
             if(n.Kind is AnimationNodeKind.Clip or AnimationNodeKind.BlendSpace){Bool("loop","循环",n.Loop);Number("speed","速度",n.Speed,0,8);}
             if(n.BlendSpace is not null)BuildSpaceProperties(n,writable);
             if(n.Kind is AnimationNodeKind.Blend or AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive)Number("weight","混合权重",n.Weight,0,1);
@@ -42,13 +44,14 @@ internal sealed unsafe partial class EditorPresenter
     }
     private void ApplyAnimProperty(GraphProperty field,double value,string text)
     {
+        if(ApplyMontageProperty(field,value,text))return;
         var d=_graphAuthor!.Capture()!;
         static int Integer(double value,int min,int max){if(!double.IsFinite(value)||value!=Math.Truncate(value)||value<min||value>max)throw new ArgumentException("Integral graph property.");return (int)value;}
         static bool Boolean(double value)=>value is 0?false:value is 1?true:throw new ArgumentException("Boolean graph property.");
         static Guid Id(string text)=>Guid.TryParseExact(text,"D",out Guid id)&&id!=Guid.Empty&&id.ToString("D")==text?id:throw new ArgumentException("Exact graph UUID.");
         object op;
         switch(field.Section){
-            case "node":var n=d.Nodes.Single(v=>v.Id==field.Id);n=field.Field switch{"name"=>n with{Name=text},"x"=>n with{X=value},"y"=>n with{Y=value},"clip"=>n with{ClipId=Id(text)},"parameter"=>n with{ParameterId=Id(text)},"loop"=>n with{Loop=Boolean(value)},"speed"=>n with{Speed=value},"weight"=>n with{Weight=value},_=>throw new ArgumentException("Node property.")};op=new{op="node.upsert",node=n};break;
+            case "node":var n=d.Nodes.Single(v=>v.Id==field.Id);n=field.Field switch{"name"=>n with{Name=text},"x"=>n with{X=value},"y"=>n with{Y=value},"clip"=>n with{ClipId=Id(text)},"slot"=>n with{SlotId=Id(text)},"startup"=>n with{PlayOnStart=Boolean(value)},"parameter"=>n with{ParameterId=Id(text)},"loop"=>n with{Loop=Boolean(value)},"speed"=>n with{Speed=value},"weight"=>n with{Weight=value},_=>throw new ArgumentException("Node property.")};op=new{op="node.upsert",node=n};break;
             case "parameter":var p=d.Parameters.Single(v=>v.Id==field.Id);p=field.Field switch{"name"=>p with{Name=text},"kind"=>p with{Kind=(AnimationParameterKind)Integer(value,0,3),FloatDefault=0,IntDefault=0,BoolDefault=false},"float"=>p with{FloatDefault=value},"int"=>p with{IntDefault=Integer(value,int.MinValue,int.MaxValue)},"bool"=>p with{BoolDefault=Boolean(value)},_=>throw new ArgumentException("Parameter property.")};op=new{op="parameter.upsert",parameter=p};break;
             case "state":var s=d.States.Single(v=>v.Id==field.Id);s=field.Field switch{"name"=>s with{Name=text},"pose"=>s with{PoseNode=Id(text)},_=>throw new ArgumentException("State property.")};op=new{op="state.upsert",state=s};break;
             case "link":var l=d.Links.Single(v=>v.Id==field.Id);l=field.Field switch{"from"=>l with{From=Id(text)},"to"=>l with{To=Id(text)},"from_pin"=>l with{FromPin=text},"to_pin"=>l with{ToPin=text},_=>throw new ArgumentException("Link property.")};op=new{op="link.upsert",link=l};break;

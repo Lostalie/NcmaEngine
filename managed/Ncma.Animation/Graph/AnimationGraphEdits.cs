@@ -26,7 +26,7 @@ public static class AnimationGraphEdits
         var ids = new HashSet<Guid> { d.AssetId, d.SkeletonId };
         void Id(Guid id) { if (id == Guid.Empty || !ids.Add(id)) throw new ArgumentException("Distinct draft UUIDs required."); }
         AnimationMontageDefinition? montage=null;
-        if(d.Montage is{} authored){montage=AnimationMontageCodec.Decode(AnimationMontageCodec.Encode(authored));if(montage.SkeletonId!=d.SkeletonId)throw new ArgumentException("Same draft Montage skeleton required.");Id(montage.AssetId);foreach(var slot in montage.Slots)Id(slot.Id);foreach(var section in montage.Sections)Id(section.Id);}
+        if(d.Montage is{} authored){montage=AnimationMontageCodec.CopyDraft(authored);if(montage.SkeletonId!=d.SkeletonId)throw new ArgumentException("Same draft Montage skeleton required.");Id(montage.AssetId);foreach(var slot in montage.Slots)Id(slot.Id);foreach(var section in montage.Sections)Id(section.Id);}
         foreach (var n in d.Nodes) { Id(n.Id); AnimationGraphCodec.Text(n.Name); if (!Enum.IsDefined(n.Kind)) throw new ArgumentException("Draft node kind.");
             AnimationGraphCodec.Scalar(n.X, -65536, 65536); AnimationGraphCodec.Scalar(n.Y, -65536, 65536); AnimationGraphCodec.Scalar(n.Speed, 0, 8); AnimationGraphCodec.Scalar(n.Weight, 0, 1);
             if(n.BlendSpace is{} space){Id(space.Id);if(space.AxisX is null||space.Dimensions is not (1 or 2)||space.Samples is null||space.Samples.Length>BlendSpaceProgram.MaximumSamples||space.Samples.Any(s=>s is null))throw new ArgumentException("Bounded space draft.");AnimationGraphCodec.Scalar(space.CycleSeconds,.001,600);foreach(var axis in new[]{space.AxisX,space.AxisY}.Where(a=>a is not null)){AnimationGraphCodec.Text(axis!.Name);AnimationGraphCodec.Text(axis.Unit);AnimationGraphCodec.Scalar(axis.Minimum,-1000000,1000000);AnimationGraphCodec.Scalar(axis.Maximum,-1000000,1000000);}foreach(var s in space.Samples){Id(s.Id);AnimationGraphCodec.Scalar(s.X,-1000000,1000000);AnimationGraphCodec.Scalar(s.Y,-1000000,1000000);}}
@@ -52,6 +52,12 @@ public static class AnimationGraphEdits
             if (op.ValueKind != JsonValueKind.Object || !op.TryGetProperty("op", out var kind) || kind.ValueKind != JsonValueKind.String) throw new ArgumentException("Graph operation required.");
             string name = kind.GetString()!;
             switch (name) {
+                case "montage.upsert":Closed(op,"op","montage");d=d with{Montage=Decode<AnimationMontageDefinition>(op,"montage")};break;
+                case "montage.delete":Closed(op,"op","id");if(Montage(d).AssetId!=Uuid(op,"id"))throw new ArgumentException("Exact Montage required.");d=d with{Montage=null};break;
+                case "montage.slot.upsert":Closed(op,"op","slot");var slot=Decode<AnimationMontageSlot>(op,"slot");d=d with{Montage=Montage(d) with{Slots=Upsert(Montage(d).Slots,slot,s=>s.Id)}};break;
+                case "montage.slot.delete":Closed(op,"op","id");d=d with{Montage=Montage(d) with{Slots=Delete(Montage(d).Slots,Uuid(op,"id"),s=>s.Id)}};break;
+                case "montage.section.upsert":Closed(op,"op","section");var section=Decode<AnimationMontageSection>(op,"section");d=d with{Montage=Montage(d) with{Sections=Upsert(Montage(d).Sections,section,s=>s.Id)}};break;
+                case "montage.section.delete":Closed(op,"op","id");d=d with{Montage=Montage(d) with{Sections=Delete(Montage(d).Sections,Uuid(op,"id"),s=>s.Id)}};break;
                 case "node.upsert": Closed(op, "op", "node"); var node = Decode<AnimationGraphNode>(op, "node"); d = d with { Nodes = Upsert(d.Nodes, node, n => n.Id) }; break;
                 case "link.upsert": Closed(op, "op", "link"); var link = Decode<AnimationGraphLink>(op, "link"); d = d with { Links = Upsert(d.Links, link, l => l.Id) }; break;
                 case "parameter.upsert": Closed(op, "op", "parameter"); var parameter = Decode<AnimationParameter>(op, "parameter"); d = d with { Parameters = Upsert(d.Parameters, parameter, p => p.Id) }; break;
@@ -90,6 +96,7 @@ public static class AnimationGraphEdits
         return requireComplete ? AnimationGraphCodec.Decode(AnimationGraphCodec.Encode(d)) : CopyDraft(d);
     }
     private static AnimationGraphNode LayerNode(AnimationGraphDefinition d,Guid id)=>d.Nodes.SingleOrDefault(n=>n.Id==id&&n.Kind is AnimationNodeKind.LayerOverride or AnimationNodeKind.LayerAdditive&&n.Layer is not null)??throw new ArgumentException("Exact layer node required.");
+    private static AnimationMontageDefinition Montage(AnimationGraphDefinition d)=>d.Montage??throw new ArgumentException("Explicit Montage required.");
     private static AnimationGraphDefinition DeleteNode(AnimationGraphDefinition d, Guid id)
     {
         var states = d.States.Where(s => s.PoseNode == id).Select(s => s.Id).ToHashSet();

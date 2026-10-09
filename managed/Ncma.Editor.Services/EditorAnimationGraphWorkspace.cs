@@ -117,6 +117,7 @@ public sealed class EditorAnimationGraphWorkspace : IDisposable
     }
     private static Dictionary<Guid, string> Rows(AnimationGraphDefinition graph) {
         var result = new Dictionary<Guid, string> { [graph.AssetId] = JsonSerializer.Serialize(new { graph.Name, graph.EntryState,graph.InterruptTransitions }) };
+        if(graph.Montage is{} montage){result.Add(montage.AssetId,JsonSerializer.Serialize(new{montage.Version,montage.Name,montage.SkeletonId}));foreach(var slot in montage.Slots)result.Add(slot.Id,JsonSerializer.Serialize(slot));foreach(var section in montage.Sections)result.Add(section.Id,JsonSerializer.Serialize(section));}
         foreach (var n in graph.Nodes) result.Add(n.Id, JsonSerializer.Serialize(n)); foreach (var l in graph.Links) result.Add(l.Id, JsonSerializer.Serialize(l));
         foreach (var p in graph.Parameters) result.Add(p.Id, JsonSerializer.Serialize(p)); foreach (var s in graph.States) result.Add(s.Id, JsonSerializer.Serialize(s)); foreach (var t in graph.Transitions) result.Add(t.Id, JsonSerializer.Serialize(t));foreach(var e in graph.Events)result.Add(e.Id,JsonSerializer.Serialize(e));return result;
     }

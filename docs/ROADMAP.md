@@ -235,7 +235,10 @@ M6.8 A/B1/B2a完整双配置自动候选通过：strict Montage数据、同Graph
 独立root数值准备完整双配置自动候选通过，actual NCA1/8/32和16Slot528区间，见[B2b-1交付](M6_8_B2B1_DELIVERY_REPORT.md)。
 当前候选graph strictv5替代v4，B2b-2正式姿态/Movement-root/Notify/持久化/startup/NCP1/Player已接通，
 实际NCA/Editor0-1-8-32/16搬移Player及完整顺序无Skip双配置通过（12native/22managed、core109/Editor105/Player56/Python43/checkeddeploy），见[B2b-2交付](M6_8_B2B2_DELIVERY_REPORT.md)。
-C作者/获批typed AI编排工具以及M6.9/M6.10尚未完成；正式Montage Player自动路径通过，不据此标记整个M6或人工/目标验收完成。
+C按C1作者/同源获批语义与C2 typed隔离控制用例/最终联合验收切片。C1修复后完整顺序无Skip双配置自动候选通过
+（12native/22managed、core111/Editor109/Player56/Python43/101hashes/Complete journal），
+见[C1契约](M6_8_C1_RUNTIME_CONTRACT.md)和[交付](M6_8_C1_DELIVERY_REPORT.md)；C2、整个C及M6.9/M6.10尚未完成。
+正式Montage Player自动路径通过，不据此标记整个M6或人工/目标验收完成。
 并非内置推理接入或真实用户素材/人工/目标/性能/长稳验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/
 性能/长稳门禁仍开放。M6.1 进度见 [契约](M6_1_GRAPH_CONTRACT.md) 与 [交付](M6_1_DELIVERY_REPORT.md)。

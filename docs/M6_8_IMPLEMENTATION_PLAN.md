@@ -43,12 +43,21 @@ B2b-2当前候选正式graph v5/Slot最后链/实际NCA pose-root-Notify/NCP1/st
 删除B2a外部临时绑定。定向核心109及真实GPU/uniqueJolt/Editor0-1-8-32/16搬移Player通过；
 完整顺序无Skip Debug/Release已通过：12native/22managed、core109/Editor105/Player56、
 Python43/smokes/formats/inspect/3profiles/audits/checkeddeploy。见M6_8_B2B2_RUNTIME_CONTRACT.md及M6_8_B2B2_DELIVERY_REPORT.md。
-前文v4/外部绑定描述只属于已留证据的历史切片，不是当前入口。C typed作者/AI尚未实现。
+前文v4/外部绑定描述只属于已留证据的历史切片，不是当前入口。C1/C2最新进度见下，不以B2b-2结论提前关闭C。
 
 typed Slot/Section/Notify轨道、引用/区间/时间/优先级/重入规则编辑走原shared closed语义、
 精确文件/资源/受众审阅和唯一history。Agent只提议已审阅素材的编排与隔离用例，不获live攻击/移动/伤害控制。
 真实stdio default-denied/TTL/revoke/queued/re-pair、完整审阅/Undo/取消/故障，以及Editor/Player搬移包联合测试。
 新增工具随功能交付，不拖到M6.9；没有模型凭证配置、推理服务或Python gameplay。
+
+C按C1作者/同源获批编辑与C2 typed隔离控制用例/最终联合验收切片。
+C1新增共享Montage/Slot/Section操作、typed属性、源Clip/Notify轨道与完整提案差异；
+草稿可不完整，发布/Agent提案仍严格完整，实际NCA引用/长度在off-frame审阅重检。
+C1修复后完整顺序无Skip双配置自动候选通过：12native/22managed、core111/Editor109/Player56、
+Python43/smokes/formats/inspect/3profiles/audits/101hashes/Complete journal。
+Release首轮joint绘制失败保留，同步验收补既有有界GPU drain、保留原完整绘制断言并增tick/背压检查，
+定向和完整双配置重跑通过；无生产等待或性能声明。见M6_8_C1_RUNTIME_CONTRACT.md/M6_8_C1_DELIVERY_REPORT.md。
+提交推送核对远端后再做C2；C2尚未实现，不标整个C完成。
 
 ## 完成与开放验收
 

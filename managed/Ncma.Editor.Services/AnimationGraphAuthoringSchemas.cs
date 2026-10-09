@@ -20,6 +20,15 @@ public static class AnimationGraphAuthoringSchemas
             }
             cases.Add(Closed(new(){["op"]=Constant("event.upsert"),["marker"]=shapes[7]!.DeepClone()}));
             cases.Add(Closed(new(){["op"]=Constant("event.delete"),["id"]=Uuid()}));
+            var montageProperties=shapes[8]!["properties"]!.DeepClone().AsObject();
+            montageProperties["slots"]=new JsonObject{["type"]="array",["minItems"]=1,["maxItems"]=16,["items"]=shapes[9]!.DeepClone()};
+            montageProperties["sections"]=new JsonObject{["type"]="array",["minItems"]=1,["maxItems"]=64,["items"]=shapes[10]!.DeepClone()};
+            cases.Add(Closed(new(){["op"]=Constant("montage.upsert"),["montage"]=Closed(montageProperties)}));
+            cases.Add(Closed(new(){["op"]=Constant("montage.delete"),["id"]=Uuid()}));
+            foreach(var (field,index) in new[]{("slot",9),("section",10)}){
+                cases.Add(Closed(new(){["op"]=Constant("montage."+field+".upsert"),[field]=shapes[index]!.DeepClone()}));
+                cases.Add(Closed(new(){["op"]=Constant("montage."+field+".delete"),["id"]=Uuid()}));
+            }
             cases.Add(Closed(new(){["op"]=Constant("graph.interruptions"),["enabled"]=new JsonObject{["type"]="boolean"}}));
             var sample=shapes[0]!["properties"]!["blendSpace"]!["anyOf"]![0]!["properties"]!["samples"]!["items"]!.DeepClone();
             cases.Add(Closed(new(){["op"]=Constant("blendspace.sample.upsert"),["nodeId"]=Uuid(),["sample"]=sample}));

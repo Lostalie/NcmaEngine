@@ -42,7 +42,13 @@ internal static unsafe partial class Program
                     var instances=new HashSet<Guid>();
                     foreach(Guid id in actors){var debug=runtime.Animators!.ReadDebug(id);instances.Add(debug.Frame.InstanceId);Check(debug.SnapshotValid&&(montage?runtime.Animators.ReadMontageFrame(id).Context==debug.Frame.Context:debug.Frame.FrozenPoseGeneration==(ulong)step&&debug.Events.Count==1),"Persistent policy and SAME playback owner");
                         foreach(var receipt in debug.Events)Check(receipt.Context.Tick==play.Tick&&receipt.StateId==debug.Frame.StateId,"Committed event identity");Check(runtime.Characters!.InspectRootMotion(id).Tick==play.Tick,"Unique movement and graph share committed tick");}
-                    bool submitted=scene.Submit(frame++,256,256,camera,target:target);Check(instances.Count==count&&submitted==(count>0),"Joint actor isolation/native scene submission; count="+count+" cycle="+cycle+" step="+step+" instances="+instances.Count+" submitted="+submitted+" diagnostics="+JsonSerializer.Serialize(scene.Diagnostics));if(submitted)renderer.Present();
+                    // Synchronous numerical/draw acceptance, not throughput acceptance. Present does
+                    // not promise GPU completion; a fast host may legitimately fill bounded skin slots.
+                    // Use the existing bounded (2s) diagnostic drain, never wait in production ticks.
+                    if(count>0)renderer.WaitIdle();
+                    ulong backpressure=scene.SkinBackpressureFrames,tick=play.Tick;
+                    bool submitted=scene.Submit(frame++,256,256,camera,target:target);Check(instances.Count==count&&submitted==(count>0),"Joint actor isolation/native scene submission; count="+count+" cycle="+cycle+" step="+step+" instances="+instances.Count+" submitted="+submitted+" skinBackpressure="+scene.SkinBackpressureFrames+" diagnostics="+JsonSerializer.Serialize(scene.Diagnostics));if(submitted)renderer.Present();
+                    Check(scene.SkinBackpressureFrames==backpressure&&play.Tick==tick,"Completed GPU drain must allow exact same committed tick presentation without skin backpressure or simulation changes");
                     if(submitted)Check(scene.Costs.GeometryDraws==count&&scene.Costs.ShadowDraws==count,"Every joint actor contributes actual geometry and shadow, not merely a prepared palette");
                     Check(count==0?scene.Animation is null&&scene.Plan is null:scene.Animation?.Costs.Characters==count,"All prepared actor palettes share one scene clock; zero actors do not initialize 3D");
                 }

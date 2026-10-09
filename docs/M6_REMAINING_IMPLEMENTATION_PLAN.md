@@ -27,6 +27,9 @@ A定义有界严格动作编排数据，包含骨架/clipUUID、Slot优先级、
 B同一个固定步Prepare/Commit/Abort与安全边界请求接入正式runtime；每量子最多32边界，
 请求带instance/session/world/tick，唯一movement接收已准备根意图，不直接写Transform/Health。
 C可视轨道和获批语义编辑/隔离序列，测试结束/Combo/打断/取消/重入/Stop/Reload、实际NCA与Player。
+C分C1 typed属性/源时间-Notify轨道/同源语义/完整提案差异与C2 typed隔离控制用例/最终联合验收。
+C1完整双配置通过提交推送核对远端后再做C2；不把C1标为整个C或M6.8完成。
+C1目前完整顺序无Skip双配置自动候选通过，详见M6_8_C1_DELIVERY_REPORT.md；C2尚未实现。
 
 ## M6.9 AI 工作流可靠性
 
