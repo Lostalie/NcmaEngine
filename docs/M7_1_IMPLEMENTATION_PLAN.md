@@ -1,6 +1,7 @@
 # M7.1 Shader契约、真实反射和绑定验证
 
-状态：A自动候选及70项纯托管定向、最终完整顺序Debug/Release/checked deployment通过；B/C未实现。
+状态：A70项、B41项真实编译／反射自动候选及各自最终完整顺序Debug/Release/checked deployment通过；C未实现。
+见[B契约](M7_1_B_RUNTIME_CONTRACT.md)、[B交付](M7_1_B_DELIVERY_REPORT.md)。
 见[A契约](M7_1_A_RUNTIME_CONTRACT.md)、[A交付](M7_1_A_DELIVERY_REPORT.md)。M6.10远端`74be5b4`核对后才建立方案，方案`09e0608`已推送。
 
 ## A：纯C#资产与受控语义（先执行）

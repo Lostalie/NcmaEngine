@@ -318,6 +318,7 @@ internal static unsafe partial class Program
         if(args.Length==4 && args[0]=="--graph-root-player-child")
             return Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
+            if (args.Length == 3 && args[0] == "--shader-compile-tests") return ShaderCompileTests(args[1], args[2]);
             TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
             TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
             if(args.Length is not (3 or 4 or 6))return 2;
@@ -351,6 +352,7 @@ internal static unsafe partial class Program
             var absent=new RenderGraph();absent.AddResource(new("Empty",RenderRole.Output,RenderFormat.Rgba8,RenderUsage.ColorTarget,256,256,Imported:true));Reject(()=>absent.Compile(caps),"graph_budget");
             Console.WriteLine("PASS graph validation/cache/capabilities");
 
+            ShaderCompileTests(root,output);
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");

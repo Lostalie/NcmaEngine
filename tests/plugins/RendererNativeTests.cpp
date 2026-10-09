@@ -33,7 +33,33 @@ int main(int argc,char** argv) {
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,8,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,9,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        NcmaShaderApiV1 shaders{};
+        Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
+        Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");
+        // Policy-unit boundary only, NOT a claim that real D3DCompile returned a large blob.
+        Check(ShaderCompilation::DiagnosticFailure(16384,&error)==NCMA_INVALID_ARGUMENT&&error.reserved==0&&error.required_bytes==16384,"Diagnostic exact budget policy");
+        Check(ShaderCompilation::DiagnosticFailure(16385,&error)==NCMA_INVALID_ARGUMENT&&error.reserved==1&&error.required_bytes==16385&&error.message_length<128,"Diagnostic over-budget redacted policy");
+        const std::string shaderSource="float4 VSMain(float3 p:POSITION):SV_POSITION{return float4(p,1);}";
+        const char* shaderEntry="VSMain";
+        NcmaShaderCompileV1 shaderRequest{56,1,0,static_cast<uint32_t>(shaderSource.size()),6,0,0,0,reinterpret_cast<const uint8_t*>(shaderSource.data()),shaderEntry,nullptr};
+        NcmaShaderOutputV1 shaderOutput{};std::array<NcmaShaderRowV1,256> shaderRows{};std::vector<uint8_t> shaderBytes(1048576);
+        const auto compile=[&](uint32_t rowCapacity=256,uint32_t byteCapacity=1048576){return shaders.compile(renderModule,handle,&shaderRequest,&shaderOutput,shaderRows.data(),rowCapacity,shaderBytes.data(),byteCapacity,&error);};
+        Check(compile()==NCMA_OK&&shaderOutput.version==1&&shaderOutput.row_count==1&&shaderRows[0].columns==3&&shaderRows[0].scalar==0&&shaderOutput.bytecode_bytes>4,"Actual shader compile/input reflection");
+        const auto savedOutput=shaderOutput;const auto savedRows=shaderRows;const auto savedBytes=shaderBytes;
+        Check(compile(0)==NCMA_BUFFER_TOO_SMALL&&std::memcmp(&shaderOutput,&savedOutput,32)==0&&std::memcmp(shaderRows.data(),savedRows.data(),sizeof(shaderRows))==0&&shaderBytes==savedBytes,"Short reflection output atomic");
+        Check(compile(256,1)==NCMA_BUFFER_TOO_SMALL&&shaderBytes==savedBytes,"Short bytecode output atomic");
+        // A valid first member followed by an unsupported nested struct: no partial publication.
+        const std::string lateFailure="struct Nested{float4 Value;};cbuffer C:register(b0){float4 Good;Nested Bad;};float4 VSMain(float3 p:POSITION):SV_POSITION{return float4(p,1)+Good+Bad.Value;}";
+        const auto originalRequest=shaderRequest;shaderRequest.source=reinterpret_cast<const uint8_t*>(lateFailure.data());shaderRequest.source_bytes=static_cast<uint32_t>(lateFailure.size());
+        Check(compile()==NCMA_UNSUPPORTED_FEATURE&&std::memcmp(&shaderOutput,&savedOutput,32)==0&&std::memcmp(shaderRows.data(),savedRows.data(),sizeof(shaderRows))==0&&shaderBytes==savedBytes,"Unsupported late member atomic");shaderRequest=originalRequest;
+        shaderRequest.version=2;Check(compile()==NCMA_ABI_MISMATCH&&shaderBytes==savedBytes,"Wrong shader contract version");shaderRequest.version=1;
+        shaderRequest.stage=99;Check(compile()==NCMA_INVALID_ARGUMENT,"Invalid shader stage");shaderRequest.stage=0;
+        uint32_t shaderThread=0;std::thread shaderWorker([&]{NcmaErrorV1 e{};shaderThread=shaders.validate_preparation(renderModule,handle,&e);});shaderWorker.join();Check(shaderThread==NCMA_WRONG_THREAD,"Shader owner thread");
+        Check(shaders.validate_preparation(renderModule,handle+1,&error)==NCMA_INVALID_HANDLE,"Shader stale renderer");
+        renderer->active=true;Check(compile()==NCMA_BUSY&&shaders.validate_preparation(renderModule,handle,&error)==NCMA_BUSY,"Shader active frame blocked including cache boundary");renderer->active=false;
+        renderer->failed=true;Check(compile()==NCMA_INTERNAL_ERROR,"Shader fail-stop renderer blocked");renderer->failed=false;
+        Check(renderer->backend->GetLiveResourceCount()==0&&renderer->stats.submitted_frames==0,"Shader compilation allocates no GPU pipelines or frames");
         Check(latest.query_scene_render(renderModule,1,&scene,47,&error)==NCMA_BUFFER_TOO_SMALL && error.required_bytes==48,"Short scene service table");
         Check(latest.query_scene_render(renderModule,1,&scene,sizeof(scene),&error)==NCMA_OK && scene.version==1 && scene.capabilities==1,"Scene service negotiation");
         const float vertices[36]{-0.8f,-0.7f,.5f,0,0,1,0,0,1,0,0,1, .6f,-.7f,.5f,0,0,1,1,0,1,0,0,1, -.8f,.7f,.5f,0,0,1,0,1,1,0,0,1};

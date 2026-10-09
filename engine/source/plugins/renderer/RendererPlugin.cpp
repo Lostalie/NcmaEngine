@@ -9,6 +9,7 @@
 #include "SkinKernel.h"
 #include "UiKernel.h"
 #include "../contracts/NcmaUiTarget.h"
+#include "../contracts/NcmaShader.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -22,6 +23,11 @@
 #include <unordered_map>
 #include <span>
 #include <algorithm>
+#include <bit>
+#include <charconv>
+#include <unordered_set>
+#include <d3dcompiler.h>
+#include <d3d11shader.h>
 #include <Eigen/LU>
 using namespace NcmaEngine;
 using Microsoft::WRL::ComPtr;
@@ -536,12 +542,13 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
 #include "ScenePipelineServices.inl"
 #include "UiServices.inl"
 #include "UiTargetServices.inl"
+#include "ShaderServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>7)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>8)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):sizeof(NcmaUiTargetApiV1);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):sizeof(NcmaShaderApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -553,7 +560,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==4) {const NcmaScenePipelineApiV4 scene{sizeof(scene),4,0x7,CreateScenePipeline,DestroyScenePipeline,SubmitScenePipeline,ScenePipelineStats};std::memcpy(output,&scene,sizeof(scene));}
         else if(version==5) {const NcmaSkinApiV5 skin{sizeof(skin),5,3,CreateSkin,DestroySkin,UpdateSkin,CaptureSkin,SkinStats};std::memcpy(output,&skin,sizeof(skin));}
         else if(version==6) {const NcmaUiApiV1 ui{sizeof(ui),1,7,CreateUiRenderer,CreateUiImage,CreateUiList,DestroyUi,SubmitUi,UiStats};std::memcpy(output,&ui,sizeof(ui));}
-        else {const NcmaUiTargetApiV1 ui{sizeof(ui),1,7,CreateUiTarget,DestroyUiTarget,SubmitUiTarget,CaptureUiTarget,AcquireUiTarget,ReleaseUiTarget,UiTargetStats};std::memcpy(output,&ui,sizeof(ui));}
+        else if(version==7) {const NcmaUiTargetApiV1 ui{sizeof(ui),1,7,CreateUiTarget,DestroyUiTarget,SubmitUiTarget,CaptureUiTarget,AcquireUiTarget,ReleaseUiTarget,UiTargetStats};std::memcpy(output,&ui,sizeof(ui));}
+        else {const NcmaShaderApiV1 shader{sizeof(shader),1,1,CompileShader,ValidateShaderPreparation};std::memcpy(output,&shader,sizeof(shader));}
         return NCMA_OK;
     });
 }
