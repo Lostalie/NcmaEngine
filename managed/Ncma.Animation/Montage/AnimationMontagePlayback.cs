@@ -5,7 +5,13 @@ public enum MontageRequestOutcome { Started, Cancelled, Jumped, PriorityRejected
 public readonly record struct MontageRequest(Guid RequestId,Guid InstanceId,AnimationStepContext Context,Guid SlotId,
     MontageRequestKind Kind,Guid SectionId,int Priority);
 public readonly record struct MontageEvaluationToken(Guid InstanceId,ulong Sequence,ulong SourceTick);
-public readonly record struct MontageInterval(Guid SlotId,Guid SectionId,Guid ClipId,double Previous,double Current,bool RootMotion);
+public readonly record struct MontageInterval(Guid SlotId,Guid SectionId,Guid ClipId,double Previous,double Current,bool RootMotion)
+{
+    // Integral mean of the authored blend envelope over THIS traversal, not the final Slot weight.
+    public float AverageWeight {get;init;}
+    // Traversed time / host fixed delta. Terminal frames can cover less than the whole quantum.
+    public double StepFraction {get;init;}
+}
 public readonly record struct MontageReceipt(Guid RequestId,Guid SlotId,MontageRequestOutcome Outcome);
 public readonly record struct MontageSlotFrame(Guid SlotId,Guid SectionId,Guid ClipId,double Time,float Weight,bool Active,
     bool Cancelling,int Priority,ulong PlaybackGeneration);
@@ -100,7 +106,9 @@ public sealed class AnimationMontagePlayback
         double consumed=0,compensation=0;int crossings=0;
         while(consumed<delta){var section=_sections[state.Section];double available=section.End-state.Time;double advance=Math.Min(delta-consumed,available);double next=state.Time+advance;
             if(!double.IsFinite(next)||advance>0&&next<=state.Time)throw new ArgumentException("Section time precision loss.");
-            if(advance>0){if(_intervalCount>=MaxIntervals)throw new ArgumentException("Montage interval budget.");_intervals[_intervalCount++]=new(slot.Id,section.Id,section.ClipId,state.Time,next,slot.RootMotion);state.Time=next;
+            if(advance>0){if(_intervalCount>=MaxIntervals)throw new ArgumentException("Montage interval budget.");
+                float mean=MeanWeight(slot,state.Elapsed-delta+consumed,advance,_next[state.Section]<0?available:double.PositiveInfinity);
+                _intervals[_intervalCount++]=new(slot.Id,section.Id,section.ClipId,state.Time,next,slot.RootMotion){AverageWeight=mean,StepFraction=advance/delta};state.Time=next;
                 // Compensated accumulation avoids inventing a33rd tiny crossing from repeated subtraction.
                 double corrected=advance-compensation,total=consumed+corrected;compensation=(total-consumed)-corrected;consumed=total;}
             if(state.Time<section.End)break;
@@ -110,6 +118,25 @@ public sealed class AnimationMontagePlayback
         float incoming=slot.BlendIn==0?1:(float)Math.Min(1,state.Elapsed/slot.BlendIn);double untilEnd=_next[state.Section]<0?_sections[state.Section].End-state.Time:double.PositiveInfinity;
         float outgoing=slot.BlendOut==0?1:(float)Math.Min(1,untilEnd/slot.BlendOut);state.Weight=Math.Min(incoming,outgoing);
     }
+    private static float MeanWeight(AnimationMontageSlot slot,double elapsed,double length,double remaining)
+    {
+        // min(1, incoming linear ramp, terminal outgoing linear ramp) is piecewise linear.
+        // Split at saturation and ramp intersection; trapezoids integrate it exactly without heap work.
+        Span<double> points=stackalloc double[5];points[0]=0;points[1]=length;int count=2;
+        double incoming=slot.BlendIn-elapsed,outgoing=remaining-slot.BlendOut;
+        if(slot.BlendIn>0&&incoming>0&&incoming<length)points[count++]=incoming;
+        if(slot.BlendOut>0&&double.IsFinite(remaining)&&outgoing>0&&outgoing<length)points[count++]=outgoing;
+        if(slot.BlendIn>0&&slot.BlendOut>0&&double.IsFinite(remaining)){
+            double cross=(remaining*slot.BlendIn-elapsed*slot.BlendOut)/(slot.BlendIn+slot.BlendOut);
+            if(cross>0&&cross<length)points[count++]=cross;
+        }
+        points=points[..count];points.Sort();double integral=0;
+        for(int i=1;i<count;i++)integral+=(Envelope(slot,elapsed,remaining,points[i-1])+Envelope(slot,elapsed,remaining,points[i]))*.5*(points[i]-points[i-1]);
+        float mean=(float)(integral/length);if(!float.IsFinite(mean)||mean is <0 or >1)throw new ArgumentException("Finite bounded interval envelope required.");return mean;
+    }
+    private static double Envelope(AnimationMontageSlot slot,double elapsed,double remaining,double at)=>Math.Clamp(Math.Min(
+        slot.BlendIn==0?1:(elapsed+at)/slot.BlendIn,
+        slot.BlendOut==0||!double.IsFinite(remaining)?1:(remaining-at)/slot.BlendOut),0,1);
     private void Token(MontageEvaluationToken t){Verify();if(!_prepared||t.InstanceId!=_identity||t.Sequence!=_attempt||t.SourceTick!=_context.Tick)throw new InvalidOperationException("Exact prepared montage token required.");}
     public void Commit(MontageEvaluationToken token,AnimationStepContext context)
     {

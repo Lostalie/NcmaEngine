@@ -231,7 +231,9 @@ D的0/1/8/32 Editor、16个搬移正式Player、调度/fault/reload联合测试�
 M6.7 A–C完整双配置自动候选通过：精确骨架遮罩、native layer1.0、严格v4/cache、typed作者及单独获批骨清单/
 缓存诊断；人工/素材/目标/性能/1h仍开放，见[M6.7交付](M6_7_C_DELIVERY_REPORT.md)。当前推进M6.8。
 M6.8 A/B1/B2a完整双配置自动候选通过：strict Montage数据、同Graph/Animator的instance/tick/attempt/token、
-合作事务及实际NCA准备，见[B2a交付](M6_8_B2A_DELIVERY_REPORT.md)。B2b姿态/root/Notify/持久化、
+合作事务及实际NCA准备，见[B2a交付](M6_8_B2A_DELIVERY_REPORT.md)。B2b-1混合包络积分/partial fraction与
+独立root数值准备完整双配置自动候选通过，actual NCA1/8/32和16Slot528区间，见[B2b-1交付](M6_8_B2B1_DELIVERY_REPORT.md)。
+图仍strictv4，B2b-2正式姿态/Movement-root/Notify/持久化、
 C作者/获批AI工具以及M6.9/M6.10尚未完成；不据此标记整个M6或正式Montage Player已交付。
 并非内置推理接入或真实用户素材/人工/目标/性能/长稳验收通过；Agent不能控制live Play。
 旧 C++ 图作者原型删除，不提供兼容层；M4/M5 及既有人工/目标环境/

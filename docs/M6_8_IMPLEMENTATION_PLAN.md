@@ -24,6 +24,12 @@ NCA闭包绑定和1/8/32对象/Reload/fault；详见M6_8_B2A_RUNTIME_CONTRACT.md
 搬移包测试只证明现有NCA可准备host提供的定义，不表示Montage已cooked或姿态/root/Player接通。
 完整门禁及保持User-only ACL的elevated-token Owner修复见M6_8_B2A_DELIVERY_REPORT.md；B2b/C待实现。
 
+B2b进一步拆为B2b-1跨段blend积分/fraction与独立root数值准备、B2b-2严格新图与正式pose/root/
+Notify/package消费者。先验证解析包络、终止区间、actual NCA1/8/32及16Slot528区间/原子输出，
+完整双配置通过提交推送后再切图。B2b-1不向Movement写入、不注册placeholder、不部署半成品v5；
+见M6_8_B2B1_RUNTIME_CONTRACT.md及M6_8_B2B1_DELIVERY_REPORT.md。B2b-1完整双配置自动候选通过；
+B2b-2正式接线、B2b整体和C仍待完成，不将数值准备器作为已接通Movement/pose的证据。
+
 复用AnimationGraphInstance和SceneAnimatorRuntime的唯一Prepare/Commit/Abort及安全边界控制，
 没有独立World、OnUpdate时钟、solver或Actor网络字段。Slot播放/取消/Section跳转带精确instance/session/world/tick。
 有限请求/队列、同Slot优先级和明确中断，完整候选验证后提交；Abort/fault不消费请求或发布新时间/事件。

@@ -8,6 +8,7 @@ internal static unsafe partial class Program
 {
     private static void TestGraphRootRecipes(string output)
     {
+        TestMontageRootRecipes(output);
         var source = SyntheticModel(); var skeleton = new SkeletonPayload(source.Bones);
         Guid right = Guid.NewGuid(), left = Guid.NewGuid();
         var tracks = new Dictionary<Guid, RootMotionTrack> {

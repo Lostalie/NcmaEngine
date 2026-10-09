@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ncma.Animation;
 using Ncma.Assets;
 using Ncma.Assets.Runtime;
+using Ncma.Characters;
 using Ncma.Gameplay;
 using Ncma.Runtime;
 using Ncma.Scene.Rendering;
@@ -29,6 +30,9 @@ internal static unsafe partial class Program
         File.WriteAllBytes(Path.Combine(moved,"assets/game.ncpak"),SceneAssetPreparation.CreateRuntimePackage(f.Root,f.Project,source.CaptureSnapshot(),[]));
         using var packed=SceneAssetPreparation.Prepare(moved,f.Project,source.CaptureSnapshot(),true,"assets/game.ncpak");
         Check(((RuntimeAnimationGraphAsset)packed.Assets.Require(graph.AssetId,AssetKind.AnimationGraph)).PrepareMontage(packed.Assets,montage).ContentHash==program.ContentHash,"Host-supplied copied candidate can prepare from source-free real NCP1 NCA; Montage itself NOT cooked");
+        var rootRig=(RuntimeDataAsset)packed.Assets.Require(graph.SkeletonId,AssetKind.Skeleton);var rootSkeleton=ModelPayloadCodec.DecodeSkeleton(rootRig.CopyData());
+        var rootTracks=montage.Sections.Select(s=>s.ClipId).Distinct().ToDictionary(id=>id,id=>new RootMotionTrack(rootSkeleton,ModelPayloadCodec.DecodeClip(((RuntimeDataAsset)packed.Assets.Require(id,AssetKind.Clip)).CopyData()),0));
+        var intervalRoot=new MontageRootMotionRecipe(program,rootTracks);var rootResult=new MontageRootContribution[16];
         var evidence=new List<object>();
         foreach(int count in new[]{1,8,32}){
             var (d,_,ids)=f.Scene(count);foreach(Guid id in ids){var obj=d.World.FindObject(id);obj.Remove<ClipPlaybackData>();obj.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));}
@@ -44,7 +48,10 @@ internal static unsafe partial class Program
                 Reject(()=>animator.BindMontage(ids[0],montage));var rows=new MontageInterval[528];int terminal=0;
                 for(int step=0;step<4;step++){
                     Check(play.Step().State==PlayState.Paused,"Shared Animator Montage quantum "+play.Fault?.Code);
-                    foreach(Guid id in ids){var frame=animator.ReadFrame(id);Check(animator.ReadMontageFrame(id).Context==frame.Context&&frame.Context.Tick==play.Tick,"SAME committed tick");int n=animator.CopyCommittedMontageIntervals(id,rows);if(step==1)Check(n==2&&rows[0].ClipId!=rows[1].ClipId,"ALL crossed actual Section Clip intervals retained");if(step==3){Check(!animator.ReadMontageSlot(id,slot).Active&&n==1,"Final interval survives inactive Slot");terminal++;}}
+                    foreach(Guid id in ids){var frame=animator.ReadFrame(id);Check(animator.ReadMontageFrame(id).Context==frame.Context&&frame.Context.Tick==play.Tick,"SAME committed tick");int n=animator.CopyCommittedMontageIntervals(id,rows);
+                        intervalRoot.Evaluate(rows.AsSpan(0,n),.1,rootResult);double expected=step==0?.075:step==1?0:step==2?-.1:-.05;
+                        Check(Math.Abs(rootResult[0].Delta.Translation.X-expected)<1e-6,"B2b-1 actual packed NCA copied interval root oracle; no Movement write");
+                        if(step==1)Check(n==2&&rows[0].ClipId!=rows[1].ClipId,"ALL crossed actual Section Clip intervals retained");if(step==3){Check(!animator.ReadMontageSlot(id,slot).Active&&n==1&&rootResult[0].Coverage>.49f,"Final interval survives inactive Slot");terminal++;}}
                 }
                 Guid old=animator.ReadFrame(ids[0]).InstanceId;ulong tick=play.Tick;play.Reload(_=>throw new Exception("No behaviours"));
                 Check(play.State==PlayState.Paused&&play.Tick==tick&&animator.ReadFrame(ids[0]).InstanceId!=old&&!animator.ReadMontageSlot(ids[0],slot).Active,"Reload rebuilds joint state with fresh identity and retained tick chronology");
@@ -71,6 +78,7 @@ internal static unsafe partial class Program
         }
         File.WriteAllText(Path.Combine(output,"m6-8-b2a-montage-binding-results.json"),JsonSerializer.Serialize(new{schema=1,realNca=true,hostSuppliedMontage=true,packedNcaOnly=true,rows=evidence,caughtTickControlsPoison=true,failures=4,montagePoseRootPackageImplemented=false,manualAccepted=false}));
         Console.WriteLine("PASS M6.8-B2a actual NCA/shared Animator/1-8-32 owners/all Section intervals/source-free NCA/Reload/caught control/fault/Stop recovery");
+        Console.WriteLine("PASS M6.8-B2b-1 actual source-free NCA/1-8-32 same Animator interval root numerical oracle/terminal weight0 retained; Movement and pose integration pending");
     }
     private sealed class MontageObserver(Action<World,double> action):ICommittedStepObserver
     {public void StepCommitted(World world,double delta)=>action(world,delta);}
