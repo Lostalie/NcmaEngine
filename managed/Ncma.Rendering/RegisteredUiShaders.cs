@@ -12,16 +12,16 @@ public sealed record UiShaderSelection(ShaderDescriptor Vertex,ShaderDescriptor 
 public static class DefaultUiShaders
 {
     public static readonly Guid VertexId=Guid.Parse("fa182176-d879-40c0-bcf2-f7d09e545301"),PixelId=Guid.Parse("fa182176-d879-40c0-bcf2-f7d09e545302");
+    internal static ShaderVertexInput[] Inputs => [new("POSITION",0,ShaderScalar.Float32,2,0),new("TEXCOORD",0,ShaderScalar.Float32,2,8),new("COLOR",0,ShaderScalar.Float32,4,16),
+        new("TEXCOORD",1,ShaderScalar.Float32,2,32),new("TEXCOORD",2,ShaderScalar.Float32,2,40),new("TEXCOORD",3,ShaderScalar.Float32,1,48)];
+    internal static ShaderConstantBuffer[] Constants => [new("Frame",0,16,[new("Size",ShaderScalar.Float32,1,2,ShaderMatrixOrder.None,0,1,0),new("Pad",ShaderScalar.Float32,1,2,ShaderMatrixOrder.None,8,1,0)])];
+    internal static ShaderResourceBinding[] Resources => [new("Image",ShaderResourceKind.Texture2D,ShaderResourceAccess.ReadOnly,0,1,0),new("Linear",ShaderResourceKind.Sampler,ShaderResourceAccess.ReadOnly,0,1,0)];
     internal static ShaderDefinition[] Definitions(string source)
     {
         ShaderDefinition D(Guid id,string name,ShaderStage stage,string entry,ShaderVertexInput[] inputs,ShaderConstantBuffer[] constants,ShaderResourceBinding[] resources)=>
             new(1,id,name,ShaderProfile.Flat2D,stage,entry,source,ShaderContractCodec.HashSource(source),inputs,constants,resources,[]);
-        return [D(VertexId,"Flat UI Vertex",ShaderStage.Vertex,"VSMain",
-            [new("POSITION",0,ShaderScalar.Float32,2,0),new("TEXCOORD",0,ShaderScalar.Float32,2,8),new("COLOR",0,ShaderScalar.Float32,4,16),
-             new("TEXCOORD",1,ShaderScalar.Float32,2,32),new("TEXCOORD",2,ShaderScalar.Float32,2,40),new("TEXCOORD",3,ShaderScalar.Float32,1,48)],
-            [new("Frame",0,16,[new("Size",ShaderScalar.Float32,1,2,ShaderMatrixOrder.None,0,1,0),new("Pad",ShaderScalar.Float32,1,2,ShaderMatrixOrder.None,8,1,0)])],[]),
-            D(PixelId,"Flat UI Pixel",ShaderStage.Pixel,"PSMain",[],[],
-            [new("Image",ShaderResourceKind.Texture2D,ShaderResourceAccess.ReadOnly,0,1,0),new("Linear",ShaderResourceKind.Sampler,ShaderResourceAccess.ReadOnly,0,1,0)])];
+        return [D(VertexId,"Flat UI Vertex",ShaderStage.Vertex,"VSMain",Inputs,Constants,[]),
+            D(PixelId,"Flat UI Pixel",ShaderStage.Pixel,"PSMain",[],[],Resources)];
     }
     public static ShaderCatalog CopyCatalog(RendererSession renderer)
     { ArgumentNullException.ThrowIfNull(renderer);return ShaderCatalog.Create(ShaderProfile.Flat2D,Definitions(renderer.CopyDefaultUiSource())); }

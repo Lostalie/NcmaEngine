@@ -322,6 +322,8 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--registered-tone-tests") return RegisteredToneTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-stages-tests") return RegisteredStagesTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-ui-tests") return RegisteredUiTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shader-package-tests") return ShaderPackageTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shader-package-preflight") return ShaderPackageChild(args[1], args[2]);
             TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
             TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
             if(args.Length is not (3 or 4 or 6))return 2;
@@ -359,6 +361,7 @@ internal static unsafe partial class Program
             RegisteredToneTests(root, Path.Combine(output, "registered-tone"));
             RegisteredStagesTests(root, Path.Combine(output, "registered-stages"));
             RegisteredUiTests(root, Path.Combine(output, "registered-ui"));
+            ShaderPackageTests(root, Path.Combine(output, "shader-package"));
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");

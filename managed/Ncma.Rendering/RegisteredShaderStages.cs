@@ -54,9 +54,9 @@ public static class DefaultSceneShaders
 public static class DefaultSkinShader
 {
     public static readonly Guid ComputeId=Guid.Parse("fa182176-d879-40c0-bcf2-f7d09e545205");
-    internal static ShaderDefinition Definition(string source)=>new(1,ComputeId,"Shared Skin Compute",ShaderProfile.Skinning,ShaderStage.Compute,"CSMain",source,ShaderContractCodec.HashSource(source),[],
-        [new("Settings",0,16,new[]{"VertexCount","Offset","Unused","Unused2"}.Select((n,i)=>new ShaderConstantMember(n,ShaderScalar.UInt32,1,1,ShaderMatrixOrder.None,i*4,1,0)).ToArray())],
-        [new("Source",ShaderResourceKind.StructuredBuffer,ShaderResourceAccess.ReadOnly,0,1,80),new("Bones",ShaderResourceKind.StructuredBuffer,ShaderResourceAccess.ReadOnly,1,1,128),new("Output",ShaderResourceKind.RWByteAddressBuffer,ShaderResourceAccess.ReadWrite,0,1,0)],[]);
+    internal static ShaderConstantBuffer[] Constants => [new("Settings",0,16,new[]{"VertexCount","Offset","Unused","Unused2"}.Select((n,i)=>new ShaderConstantMember(n,ShaderScalar.UInt32,1,1,ShaderMatrixOrder.None,i*4,1,0)).ToArray())];
+    internal static ShaderResourceBinding[] Resources => [new("Source",ShaderResourceKind.StructuredBuffer,ShaderResourceAccess.ReadOnly,0,1,80),new("Bones",ShaderResourceKind.StructuredBuffer,ShaderResourceAccess.ReadOnly,1,1,128),new("Output",ShaderResourceKind.RWByteAddressBuffer,ShaderResourceAccess.ReadWrite,0,1,0)];
+    internal static ShaderDefinition Definition(string source)=>new(1,ComputeId,"Shared Skin Compute",ShaderProfile.Skinning,ShaderStage.Compute,"CSMain",source,ShaderContractCodec.HashSource(source),[],Constants,Resources,[]);
     public static ShaderCatalog CopyCatalog(RendererSession renderer)
     { ArgumentNullException.ThrowIfNull(renderer);return ShaderCatalog.Create(ShaderProfile.Skinning,[Definition(renderer.CopyDefaultStageSource(1))]); }
     public static ShaderDescriptor Select(ShaderCatalog catalog)=>DefaultSceneShaders.Find(catalog,ComputeId);

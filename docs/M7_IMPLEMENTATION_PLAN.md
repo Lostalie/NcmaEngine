@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项和C3独立Flat2D32项/16文件独立UI apphost/native故障、各自最终顺序Debug/Release/checked deployment通过；C4、M7.2–M7.7未实现。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项和C3独立Flat2D32项/16文件独立UI apphost/native故障、各自最终顺序Debug/Release/checked deployment通过；C4-A包预检已通过，C4-B/C及M7.2–M7.7未实现。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -26,7 +26,9 @@ C#拥有组合／配置／资产／编辑事务／审批，C++仅GPU执行／资
   last-valid query，没有采样帧ID；不能按当前提交帧归属或把重复观察算独立样本。
 - 现有RenderPipelineService配置更换用同步WaitIdle安全退役，不冒称已有异步retirement/device-loss恢复。
 
-## M7.1 Shader与绑定契约（A/B/C1/C2/C3自动闭环，C4未实现）
+## M7.1 Shader与绑定契约（A/B/C1/C2/C3/C4-A自动闭环，C4-B/C待执行）
+
+C4-A最新交付：source-free NCS1内存包和native-free结构预检77项/六种真实编译变体/独立进程/完整Debug/Release/checked部署通过，见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)。这是CPU包，不是可发布GPU运行资产或正式宿主切换；C4-B/C待执行。
 
 详见[M7.1方案](M7_1_IMPLEMENTATION_PLAN.md)。先A纯C#受控描述/验证，再B薄native真实编译/反射，
 最后C同一个注册目录接入官方默认与用户管线。shader源代码与普通数据事务分权限，不开任意Agent执行。

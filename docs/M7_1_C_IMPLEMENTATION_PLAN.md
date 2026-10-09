@@ -17,7 +17,7 @@ Scene Tone固定HDR纹理、sampler、400字节场景常量布局和SV_VertexID�
 
 ## C2：Geometry／Shadow和Skin（自动候选完成）
 
-执行／契约见[C2方案](M7_1_C2_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C2_RUNTIME_CONTRACT.md)、[交付](M7_1_C2_DELIVERY_REPORT.md)。真实定向40项/native故障/完整渲染联合和最终顺序无Skip Debug/Release/checked deployment/hash/journal通过；后续C3状态见下节，C4仍未实现。
+执行／契约见[C2方案](M7_1_C2_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C2_RUNTIME_CONTRACT.md)、[交付](M7_1_C2_DELIVERY_REPORT.md)。真实定向40项/native故障/完整渲染联合和最终顺序无Skip Debug/Release/checked deployment/hash/journal通过；后续C3/C4状态见下节。
 
 注册同源官方Scene geometry/shadow及compute skin描述与闭包；核对实际mesh layout、材质角色、skin stride/dispatch布局，
 同一目录和validated模块供trusted用户替换；实际静态/动画/阴影reference与独立oracle及API0/0。
@@ -25,12 +25,14 @@ Scene Tone固定HDR纹理、sampler、400字节场景常量布局和SV_VertexID�
 
 ## C3：独立2D（自动候选完成）
 
-独立query11/API1、同源Flat2D默认/用户VS/PS、32项真实像素/原子/cache测试、native故障和16文件独立UI apphost通过；最终顺序无Skip Debug/Release/checked部署均通过。见[方案](M7_1_C3_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C3_RUNTIME_CONTRACT.md)、[交付](M7_1_C3_DELIVERY_REPORT.md)。C4仍未实现。
+独立query11/API1、同源Flat2D默认/用户VS/PS、32项真实像素/原子/cache测试、native故障和16文件独立UI apphost通过；最终顺序无Skip Debug/Release/checked部署均通过。见[方案](M7_1_C3_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C3_RUNTIME_CONTRACT.md)、[交付](M7_1_C3_DELIVERY_REPORT.md)。C4最新进度见下节。
 
 同源2D VS/PS描述和严格vertex/display-list/texture/clip/alpha约定；真实纯平面应用、顺序正确批次、无3D初始化／资源／部署闭包。
 明确参数／Feature／替换方式，不能让2D依赖强制Scene/skin。
 
-## C4：正式宿主与运行包／最终联合门禁
+## C4：正式宿主与运行包／最终联合门禁（A自动完成，B/C待执行）
+
+执行分片见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)。C4-A无源码CPU包/严格结构预检77项、六种实际编译产物/独立进程和最终完整Debug/Release/checked部署通过，见[A契约](M7_1_C4A_RUNTIME_CONTRACT.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)。GpuValidated=false；正式GPU准入/宿主切换和项目部署联合尚未完成，不能关闭C4或整个C。
 
 在宿主明确off-simulation/off-render准备边界接入官方默认与trusted用户配置；版本化精确descriptor/bytecode/依赖闭包，
 运行包不加载Editor／source authoring／native handle，损坏／错版本／不匹配初始化前拒绝。
