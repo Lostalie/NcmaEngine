@@ -1,11 +1,13 @@
 #pragma once
 #include "contracts/NcmaUiRender.h"
+#include "contracts/NcmaShaderPipeline.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <vector>
 #include <unordered_map>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace NcmaEngine::Rendering {
 class UiKernel final {
@@ -21,7 +23,11 @@ class UiKernel final {
     uint64_t next=1,bytes=0,uploaded=0,draws=0,submits=0;
 public:
     UiKernel(ID3D11Device* d,ID3D11DeviceContext* c):device(d),context(c){}
-    bool Initialize(std::string&);
+    struct Programs { Ptr<ID3D11VertexShader> vs; Ptr<ID3D11PixelShader> ps; Ptr<ID3D11InputLayout> layout; };
+    static std::string_view ShaderSource() noexcept;
+    bool PrepareShaders(const NcmaShaderPairV1&,Programs&,std::string&);
+    void PublishShaders(Programs&) noexcept;
+    bool Initialize(std::string&,const NcmaShaderPairV1* = nullptr);
     bool CanImage(const NcmaUiImageV1&) const;
     bool CanList(const NcmaUiListV1&,uint64_t) const;
     bool CreateImage(const NcmaUiImageV1&,uint64_t&,std::string&);

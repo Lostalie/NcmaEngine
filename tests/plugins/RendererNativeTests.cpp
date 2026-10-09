@@ -33,7 +33,7 @@ int main(int argc,char** argv) {
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,11,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,12,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");
@@ -111,6 +111,24 @@ int main(int argc,char** argv) {
          renderer->active=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_BUSY,"Group active frame rejection");renderer->active=false;
          Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_OK&&renderer->sceneStats.creates==creates&&renderer->backend->GetLiveResourceCount()==count,"Whole-group replacement no target rebuild");
          Check(DestroyScenePipeline(renderModule,handle,key,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"Registered whole group closes");
+        }
+        {NcmaUiShadersApiV1 uiPrograms{};
+         Check(latest.query_scene_render(renderModule,11,&uiPrograms,39,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==40,"Short UI shader table");
+         Check(latest.query_scene_render(renderModule,11,&uiPrograms,40,&error)==NCMA_OK&&uiPrograms.version==1&&uiPrograms.capabilities==1&&uiPrograms.copy_source&&uiPrograms.create&&uiPrograms.replace,"UI shader query11/API1");
+         uint8_t unchanged=77;uint32_t count=123;Check(uiPrograms.copy_source(renderModule,handle,&unchanged,1,&count,&error)==NCMA_BUFFER_TOO_SMALL&&unchanged==77&&count==123,"UI source short buffer atomic");
+         auto source=Rendering::UiKernel::ShaderSource();ComPtr<ID3DBlob> vertex,pixel;
+         Check(SUCCEEDED(D3DCompile(source.data(),source.size(),nullptr,nullptr,nullptr,"VSMain","vs_5_0",ShaderCompilation::Flags,0,&vertex,nullptr))&&SUCCEEDED(D3DCompile(source.data(),source.size(),nullptr,nullptr,nullptr,"PSMain","ps_5_0",ShaderCompilation::Flags,0,&pixel,nullptr)),"Native UI actual compilation");
+         NcmaShaderPairV1 pair{32,1,static_cast<uint32_t>(vertex->GetBufferSize()),static_cast<uint32_t>(pixel->GetBufferSize()),static_cast<const uint8_t*>(vertex->GetBufferPointer()),static_cast<const uint8_t*>(pixel->GetBufferPointer())};
+         auto bad=pair;bad.version=2;Check(uiPrograms.create(renderModule,handle,&bad,&error)==NCMA_ABI_MISMATCH&&!renderer->ui,"UI wrong ABI atomic");
+         bad=pair;bad.pixel=pair.vertex;bad.pixel_bytes=pair.vertex_bytes;Check(uiPrograms.create(renderModule,handle,&bad,&error)==NCMA_INVALID_ARGUMENT&&!renderer->ui,"UI last wrong stage no kernel");
+         testTonePreparationThrow=true;Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&!renderer->ui&&!renderer->failed,"UI create diagnostic failure atomic");testTonePreparationThrow=false;
+         testWaitTimeout=true;Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_SHUTDOWN_TIMEOUT&&!renderer->ui,"UI create drain failure atomic");testWaitTimeout=false;
+         Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_OK&&renderer->ui,"UI registered creation");auto* retained=renderer->ui.get();
+         Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_INVALID_HANDLE&&renderer->ui.get()==retained,"UI no implicit replacement");
+         testTonePreparationThrow=true;Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->ui.get()==retained&&!renderer->failed,"UI replacement diagnostic atomic");testTonePreparationThrow=false;
+         testWaitTimeout=true;Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->ui.get()==retained,"UI replacement drain failure retains kernel");testWaitTimeout=false;
+         Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_OK&&renderer->ui.get()==retained&&renderer->scenePipelines.empty()&&!renderer->skinKernel&&renderer->backend->GetLiveResourceCount()==0,"UI replacement no 3D resources");
+         renderer->backend->GetDeviceContext()->ClearState();renderer->ui.reset();
         }
         Check(latest.query_scene_render(renderModule,1,&scene,47,&error)==NCMA_BUFFER_TOO_SMALL && error.required_bytes==48,"Short scene service table");
         Check(latest.query_scene_render(renderModule,1,&scene,sizeof(scene),&error)==NCMA_OK && scene.version==1 && scene.capabilities==1,"Scene service negotiation");

@@ -412,9 +412,9 @@ if(NCMA_BUILD_TESTS)
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Ui.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")
         set_tests_properties(NcmaUiTests PROPERTIES TIMEOUT 60)
         if(WIN32)
-            add_test(NAME NcmaUiSampleSmoke COMMAND "${DOTNET_EXECUTABLE}"
-                "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Sample/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaUiSample.dll"
-                --smoke --plugins "${CMAKE_BINARY_DIR}/m2/plugins")
+            add_test(NAME NcmaUiSampleSmoke COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-UiSamplePackage.ps1"
+                -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -NativePluginRoot "${CMAKE_BINARY_DIR}/m2/plugins")
             set_tests_properties(NcmaUiSampleSmoke PROPERTIES TIMEOUT 60)
             add_test(NAME NcmaPhysicsTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Physics.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Physics.Tests.dll"

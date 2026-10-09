@@ -28,6 +28,12 @@ try {
     var platform = loader.Modules.Single(m => m.Kind == ModuleKind.Platform); var native = loader.Modules.Single(m => m.Kind == ModuleKind.Renderer); var text = loader.Modules.Single(m => m.Kind == ModuleKind.Text);
     using var window = new PlatformWindow(platform, "NcmaEngine UI sample", 640, 400, !smoke);
     using var renderer = new RendererSession(native, window, 640, 400, pureUi: true); using var textService = new TextService(text);
+    // Trusted sample startup, before any canvas/image creation or event/render loop. C4 owns
+    // formal Editor/Player defaults and shader package loading; this is the independent UI demo.
+    bool preparing = true;
+    var shaderCatalog = DefaultUiShaders.CopyCatalog(renderer);
+    renderer.CreateUiShaders(RegisteredUiShaders.Prepare(renderer, shaderCatalog, DefaultUiShaders.Select(shaderCatalog), () => preparing));
+    preparing = false;
     using var canvas = UiCanvas.Create(new(UiCodec.Decode(UiCodec.Encode(d))), renderer, textService, new Dictionary<Guid, FontAsset> { [fontId] = asset });
     var input = new UiWindowInput(); ulong frame = 1, renderedRevision = ulong.MaxValue; uint width = 640, height = 400; int value = 100;
     for (;;) {
@@ -44,5 +50,6 @@ try {
     }
     canvas.Dispose(); textService.Dispose(); var stats = renderer.Stats;
     if (stats.ValidationErrors != 0 || stats.ValidationWarnings != 0) throw new InvalidOperationException("UI sample graphics validation failed.");
-    Console.WriteLine(JsonSerializer.Serialize(new { sample = "M5 UI", frames = frame - 1, worldInitialized = false, physicsInitialized = false, imguiInitialized = false, validationErrors = stats.ValidationErrors, validationWarnings = stats.ValidationWarnings }));
+    if(renderer.PipelineStats.Pipelines != 0 || renderer.SkinStats.Meshes != 0 || renderer.UiStats.PureUi != 1 || renderer.UiShaderGeneration != 1) throw new InvalidOperationException("Independent registered UI closure failed.");
+    Console.WriteLine(JsonSerializer.Serialize(new { sample = "M7.1-C3 registered UI", frames = frame - 1, registeredUi = true, shaderGeneration = renderer.UiShaderGeneration, worldInitialized = false, physicsInitialized = false, imguiInitialized = false, validationErrors = stats.ValidationErrors, validationWarnings = stats.ValidationWarnings }));
 } catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }

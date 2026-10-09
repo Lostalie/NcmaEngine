@@ -17,13 +17,15 @@ Scene Tone固定HDR纹理、sampler、400字节场景常量布局和SV_VertexID�
 
 ## C2：Geometry／Shadow和Skin（自动候选完成）
 
-执行／契约见[C2方案](M7_1_C2_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C2_RUNTIME_CONTRACT.md)、[交付](M7_1_C2_DELIVERY_REPORT.md)。真实定向40项/native故障/完整渲染联合和最终顺序无Skip Debug/Release/checked deployment/hash/journal通过；C3/C4仍未实现。
+执行／契约见[C2方案](M7_1_C2_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C2_RUNTIME_CONTRACT.md)、[交付](M7_1_C2_DELIVERY_REPORT.md)。真实定向40项/native故障/完整渲染联合和最终顺序无Skip Debug/Release/checked deployment/hash/journal通过；后续C3状态见下节，C4仍未实现。
 
 注册同源官方Scene geometry/shadow及compute skin描述与闭包；核对实际mesh layout、材质角色、skin stride/dispatch布局，
 同一目录和validated模块供trusted用户替换；实际静态/动画/阴影reference与独立oracle及API0/0。
 不能把C1的Tone成功称为上述阶段已支持。
 
-## C3：独立2D
+## C3：独立2D（自动候选完成）
+
+独立query11/API1、同源Flat2D默认/用户VS/PS、32项真实像素/原子/cache测试、native故障和16文件独立UI apphost通过；最终顺序无Skip Debug/Release/checked部署均通过。见[方案](M7_1_C3_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C3_RUNTIME_CONTRACT.md)、[交付](M7_1_C3_DELIVERY_REPORT.md)。C4仍未实现。
 
 同源2D VS/PS描述和严格vertex/display-list/texture/clip/alpha约定；真实纯平面应用、顺序正确批次、无3D初始化／资源／部署闭包。
 明确参数／Feature／替换方式，不能让2D依赖强制Scene/skin。

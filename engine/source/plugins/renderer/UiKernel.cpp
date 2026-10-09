@@ -6,8 +6,8 @@
 
 namespace NcmaEngine::Rendering {
 using Microsoft::WRL::ComPtr;
-bool UiKernel::Initialize(std::string& error) {
-    constexpr char shader[]=R"(
+std::string_view UiKernel::ShaderSource() noexcept {
+    return R"(
 cbuffer Frame : register(b0) {float2 Size;float2 Pad;};
 Texture2D Image : register(t0);SamplerState Linear : register(s0);
 struct V {float2 p:POSITION;float2 uv:TEXCOORD0;float4 c:COLOR0;float2 local:TEXCOORD1;float2 extent:TEXCOORD2;float radius:TEXCOORD3;};
@@ -15,15 +15,28 @@ struct O {float4 p:SV_POSITION;float2 uv:TEXCOORD0;float4 c:COLOR0;float2 local:
 O VSMain(V v){O o;o.p=float4(v.p.x/Size.x*2-1,1-v.p.y/Size.y*2,0,1);o.uv=v.uv;o.c=v.c;o.local=v.local;o.extent=v.extent;o.radius=v.radius;return o;}
 float4 PSMain(O v):SV_TARGET {float2 q=abs(v.local-v.extent*.5)-(v.extent*.5-v.radius);float d=length(max(q,0))+min(max(q.x,q.y),0)-v.radius;float coverage=saturate(.5-d/max(fwidth(d),.001));return Image.Sample(Linear,v.uv)*v.c*float4(1,1,1,coverage);}
 )";
-    ComPtr<ID3DBlob> vb,pb,messages;
+}
+bool UiKernel::PrepareShaders(const NcmaShaderPairV1& code,Programs& candidate,std::string& error) {
     auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){error=operation;return false;}return true;};
-    if(!check(D3DCompile(shader,sizeof(shader),nullptr,nullptr,nullptr,"VSMain","vs_5_0",D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_WARNINGS_ARE_ERRORS,0,&vb,&messages),"UI vertex shader")||
-       !check(D3DCompile(shader,sizeof(shader),nullptr,nullptr,nullptr,"PSMain","ps_5_0",D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_WARNINGS_ARE_ERRORS,0,&pb,&messages),"UI pixel shader"))return false;
-    if(!check(device->CreateVertexShader(vb->GetBufferPointer(),vb->GetBufferSize(),nullptr,&vs),"UI VS")||!check(device->CreatePixelShader(pb->GetBufferPointer(),pb->GetBufferSize(),nullptr,&ps),"UI PS"))return false;
+    if(!check(device->CreateVertexShader(code.vertex,code.vertex_bytes,nullptr,&candidate.vs),"UI VS")||!check(device->CreatePixelShader(code.pixel,code.pixel_bytes,nullptr,&candidate.ps),"UI PS"))return false;
     const D3D11_INPUT_ELEMENT_DESC attributes[]={{"POSITION",0,DXGI_FORMAT_R32G32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,8,D3D11_INPUT_PER_VERTEX_DATA,0},
         {"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,16,D3D11_INPUT_PER_VERTEX_DATA,0},{"TEXCOORD",1,DXGI_FORMAT_R32G32_FLOAT,0,32,D3D11_INPUT_PER_VERTEX_DATA,0},
         {"TEXCOORD",2,DXGI_FORMAT_R32G32_FLOAT,0,40,D3D11_INPUT_PER_VERTEX_DATA,0},{"TEXCOORD",3,DXGI_FORMAT_R32_FLOAT,0,48,D3D11_INPUT_PER_VERTEX_DATA,0}};
-    if(!check(device->CreateInputLayout(attributes,6,vb->GetBufferPointer(),vb->GetBufferSize(),&layout),"UI layout"))return false;
+    return check(device->CreateInputLayout(attributes,6,code.vertex,code.vertex_bytes,&candidate.layout),"UI layout");
+}
+void UiKernel::PublishShaders(Programs& candidate) noexcept {
+    vs.Swap(candidate.vs);ps.Swap(candidate.ps);layout.Swap(candidate.layout);
+}
+bool UiKernel::Initialize(std::string& error,const NcmaShaderPairV1* registered) {
+    ComPtr<ID3DBlob> vb,pb,messages;
+    auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){error=operation;return false;}return true;};
+    NcmaShaderPairV1 defaults{};
+    if(!registered){auto source=ShaderSource();constexpr auto flags=D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_WARNINGS_ARE_ERRORS|D3DCOMPILE_OPTIMIZATION_LEVEL3;
+        if(!check(D3DCompile(source.data(),source.size(),nullptr,nullptr,nullptr,"VSMain","vs_5_0",flags,0,&vb,&messages),"UI vertex shader")||
+           !check(D3DCompile(source.data(),source.size(),nullptr,nullptr,nullptr,"PSMain","ps_5_0",flags,0,&pb,&messages),"UI pixel shader"))return false;
+        defaults={32,1,static_cast<uint32_t>(vb->GetBufferSize()),static_cast<uint32_t>(pb->GetBufferSize()),static_cast<const uint8_t*>(vb->GetBufferPointer()),static_cast<const uint8_t*>(pb->GetBufferPointer())};registered=&defaults;
+    }
+    Programs candidate;if(!PrepareShaders(*registered,candidate,error))return false;PublishShaders(candidate);
     D3D11_BUFFER_DESC b{};b.ByteWidth=16;b.Usage=D3D11_USAGE_DEFAULT;b.BindFlags=D3D11_BIND_CONSTANT_BUFFER;
     if(!check(device->CreateBuffer(&b,nullptr,&constants),"UI constants"))return false;
     D3D11_RASTERIZER_DESC r{};r.FillMode=D3D11_FILL_SOLID;r.CullMode=D3D11_CULL_NONE;r.ScissorEnable=TRUE;r.DepthClipEnable=TRUE;
