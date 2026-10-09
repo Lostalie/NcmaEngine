@@ -273,9 +273,11 @@ M6.1 完整顺序Debug/Release已通过，10项新增图专项随25项pose/clock
 ### M7：本版本 DX11 渲染与画质完成度
 
 **状态：M6.10最终双配置及提交推送完成，远端74be5b4已核对；M7进入方案／源码基线核对。
-M7运行代码尚未修改，M7.1–M7.7均未实现。本版本只实现DX11。**
+M7.1-A纯C# Shader描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过。
+M7.1-B/C真实反射/GPU接入及M7.2–M7.7仍未实现。本版本只实现DX11。**
 
 小阶段顺序与验收见[M7总方案](M7_IMPLEMENTATION_PLAN.md)、[M7.1详细方案](M7_1_IMPLEMENTATION_PLAN.md)。
+M7.1-A边界/最终验证记录见[契约](M7_1_A_RUNTIME_CONTRACT.md)、[交付](M7_1_A_DELIVERY_REPORT.md)，不冒称已执行shader。
 已核对现有局部VS反射/固定操作契约/PBR-PCSS及GPU last-valid无sample-frame ID的限制，不冒称完整shader/IBL/后处理框架。
 
 - 完成DX11 Shader编译/反射、绑定验证、资源更新及网格/GPU蒙皮/材质/HDR/UI合成，补齐本版本缺口。

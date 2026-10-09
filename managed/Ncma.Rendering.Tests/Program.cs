@@ -318,6 +318,7 @@ internal static unsafe partial class Program
         if(args.Length==4 && args[0]=="--graph-root-player-child")
             return Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
+            TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
             TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
             if(args.Length is not (3 or 4 or 6))return 2;
             string root=Path.GetFullPath(args[0]),baselinePath=Path.GetFullPath(args[1]),output=Path.GetFullPath(args[2]);Directory.CreateDirectory(output);
