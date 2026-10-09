@@ -31,6 +31,7 @@ internal static unsafe partial class Program
     private static void TestAnimatorScenes(RendererSession renderer,ref ulong frame,string native,string output)
     {
         TestGraphRootRecipes(output);
+        TestMontageAnimatorBindings(output);
         native=Path.GetDirectoryName(native)!;
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
         var f=new SkinFixture(output);var graph=AnimatorGraph(f);string graphPath=Path.Combine(f.Root,"assets/character.ncmaanim");

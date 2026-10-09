@@ -16,7 +16,13 @@ Slot名称/优先级/是否可中断/root策略/blend窗口；Section明确slot�
 ## B 唯一固定步运行与数值路径
 
 B按B1合作固定步状态→B2正式Animator/NCA/pose-root接线分步验证，各自完整双配置通过并提交后前进。
-B1合作状态完整双配置自动候选通过，但不能当作B运行时完成，契约见M6_8_B1_RUNTIME_CONTRACT.md，B2尚未接线。
+B1合作状态完整双配置自动候选通过，但不能当作B运行时完成，契约见M6_8_B1_RUNTIME_CONTRACT.md；B2完整数值路径尚未完成。
+
+B2按B2a同一Graph/Animator事务与实际NCA准备、B2b姿态/root/Notify/持久化接线验证。
+B2a完整双配置自动候选通过：同instance/tick/attempt及sole graph token、两向失败/Abort、trusted stopped-host实际
+NCA闭包绑定和1/8/32对象/Reload/fault；详见M6_8_B2A_RUNTIME_CONTRACT.md。图仍严格v4，
+搬移包测试只证明现有NCA可准备host提供的定义，不表示Montage已cooked或姿态/root/Player接通。
+完整门禁及保持User-only ACL的elevated-token Owner修复见M6_8_B2A_DELIVERY_REPORT.md；B2b/C待实现。
 
 复用AnimationGraphInstance和SceneAnimatorRuntime的唯一Prepare/Commit/Abort及安全边界控制，
 没有独立World、OnUpdate时钟、solver或Actor网络字段。Slot播放/取消/Section跳转带精确instance/session/world/tick。

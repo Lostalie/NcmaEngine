@@ -28,6 +28,7 @@ var edit = new EditSession(doc); using var endpoint = new EditorEndpoint(edit, r
 var descriptor = Wire.Decode<EndpointDescriptor>(File.ReadAllBytes(endpoint.DescriptorPath));
 using var client = new NamedPipeClientStream(".", descriptor.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 client.Connect(3000);
+PipeSecurityTests.Verify(client);
 var helloWrite = Wire.WriteAsync(client, Wire.Encode(new Hello(1, descriptor.InstanceId, descriptor.ProjectRoot, "Pipe test")), CancellationToken.None); helloWrite.GetAwaiter().GetResult();
 var helloRead = Wire.ReadAsync(client, CancellationToken.None);
 Until(() => endpoint.View.Connections.Length == 1, () => endpoint.Pump());

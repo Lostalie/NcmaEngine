@@ -44,7 +44,9 @@ public sealed class AnimationGraphInstance
     private ulong _frozenGeneration,_nextFrozenGeneration;
     private bool _cacheChanged;
     private int _cacheRequests,_cacheHits;private AnimationCacheStatistics _committedCache;
-    public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false)
+    private readonly AnimationMontagePlayback? _montage;
+    private MontageEvaluationToken? _montagePending;
+    public AnimationGraphInstance(AnimationProgram program, AnimationStepContext context,IAnimationPoseSnapshotSource? poseSource=null,bool interruptTransitions=false,AnimationMontageProgram? montage=null)
     {
         _program = program ?? throw new ArgumentNullException(nameof(program)); RequireContext(context);
         interruptTransitions|=program.InterruptTransitions;
@@ -62,6 +64,13 @@ public sealed class AnimationGraphInstance
         _primaryRows=new int[_times.Length];_phaseAdvanced=new bool[_times.Length];_phasePrevious=new double[_times.Length];
         _plan = new AnimationPoseInstruction[program.MaximumPlanInstructions]; _committedPlan = new AnimationPoseInstruction[_plan.Length];
         Build(0, false); PublishPlan();
+        if(montage is not null){
+            if(montage.SkeletonId!=program.SkeletonId||montage.ResourceGeneration!=program.ResourceGeneration)
+                throw new ArgumentException("Montage requires the exact graph skeleton/generation.");
+            foreach(var section in montage.CopyDefinition().Sections)
+                if(section.End>program.ClipDuration(section.ClipId))throw new ArgumentException("Montage requires graph-owned actual Clip durations.");
+            _montage=new(montage,context,_identity);
+        }
     }
     private void Verify() { if (Environment.CurrentManagedThreadId != _owner) throw new InvalidOperationException("Animation graph owner thread required."); }
     private static void RequireContext(AnimationStepContext context)
@@ -85,18 +94,27 @@ public sealed class AnimationGraphInstance
         Verify(); CheckContext(context);
         if (_prepared || context.Tick == ulong.MaxValue || _sequence == ulong.MaxValue) throw new InvalidOperationException("One bounded quantum may be prepared.");
         _sequence++;
-        try { AnimationGraphCodec.Scalar(fixedDelta, .001, 1); Build(fixedDelta, true); CollectEvents(); }
-        catch { _outcome = AnimationEvaluationOutcome.PreparationRejected; throw; }
+        try {
+            AnimationGraphCodec.Scalar(fixedDelta, .001, 1);
+            if(_montage is not null)_montagePending=_montage.Prepare(context,fixedDelta,_sequence);
+            Build(fixedDelta, true); CollectEvents();
+        }
+        catch {
+            if(_montagePending is{} pending){_montage!.Abort(pending);_montagePending=null;}
+            _outcome = AnimationEvaluationOutcome.PreparationRejected; throw;
+        }
         _prepared = true; _outcome = AnimationEvaluationOutcome.Prepared; return new(_identity, _sequence, _context.Tick);
     }
     private void Token(AnimationEvaluationToken token)
     { Verify(); if (!_prepared || token.InstanceId != _identity || token.Sequence != _sequence || token.SourceTick != _context.Tick) throw new InvalidOperationException("Stale/foreign prepared graph quantum."); }
-    public void Abort(AnimationEvaluationToken token) { Token(token); _prepared = false; _outcome = AnimationEvaluationOutcome.Aborted; }
+    public void Abort(AnimationEvaluationToken token)
+    { Token(token);if(_montagePending is{} pending){_montage!.Abort(pending);_montagePending=null;}_prepared = false; _outcome = AnimationEvaluationOutcome.Aborted; }
     public void Commit(AnimationEvaluationToken token, AnimationStepContext committed)
     {
         Token(token); RequireContext(committed);
         if (committed.SessionId != _context.SessionId || committed.WorldId != _context.WorldId || committed.Tick != _context.Tick + 1)
             throw new InvalidOperationException("Commit must match the next successful host fixed step.");
+        if(_montagePending is{} pending){_montage!.Commit(pending,committed);_montagePending=null;}
         _candidateTimes.CopyTo(_times, 0); _requested.CopyTo(_committedParameters, 0);
         for (int i = 0; i < _consume.Length; i++) if (_consume[i]) _requested[i] = _committedParameters[i] = 0;
         _state = _nextState; _from = _nextFrom; _elapsed = _nextElapsed; _duration = _nextDuration; _transition = _nextTransition;
@@ -120,6 +138,19 @@ public sealed class AnimationGraphInstance
     public int CopyCommittedPlan(Span<AnimationPoseInstruction> destination)
     { Verify(); if (destination.Length < _committedCount) throw new ArgumentException("Graph plan output capacity."); _committedPlan.AsSpan(0, _committedCount).CopyTo(destination); return _committedCount; }
     public AnimationCacheStatistics CacheStatistics {get{Verify();if(_prepared||_outcome==AnimationEvaluationOutcome.PreparationRejected)throw new InvalidOperationException("Current committed cache statistics required.");return _committedCache;}}
+    private AnimationMontagePlayback Montage()
+    {Verify();return _montage??throw new InvalidOperationException("No prepared Montage is bound to this graph instance.");}
+    private AnimationMontagePlayback CommittedMontage()
+    {var montage=Montage();if(_prepared||_outcome==AnimationEvaluationOutcome.PreparationRejected)throw new InvalidOperationException("Current successful graph/Montage snapshot required.");return montage;}
+    public bool RequestMontage(MontageRequest request)=>CommittedMontage().Request(request);
+    public MontagePlaybackFrame ReadMontageFrame()=>CommittedMontage().Frame;
+    public MontageSlotFrame ReadMontageSlot(Guid slot)=>CommittedMontage().ReadSlot(slot);
+    public int CopyCommittedMontageIntervals(Span<MontageInterval> destination)=>CommittedMontage().CopyCommittedIntervals(destination);
+    public int CopyCommittedMontageReceipts(Span<MontageReceipt> destination)=>CommittedMontage().CopyCommittedReceipts(destination);
+    public MontageSlotFrame PreparedMontageSlot(AnimationEvaluationToken token,Guid slot)
+    {Token(token);return Montage().PreparedSlot(_montagePending??throw new InvalidOperationException("Prepared Montage missing."),slot);}
+    public int CopyPreparedMontageIntervals(AnimationEvaluationToken token,Span<MontageInterval> destination)
+    {Token(token);return Montage().CopyPreparedIntervals(_montagePending??throw new InvalidOperationException("Prepared Montage missing."),destination);}
     // Repeated reads copy the same committed receipts; they never dispatch events or consume them.
     public int CopyCommittedEvents(AnimationStepContext context, Span<AnimationGraphEvent> destination)
     {

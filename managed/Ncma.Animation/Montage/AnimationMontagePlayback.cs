@@ -29,11 +29,14 @@ public sealed class AnimationMontagePlayback
     private readonly MontageInterval[] _intervals=new MontageInterval[MaxIntervals],_publishedIntervals=new MontageInterval[MaxIntervals];
     private readonly MontageReceipt[] _receipts=new MontageReceipt[MaxRequests],_publishedReceipts=new MontageReceipt[MaxRequests];
     private int _requestCount,_intervalCount,_receiptCount,_publishedIntervalCount,_publishedReceiptCount;
-    private readonly Guid _identity=Guid.NewGuid();private AnimationStepContext _context;
+    private readonly Guid _identity;private AnimationStepContext _context;
     private ulong _attempt,_sequence;private bool _prepared,_rejected;
-    public AnimationMontagePlayback(AnimationMontageProgram program,AnimationStepContext context)
+    public AnimationMontagePlayback(AnimationMontageProgram program,AnimationStepContext context):this(program,context,Guid.NewGuid()) { }
+    // Only the owning graph can share its instance identity; no second public scheduler/token owner.
+    internal AnimationMontagePlayback(AnimationMontageProgram program,AnimationStepContext context,Guid identity)
     {
         _program=program??throw new ArgumentNullException(nameof(program));RequireContext(context);_context=context;
+        if(identity==Guid.Empty)throw new ArgumentException("Exact playback instance required.");_identity=identity;
         var d=program.CopyDefinition();_slots=d.Slots;_sections=d.Sections;
         _slotIndices=_slots.Select((s,i)=>(s.Id,i)).ToDictionary(x=>x.Id,x=>x.i);_sectionIndices=_sections.Select((s,i)=>(s.Id,i)).ToDictionary(x=>x.Id,x=>x.i);
         _next=_sections.Select(s=>s.NextSection==Guid.Empty?-1:_sectionIndices[s.NextSection]).ToArray();_entries=_slots.Select(s=>_sectionIndices[s.EntrySection]).ToArray();
@@ -57,10 +60,11 @@ public sealed class AnimationMontagePlayback
         Guid retired=_idRing[_idPosition];if(retired!=Guid.Empty)_ids.Remove(retired);_idRing[_idPosition]=request.RequestId;_idPosition=(_idPosition+1)%MaxRequestIds;
         _ids.Add(request.RequestId,request);_requests[_requestCount++]=request;return true;
     }
-    public MontageEvaluationToken Prepare(AnimationStepContext context,double fixedDelta)
+    public MontageEvaluationToken Prepare(AnimationStepContext context,double fixedDelta)=>Prepare(context,fixedDelta,_attempt==ulong.MaxValue?0:_attempt+1);
+    internal MontageEvaluationToken Prepare(AnimationStepContext context,double fixedDelta,ulong sequence)
     {
-        Verify();RequireContext(context);if(context!=_context||_prepared||_attempt==ulong.MaxValue||context.Tick==ulong.MaxValue)throw new InvalidOperationException("Exact next montage candidate required.");
-        _attempt++;_intervalCount=_receiptCount=0;_committed.CopyTo(_candidate,0);_rejected=false;
+        Verify();RequireContext(context);if(context!=_context||_prepared||sequence<=_attempt||context.Tick==ulong.MaxValue)throw new InvalidOperationException("Exact next montage candidate required.");
+        _attempt=sequence;_intervalCount=_receiptCount=0;_committed.CopyTo(_candidate,0);_rejected=false;
         try{
             AnimationGraphCodec.Scalar(fixedDelta,.001,1);
             for(int i=0;i<_requestCount;i++)Apply(_requests[i]);

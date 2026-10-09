@@ -23,7 +23,10 @@ internal static class WindowsPipe
     {
         using var identity = WindowsIdentity.GetCurrent();
         string sid = identity.User?.Value ?? throw new InvalidOperationException("No user SID.");
-        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW("O:" + sid + "D:P(A;;GA;;;" + sid + ")", 1, out nint descriptor, out _))
+        // .NET CurrentUserOnly clients compare the pipe OWNER to WindowsIdentity.Owner, not User.
+        // Elevated tokens may own objects as Administrators. DACL access remains ONLY the actual User SID.
+        string owner = identity.Owner?.Value ?? throw new InvalidOperationException("No token owner SID.");
+        if (!ConvertStringSecurityDescriptorToSecurityDescriptorW("O:" + owner + "D:P(A;;GA;;;" + sid + ")", 1, out nint descriptor, out _))
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         try
         {
