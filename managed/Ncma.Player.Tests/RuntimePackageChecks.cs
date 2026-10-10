@@ -21,6 +21,12 @@ internal static class RuntimePackageChecks
         string referenceIndex = Path.Combine(repository, "out/verification/m2-7", configuration, "packages.json");
         using var baseline = JsonDocument.Parse(File.ReadAllBytes(referenceIndex)); string template = baseline.RootElement.GetProperty("playerDx11").GetString()!;
         DeploymentManifest.Validate(template);
+        using(var shaderFiles=Ncma.Rendering.RuntimeShaderFileSet.Load(template)) {
+            Check(shaderFiles.Count==4,"Standalone DX11 Player requires four scene shader variants");
+            string shaders=Path.Combine(package,"assets/shaders");Directory.CreateDirectory(shaders);
+            var shaderPaths=Directory.GetFiles(Path.Combine(template,"assets/shaders"));Check(shaderPaths.Length==5,"Exact shader variants and selection index");
+            foreach(string file in shaderPaths)File.Copy(file,Path.Combine(shaders,Path.GetFileName(file)));
+        }
         foreach (var file in Directory.EnumerateFiles(template).Where(p => Path.GetFileName(p) != DeploymentManifest.FileName && Path.GetExtension(p) is not (".pdb" or ".xml"))) File.Copy(file, Path.Combine(package, Path.GetFileName(file)));
         // Standalone direct tests can follow a source rebuild before canonical publish refreshes the
         // baseline template. Only replace exact files in this newly created, test-owned candidate.

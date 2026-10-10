@@ -86,11 +86,19 @@ public sealed unsafe partial class RendererSession
     }
 }
 
-// Shared bounded official startup preparation. User packages use Prepare directly and never
-// replace this cache implicitly. C4-C supplies trusted file selection/deployment; until then
-// official source cooking remains an explicit off-frame startup step, never a submission step.
+// Formal hosts install pinned runtime packages once at startup. Missing selected variants reject,
+// never cook a fallback. Explicit source-layout test/build-tool hosts retain off-frame cooking.
 public sealed class DefaultRuntimeShaderService(RendererSession renderer)
 {
+    private RuntimeShaderFileSet? _files;
+    internal void UseFiles(RuntimeShaderFileSet files,Func<bool> allowed) {
+        renderer.BeginToneOperation();
+        try {
+            renderer.VerifyShaderPreparation();
+            if (!allowed() || _files is not null || _packages.Count != 0) throw new InvalidOperationException("Shader file selection is startup-only.");
+            renderer.VerifyShaderPreparation(); files.Verify(); _files = files;
+        } finally { renderer.EndToneOperation(); }
+    }
     private readonly Dictionary<(ShaderProfile Profile,bool Shadows,bool Skin),RuntimeShaderPackage> _packages=[];
     public RuntimeShaderPreparation Prepare(ShaderProfile profile,bool shadows,bool skin,Func<bool> allowed) {
         ArgumentNullException.ThrowIfNull(allowed);
@@ -101,7 +109,8 @@ public sealed class DefaultRuntimeShaderService(RendererSession renderer)
             if(!allowed())throw new InvalidOperationException("Trusted startup shader preparation required.");
             renderer.VerifyShaderPreparation();
             if(profile is not (ShaderProfile.Flat2D or ShaderProfile.Scene3D)||profile==ShaderProfile.Flat2D&&(shadows||skin))throw new ArgumentException("Default shader profile/features.");
-            if(!_packages.TryGetValue((profile,shadows,skin),out package!)) {
+            if (_files is not null) package = _files.Get(profile,shadows,skin);
+            else if(!_packages.TryGetValue((profile,shadows,skin),out package!)) {
                 using var compiler=new ShaderCompilerService(renderer,allowed);var inputs=new List<RuntimeShaderInput>();
                 if(profile==ShaderProfile.Flat2D){
                     var selected=DefaultUiShaders.Select(DefaultUiShaders.CopyCatalog(renderer));

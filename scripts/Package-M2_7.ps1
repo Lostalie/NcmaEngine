@@ -75,6 +75,17 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
 $editor = Join-Path $packageBase 'editor'
 $playerNull = Join-Path $packageBase 'player-null'
 $playerDx11 = Join-Path $packageBase 'player-dx11'
+& dotnet build (Join-Path $packageWorkspace 'managed\Ncma.Shader.Cook\Ncma.Shader.Cook.csproj') --configuration $Configuration --nologo
+if ($LASTEXITCODE -ne 0) { throw 'Shader cooker build failed.' }
+$shaderCooker = Join-Path $packageWorkspace "managed\Ncma.Shader.Cook\bin\$Configuration\net8.0\Ncma.Shader.Cook.dll"
+function Add-Shaders([string]$destination,[string]$profile) {
+    $cooked = Join-Path $packageBase ("shaders-" + $profile)
+    & dotnet $shaderCooker $NativePluginRoot $cooked $profile
+    if ($LASTEXITCODE -ne 0) { throw 'Shader package cook failed.' }
+    foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $cooked 'assets\shaders') -File)) {
+        Copy-Exact $file.FullName (Join-Path $destination ('assets\shaders\' + $file.Name))
+    }
+}
 Publish-Candidate 'managed\Ncma.Editor.App\Ncma.Editor.App.csproj' $editor
 Publish-Candidate 'managed\Ncma.Asset.ImportWorker\Ncma.Asset.ImportWorker.csproj' (Join-Path $editor 'tools\import-worker')
 Copy-Exact (Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaImportKernel.dll') (Join-Path $editor 'tools\import-worker\NcmaImportKernel.dll')
@@ -83,6 +94,8 @@ New-Item -ItemType Directory -Path $playerDx11 | Out-Null
 # Publish outputs are a fresh immutable generation; never merge old bin directories.
 Get-ChildItem -LiteralPath $playerNull -File | ForEach-Object { Copy-Exact $_.FullName (Join-Path $playerDx11 $_.Name) }
 foreach ($target in @($editor, $playerNull, $playerDx11)) { Add-Sample $target }
+Add-Shaders $editor 'editor'
+Add-Shaders $playerDx11 'player'
 foreach ($file in @('NcmaPlatform.dll', 'NcmaRenderer.dll', 'glfw3.dll')) {
     Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $editor "plugins\$file")
     Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $playerDx11 "plugins\$file")

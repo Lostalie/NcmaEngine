@@ -65,6 +65,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private PlatformWindow? _window;
     private GuiSession? _gui;
     private RendererSession? _renderer;
+    private RuntimeShaderFileSet? _shaderFiles;
     private GpuViewTarget? _viewportTarget;
     private RenderPipelineService? _renderService;
     private Ncma.Rendering.RenderResourceCache? _sceneCache;
@@ -107,6 +108,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private string _lastPlatformDiagnostic = "";
     public void Start()
     {
+        if (!cpuOnly) _shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShaderPackages);
         _log = new(Path.Combine(project?.Root ?? AppContext.BaseDirectory, "out/user/logs/editor-candidate.jsonl"));
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
@@ -124,6 +126,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _gui = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Gui), _window, _preferences?.Current.FontPath??font,fontSize:_preferences?.Current.FontSize??18);
         if (!cpuOnly) {
             _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, 1280, 720);
+            _shaderFiles?.InstallSelection(_renderer,()=>!_closed);
             _renderService = new(_renderer); _sceneCache=new(_renderer); _gui.AttachRenderer(_renderer);
         }
         _gui.SetToolbarIcon(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico")));
@@ -402,6 +405,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _viewportTarget?.Dispose(); _viewportTarget = null;
         _renderService?.Dispose(); _renderService = null;
         _renderer?.Dispose(); _renderer = null;
+        _shaderFiles?.Dispose(); _shaderFiles = null;
         _window?.Dispose(); _window = null;
         _physics?.Dispose(); _physics = null;
         _loader.Dispose();

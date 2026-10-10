@@ -19,6 +19,7 @@ public static class PlayerRunner
         var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
         PhysicsService? physics = null; PlayerPresentation? presentation = null; PlayStatus? status = null;
         Ncma.Scene.Rendering.PreparedSceneAssetLease? renderAssets = null;
+        RuntimeShaderFileSet? shaderFiles = null;
         int exit = 0, count = 0; string reason = "completed", renderer = options.Headless ? "null" : "unknown";
         string? digest = null; string phase = "configuration"; var errors = new List<string>(); PlayerModule[] modules = [];
         ulong rendered = 0, validationErrors = 0, validationWarnings = 0; bool running = false;
@@ -45,6 +46,11 @@ public static class PlayerRunner
                 {
                     phase = "dependencies";
                     var startup = document.CaptureSnapshot();
+                    shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.ShaderPackages);
+                    if (shaderFiles is not null && startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.StaticMeshData.TypeId || c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
+                        bool skin=startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId));
+                        _=shaderFiles.Get(ShaderProfile.Scene3D,false,skin); _=shaderFiles.Get(ShaderProfile.Scene3D,true,skin);
+                    }
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage);
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
@@ -54,16 +60,16 @@ public static class PlayerRunner
                             throw new ArgumentException("scene_camera_selection_required");
                     }
                 }
-                owner = new(document); owner.LoadGameplay(project.GameplayAssemblyPath);
                 string plugins = Path.GetFullPath(pluginRoot ?? Path.Combine(AppContext.BaseDirectory, "plugins"));
                 phase = "dependencies"; physics = new(plugins, project.Configuration.PhysicsEnabled,characterSupport:hasPhysics);
                 if (physics.Inspect() is { Enabled: true } inspected) modules = [new("ncma.physics", inspected.AbiMajor, inspected.AbiMinor, (ulong)inspected.Capabilities)];
                 if (!options.Headless)
                 {
-                    presentation = new(plugins, visible); presentation.Start();
+                    presentation = new(plugins, visible); presentation.Start(shaderFiles);
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }
                 Ncma.Characters.ScenePlayRuntime? sceneRuntime=null;
+                owner = new(document); owner.LoadGameplay(project.GameplayAssemblyPath);
                 phase = "initialize"; var play = owner.StartPlay(factory: d => new PlaySession(d,
                     options.Headless ? FrameTimePolicy.Strict : FrameTimePolicy.Interactive, options.FixedDelta,
                     advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames),
@@ -109,6 +115,7 @@ public static class PlayerRunner
             bool Close(IDisposable? service, string id) { if (service is null) return true; try { service.Dispose(); return true; } catch { errors.Add(id); return false; } }
             // Derived animation/GPU resources close before coupled solver and its module.
             if(Close(presentation, "presentation_shutdown_failed")) {
+                Close(shaderFiles,"shader_files_shutdown_failed");
                 if(Close(owner, "runtime_shutdown_failed")) { Close(physics, "physics_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed"); }
             }
         }

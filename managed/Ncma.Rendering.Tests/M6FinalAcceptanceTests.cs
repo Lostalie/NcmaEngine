@@ -228,6 +228,17 @@ internal static unsafe partial class Program
         string binaries=Path.Combine(repository,"managed/Ncma.Player.App/bin",build,"net8.0");
         foreach(string file in Directory.GetFiles(binaries).Where(p=>Path.GetExtension(p) is ".dll" or ".json" or ".exe" or ".ico"))File.Copy(file,Path.Combine(moved,Path.GetFileName(file)));
         Directory.CreateDirectory(Path.Combine(moved,"plugins"));foreach(string name in new[]{"NcmaPlatform.dll","NcmaRenderer.dll","NcmaPhysics.dll","NcmaAnimationKernel.dll","glfw3.dll"})File.Copy(Path.Combine(plugins,name),Path.Combine(moved,"plugins",name));
+        // Relocated formal apphosts now require their build-cooked source-free shader closure.
+        // Copy the checked DX11 package's exact four variants + index, not Editor/authoring sources.
+        using(var packageIndex=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository,"out/verification/m2-7",build,"packages.json")))) {
+            string packageRoot=packageIndex.RootElement.GetProperty("playerDx11").GetString()!;
+            Ncma.Application.DeploymentManifest.Validate(packageRoot);
+            using var pins=RuntimeShaderFileSet.Load(packageRoot);
+            Check(pins.Count==4,"M6 Player exact four scene shader packages");
+            string source=Path.Combine(packageRoot,"assets/shaders"),destination=Path.Combine(moved,"assets/shaders");Directory.CreateDirectory(destination);
+            var shaderFiles=Directory.GetFiles(source);Check(shaderFiles.Length==5,"M6 Player shader files and index");
+            foreach(string file in shaderFiles)File.Copy(file,Path.Combine(destination,Path.GetFileName(file)));
+        }
         string[] forbidden=["Ncma.Editor","Ncma.Gui","Ncma.Mcp","Ncma.Asset.Import","Ncma.Assets.Authoring","NcmaNative",".fbx",".ncmeta",".ncmaanim",".nca",".py"];
         var files=Directory.GetFiles(moved,"*",SearchOption.AllDirectories).Order(StringComparer.Ordinal).Select(p=>new{path=Path.GetRelativePath(moved,p).Replace('\\','/'),size=new FileInfo(p).Length,sha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(p)))}).ToArray();
         foreach(var file in files)foreach(string marker in forbidden)Check(!file.path.Contains(marker,StringComparison.OrdinalIgnoreCase),"M6 apphost authoring dependency: "+file.path);

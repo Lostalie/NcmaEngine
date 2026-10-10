@@ -6,13 +6,14 @@ namespace Ncma.Application;
 public sealed record ProjectPlugin(string Id, string Path);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProjectConfiguration(int SchemaVersion, Guid ProjectId, string Name,
-    string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false, Guid? SceneCamera = null, string? AssetPackage = null);
+    string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false, Guid? SceneCamera = null, string? AssetPackage = null,
+    Ncma.Assets.ShaderPackageSelection? ShaderPackages = null);
 public sealed class ProjectContext
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     private readonly ProjectConfiguration _configuration;
     public string Root { get; }
-    public ProjectConfiguration Configuration => _configuration with { Plugins = (ProjectPlugin[])_configuration.Plugins.Clone() };
+    public ProjectConfiguration Configuration => _configuration with { Plugins = (ProjectPlugin[])_configuration.Plugins.Clone(), ShaderPackages = _configuration.ShaderPackages?.CopyValidated() };
     public string StartupScenePath { get; }
     public string GameplayAssemblyPath { get; }
     public string? AssetPackagePath { get; }
@@ -25,7 +26,7 @@ public sealed class ProjectContext
             string.IsNullOrWhiteSpace(configuration.Name) || configuration.Name.Length > 256 ||
             configuration.Renderer is not ("Direct3D11" or "Vulkan" or "Null") || configuration.Plugins is null ||
             configuration.Plugins.Length > 64 || configuration.SceneCamera == Guid.Empty) throw new ArgumentException("Invalid project configuration.");
-        _configuration = configuration with { Plugins = (ProjectPlugin[])configuration.Plugins.Clone() };
+        _configuration = configuration with { Plugins = (ProjectPlugin[])configuration.Plugins.Clone(), ShaderPackages = configuration.ShaderPackages?.CopyValidated() };
         StartupScenePath = Resolve(configuration.StartupScene, ".ncmascene");
         if (new FileInfo(StartupScenePath).Length > Ncma.Scene.SceneDocumentCodec.MaxBytes) throw new ArgumentException("Startup scene exceeds budget.");
         _ = Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(StartupScenePath));

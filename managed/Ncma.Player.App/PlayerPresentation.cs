@@ -22,7 +22,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     private bool _focused, _disposed;
     public PlayerModule[] Modules => _loader.Modules.Select(m => new PlayerModule(m.Id, m.AbiMajor, m.AbiMinor, m.Capabilities)).ToArray();
     public RendererStats Stats => _renderer!.Stats;
-    public void Start()
+    public void Start(RuntimeShaderFileSet? shaderFiles = null)
     {
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
@@ -30,6 +30,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaPlayer — DX11 scene", visible: visible);
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory, "NcmaEngine.ico"));
         _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, 1280, 720);
+        shaderFiles?.InstallSelection(_renderer,()=>!_disposed);
         _pipeline = new(_renderer);
         _cache = new(_renderer);
     }

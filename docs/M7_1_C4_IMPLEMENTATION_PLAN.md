@@ -24,7 +24,9 @@ C4 按以下三个可独立回归的切片执行；每片完整顺序无 Skip De
 - C#正式Editor/Player共享服务在startup/stopped preparation显式准备默认或可信用户选择；SceneGpuResources、SceneRenderSession、UIcache从准备结果取程序，submit/tick不重新编译。空场景与纯2D无3D强制初始化，Headless不加载GPU。
 - 错最后stage/旧设备/revoke/nonreentry/active/超时等失败保持原资源/metadata；GPU设备失效fail-stop。真正的角色集合及像素验证通过后才能宣称宿主切换。
 
-## C4-C：版本化项目选择、部署和联合验收（待执行）
+## C4-C：版本化项目选择、部署和联合验收（自动候选完成）
+
+62项定向、实际用户UI像素/整组准入/文件pin/manifest绑定/Player pre-start拒绝，最终完整顺序无Skip Debug second / Release first、checked部署/hash/journal通过。首次完整Debug的两个搬移Player夹具遗漏Shader包已修正并完整复测，所有原断言/失败证据保留。详见[C契约](M7_1_C4C_RUNTIME_CONTRACT.md)、[C交付](M7_1_C4C_DELIVERY_REPORT.md)。C4及整个M7.1自动链闭合；人工/用户FBX/目标/自包含/完整性能/1h仍待验收，无Agent新执行权限，也不承诺完全无编译器。
 
 - 可信构建与项目选择传递单独可信的package hash、profile/features/精确依赖，启动前bounded文件/路径/handle读pin预检，实际绑定在GPU创建前全量验收。不同格式或缺失字段直接拒绝，不回退到旧入口。
 - Editor/Player checked包和manifest明确包含必要的shader包，独立Player不依赖Editor/source authoring/native handle，不加载HLSL文件、不在tick重建。

@@ -1,7 +1,7 @@
 # M7.1 Shader契约、真实反射和绑定验证
 
-状态：A70/B41/C1 24/C2 40及各自最终完整门禁通过；C3独立Flat2D默认/用户VS/PS32项真实测试、native故障、16文件独立UI apphost及最终顺序无Skip Debug/Release/checked deployment通过。C4-A/B自动完成，C4-C待执行，整个C尚未完成。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)。
-C4最新状态：A无源码NCS1包/纯C#结构预检77项、六种实际编译产物/独立进程和最终完整Debug/Release通过；B正式GPU准入/共享宿主42项及最终完整Debug/Release/checked部署通过；C项目部署联合仍待执行。见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)、[B交付](M7_1_C4B_DELIVERY_REPORT.md)。整个C尚未完成。
+状态：A70/B41/C1 24/C2 40/C3 32及各自完整门禁通过；C4-A77/B42/C62和最终完整顺序无Skip Debug/Release/checked deployment通过，整个M7.1自动候选完成，下一阶段M7.2。人工/用户FBX/目标/自包含/完整性能/1h仍开放。见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)。
+C4最新状态：项目精确Shader选择、manifest绑定文件pin、正式Editor/Player source-free包、18文件独立UI apphost与原全部联合回归通过。见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)、[B交付](M7_1_C4B_DELIVERY_REPORT.md)、[C交付](M7_1_C4C_DELIVERY_REPORT.md)。GpuValidated仍false；内部参考反射仍依赖编译器，不增加Agent执行权限。
 见[B契约](M7_1_B_RUNTIME_CONTRACT.md)、[B交付](M7_1_B_DELIVERY_REPORT.md)。
 见[A契约](M7_1_A_RUNTIME_CONTRACT.md)、[A交付](M7_1_A_DELIVERY_REPORT.md)。M6.10远端`74be5b4`核对后才建立方案，方案`09e0608`已推送。
 

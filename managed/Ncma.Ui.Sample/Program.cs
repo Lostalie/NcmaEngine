@@ -21,6 +21,8 @@ try {
     var field = UiElement.Create(Guid.NewGuid(), "Name", UiKind.TextInput, d.Root) with { Order = 3, Font = fontId, Text = "角色名称", Action = "name.changed", FontSize = 22, Layout = UiLayout.Fixed(32, 216, 400, 48), Style = UiStyle.Default with { Fill = new(.1f, .16f, .24f, 1), Clip = true } };
     var slider = UiElement.Create(Guid.NewGuid(), "Slider", UiKind.Slider, d.Root) with { Order = 4, Action = "volume", Layout = UiLayout.Fixed(32, 292, 400, 24), Style = UiStyle.Default with { Fill = new(.08f, .15f, .23f, 1), Foreground = new(.08f, .6f, .98f, 1), CornerRadius = 5 } };
     d = d with { Elements = [d.Elements[0] with { Style = UiStyle.Default with { Fill = new(.025f, .045f, .075f, 1), Clip = true } }, title, health, button, field, slider] };
+    using var shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,null,null);
+    if (shaderFiles is not null && shaderFiles.Count != 1) throw new ArgumentException("Pure UI requires only one Flat2D package.");
     using var loader = new PluginLoader(); loader.Load(plugins, [
         new("platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
         new("renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["platform"]),
@@ -31,6 +33,7 @@ try {
     // Trusted sample startup, before any canvas/image creation or event/render loop. C4 owns
     // formal Editor/Player defaults and shader package loading; this is the independent UI demo.
     bool preparing = true;
+    shaderFiles?.InstallSelection(renderer,()=>preparing);
     var shaders = renderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Flat2D,false,false,() => preparing);
     renderer.CreateUiShaders(shaders.Ui!);
     preparing = false;
@@ -51,5 +54,5 @@ try {
     canvas.Dispose(); textService.Dispose(); var stats = renderer.Stats;
     if (stats.ValidationErrors != 0 || stats.ValidationWarnings != 0) throw new InvalidOperationException("UI sample graphics validation failed.");
     if(renderer.PipelineStats.Pipelines != 0 || renderer.SkinStats.Meshes != 0 || renderer.UiStats.PureUi != 1 || renderer.UiShaderGeneration != 1) throw new InvalidOperationException("Independent registered UI closure failed.");
-    Console.WriteLine(JsonSerializer.Serialize(new { sample = "M7.1-C3 registered UI", frames = frame - 1, registeredUi = true, shaderGeneration = renderer.UiShaderGeneration, worldInitialized = false, physicsInitialized = false, imguiInitialized = false, validationErrors = stats.ValidationErrors, validationWarnings = stats.ValidationWarnings }));
+    Console.WriteLine(JsonSerializer.Serialize(new { sample = "M7.1-C4-C packaged UI", runtimeShaderPackage = shaderFiles is not null, frames = frame - 1, registeredUi = true, shaderGeneration = renderer.UiShaderGeneration, worldInitialized = false, physicsInitialized = false, imguiInitialized = false, validationErrors = stats.ValidationErrors, validationWarnings = stats.ValidationWarnings }));
 } catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }

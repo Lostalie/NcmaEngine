@@ -8,4 +8,5 @@
   <ItemGroup>
     <ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />
   </ItemGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Assets/Ncma.Assets.csproj" /></ItemGroup>
 </Project>

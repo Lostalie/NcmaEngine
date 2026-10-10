@@ -4,7 +4,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Ncma.Assets.Runtime;
 
-// Separate read-only boundary: no authoring commands, file creation, deletion or native renderer.
+// Shared read-only file boundary for runtime assets and shader packages. No authoring or renderer.
 internal sealed class RuntimeReadPin : IDisposable
 {
     private readonly List<SafeFileHandle> _directories = [];
@@ -19,9 +19,11 @@ internal sealed class RuntimeReadPin : IDisposable
             if ((File.GetAttributes(d.FullName) & FileAttributes.ReparsePoint) != 0) throw new ArgumentException("Asset root traverses a reparse point.");
         return root;
     }
-    internal RuntimeReadPin(string root, string relative, bool derived = false, bool directory = false)
+    internal RuntimeReadPin(string root, string relative, bool derived = false, bool directory = false, bool deploymentManifest = false)
     {
-        if (!(directory && relative == "assets")) AssetPaths.Validate(relative, derived ? "out/assets" : "assets");
+        if (deploymentManifest) {
+            if (directory || derived || relative != "deployment-manifest.json") throw new ArgumentException("Exact runtime deployment manifest required.");
+        } else if (!(directory && relative == "assets")) AssetPaths.Validate(relative, derived ? "out/assets" : "assets");
         string full = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
         try
         {

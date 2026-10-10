@@ -30,9 +30,9 @@ Scene Tone固定HDR纹理、sampler、400字节场景常量布局和SV_VertexID�
 同源2D VS/PS描述和严格vertex/display-list/texture/clip/alpha约定；真实纯平面应用、顺序正确批次、无3D初始化／资源／部署闭包。
 明确参数／Feature／替换方式，不能让2D依赖强制Scene/skin。
 
-## C4：正式宿主与运行包／最终联合门禁（A/B自动完成，C待执行）
+## C4：正式宿主与运行包／最终联合门禁（A/B/C自动完成）
 
-执行分片见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)。C4-A无源码CPU包/严格结构预检77项、六种实际编译产物/独立进程和最终完整Debug/Release/checked部署通过，见[A契约](M7_1_C4A_RUNTIME_CONTRACT.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)。C4-B另行真实原生准入/正式共享Scene与UI准备42项及完整门禁通过，见[B交付](M7_1_C4B_DELIVERY_REPORT.md)。CPU包GpuValidated仍为false；C4-C项目选择和部署联合尚未完成，不能关闭C4或整个C。
+执行分片见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)。C4-A无源码CPU包/严格结构预检77项、六种实际编译产物/独立进程和最终完整Debug/Release/checked部署通过，见[A契约](M7_1_C4A_RUNTIME_CONTRACT.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)。C4-B真实原生准入/正式共享Scene与UI准备42项通过，见[B交付](M7_1_C4B_DELIVERY_REPORT.md)。C4-C版本化项目选择、文件pin/manifest绑定、正式包及62项/全部旧联合测试和最终完整顺序Debug/Release通过，见[C交付](M7_1_C4C_DELIVERY_REPORT.md)。C4/整个C自动候选闭合；CPU包GpuValidated仍false，不授予Agent新执行权限，不替代人工/目标/完整性能/1h验收。
 
 在宿主明确off-simulation/off-render准备边界接入官方默认与trusted用户配置；版本化精确descriptor/bytecode/依赖闭包，
 运行包不加载Editor／source authoring／native handle，损坏／错版本／不匹配初始化前拒绝。
