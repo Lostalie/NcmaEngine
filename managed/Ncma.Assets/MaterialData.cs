@@ -28,6 +28,7 @@ public static class MaterialCodec
         foreach(float x in new[]{d.Emissive.R,d.Emissive.G,d.Emissive.B,d.Emissive.A})if(!float.IsFinite(x)||x<0||x>16)throw new ArgumentException("Emissive range.");
         Unit(d.Metallic);Unit(d.Roughness);Unit(d.AlphaCutoff);
         if(d.Roughness<.045f||!float.IsFinite(d.NormalScale)||d.NormalScale<0||d.NormalScale>4||d.MetallicChannel>3||d.RoughnessChannel>3||d.AOChannel>3)throw new ArgumentException("Material scalar/channel.");
+        MaterialSurfaceContract.ValidateRoles(d);
     }
     public static void Validate(MaterialSetDefinition d){ArgumentNullException.ThrowIfNull(d);if(d.Version!=1||d.AssetId==Guid.Empty||d.Materials is null||d.Materials.Length is <1 or >4096||d.Materials.Contains(Guid.Empty))throw new ArgumentException("Material set version/identity/slots.");}
     public static byte[] Encode(MaterialDefinition d){Validate(d);return JsonSerializer.SerializeToUtf8Bytes(d,Json);}

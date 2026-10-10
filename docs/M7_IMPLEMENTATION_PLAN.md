@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2–M7.7未实现。最新项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3–M7.7未实现。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -34,12 +34,13 @@ C4最新交付：A source-free NCS1/native-free预检77项、B实际准入/共�
 最后C同一个注册目录接入官方默认与用户管线。shader源代码与普通数据事务分权限，不开任意Agent执行。
 测试错误stage/vertex语义/cbuffer布局/资源种类/预算、真实shader像素及编译失败保留原管线。
 
-## M7.2 3D PBR纹理与默认材质（未实现）
+## M7.2 3D PBR纹理与默认材质（自动候选完成）
 
 统一颜色/数据纹理语义、法线切线/符号、metal-rough-AO打包通道、材质defaults/静态和动画一致性。
 复用已有GPU缓存/增量更新，不每帧上传网格或完整场景文档。给出材质诊断/受控preset及同源Undo。
 测试颜色空间、UV/非均匀变换/alpha cutoff、缺失或错误语义纹理拒绝，独立CPU预期与固定图像容限。
 已有测试原样保留，新覆盖通过后才称补齐。
+实际范围、正变换限制及证据见[实施方案](M7_2_IMPLEMENTATION_PLAN.md)、[合同](M7_2_RUNTIME_CONTRACT.md)、[交付](M7_2_DELIVERY_REPORT.md)。材质面板人工操作/用户素材/目标环境/完整性能/1h验收仍待完成；下一阶段M7.3。
 
 ## M7.3 环境光与IBL（未实现）
 

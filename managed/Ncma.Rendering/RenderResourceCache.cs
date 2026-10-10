@@ -73,11 +73,13 @@ public sealed class RenderResourceCache : IDisposable
         if (version.AssetId != definition.AssetId || version.ContentHash != Convert.ToHexString(SHA256.HashData(encoded))) throw new ArgumentException("Material identity/hash mismatch.");
         var fallbacks = new List<MaterialFallback>(); var resolved = new ResolvedTexture?[6]; var ids = definition.TextureIds;
         for (int i = 0; i < 6; i++) if (ids[i] != Guid.Empty) {
-            if (!safeUV || (i == 1 && !safeTangents)) { fallbacks.Add(new(i == 1 ? "unsafe_normal_basis" : "missing_uv", i)); continue; }
             resolved[i] = resolve(ids[i]);
-            if (resolved[i] is not { } t) { fallbacks.Add(new("missing_texture", i)); continue; }
-            t.Version.Validate();
-            if (t.Version.AssetId != ids[i] || t.Version.ContentHash != t.Data.ContentHash || t.Data.Semantic != ((i == 0 || i == 5) ? TextureSemantic.Color : i == 1 ? TextureSemantic.Normal : TextureSemantic.Data)) throw new ArgumentException("Texture reference identity/role mismatch.");
+            if (resolved[i] is { } t) {
+                t.Version.Validate();
+                if (t.Version.AssetId != ids[i] || t.Version.ContentHash != t.Data.ContentHash || t.Data.Semantic != MaterialSurfaceContract.Semantic(i)) throw new ArgumentException("Texture reference identity/role mismatch.");
+            }
+            if (!safeUV || (i == 1 && !safeTangents)) { resolved[i]=null; fallbacks.Add(new(i == 1 ? "unsafe_normal_basis" : "missing_uv", i)); continue; }
+            if (resolved[i] is null) fallbacks.Add(new("missing_texture", i));
         }
         string variant = string.Join('|', resolved.Select(t => t is null ? "fallback" : $"{t.Version.AssetId:N}:{t.Version.Generation}:{t.Version.ContentHash}"));
         diagnostics = fallbacks.AsReadOnly();

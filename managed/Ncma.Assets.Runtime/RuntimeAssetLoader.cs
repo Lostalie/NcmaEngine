@@ -44,10 +44,8 @@ public static class RuntimeAssetLoader
             foreach (var request in requests) Resolve(request);
             foreach (var material in assets.Values.OfType<RuntimeMaterialAsset>())
             {
-                var d = material.Definition;
-                CheckTexture(d.BaseTexture, TextureSemantic.Color); CheckTexture(d.EmissiveTexture, TextureSemantic.Color);
-                CheckTexture(d.NormalTexture, TextureSemantic.Normal);
-                CheckTexture(d.MetallicTexture, TextureSemantic.Data); CheckTexture(d.RoughnessTexture, TextureSemantic.Data); CheckTexture(d.AOTexture, TextureSemantic.Data);
+                _ = MaterialSurfaceContract.Inspect(material.Definition,id=>assets.TryGetValue(id,out var asset)?
+                    asset is RuntimeTextureAsset texture?texture.Data.Semantic:throw new ArgumentException("Material dependency is not a texture."):null,strictMissing);
             }
             var state = new RuntimeAssetState(assets, pins, diagnostics, project);
             using (var validation = new RuntimeAssetLease(state)) {
@@ -56,12 +54,6 @@ public static class RuntimeAssetLoader
             }
             return new(state);
 
-            void CheckTexture(Guid id, TextureSemantic semantic)
-            {
-                if (id != Guid.Empty && assets.TryGetValue(id, out var asset) &&
-                    (asset is not RuntimeTextureAsset texture || texture.Data.Semantic != semantic))
-                    throw new ArgumentException("Material texture semantic mismatch.");
-            }
             void Charge(int bytes) { if (bytes > MaxRetainedBytes - retained) throw new ArgumentException("Runtime CPU preparation byte budget."); retained += bytes; cancellation.ThrowIfCancellationRequested(); }
             void Resolve(AssetRef request)
             {

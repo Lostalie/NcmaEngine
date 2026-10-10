@@ -30,6 +30,13 @@ public sealed class MaterialCommands : IEditCommandParticipant, IDisposable
     public static CapabilityDescriptor Descriptor => new(CapabilityName, "Create or replace an explicitly approved UUID material/material-set authoring file; durable shared Undo, no imported data overwrite.", MutationRisk.Reversible,
         Schema("""{"type":"object","additionalProperties":false,"required":["path","expectedAssetRevision","document"],"properties":{"path":{"type":"string","maxLength":1024},"expectedAssetRevision":{"type":"integer","minimum":0},"document":{"type":"string","maxLength":4194304}}}"""), AssetMetadataCommands.Descriptor.OutputSchema);
     internal static bool IsPath(string path) => path.EndsWith(".ncmaterial", StringComparison.Ordinal) || path.EndsWith(".ncmatset", StringComparison.Ordinal);
+    // Typed trusted UI/tool helper only. The returned input still needs the existing exact
+    // session/path/UUID/revision/dependency grant and commits through the sole editor history.
+    public static JsonElement PresetInput(string path,ulong expectedAssetRevision,MaterialDefinition material,MaterialPreset preset)
+    {
+        AssetPaths.Validate(path);if(!path.EndsWith(".ncmaterial",StringComparison.Ordinal))throw new ArgumentException("Material authoring path required.");
+        return JsonSerializer.SerializeToElement(new{path,expectedAssetRevision,document=Encoding.UTF8.GetString(MaterialCodec.Encode(MaterialSurfaceContract.Apply(material,preset)))});
+    }
     private Guid Check(string path, byte[] bytes)
     {
         if (path.EndsWith(".ncmaterial", StringComparison.Ordinal)) { var d = MaterialCodec.Decode(bytes); _scope.Require(path, d.AssetId, d.TextureIds.Where(id => id != Guid.Empty), AssetKind.Texture); return d.AssetId; }

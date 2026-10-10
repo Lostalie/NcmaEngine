@@ -74,7 +74,7 @@ public sealed unsafe partial class RendererSession
         d.Base[0]=definition.BaseColor.R;d.Base[1]=definition.BaseColor.G;d.Base[2]=definition.BaseColor.B;d.Base[3]=definition.BaseColor.A;
         d.Emissive[0]=definition.Emissive.R;d.Emissive[1]=definition.Emissive.G;d.Emissive[2]=definition.Emissive.B;d.Emissive[3]=definition.Emissive.A;
         d.Surface[0]=definition.Metallic;d.Surface[1]=definition.Roughness;d.Surface[2]=definition.NormalScale;d.Surface[3]=definition.AlphaCutoff;
-        for(int i=0;i<6;i++)if(textures[i] is { } t){if(t.Owner!=this||t.Semantic!=((i==0||i==5)?TextureSemantic.Color:i==1?TextureSemantic.Normal:TextureSemantic.Data))throw new ArgumentException("Foreign texture or semantic/color-space role mismatch.");var k=t.Key;d.Textures[i*2]=k.Value;d.Textures[i*2+1]=k.Generation;}
+        for(int i=0;i<6;i++)if(textures[i] is { } t){if(t.Owner!=this||t.Semantic!=MaterialSurfaceContract.Semantic(i))throw new ArgumentException("Foreign texture or semantic/color-space role mismatch.");var k=t.Key;d.Textures[i*2]=k.Value;d.Textures[i*2+1]=k.Generation;}
         bool normal=enableNormalMap&&textures[1] is not null;if(normal){d.Flags|=2;if(textures[1]!.NormalYDown)d.Flags|=4;}
         var lease=new GpuMaterial(this,normal);_resources.Add(lease);GpuMeshKey key=default;PluginError error=default;
         try{PluginModule.Check(Module.Id,"create_material",_createMaterial!(Module.Context,Handle,&d,&key,&error),error);lease.Publish(key);return lease;}catch{_resources.Remove(lease);throw;}

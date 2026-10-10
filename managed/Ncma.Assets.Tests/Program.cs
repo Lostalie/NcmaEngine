@@ -58,6 +58,52 @@ JsonElement FileCommand(AssetRevisionClock clock, Guid? copy = null, ulong gener
 
 var tests = new (string Name, Action Run)[]
 {
+    ("M7.2 bounded material roles, packed channels, defaults and diagnostics", () => {
+        var material=MaterialDefinition.Default(Guid.NewGuid());Guid color=Guid.NewGuid(),normal=Guid.NewGuid(),data=Guid.NewGuid();
+        Check(material.Metallic==0&&material.Roughness==.5f&&material.BaseColor==new LinearColor(1,1,1,1));
+        var orm=MaterialSurfaceContract.WithPackedSurface(material,data,PackedSurfaceLayout.OcclusionRoughnessMetallic);
+        var mra=MaterialSurfaceContract.WithPackedSurface(material,data,PackedSurfaceLayout.MetallicRoughnessOcclusion);
+        Check(orm.MetallicChannel==2&&orm.RoughnessChannel==1&&orm.AOChannel==0&&orm.Metallic==1&&orm.Roughness==1);
+        Check(mra.MetallicChannel==0&&mra.RoughnessChannel==1&&mra.AOChannel==2);
+        var full=orm with{BaseTexture=color,EmissiveTexture=color,NormalTexture=normal};
+        var rows=MaterialSurfaceContract.Bindings(full);Check(rows.Length==6&&rows[5].Semantic==TextureSemantic.Color&&rows[1].Semantic==TextureSemantic.Normal&&rows[2].Channel==2);
+        rows[0]=rows[0] with{AssetId=Guid.NewGuid()};Check(MaterialSurfaceContract.Bindings(full)[0].AssetId==color);
+        foreach(var preset in Enum.GetValues<MaterialPreset>()) {
+            var result=MaterialSurfaceContract.Apply(full,preset);Check(result.AssetId==full.AssetId&&result.TextureIds.SequenceEqual(full.TextureIds)&&result.BaseColor==full.BaseColor&&MaterialCodec.Decode(MaterialCodec.Encode(result))==result);
+        }
+        Check(MaterialSurfaceContract.Apply(full,MaterialPreset.Cutout).Mode==MaterialMode.AlphaMask);
+        Check(MaterialSurfaceContract.Apply(full,MaterialPreset.PolishedMetal).Metallic==1&&MaterialSurfaceContract.Apply(full,MaterialPreset.Matte).Roughness==1);
+        Check(MaterialSurfaceContract.Inspect(full,id=>id==color?TextureSemantic.Color:id==normal?TextureSemantic.Normal:TextureSemantic.Data,true).Length==0);
+        var missing=MaterialSurfaceContract.Inspect(full,_=>null,false);Check(missing.Length==6&&missing.All(d=>d.Code=="missing_texture"));
+        Check(MaterialSurfaceContract.Inspect(material,_=>throw new Exception("Empty slots must not resolve"),true).Length==0);
+        Reject(()=>MaterialSurfaceContract.Inspect(full,_=>null,true));Reject(()=>MaterialSurfaceContract.Inspect(full,_=>(TextureSemantic)99,false));
+        Reject(()=>MaterialSurfaceContract.Apply(full,(MaterialPreset)99));Reject(()=>MaterialSurfaceContract.Semantic(6));
+        Reject(()=>MaterialSurfaceContract.WithPackedSurface(full,Guid.Empty,PackedSurfaceLayout.OcclusionRoughnessMetallic));
+        Reject(()=>MaterialSurfaceContract.WithPackedSurface(full,color,PackedSurfaceLayout.OcclusionRoughnessMetallic));
+        Reject(()=>MaterialSurfaceContract.WithPackedSurface(full,data,(PackedSurfaceLayout)99));
+        Reject(()=>MaterialCodec.Encode(full with{NormalTexture=color}));Reject(()=>MaterialCodec.Encode(full with{BaseTexture=data}));
+        Reject(()=>MaterialCodec.Decode(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(MaterialCodec.Encode(full)).Replace(normal.ToString(),color.ToString(),StringComparison.Ordinal))));
+    }),
+    ("M7.2 presets use original approved material transaction and reversible history", () => {
+        string root=TestRoot(),path="assets/Preset.ncmaterial";Guid id=Guid.NewGuid();bool current=true;
+        var clock=new AssetRevisionClock();var material=MaterialDefinition.Default(id);
+        using var commands=new MaterialCommands(new(root),new(new Dictionary<string,Guid>{{path,id}},(_,_)=>false,()=>current),clock);
+        var edit=new EditSession(new SceneDocument());edit.RegisterCommandParticipant(MaterialCommands.Descriptor,commands);
+        var permission=new CapabilityPermissions([MaterialCommands.CapabilityName,"ncma.history.undo","ncma.history.redo"]);
+        JsonElement Input(MaterialPreset preset)=>MaterialCommands.PresetInput(path,clock.Revision,material,preset);
+        var request=Request(edit,MaterialCommands.CapabilityName,Input(MaterialPreset.Default));Check(edit.Invoke(request).Status=="denied");
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(MaterialPreset.Default)),permission).Changed);
+        var stale=Input(MaterialPreset.Matte);
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(MaterialPreset.PolishedMetal)),permission).Changed);
+        string full=Path.Combine(root,path);Check(MaterialCodec.Decode(File.ReadAllBytes(full)).Metallic==1);
+        Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,stale),permission).Status=="conflict");
+        Check(edit.Invoke(Request(edit,"ncma.history.undo",Element(new{})),permission).Changed&&MaterialCodec.Decode(File.ReadAllBytes(full))==material);
+        Check(edit.Invoke(Request(edit,"ncma.history.redo",Element(new{})),permission).Changed&&MaterialCodec.Decode(File.ReadAllBytes(full)).Metallic==1);
+        current=false;Check(edit.Invoke(Request(edit,MaterialCommands.CapabilityName,Input(MaterialPreset.Cutout)),permission).Status=="denied");
+        Check(edit.Invoke(Request(edit,"ncma.history.undo",Element(new{})),permission).Status=="denied");
+        Reject(()=>MaterialCommands.PresetInput("assets/../bad.ncmaterial",0,material,MaterialPreset.Default));
+        Reject(()=>MaterialCommands.PresetInput("assets/bad.ncmatset",0,material,MaterialPreset.Default));
+    }),
     ("Material authoring uses exact path/UUID/dependency grants and shared Undo/Redo", () => {
         string root=TestRoot();Guid id=Guid.NewGuid(),texture=Guid.NewGuid(),setId=Guid.NewGuid();bool current=true;
         var clock=new AssetRevisionClock();var scope=new MaterialWriteScope(new Dictionary<string,Guid>{{"assets/Hero.ncmaterial",id},{"assets/Hero.ncmatset",setId}},(dep,kind)=>dep==texture&&kind==AssetKind.Texture||dep==id&&kind==AssetKind.Material,()=>current);

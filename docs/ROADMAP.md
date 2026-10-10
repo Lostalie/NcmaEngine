@@ -274,7 +274,7 @@ M6.1 完整顺序Debug/Release已通过，10项新增图专项随25项pose/clock
 
 **状态：M6.10最终双配置及提交推送完成，远端74be5b4已核对；M7进入方案／源码基线核对。
 M7.1-A纯C# Shader描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过。
-M7.1-B41项及完整门禁通过；C1默认／用户Tone24项、C2同源Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自完整顺序Debug/Release/checked deployment通过。C4-C加入项目文件/pin/manifest绑定与运行包，独立UI现为18文件。M7.1自动候选完成，M7.2–M7.7未实现。本版本只实现DX11。**
+M7.1-B41项及完整门禁通过；C1默认／用户Tone24项、C2同源Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自完整顺序Debug/Release/checked deployment通过。C4-C加入项目文件/pin/manifest绑定与运行包，独立UI现为18文件。M7.1自动候选完成；M7.2统一材质合同/预设/68项GPU检查及完整双配置/部署通过。M7.3–M7.7未实现。本版本只实现DX11。**
 
 小阶段顺序与验收见[M7总方案](M7_IMPLEMENTATION_PLAN.md)、[M7.1详细方案](M7_1_IMPLEMENTATION_PLAN.md)。
 M7.1-A边界/最终验证记录见[契约](M7_1_A_RUNTIME_CONTRACT.md)、[交付](M7_1_A_DELIVERY_REPORT.md)，不冒称已执行shader。
@@ -284,6 +284,7 @@ M7.1-C2闭合Geometry/Shadow/Skin、整组／共享kernel原子替换及最终�
 M7.1-C3独立Flat2D默认/用户注册VS/PS、原子替换/显式缓存刷新和独立UI示例闭包见[方案](M7_1_C3_IMPLEMENTATION_PLAN.md)、[契约](M7_1_C3_RUNTIME_CONTRACT.md)、[交付](M7_1_C3_DELIVERY_REPORT.md)。后续C4范围及进度见下条；没有Agent编译权限或人工／性能／长跑验收。
 M7.1-C4的A包/预检77项、B正式准入/共享宿主42项、C版本化项目选择/运行包/文件pin62项与完整联合门禁均通过，见[C4方案](M7_1_C4_IMPLEMENTATION_PLAN.md)、[A交付](M7_1_C4A_DELIVERY_REPORT.md)、[B交付](M7_1_C4B_DELIVERY_REPORT.md)、[C交付](M7_1_C4C_DELIVERY_REPORT.md)。C4/整个M7.1自动链闭合，下一片M7.2；CPU包GpuValidated仍false，内部参考反射仍依赖编译器，无Agent新执行权限。人工/用户FBX/目标/自包含/完整性能/1h仍待验收。
 已核对现有局部VS反射/固定操作契约/PBR-PCSS及GPU last-valid无sample-frame ID的限制，不冒称完整shader/IBL/后处理框架。
+M7.2六槽语义、ORM/MRA、原可撤销预设命令、运行包拒绝及静态/compute skin真实像素证据见[方案](M7_2_IMPLEMENTATION_PLAN.md)、[合同](M7_2_RUNTIME_CONTRACT.md)、[交付](M7_2_DELIVERY_REPORT.md)。正变换限制和原测试保留；当前自动链推进到M7.2，提交推送后下一片M7.3环境光与IBL。材质面板人工操作与原人工/用户FBX/目标/自包含/性能/长跑验收仍待完成。
 
 - 完成DX11 Shader编译/反射、绑定验证、资源更新及网格/GPU蒙皮/材质/HDR/UI合成，补齐本版本缺口。
 - 保持API中立的能力查询、资源/执行/扩展模块契约；Vulkan/OpenGL下一版本再实现device/swapchain/shader/draw等实际后端。

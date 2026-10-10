@@ -148,9 +148,7 @@ public static class RuntimeAssetPackage
             if (asset is RuntimeMaterialAsset material) {
                 var d = material.Definition;
                 foreach (Guid id in d.TextureIds.Where(id => id != Guid.Empty)) _ = Require(id, AssetKind.Texture);
-                Check(d.BaseTexture, TextureSemantic.Color); Check(d.EmissiveTexture, TextureSemantic.Color); Check(d.NormalTexture, TextureSemantic.Normal);
-                Check(d.MetallicTexture, TextureSemantic.Data); Check(d.RoughnessTexture, TextureSemantic.Data); Check(d.AOTexture, TextureSemantic.Data);
-                void Check(Guid id, TextureSemantic semantic) { if (id != Guid.Empty && ((RuntimeTextureAsset)Require(id, AssetKind.Texture)).Data.Semantic != semantic) throw new ArgumentException("Runtime package texture semantic."); }
+                _=MaterialSurfaceContract.Inspect(d,id=>((RuntimeTextureAsset)Require(id,AssetKind.Texture)).Data.Semantic,true);
             }
         }
     }

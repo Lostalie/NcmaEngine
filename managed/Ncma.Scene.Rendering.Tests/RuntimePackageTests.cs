@@ -30,6 +30,29 @@ internal static partial class Program
     private static void RegisterPackageTests(List<(string Name, Action Run)> tests)
     {
         tests.AddRange(new (string, Action)[] {
+            ("M7.2 packed surface closure, source-free roundtrip and rehashed wrong semantics reject", () => {
+                var f=new AssetFixture();Guid color=f.Texture(TextureSemantic.Color),normal=f.Texture(TextureSemantic.Normal),packed=f.Texture(TextureSemantic.Data),id=Guid.NewGuid();
+                var definition=MaterialSurfaceContract.WithPackedSurface(MaterialDefinition.Default(id) with{BaseTexture=color,EmissiveTexture=color,NormalTexture=normal},packed,PackedSurfaceLayout.OcclusionRoughnessMetallic);
+                File.WriteAllBytes(Path.Combine(f.Root,"assets/Surface.ncmaterial"),MaterialCodec.Encode(definition));
+                using(var source=f.Prepare(true,Ref(id,AssetKind.Material)))using(var lease=source.AcquireLease())Check(lease.List().Count==4&&lease.PinnedGenerations==3);
+                byte[] bytes=Package(f,Ref(id,AssetKind.Material));string path=Path.Combine(f.Root,"assets/surface.ncpak");File.WriteAllBytes(path,bytes);
+                using(var snapshot=RuntimeAssetPackage.Prepare(f.Root,"assets/surface.ncpak",f.Project,[Ref(id,AssetKind.Material)]))using(var lease=snapshot.AcquireLease())
+                    Check(((RuntimeMaterialAsset)lease.Require(id,AssetKind.Material)).Definition==definition&&((RuntimeTextureAsset)lease.Require(packed,AssetKind.Texture)).Data.Semantic==TextureSemantic.Data);
+                // Valid material UUID/roles and recomputed payload hash cannot disguise a Color texture as Normal.
+                var altered=definition with{BaseTexture=Guid.Empty,EmissiveTexture=Guid.Empty,NormalTexture=color};byte[] changed=MaterialCodec.Encode(altered);int offset=0;
+                byte[] bad=ChangeIndex(bytes,n=>{var entry=n["assets"]!.AsArray().Single(a=>a!["assetId"]!.GetValue<Guid>()==id)!;
+                    offset=entry["offset"]!.GetValue<int>();Check(changed.Length==entry["length"]!.GetValue<int>());entry["hash"]=Convert.ToHexString(SHA256.HashData(changed));});
+                changed.CopyTo(bad,16+BinaryPrimitives.ReadInt32LittleEndian(bad.AsSpan(8))+offset);AssetReject(()=>RuntimeAssetPackage.Inspect(bad,f.Project));
+                Check(!Locked(path));
+            }),
+            ("M7.2 missing material texture is explicit Editor diagnostic, strict runtime/package rejection", () => {
+                var f=new AssetFixture();var definition=MaterialDefinition.Default(Guid.NewGuid()) with{BaseTexture=Guid.NewGuid()};
+                string path=Path.Combine(f.Root,"assets/Missing.ncmaterial");byte[] input=MaterialCodec.Encode(definition);File.WriteAllBytes(path,input);
+                using(var preview=f.Prepare(false,Ref(definition.AssetId,AssetKind.Material)))using(var lease=preview.AcquireLease()){
+                    Check(lease.Diagnostics.Count==1&&lease.Diagnostics[0].Code=="asset_missing");AssetReject(()=>RuntimeAssetPackage.Encode(lease));
+                }
+                AssetReject(()=>f.Prepare(true,Ref(definition.AssetId,AssetKind.Material)));Check(File.ReadAllBytes(path).SequenceEqual(input));
+            }),
             ("M3.9 deterministic source-free typed runtime package", () => {
                 var f = new AssetFixture(); byte[] bytes = Package(f); Check(bytes.SequenceEqual(Package(f)));
                 var index = RuntimeAssetPackage.Inspect(bytes, f.Project); Check(index.Assets.Length == 3 && index.Assets.Select(a => a.AssetId).SequenceEqual(index.Assets.Select(a => a.AssetId).Order()));
