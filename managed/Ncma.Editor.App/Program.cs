@@ -59,6 +59,12 @@ internal static class Program
 }
 internal sealed unsafe class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview) : IApplicationService, IFramePipeline
 {
+    internal static void RequireComposition(Ncma.Scene.SceneDocumentSnapshot snapshot)
+    {
+        Ncma.Characters.CharacterComponents.RequireComposition(snapshot);
+        if (Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(snapshot))
+            throw new ArgumentException("environment_host_integration_pending");
+    }
     private bool ReferencePreview => (preview||smoke) && project is null;
     private readonly PluginLoader _loader = new();
     private PhysicsService? _physics;
@@ -108,6 +114,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private string _lastPlatformDiagnostic = "";
     public void Start()
     {
+        // Removed by the explicit C2 host integration, not by a compatibility fallback.
+        if (project is not null && Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(
+            Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath))))
+            throw new NotSupportedException("environment_host_integration_pending");
         if (!cpuOnly) _shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShaderPackages);
         _log = new(Path.Combine(project?.Root ?? AppContext.BaseDirectory, "out/user/logs/editor-candidate.jsonl"));
         _loader.Load(plugins, [
@@ -133,7 +143,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _log.Write("info", cpuOnly ? "presentation.cpu_only" : ReferencePreview ? "presentation.dx11_reference" : "presentation.dx11_scene", "Managed candidate presentation initialized.", _correlation);
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
-            validateComposition: Ncma.Characters.CharacterComponents.RequireComposition,
+            validateComposition: RequireComposition,
             composePreparedPlay:(play,assets)=>{_sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics,assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;},
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
@@ -322,7 +332,10 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if(_viewportTarget is not null){x=0;y=0;width=_viewportTarget.Width;height=_viewportTarget.Height;}
             var configurationWorld=_editor.Play?.Document.World??_editor.Document.World;
             if (_configurationRevision != configurationWorld.Revision || _configurationWorld != configurationWorld.Identity) {
-                var configurations=configurationWorld.GetObjects().Where(item=>item.Has<RenderConfiguration>()).Take(2).ToArray();
+                var objects = configurationWorld.GetObjects();
+                if (objects.Any(item => item.Has<Ncma.Scene.Rendering.EnvironmentLightingData>() && item.Get<Ncma.Scene.Rendering.EnvironmentLightingData>().Enabled))
+                    throw new NotSupportedException("environment_host_integration_pending");
+                var configurations=objects.Where(item=>item.Has<RenderConfiguration>()).Take(2).ToArray();
                 if(configurations.Length>1) _log!.Write("warning","render.ambiguous_configuration","Multiple render configurations; keeping the last valid configuration.",_correlation);
                 else _configuration=configurations.Length==1?configurations[0].Get<RenderConfiguration>():RenderConfiguration.Default(_editor.Edit.SessionId);
                 _configurationRevision=configurationWorld.Revision; _configurationWorld=configurationWorld.Identity;

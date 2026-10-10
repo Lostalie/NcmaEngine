@@ -108,10 +108,10 @@ M3.3：Renderer ABI 1.2 additive query → scene-render v1（static-unlit-v1）/
 C# 负责帧外 typed mesh/绑定姿态、原始skin/palette保留、工具侧PNG/JPEG/mips、UUID/generation/hash cache/lease、
 作者MaterialDefinition/MaterialSet与统一可逆命令、公共Graph受限typed stage/Feature/Stage/pipeline替换；native执行驻留mesh/texture/material/离屏target与最小GGX PBR/AlphaMask/normal。
 旧1.0/1.1 reference不变，最终完整Debug/Release与实际DX11图像/Debug Layer通过，G3资源切片关闭。
-后续 M3.4 已补正式 Scene/Editor/Player 静态多对象、单方向光阴影/HDR；M3.5 增加最小片段播放与 DX11 GPU 蒙皮（见下文）；M3.6 候选增加 GUI1.3 opaque离屏展示，见 [交付记录](M3_6_DELIVERY_REPORT.md)。IBL 和通用多阶段资源图仍未实现，不称完整后端。
+后续 M3.4 已补正式 Scene/Editor/Player 静态多对象、单方向光阴影/HDR；M3.5 增加最小片段播放与 DX11 GPU 蒙皮（见下文）；M3.6 候选增加 GUI1.3 opaque离屏展示，见 [交付记录](M3_6_DELIVERY_REPORT.md)。该历史切片尚无IBL；当前M7.3-B独立GPU IBL已通过自动验证，C1资产/配置已实现，正式宿主C2与通用多阶段资源图仍未完成，不称完整后端。
 契约与边界见 [M3.3 GPU ABI](M3_3_RENDER_ABI.md) 与 [B/C/D交付记录](M3_3_BCD_DELIVERY_REPORT.md)。
 
-M3.4：独立 `Ncma.Scene.Rendering` 注册 UUID/值组件、完整文档组合校验与 committed World 提取/缓存；普通对象不强制 Transform，不逐帧序列化。`Ncma.Assets.Runtime` 帧外严格解析 typed UUID/NCA/hash/材质闭包并 pin 文件，Play 保留旧代。新增 `Ncma.Rendering.Scene` 适配层拥有 CPU/GPU 租约，Renderer ABI 1.2 独立 query v4 执行静态数值批次：单方向光 PCF/近似 PCSS、alpha-mask shadow → GGX HDR → ACES/sRGB；默认及注册 Feature/stage/pipeline 替换共用 typed graph。Editor/Player 实际项目走真实场景，Player 必须显式 `sceneCamera`；空/Headless 不创建 3D 资源。只读检查、light-space 独立裁剪、Edit/Play/Stop/reimport/resize 与图像验证见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md) 和 [v4 契约](M3_4_RENDER_ABI.md)。后续 M3.5 additive query 5 的蒙皮见下文，M3.6 GUI离屏候选见 [记录](M3_6_DELIVERY_REPORT.md)；CSM/contact、IBL、透明、多光、Vulkan仍未实现；不称完整后端。
+M3.4：独立 `Ncma.Scene.Rendering` 注册 UUID/值组件、完整文档组合校验与 committed World 提取/缓存；普通对象不强制 Transform，不逐帧序列化。`Ncma.Assets.Runtime` 帧外严格解析 typed UUID/NCA/hash/材质闭包并 pin 文件，Play 保留旧代。新增 `Ncma.Rendering.Scene` 适配层拥有 CPU/GPU 租约，Renderer ABI 1.2 独立 query v4 执行静态数值批次：单方向光 PCF/近似 PCSS、alpha-mask shadow → GGX HDR → ACES/sRGB；默认及注册 Feature/stage/pipeline 替换共用 typed graph。Editor/Player 实际项目走真实场景，Player 必须显式 `sceneCamera`；空/Headless 不创建 3D 资源。只读检查、light-space 独立裁剪、Edit/Play/Stop/reimport/resize 与图像验证见 [GPU 记录](M3_4_GPU_DELIVERY_REPORT.md) 和 [v4 契约](M3_4_RENDER_ABI.md)。后续 M3.5 additive query 5 的蒙皮见下文，M3.6 GUI离屏候选见 [记录](M3_6_DELIVERY_REPORT.md)；该切片的场景CSM/contact、IBL、透明、多光、Vulkan尚未实现；当前IBL进展见下表；不称完整后端。
 
 统一边界：
 
@@ -140,12 +140,14 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 | Vulkan loader/runtime 探测 | 已实现 |
 | Vulkan 设备/交换链/绘制和双 API 参考场景一致性 | 未实现 |
 | OpenGL实际后端 | 未实现；与Vulkan实际渲染一并延后下一版本，本版本只保留扩展边界 |
-| 完整材质/贴图资产、IBL、延迟/聚类渲染 | 未实现 |
-| 线性环境资产与离线IBL数值预计算 | M7.3-A自动候选：C#值/包/策略、C++ query13有界数值；123项及完整双配置通过，GPU IBL和正式宿主仍未实现 |
+| 材质/贴图资产与六槽工作流 | M7.2闭合合同/ORM-MRA/预设/运行包及68项GPU自动检查通过；完整用户素材与人工验收待完成 |
+| 真实DX11 IBL | M7.3-B资源/绑定/353项独立图像自动验证通过，API0/0；正式Editor/Player接入C2未实现 |
+| 延迟/聚类渲染 | 未实现 |
+| 线性环境资产、离线IBL数值与场景配置 | M7.3-A数值123项；C1 ncenv/NCE read pins/NCP/值组件与原命令合同，新增29+1项和完整双配置通过；C2/C3默认宿主/部署未完成 |
 | 场景渲染提取与静态多对象 | M3.4 已实现，M3.5 增加 DX11 蒙皮；M3.6 候选 GUI1.3 合成视口纹理，G6未关闭 |
 | 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
-当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。M7.3-A环境包始终GpuValidated=false，见[合同](M7_3_A_RUNTIME_CONTRACT.md)和[交付](M7_3_A_DELIVERY_REPORT.md)。
+当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。环境CPU包始终GpuValidated=false；独立GPU IBL证据见[B3交付](M7_3_B3_DELIVERY_REPORT.md)，正式宿主当前拒绝enabled环境，资产/配置边界见[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)和[交付](M7_3_C1_DELIVERY_REPORT.md)。
 构建和编辑器 smoke 通过不等于完成双 API 验证；不能宣称 Vulkan 已可渲染。
 
 ### 物理

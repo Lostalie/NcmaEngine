@@ -41,4 +41,12 @@ public static class RenderingEditorAdapter
         var input=JsonSerializer.SerializeToElement(new{label="Configure rendering",operations=new[]{new{op="set_component",objectId,typeId=RenderConfiguration.ComponentType,version=1,data}}});
         return new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,expectedRevision,"ncma.scene.transaction",input);
     }
+    // Builds existing scoped input only. This does not approve, write files or touch GPU resources.
+    public static CapabilityRequest EnvironmentRequest(EditSession edit, Guid objectId, Ncma.Scene.Rendering.EnvironmentLightingData configuration, ulong expectedRevision)
+    {
+        var data = edit.Document.World.Components.Encode(configuration);
+        var input = JsonSerializer.SerializeToElement(new { label = "Configure environment", operations = new[] { new {
+            op = "set_component", objectId, typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1, data } } });
+        return new(EditSession.ContractVersion, Guid.NewGuid(), edit.SessionId, expectedRevision, "ncma.scene.transaction", input);
+    }
 }

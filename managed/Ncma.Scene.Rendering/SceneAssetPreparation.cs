@@ -34,6 +34,8 @@ public sealed class PreparedSceneAssetLease : IDisposable
 public static class SceneAssetPreparation
 {
     private static readonly ComponentRegistry Registry = RenderComponentRegistry.CreateRegistry();
+    public static bool HasEnabledEnvironment(SceneDocumentSnapshot scene) => scene.Objects.SelectMany(o => o.Components)
+        .Where(c => c.TypeId == EnvironmentLightingData.TypeId).Any(c => Registry.Decode<EnvironmentLightingData>(c).Enabled);
     public static AssetRef[] References(SceneDocumentSnapshot scene)
     {
         var refs = new HashSet<AssetRef>();
@@ -41,6 +43,9 @@ public static class SceneAssetPreparation
             foreach (var component in obj.Components)
                 switch (component.TypeId)
                 {
+                    case EnvironmentLightingData.TypeId:
+                        var environment = Registry.Decode<EnvironmentLightingData>(component);
+                        if (environment.Enabled) Add(environment.AssetId, AssetKind.Environment); break;
                     case StaticMeshData.TypeId:
                         var mesh = Registry.Decode<StaticMeshData>(component); Add(mesh.MeshId, AssetKind.StaticMesh); Add(mesh.MaterialSetId, AssetKind.MaterialSet); break;
                     case SkinnedMeshData.TypeId:

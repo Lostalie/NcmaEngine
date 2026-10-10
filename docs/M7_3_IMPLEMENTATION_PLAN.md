@@ -4,7 +4,7 @@
 
 ## A：环境资产与离线数值预计算（自动候选完成）
 
-最终123项与完整顺序Debug/Release/checked部署通过，见[合同](M7_3_A_RUNTIME_CONTRACT.md)、[交付](M7_3_A_DELIVERY_REPORT.md)。B1资源、B2新Shader/场景绑定和B3完整自动图像均通过完整门禁，见[B2交付](M7_3_B2_DELIVERY_REPORT.md)、[B3交付](M7_3_B3_DELIVERY_REPORT.md)；B自动链闭合，C正式宿主/配置/资产闭包未实现，整个M7.3未完成。以下是A历史范围，不升级为完整IBL或用户HDR文件验收。
+最终123项与完整顺序Debug/Release/checked部署通过，见[合同](M7_3_A_RUNTIME_CONTRACT.md)、[交付](M7_3_A_DELIVERY_REPORT.md)。B1资源、B2新Shader/场景绑定和B3完整自动图像均通过完整门禁，见[B2交付](M7_3_B2_DELIVERY_REPORT.md)、[B3交付](M7_3_B3_DELIVERY_REPORT.md)；B自动链闭合。C1资产/场景配置/运行包自动候选已完成，见[C详细分片](M7_3_C_IMPLEMENTATION_PLAN.md)、[C1交付](M7_3_C1_DELIVERY_REPORT.md)；C2正式宿主和C3默认部署/联合验收未实现，整个M7.3未完成。以下是A历史范围，不升级为正式宿主IBL或用户HDR文件验收。
 
 - C#拥有复制的linear RGBA32F等距圆柱源（宽=高×2，高2–256，RGB0–65504，alpha1）、源UUID/hash、四个显式Cook参数和受控环境配置。源API接收可信解码后的值，本阶段不宣称HDR/EXR文件解码器或用户HDR素材验收。
 - 新NCE1 v1不可变包：独立asset/source UUID、非零generation、源SHA256、算法/布局/样本参数、规范diffuse cube/GGX specular mip cube/BRDF RG LUT。Header160，最多4MiB；不含源像素/路径/name/native handle。读取要求独立可信expectedHash，并逐项校验闭合header/layout/有限数值/alpha/系数/完整长度。不把hash称签名/可信Cook来源证明。
@@ -20,6 +20,8 @@ B1真实环境GPU资源、B2新Shader/场景绑定和B3图像验收已按[B详�
 新增有版本的环境GPU资源和绑定合同，完整候选准入/创建/发布/释放；旧Scene/Shader binding合同冻结，不偷偷扩展旧闭包。官方与user registered shader走同一合同、实际反射与source-free包。C#控制strength/rotation/off；native采样diffuse/specular/LUT，正确线性HDR合成。纯2D/Off不创建环境纹理；默认环境应明确是合成预设。实际GPU常量/方向/金属粗糙度图、独立积分/像素、default-user一致、错误候选保留active、resize/关闭/API0/0。
 
 ## C：正式宿主、资产闭包与配置验收（B提交推送/远端核对后）
+
+C1 的 `.ncenv`/NCE read pins、NCP environment encoding、独立值组件与原可撤销命令合同已通过自动门禁；旧 ncmeta/MCP schema 黄金哈希保持原样。正式宿主 enabled 环境暂时 fail-closed，下一片 C2 须实际接入 profile3 shader 与 GPU 环境资源，不能仅删除 guard。C3 再补默认合成环境、产品部署与属性/检查入口，详见[C分片方案](M7_3_C_IMPLEMENTATION_PLAN.md)。
 
 环境资产接入项目/NCP运行包、精确UUID/generation/hash/pin与checked deployment；Editor和Player共用；配置进入原可撤销命令/权限/历史。默认3D可直接使用，纯UI/Null闭包不带环境包。验证搬移运行包、离线cook/损坏包、缓存增量更新、真实静态/FBX/NCA动画/阴影/材质联合图像与关闭。用户HDR/EXR解码与人工素材范围另须实证。
 

@@ -42,6 +42,7 @@ public static class RuntimeAssetPackage
                 case RuntimeMaterialSetAsset { ImportedSlotsOnly: true } slots: bytes = ModelPayloadCodec.Encode(new MaterialSlotsPayload(slots.CopyImportedNames())); encoding = "slots"; break;
                 case RuntimeMaterialSetAsset set: bytes = MaterialCodec.Encode(set.CopyDefinition()); encoding = "materialSet"; break;
                 case RuntimeTextureAsset texture: bytes = texture.Data.Encode(); encoding = "texture"; break;
+                case RuntimeEnvironmentAsset environment: bytes = environment.Package.CopyBytes(); encoding = "environment"; break;
                 default: throw new ArgumentException("Unsupported runtime package asset.");
             }
             if (entries.Count >= MaxAssets || bytes.Length > MaxBytes - 16 - offset) throw new ArgumentException("Runtime package budget.");
@@ -95,9 +96,12 @@ public static class RuntimeAssetPackage
                     new RuntimeMaterialSetAsset(entry.AssetId, entry.Generation, entry.Hash, null, ModelPayloadCodec.DecodeMaterials(data).Names),
                 "texture" when entry.Kind == AssetKind.Texture && entry.ModelId == Guid.Empty && entry.SkeletonId == Guid.Empty =>
                     new RuntimeTextureAsset(entry.AssetId, entry.Generation, TextureData.Decode(data)),
+                "environment" when entry.Kind == AssetKind.Environment && entry.ModelId == Guid.Empty && entry.SkeletonId == Guid.Empty =>
+                    new RuntimeEnvironmentAsset(EnvironmentPackage.Decode(data, entry.Hash)),
                 _ => throw new ArgumentException("Runtime package type/encoding.") };
             if (asset.Id != entry.AssetId || asset.ContentHash != entry.Hash || entry.Encoding == "materialSet" && MaterialCodec.DecodeSet(data).AssetId != entry.AssetId)
                 throw new ArgumentException("Runtime package payload identity.");
+            if (asset is RuntimeEnvironmentAsset && asset.Generation != entry.Generation) throw new ArgumentException("Runtime package environment generation.");
             if (asset is RuntimeMeshAsset mesh && (mesh.CopyPayload().Skinned != (mesh.Kind == AssetKind.SkinnedMesh))) throw new ArgumentException("Runtime package mesh type.");
             assets.Add(asset.Id, asset); previous = entry.AssetId; offset += entry.Length;
             if (asset is RuntimeMaterialSetAsset { ImportedSlotsOnly: true }) diagnostics.Add(new("imported_material_slots_only", asset.Id));

@@ -23,13 +23,21 @@ public static class RuntimeAssetLoader
             // Empty/Null scenes do not even scan asset directories or initialize a 3D dependency.
             if (requests.Length == 0) return new(new(assets, pins, diagnostics, project));
             string root = RuntimeReadPin.Root(projectRoot);
-            var records = new List<AssetRecord>(); var authored = new Dictionary<Guid, RuntimeAsset>(); long retained = 0;
+            var records = new List<AssetRecord>(); var authored = new Dictionary<Guid, RuntimeAsset>();
+            var environments = new Dictionary<Guid, EnvironmentAssetDescriptor>(); long retained = 0;
             foreach (string path in Scan(root, cancellation))
             {
                 if (path.EndsWith(".journal", StringComparison.Ordinal)) throw new ArgumentException("Runtime assets require completed authoring recovery.");
-                if (!path.EndsWith(".ncmeta", StringComparison.Ordinal) && !path.EndsWith(".ncmaterial", StringComparison.Ordinal) && !path.EndsWith(".ncmatset", StringComparison.Ordinal) && !path.EndsWith(".ncmaanim", StringComparison.Ordinal)) continue;
-                using var file = new RuntimeReadPin(root, path); byte[] bytes = file.Read(AssetRecordCodec.MaxBytes, cancellation);
+                bool environment = path.EndsWith(".ncenv", StringComparison.Ordinal);
+                if (!environment && !path.EndsWith(".ncmeta", StringComparison.Ordinal) && !path.EndsWith(".ncmaterial", StringComparison.Ordinal) && !path.EndsWith(".ncmatset", StringComparison.Ordinal) && !path.EndsWith(".ncmaanim", StringComparison.Ordinal)) continue;
+                using var file = new RuntimeReadPin(root, path); byte[] bytes = file.Read(environment ? EnvironmentAssetDescriptor.MaxBytes : AssetRecordCodec.MaxBytes, cancellation);
                 Charge(bytes.Length);
+                if (environment) {
+                    var descriptor = EnvironmentAssetDescriptor.Decode(bytes);
+                    if (descriptor.ProjectId != project || environments.Count >= MaxGenerations || !environments.TryAdd(descriptor.AssetId, descriptor))
+                        throw new ArgumentException("Environment descriptor project/identity/budget.");
+                    continue;
+                }
                 if (path.EndsWith(".ncmeta", StringComparison.Ordinal)) { records.Add(AssetRecordCodec.Decode(bytes)); continue; }
                 RuntimeAsset asset;
                 if (path.EndsWith(".ncmaterial", StringComparison.Ordinal)) { var d = MaterialCodec.Decode(bytes); string hash = Hash(MaterialCodec.Encode(d)); asset = new RuntimeMaterialAsset(d, Token(hash), hash); }
@@ -41,6 +49,9 @@ public static class RuntimeAssetLoader
             foreach (var asset in authored.Values)
                 if (catalog.TryResolve(new(new(asset.Id), asset.Kind), out _, out var collision) || collision != "asset_missing")
                     throw new ArgumentException("Authoring/derived UUID collision.");
+            foreach (var descriptor in environments.Values)
+                if (authored.ContainsKey(descriptor.AssetId) || catalog.TryResolve(new(new(descriptor.AssetId), AssetKind.Environment), out _, out var collision) || collision != "asset_missing")
+                    throw new ArgumentException("Environment/authoring/derived UUID collision.");
             foreach (var request in requests) Resolve(request);
             foreach (var material in assets.Values.OfType<RuntimeMaterialAsset>())
             {
@@ -62,6 +73,18 @@ public static class RuntimeAssetLoader
                 if (!visited.Add(request)) return;
                 if (visited.Count > MaxRequired) throw new ArgumentException("Runtime dependency closure budget.");
                 if (assets.TryGetValue(request.Id.Value, out var old)) { RequireKind(old); return; }
+                if (environments.TryGetValue(request.Id.Value, out var environment)) {
+                    if (request.ExpectedKind != AssetKind.Environment) throw new ArgumentException("Runtime environment kind mismatch.");
+                    if (pins.Count >= MaxGenerations) throw new ArgumentException("Runtime generation pin budget.");
+                    RuntimeReadPin file;
+                    try { file = new(root, environment.Path, derived: true); }
+                    catch (Exception e) when (!strictMissing && e is FileNotFoundException or DirectoryNotFoundException) { Missing("asset_generation_missing"); return; }
+                    pins.Add(file); byte[] bytes = file.Read(EnvironmentPackage.MaxBytes, cancellation); Charge(bytes.Length);
+                    var package = EnvironmentPackage.Decode(bytes, environment.ContentHash);
+                    if (package.AssetId != environment.AssetId || package.Generation != environment.Generation)
+                        throw new ArgumentException("Runtime environment header identity/generation.");
+                    assets.Add(package.AssetId, new RuntimeEnvironmentAsset(package)); return;
+                }
                 if (authored.TryGetValue(request.Id.Value, out var author))
                 {
                     RequireKind(author); assets.Add(author.Id, author);

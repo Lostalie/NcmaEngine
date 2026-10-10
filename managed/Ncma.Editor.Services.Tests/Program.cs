@@ -751,6 +751,18 @@ var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTe
     ("M4.4 actual Editor root motion/scene GPU/interpolation/Edit isolation/close failure retry",()=>CharacterEditorChecks.Run(output,args[1])),
     ("M4.6 character/combat closed schemas, live stdio, precise UI approval/expiry/revoke/redaction and reload",()=>CharacterInspectionTests.Run(root,args[1],output)),
     ("M6.3-D graph runtime exact resource/Play/UI approval + real stdio read/expiry/revoke/reload/fault",()=>AnimationRuntimeInspectionTests.Run(root,args[1],output)),
+    ("M7.3-C1 formal Editor live environment command fails closed pending C2", () => {
+        using var owner = new EditorSessionOwner("Environment pending", components:Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(), validateComposition:CandidatePresentation.RequireComposition);
+        var workspace = new EditorWorkspace(owner); Guid id = workspace.CreateObject(workspace.Stamp);
+        var off = Ncma.Scene.Rendering.EnvironmentLightingData.Off;
+        var attach = RenderingEditorAdapter.EnvironmentRequest(owner.Edit!, id, off, owner.Edit!.Revision);
+        var permissions = new CapabilityPermissions(["ncma.scene.transaction", "ncma.history.undo", "ncma.history.redo"]);
+        Check(owner.Edit.Invoke(attach,permissions).Changed); byte[] before = owner.Document.CaptureBytes(); int undo = owner.Edit.State.UndoCount;
+        var active = new Ncma.Scene.Rendering.EnvironmentLightingData(1, Guid.NewGuid(), 1, new string('A',64), 1,0,true);
+        var denied = owner.Edit.Invoke(RenderingEditorAdapter.EnvironmentRequest(owner.Edit,id,active,owner.Edit.Revision),permissions);
+        Check(!denied.Changed && denied.Status == "error" && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Edit.State.UndoCount == undo);
+        Check(owner.Document.World.FindObject(id).Get<Ncma.Scene.Rendering.EnvironmentLightingData>() == off);
+    }),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);
         File.WriteAllBytes(Path.Combine(dir,"Main.ncmascene"),new SceneDocument().CaptureBytes());

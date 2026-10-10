@@ -54,6 +54,11 @@ public sealed class RuntimeTextureAsset : RuntimeAsset
     public TextureData Data { get; }
     internal RuntimeTextureAsset(Guid id, ulong generation, TextureData data) : base(id, AssetKind.Texture, generation, data.ContentHash) => Data = data;
 }
+public sealed class RuntimeEnvironmentAsset : RuntimeAsset
+{
+    public EnvironmentPackage Package { get; }
+    internal RuntimeEnvironmentAsset(EnvironmentPackage package) : base(package.AssetId, AssetKind.Environment, package.Generation, package.ContentHash) => Package = package;
+}
 public sealed class RuntimeDataAsset : RuntimeAsset
 {
     private readonly byte[] _data;

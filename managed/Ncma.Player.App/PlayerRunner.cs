@@ -52,6 +52,9 @@ public static class PlayerRunner
                         _=shaderFiles.Get(ShaderProfile.Scene3D,false,skin); _=shaderFiles.Get(ShaderProfile.Scene3D,true,skin);
                     }
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage);
+                    // C1 understands the asset contract but must not silently ignore active IBL.
+                    if (Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(startup))
+                        throw new NotSupportedException("environment_host_integration_pending");
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
                         phase = "configuration";

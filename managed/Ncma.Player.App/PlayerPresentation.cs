@@ -38,6 +38,8 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     {
         if (_scene is not null) throw new InvalidOperationException("Scene already bound.");
         var snapshot=play.Document.CaptureSnapshot();
+        if (Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(snapshot))
+            throw new NotSupportedException("environment_host_integration_pending");
         if(snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
             _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
@@ -57,7 +59,10 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     public void Present(PlaySession play)
     {
         if (_state.Minimized != 0 || _state.FramebufferWidth == 0 || _state.FramebufferHeight == 0) { _window!.Wait(.01); return; }
-        var configurations = play.Document.World.GetObjects().Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
+        var objects = play.Document.World.GetObjects();
+        if (objects.Any(o => o.Has<Ncma.Scene.Rendering.EnvironmentLightingData>() && o.Get<Ncma.Scene.Rendering.EnvironmentLightingData>().Enabled))
+            throw new NotSupportedException("environment_host_integration_pending");
+        var configurations = objects.Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
         if (configurations.Length > 1) throw new ArgumentException("ambiguous_render_configuration");
         var config = configurations.Length == 1 ? configurations[0].Get<RenderConfiguration>() : RenderConfiguration.Default(play.SessionId);
         _renderer!.Resize(_state.FramebufferWidth, _state.FramebufferHeight);

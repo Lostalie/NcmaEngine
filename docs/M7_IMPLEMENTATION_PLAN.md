@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项、B2独立Shader/场景绑定46项、B3完整自动图像353项及各自完整双配置/部署通过，见[B3交付](M7_3_B3_DELIVERY_REPORT.md)。B自动链闭合；M7.3-C正式宿主/配置/闭包、整个M7.3和M7.4–M7.7未完成。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项、B2独立Shader/场景绑定46项、B3完整自动图像353项及各自完整双配置/部署通过，见[B3交付](M7_3_B3_DELIVERY_REPORT.md)。B自动链闭合；C1环境资产/场景配置/运行包新增29+1项及完整双配置/部署通过，见[C1交付](M7_3_C1_DELIVERY_REPORT.md)。C2正式宿主与C3默认部署/联合验收、整个M7.3和M7.4–M7.7未完成。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -21,7 +21,7 @@ C#拥有组合／配置／资产／编辑事务／审批，C++仅GPU执行／资
 - 已有：`D3D11RenderBackend.cpp`的D3DCompile及无输入layout分支的局部VS signature检查。
   B候选新增独立完整常量/SRV/sampler/stage反射准备服务；C1闭合Tone、C2闭合Geometry/Shadow/Skin、C3闭合独立Flat2D实际GPU接入；C4-A/B/C已有无源码包、实际准入、正式共享Scene/UI准备、项目文件选择/pin与checked部署。内部参考反射仍需编译器；不是任意Shader执行沙箱。
 - 已有：`ScenePipelineKernel.cpp`真实纹理PBR/普通PCF及近似PCSS，不能把当前ambient常量称IBL。
-- 未实现：可发布typed shader运行资产与通用跨阶段受控绑定，IBL，完整后处理栈与用户定制GPU模块；B完整闭合反射准备不代表GPU接入。
+- 已有：闭合 source-free shader 运行资产与实际准入；M7.3-B 独立真实 GPU IBL 及图像验证，C1 环境资产/场景配置/运行包。未实现：正式宿主 IBL 接入、通用跨阶段受控绑定、完整后处理栈与任意用户定制 GPU 模块；不把独立测试管线称为正式默认宿主。
 - 未实现：带origin frame/device generation的完整GPU成本证据。现有ResolveTiming是DONOTFLUSH
   last-valid query，没有采样帧ID；不能按当前提交帧归属或把重复观察算独立样本。
 - 现有RenderPipelineService配置更换用同步WaitIdle安全退役，不冒称已有异步retirement/device-loss恢复。
@@ -42,9 +42,9 @@ C4最新交付：A source-free NCS1/native-free预检77项、B实际准入/共�
 已有测试原样保留，新覆盖通过后才称补齐。
 实际范围、正变换限制及证据见[实施方案](M7_2_IMPLEMENTATION_PLAN.md)、[合同](M7_2_RUNTIME_CONTRACT.md)、[交付](M7_2_DELIVERY_REPORT.md)。材质面板人工操作/用户素材/目标环境/完整性能/1h验收仍待完成；下一阶段M7.3。
 
-## M7.3 环境光与IBL（A/B1/B2自动候选完成，B3/C待实施）
+## M7.3 环境光与IBL（A/B/C1自动候选完成，C2/C3待实施）
 
-A离线资产/Cook123项、B1真实环境资源54项、B2独立环境Shader/场景绑定46项及各自完整Debug/Release/checked部署通过，见[分片方案](M7_3_IMPLEMENTATION_PLAN.md)、[B2合同](M7_3_B2_RUNTIME_CONTRACT.md)、[B2交付](M7_3_B2_DELIVERY_REPORT.md)。新合同显式接入真实IBL/强度/旋转/Off，正式默认宿主尚未切换、ambient仍不是IBL。没有HDR/EXR文件解码器，GpuValidated=false；整个M7.3未完成。下一片B3完整独立图像验收，再C正式宿主/配置/资产闭包。
+A离线资产/Cook123项、B1真实环境资源54项、B2独立环境Shader/场景绑定46项、B3完整自动图像353项及各自完整Debug/Release/checked部署通过，见[分片方案](M7_3_IMPLEMENTATION_PLAN.md)、[B3交付](M7_3_B3_DELIVERY_REPORT.md)。C1追加29项资产/文件/包/历史与1项正式Editor命令测试，完整双配置/部署通过，见[C分片](M7_3_C_IMPLEMENTATION_PLAN.md)、[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_3_C1_DELIVERY_REPORT.md)。独立GPU合同已真实消费IBL；正式默认宿主尚未切换，enabled配置显式拒绝，ambient仍不是IBL。没有HDR/EXR文件解码器，GpuValidated=false；整个M7.3未完成。下一片C2正式共享渲染接入，再C3默认部署/联合验收。
 
 C#拥有环境资产/强度/旋转/配置与闭包；native执行环境纹理、diffuse irradiance、prefiltered specular
 及BRDF LUT数值工作。离线准备与精确hash/generation，默认环境可直接用，纯2D完全不分配。

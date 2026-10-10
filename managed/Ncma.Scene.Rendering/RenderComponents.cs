@@ -69,6 +69,8 @@ public static class RenderComponentRegistry
         Ncma.Animation.RootMotionData.Register(registry);
         Ncma.Animation.ActionDefinitionData.Register(registry);
         Ncma.Animation.AnimatorData.Register(registry);
+        registry.Register<EnvironmentLightingData>(EnvironmentLightingData.TypeId, 1, Schema(("version", "integer"), ("assetId", "string"),
+            ("generation", "integer"), ("contentHash", "string"), ("strength", "number"), ("rotationRadians", "number"), ("enabled", "boolean")), EnvironmentLightingData.Validate);
         registry.Register<StaticMeshData>(StaticMeshData.TypeId, 1, Schema(("meshId", "string"), ("materialSetId", "string"),
             ("visible", "boolean"), ("castShadow", "boolean"), ("layerMask", "integer")), StaticMeshData.Validate);
         registry.Register<SkinnedMeshData>(SkinnedMeshData.TypeId, 1, Schema(("characterId", "string"), ("meshId", "string"),

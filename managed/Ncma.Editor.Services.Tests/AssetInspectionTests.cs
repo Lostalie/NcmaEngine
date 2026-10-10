@@ -83,7 +83,7 @@ internal static class AssetInspectionTests
         });
         yield return ("M3.8 malformed pagination/UUID/duplicates and hidden dependency diagnostics", () => {
             using var f = new Fixture(); f.Service.ApproveForPairedClients([f.Root]);
-            foreach (object input in new object[] { new { limit = 0 }, new { limit = 65 }, new { offset = -1 }, new { offset = 65537 }, new { limit = 1.5 }, new { kind = "Unknown" }, new { kind = 2 }, new { path = "../outside" }, new { projectId = Guid.NewGuid() } })
+            foreach (object input in new object[] { new { limit = 0 }, new { limit = 65 }, new { offset = -1 }, new { offset = 65537 }, new { limit = 1.5 }, new { kind = "Unknown" }, new { kind = "environment" }, new { kind = 2 }, new { path = "../outside" }, new { projectId = Guid.NewGuid() } })
                 Check(f.Call("ncma.assets.list", input).Status != "ok");
             foreach (object input in new object[] { new { assetId = Guid.Empty, section = "summary" }, new { assetId = f.Root.ToString("D").ToUpperInvariant(), section = "summary" }, new { assetId = f.Root }, new { assetId = f.Root, section = "raw" } })
                 Check(f.Call("ncma.assets.inspect", input).Status != "ok");

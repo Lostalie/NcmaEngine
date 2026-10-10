@@ -137,7 +137,7 @@ public sealed class EnvironmentPackage
     private static void Face(int face){if(face is <0 or >5)throw new ArgumentException("Environment cube face.");}
 }
 
-// Future host configuration value only; registration/scene commands/GPU installation remain B/C.
+// Copied GPU binding value (B2) and scene configuration (C1); formal host integration remains C2.
 public readonly record struct EnvironmentLightingConfiguration(Guid AssetId,ulong Generation,string ContentHash,float Strength,float RotationRadians,bool Enabled)
 {
     public static EnvironmentLightingConfiguration Off => new(Guid.Empty,0,"",0,0,false);

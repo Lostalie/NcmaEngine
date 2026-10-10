@@ -526,7 +526,13 @@ var tests = new (string Name, Action Run)[]
         using var schema = JsonDocument.Parse(metadataStream); using var record = JsonDocument.Parse(AssetRecordCodec.Encode(Record()));
         Check(schema.RootElement.GetProperty("required").EnumerateArray().Select(e => e.GetString()).Order()
             .SequenceEqual(record.RootElement.EnumerateObject().Select(p => p.Name).Order()));
-        Check(schema.RootElement.GetProperty("$defs").GetProperty("kind").GetProperty("enum").GetArrayLength() == Enum.GetValues<AssetKind>().Length);
+        // The new Environment kind is an independent ncenv/NCE/NCP contract, not ncmeta/NCA.
+        string[] frozenKinds = ["character", "staticMesh", "skinnedMesh", "skeleton", "clip", "texture", "material", "materialSet", "prefab", "overrideSet", "animationGraph"];
+        Check(schema.RootElement.GetProperty("$defs").GetProperty("kind").GetProperty("enum").EnumerateArray().Select(e => e.GetString()).SequenceEqual(frozenKinds));
+        Check(Enum.GetValues<AssetKind>().Where(AssetRecordCodec.SupportsKind).Select(k => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(k.ToString())).SequenceEqual(frozenKinds));
+        Reject(() => AssetRecordCodec.Encode(Record() with { Kind = AssetKind.Environment }));
+        Reject(() => AssetRecordCodec.Encode(Record() with { Subassets = [new(Guid.NewGuid(), AssetKind.Environment, "environment", "Environment", false)] }));
+        Reject(() => AssetRecordCodec.Encode(Record() with { Dependencies = [new(Guid.NewGuid(), AssetKind.Environment)] }));
         using var layoutStream = assembly.GetManifestResourceStream("Ncma.Assets.Schemas.nca-v1.layout.json")!;
         using var layout = JsonDocument.Parse(layoutStream);
         Check(layout.RootElement.GetProperty("headerBytes").GetInt32() == DerivedAssetCodec.HeaderBytes && layout.RootElement.GetProperty("entryBytes").GetInt32() == DerivedAssetCodec.EntryBytes);

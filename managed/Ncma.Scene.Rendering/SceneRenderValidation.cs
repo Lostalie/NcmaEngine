@@ -39,10 +39,19 @@ public static class SceneRenderValidation
         PreparedSceneAssets? assets = null, bool strictMissing = false, AssetCatalog? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot); bool validateActionReferences=assets is not null; assets ??= PreparedSceneAssets.Empty;
-        var diagnostics = new List<SceneRenderDiagnostic>(); int primaryLights = 0;
+        var diagnostics = new List<SceneRenderDiagnostic>(); int primaryLights = 0, environments = 0;
         foreach (var obj in snapshot.Objects)
         {
             var components = obj.Components.ToDictionary(c => c.TypeId, StringComparer.Ordinal);
+            if (components.TryGetValue(EnvironmentLightingData.TypeId, out var environmentComponent)) {
+                if (++environments > 1) throw new ArgumentException("Only one scene environment configuration is supported.");
+                var environment = Registry.Decode<EnvironmentLightingData>(environmentComponent);
+                if (environment.Enabled) {
+                    var info = Resolve(obj.Id, environment.AssetId, AssetKind.Environment);
+                    if (info is not null && (info.Generation != environment.Generation || info.ContentHash != environment.ContentHash))
+                        throw new ArgumentException("Environment must resolve the exact immutable generation/hash.");
+                }
+            }
             bool mesh = components.ContainsKey(StaticMeshData.TypeId), skin = components.ContainsKey(SkinnedMeshData.TypeId);
             if (components.TryGetValue(Ncma.Animation.AnimatorData.TypeId, out var animatorComponent)) {
                 var animator = Registry.Decode<Ncma.Animation.AnimatorData>(animatorComponent);

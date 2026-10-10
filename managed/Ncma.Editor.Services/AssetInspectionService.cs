@@ -133,7 +133,7 @@ public sealed class AssetInspectionService
         int offset = Integer(input, "offset", 0, 0, 65536), limit = Integer(input, "limit", 16, 1, 64);
         if (list) {
             string? kind = input.TryGetProperty("kind", out var k) ? k.ValueKind == JsonValueKind.String ? k.GetString() : throw Invalid() : null;
-            if (kind is not null && !Enum.GetValues<AssetKind>().Any(v => Kind(v) == kind)) Bad();
+            if (kind is not null && !Enum.GetValues<AssetKind>().Any(v => AssetRecordCodec.SupportsKind(v) && Kind(v) == kind)) Bad();
             var rows = _approved.Where(Visible).Select(id => _entries[id].Row).Where(e => kind is null || kind == e.Kind).OrderBy(e => e.AssetId).ToArray();
             return new { assetRevision = _revision, total = rows.Length, items = rows.Skip(offset).Take(limit).ToArray(), nextOffset = Next(offset, limit, rows.Length) };
         }

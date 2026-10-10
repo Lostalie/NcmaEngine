@@ -7,6 +7,9 @@ public static class AssetRecordCodec
 {
     public const int MaxBytes = 4 * 1024 * 1024;
     public const int MaxSubassets = 4096, MaxDependencies = 4096;
+    // .ncmeta v1 has its own frozen kind closure. New independent containers (NCE/NCP)
+    // do not implicitly broaden this format or its metadata-only Agent schemas.
+    public static bool SupportsKind(AssetKind kind) => Enum.IsDefined(kind) && kind <= AssetKind.AnimationGraph;
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -47,7 +50,7 @@ public static class AssetRecordCodec
     public static void Validate(AssetRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        if (record.Version != 1 || record.AssetId == Guid.Empty || !Enum.IsDefined(record.Kind) ||
+        if (record.Version != 1 || record.AssetId == Guid.Empty || !SupportsKind(record.Kind) ||
             record.ImporterVersion < 1 || record.Settings is null || record.Settings.Version != 1 ||
             record.Settings.SampleRate is < 1 or > 120 || record.Subassets is null || record.Dependencies is null ||
             record.Subassets.Length > MaxSubassets || record.Dependencies.Length > MaxDependencies)
@@ -58,14 +61,14 @@ public static class AssetRecordCodec
         var keys = new HashSet<string>(StringComparer.Ordinal);
         foreach (var sub in record.Subassets)
         {
-            if (sub is null || sub.AssetId == Guid.Empty || !ids.Add(sub.AssetId) || !Enum.IsDefined(sub.Kind) || !keys.Add(sub.SourceKey))
+            if (sub is null || sub.AssetId == Guid.Empty || !ids.Add(sub.AssetId) || !SupportsKind(sub.Kind) || !keys.Add(sub.SourceKey))
                 throw new ArgumentException("Invalid/duplicate subasset identity or source key.");
             Text(sub.SourceKey, 512); Text(sub.Name, 256);
         }
         var dependencies = new HashSet<Guid>();
         foreach (var dependency in record.Dependencies)
             if (dependency is null || dependency.AssetId == Guid.Empty || !dependencies.Add(dependency.AssetId) ||
-                dependency.AssetId == record.AssetId || !Enum.IsDefined(dependency.ExpectedKind))
+                dependency.AssetId == record.AssetId || !SupportsKind(dependency.ExpectedKind))
                 throw new ArgumentException("Invalid/duplicate asset dependency.");
         if (record.Generation is { } generation)
         {

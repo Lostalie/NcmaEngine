@@ -16,7 +16,7 @@ public static class AssetInspectionSchemas
         ["required"] = new JsonArray(required.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray())
     };
     private static JsonObject Page() => new() { ["offset"] = Number(65536), ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 64 } };
-    private static JsonObject Kind() => Values(Enum.GetValues<AssetKind>().Select(k => JsonNamingPolicy.CamelCase.ConvertName(k.ToString())).ToArray());
+    private static JsonObject Kind() => Values(Enum.GetValues<AssetKind>().Where(AssetRecordCodec.SupportsKind).Select(k => JsonNamingPolicy.CamelCase.ConvertName(k.ToString())).ToArray());
     private static JsonObject Rows() => new() { ["type"] = "array", ["maxItems"] = 64, ["items"] = Object(new() {
         ["assetId"] = Uuid(), ["kind"] = Kind(), ["name"] = Text(64), ["state"] = Values("registered", "derived", "tombstone")
     }, "assetId", "kind", "name", "state") };
