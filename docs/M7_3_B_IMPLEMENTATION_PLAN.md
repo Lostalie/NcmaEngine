@@ -13,7 +13,9 @@
 - 有界诊断 readback 从真实 GPU staging 按规范 face/mip 布局读取；不是 CPU 原值回放，不在帧/tick 中使用。验证所有 texel、HDR E 超过65504不截断、最大尺寸、替换/resize/关闭、纯2D无环境分配、API0/0。
 - 不宣称 IBL 场景图像已实现；本片没有 Shader 采样、强度/旋转应用。GpuValidated 仍不能写进持久包。
 
-## B2：冻结旧合同之外的新环境 Shader/场景绑定
+## B2：冻结旧合同之外的新环境 Shader/场景绑定（自动候选完成）
+
+46项实际DX11场景检查、原生故障与完整顺序Debug/Release/checked deployment通过，见[B2方案](M7_3_B2_IMPLEMENTATION_PLAN.md)、[合同](M7_3_B2_RUNTIME_CONTRACT.md)、[交付](M7_3_B2_DELIVERY_REPORT.md)。下一片B3；整个B/M7.3及C尚未完成。
 
 新增独立版本的 geometry binding（cube/mip/LUT/环境参数）；同一个公开合同支持 default/user shader、真实反射及 source-free shader package。旧 Scene shader 包不隐式升级。接入 B1 资源，显式强度/旋转/Off，无同步 cook/inference/IPC tick。整组候选与旧结果保护、阴影/skin 联合路径。
 

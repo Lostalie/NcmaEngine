@@ -17,6 +17,7 @@ class EnvironmentGpuKernel final {
 public:
     std::array<Rhi::TextureHandle,3> textures{};
     Rhi::SamplerHandle sampler{};
+    uint32_t scenePins=0;
     NcmaEnvironmentGpuDescriptionV1 layout{}; // values is always null; no caller pointer retained.
     explicit EnvironmentGpuKernel(Rhi::D3D11RenderBackend& b):backend(b){}
     ~EnvironmentGpuKernel(){backend.DestroySampler(sampler);for(auto t:textures)backend.DestroyTexture(t);}

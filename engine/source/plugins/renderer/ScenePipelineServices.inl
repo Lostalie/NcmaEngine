@@ -1,12 +1,12 @@
 // Private numerical GPU batch service. No World, UUID resolver, authoring policy or clock.
-uint32_t CreateScenePipelinePrepared(uint64_t context,uint64_t handle,const NcmaScenePipelineDescriptionV4* input,NcmaGpuResourceV3* output,NcmaErrorV1* error,const NcmaShaderPairV1* pair,const NcmaSceneShadersV1* shaders=nullptr) noexcept {
+uint32_t CreateScenePipelinePrepared(uint64_t context,uint64_t handle,const NcmaScenePipelineDescriptionV4* input,NcmaGpuResourceV3* output,NcmaErrorV1* error,const NcmaShaderPairV1* pair,const NcmaSceneShadersV1* shaders=nullptr,bool environment=false) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{
   auto valid=ResourceReady(context,handle,error);if(valid)return valid;if(!input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);const auto d=*input;
-  uint64_t bytes=static_cast<uint64_t>(d.width)*d.height*12+static_cast<uint64_t>(d.shadow_resolution)*d.shadow_resolution*4+408;
+  uint64_t bytes=static_cast<uint64_t>(d.width)*d.height*12+static_cast<uint64_t>(d.shadow_resolution)*d.shadow_resolution*4+(environment?424:408);
   if(d.struct_size!=16||!d.width||!d.height||d.width>4096||d.height>4096||(d.shadow_resolution&&(d.shadow_resolution<256||d.shadow_resolution>2048))||
      (d.shadow_resolution&(d.shadow_resolution-1))||renderer->scenePipelines.size()>=8||bytes>512ull*1024*1024-renderer->sceneStats.resident_bytes)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
   BusyScope busyScope;std::string message;auto candidate=std::make_unique<Rendering::ScenePipelineKernel>(*renderer->backend);
-  if(!candidate->Initialize(d,message,pair,shaders))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
+  if(!candidate->Initialize(d,message,pair,shaders,environment))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
 #ifdef NCMA_RENDERER_TEST_WAIT
   if(testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
 #endif
@@ -23,7 +23,9 @@ uint32_t NCMA_CALL DestroyScenePipeline(uint64_t context,uint64_t handle,NcmaGpu
   if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);BusyScope busyScope;std::string message;
   if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
   renderer->backend->GetDeviceContext()->ClearState();const auto& p=*renderer->scenePipelines.at(key.value);
-  renderer->sceneStats.resident_bytes-=static_cast<uint64_t>(p.width)*p.height*12+static_cast<uint64_t>(p.resolution)*p.resolution*4+408;renderer->scenePipelines.erase(key.value);Validation(*renderer);return NCMA_OK;
+  Validation(*renderer);
+  if(p.environmentKey.value)--renderer->environments.at(p.environmentKey.value)->scenePins;
+  renderer->sceneStats.resident_bytes-=static_cast<uint64_t>(p.width)*p.height*12+static_cast<uint64_t>(p.resolution)*p.resolution*4+p.ConstantBytes()+8;renderer->scenePipelines.erase(key.value);return NCMA_OK;
  });
 }
 uint32_t NCMA_CALL ScenePipelineStats(uint64_t context,uint64_t handle,NcmaScenePipelineStatsV4* output,NcmaErrorV1* error) noexcept {
@@ -82,7 +84,7 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
   if(b.target.value)renderer->targets.at(b.target.value)->lastFrame=b.frame;
   renderer->active=true;renderer->lastFrame=b.frame;renderer->stats.submitted_frames++;renderer->sceneStats.geometry_draws+=b.draw_count;renderer->sceneStats.shadow_draws+=f.caster_count;
   renderer->sceneStats.copied_bytes+=240+(static_cast<uint64_t>(b.draw_count)+f.caster_count)*256+static_cast<uint64_t>(f.pass_count)*16;
-  renderer->sceneStats.constant_upload_bytes+=(static_cast<uint64_t>(b.draw_count)+f.caster_count+tones)*400;
+  renderer->sceneStats.constant_upload_bytes+=(static_cast<uint64_t>(b.draw_count)+f.caster_count+tones)*pipeline.ConstantBytes();
   renderer->stats.submit_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();Validation(*renderer);execution.success=true;return NCMA_OK;
  });
 }

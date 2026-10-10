@@ -134,6 +134,12 @@ int main()
     Rhi::DrawDescription invalidSampledDraw = draw;
     invalidSampledDraw.PixelTextures[1] = {1};
     assert(!Rhi::Validate(invalidSampledDraw, error));
+    invalidSampledDraw = draw; invalidSampledDraw.PixelSamplers[7] = {1};
+    assert(!Rhi::Validate(invalidSampledDraw, error));
+    invalidSampledDraw.AllowSamplerOnlyBindings = true;
+    assert(Rhi::Validate(invalidSampledDraw, error));
+    invalidSampledDraw.PixelTextures[8] = {1};
+    assert(!Rhi::Validate(invalidSampledDraw, error)); // opt-in never permits texture without sampler.
     nullBackend->DestroyGraphicsPipeline(pipeline);
     nullBackend->DestroyBuffer(buffer);
 

@@ -30,16 +30,17 @@ bool SameBindings(ID3D11ShaderReflection* actual,ID3D11ShaderReflection* expecte
   }
  }return true;
 }
-uint32_t ValidateCode(const uint8_t* bytes,uint32_t size,std::string_view source,const char* entry,const char* target,bool skin,NcmaErrorV1* error){
+uint32_t ValidateCode(const uint8_t* bytes,uint32_t size,std::string_view source,const char* entry,const char* target,bool skin,NcmaErrorV1* error,bool environment=false){
  if(!Code(bytes,size))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"registered_stage_bytecode_budget");
  ComPtr<ID3D11ShaderReflection> actual,expected;
- for(const auto& cached:renderer->shaderReferences)if(cached.source==source&&cached.entry==entry&&cached.target==target){expected=cached.reflection;break;}
+ auto& cache=environment?renderer->environmentShaderReferences:renderer->shaderReferences;
+ for(const auto& cached:cache)if(cached.source==source&&cached.entry==entry&&cached.target==target){expected=cached.reflection;break;}
  if(!expected){
-  if(renderer->shaderReferences.size()>=10)return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_reference_budget");
+  if(cache.size()>=(environment?4u:10u))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_reference_budget");
   ComPtr<ID3DBlob> reference;
   if(FAILED(D3DCompile(source.data(),source.size(),"Ncma.ClosedStage.v1",nullptr,nullptr,entry,target,ShaderCompilation::Flags,0,&reference,nullptr)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_contract");
   if(FAILED(D3DReflect(reference->GetBufferPointer(),reference->GetBufferSize(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_reflection");
-  renderer->shaderReferences.push_back({std::string(source),entry,target,expected});
+  cache.push_back({std::string(source),entry,target,expected});
  }
  if(FAILED(D3DReflect(bytes,size,__uuidof(ID3D11ShaderReflection),&actual)))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"registered_stage_bytecode");
  const char* reason=nullptr;if(!SameBindings(actual.Get(),expected.Get(),reason))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,reason);
@@ -79,7 +80,7 @@ uint32_t NCMA_CALL CreateRegisteredStages(uint64_t context,uint64_t handle,const
 }
 uint32_t NCMA_CALL ReplaceRegisteredStages(uint64_t context,uint64_t handle,NcmaGpuResourceV3 key,const NcmaSceneShadersV1* shaders,NcmaErrorV1* error) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{auto v=ValidateShaderPreparation(context,handle,error);if(v)return v;if(key.generation!=handle||!renderer->scenePipelines.contains(key.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
-  auto& scene=*renderer->scenePipelines.at(key.value);v=RegisteredStages::Scene(shaders,scene.resolution!=0,error);if(v)return v;
+  auto& scene=*renderer->scenePipelines.at(key.value);if(scene.environmentCapable)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH,"Environment scene requires query15.");v=RegisteredStages::Scene(shaders,scene.resolution!=0,error);if(v)return v;
   BusyScope busyScope;Rendering::ScenePipelineKernel::Programs candidate{};struct Scope{Rendering::ScenePipelineKernel& scene;Rendering::ScenePipelineKernel::Programs& candidate;~Scope(){scene.ReleasePrograms(candidate);}} retained{scene,candidate};std::string message;
   if(!scene.PrepareShaders(*shaders,candidate,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,"registered_scene_device"):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_scene_candidate");
  #ifdef NCMA_RENDERER_TEST_WAIT

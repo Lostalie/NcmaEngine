@@ -328,6 +328,7 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--material-surface-tests") return MaterialSurfaceTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-cook-tests") return EnvironmentCookTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-gpu-tests") return EnvironmentGpuTests(args[1],args[2]);
+            if (args.Length == 3 && args[0] == "--environment-scene-tests") return EnvironmentSceneTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-preflight") return EnvironmentChild(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--shader-package-preflight") return ShaderPackageChild(args[1], args[2]);
             TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
@@ -373,6 +374,7 @@ internal static unsafe partial class Program
             MaterialSurfaceTests(root,Path.Combine(output,"material-surface"));
             EnvironmentCookTests(root,Path.Combine(output,"environment-cook"));
             EnvironmentGpuTests(root,Path.Combine(output,"environment-gpu"));
+            EnvironmentSceneTests(root,Path.Combine(output,"environment-scene"));
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");

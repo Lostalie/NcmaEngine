@@ -59,15 +59,18 @@ public sealed class ScenePipelineSession : IDisposable
     public CompiledRenderGraph Plan { get; private set; }
     public RegisteredSceneTone? RegisteredTone { get; private set; }
     public RegisteredSceneShaders? RegisteredShaders { get; private set; }
+    public RegisteredEnvironmentSceneShaders? RegisteredEnvironmentShaders { get; private set; }
+    public Ncma.Assets.EnvironmentLightingConfiguration EnvironmentLighting { get; private set; } = Ncma.Assets.EnvironmentLightingConfiguration.Off;
     public bool Shadows => Plan.Resources.Any(r => r.Role == RenderRole.SceneShadow);
-    public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height, RegisteredSceneTone? tone = null, RegisteredSceneShaders? shaders = null)
+    public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height, RegisteredSceneTone? tone = null, RegisteredSceneShaders? shaders = null, RegisteredEnvironmentSceneShaders? environmentShaders = null)
     {
         Owner = renderer ?? throw new ArgumentNullException(nameof(renderer)); ArgumentNullException.ThrowIfNull(pipeline);
         Plan = pipeline.Build(width, height).Compile(RenderCapabilities.SceneDx11); if (!Plan.RequiresSceneService) throw new ArgumentException("Scene graph required.");
-        if(tone is not null&&shaders is not null)throw new ArgumentException("Choose one complete group or Tone-only preparation.");
+        if((tone is not null?1:0)+(shaders is not null?1:0)+(environmentShaders is not null?1:0)>1)throw new ArgumentException("Choose one exact shader contract.");
         Operations = Plan.SceneOperations;uint resolution=Plan.Resources.SingleOrDefault(r => r.Role == RenderRole.SceneShadow)?.Width ?? 0;
-        if(shaders is not null)renderer.InstallSceneShaders(this,resolution,shaders,true);else renderer.CreateScene(this,resolution,tone);
-        RegisteredTone = tone;RegisteredShaders=shaders;
+        if(environmentShaders is not null)renderer.InstallEnvironmentSceneShaders(this,resolution,environmentShaders,true);
+        else if(shaders is not null)renderer.InstallSceneShaders(this,resolution,shaders,true);else renderer.CreateScene(this,resolution,tone);
+        RegisteredTone = tone;RegisteredShaders=shaders;RegisteredEnvironmentShaders=environmentShaders;
     }
     public void ReplaceTone(RegisteredSceneTone tone)
     { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.ReplaceTone(this, tone); RegisteredTone = tone;RegisteredShaders=null; }
@@ -76,6 +79,10 @@ public sealed class ScenePipelineSession : IDisposable
     public void Submit(ulong frame, ReadOnlySpan<SceneGpuDraw> geometry, ReadOnlySpan<SceneGpuDraw> casters, ResourceLighting lighting, Matrix4x4 lightViewProjection,
         SceneShadowSettings shadow, GpuViewTarget? target = null, Vector4 viewport = default, Vector4 clear = default)
     { ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.SubmitScene(this, frame, geometry, casters, lighting, lightViewProjection, shadow, target, viewport, clear); }
+    public void ReplaceEnvironmentShaders(RegisteredEnvironmentSceneShaders shaders)
+    { ObjectDisposedException.ThrowIf(Key.Value==0,this);Owner.InstallEnvironmentSceneShaders(this,Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0,shaders,false);RegisteredEnvironmentShaders=shaders; }
+    public void ConfigureEnvironment(GpuEnvironmentResource? resource,Ncma.Assets.EnvironmentLightingConfiguration configuration,Func<bool> preparationAllowed)
+    { ObjectDisposedException.ThrowIf(Key.Value==0,this);Owner.BindEnvironment(this,resource,configuration,preparationAllowed);EnvironmentLighting=configuration; }
     public void Configure(RenderPipeline pipeline)
     {
         ObjectDisposedException.ThrowIf(Key.Value == 0, this); _ = Owner.Handle; ArgumentNullException.ThrowIfNull(pipeline);
@@ -84,7 +91,7 @@ public sealed class ScenePipelineSession : IDisposable
             throw new ArgumentException("Changing target/shadow allocation requires a new scene lease.");
         var operations=candidate.SceneOperations; Plan=candidate; Operations=operations;
     }
-    public void Dispose() { if (Key.Value == 0) return; Owner.DestroyScene(this); Key = default; }
+    public void Dispose() { if (Key.Value == 0) return; Owner.DestroyScene(this); Key = default;EnvironmentLighting=Ncma.Assets.EnvironmentLightingConfiguration.Off; }
 }
 public sealed unsafe partial class RendererSession
 {

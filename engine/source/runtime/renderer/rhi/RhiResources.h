@@ -11,7 +11,7 @@
 
 namespace NcmaEngine::Rhi
 {
-    inline constexpr std::size_t MaxPixelResources = 8;
+    inline constexpr std::size_t MaxPixelResources = 10;
 
     enum class BufferUsage : std::uint8_t { Vertex, Index, Constant, Storage };
     enum class MemoryUsage : std::uint8_t { GpuOnly, CpuToGpu, GpuToCpu };
@@ -169,6 +169,9 @@ namespace NcmaEngine::Rhi
         BufferHandle PixelConstantBuffer;
         std::array<TextureHandle, MaxPixelResources> PixelTextures{};
         std::array<SamplerHandle, MaxPixelResources> PixelSamplers{};
+        // Explicit sampler-only slots (e.g. disabled optional shader branch); no dummy SRV.
+        // Default retains strict paired texture/sampler validation.
+        bool AllowSamplerOnlyBindings = false;
         std::uint32_t VertexCount = 0;
         std::uint32_t IndexCount = 0;
         std::uint32_t FirstVertex = 0;

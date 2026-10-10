@@ -45,7 +45,7 @@ uint32_t NCMA_CALL ReplaceRegisteredTone(uint64_t context,uint64_t handle,NcmaGp
  return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=ValidateShaderPreparation(context,handle,error);if(valid)return valid;
   if(key.generation!=handle||!renderer->scenePipelines.contains(key.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
   valid=RegisteredTone::Validate(pair,error);if(valid)return valid;BusyScope scope;std::string message;
-  auto& scene=*renderer->scenePipelines.at(key.value);auto candidate=scene.PrepareTone(*pair,message);
+  auto& scene=*renderer->scenePipelines.at(key.value);if(scene.environmentCapable)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH,"Environment scene requires whole query15 group.");auto candidate=scene.PrepareTone(*pair,message);
   if(!candidate)return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,"tone_device_failure"):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"tone_candidate_failure");
   struct CandidateScope { Rhi::D3D11RenderBackend& backend;Rhi::GraphicsPipelineHandle handle;~CandidateScope(){backend.DestroyGraphicsPipeline(handle);} } retained{*renderer->backend,candidate};
 #ifdef NCMA_RENDERER_TEST_WAIT

@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；M7.3-B/C和M7.4–M7.7未实现。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项与B2独立Shader/场景绑定46项及完整双配置/部署也通过；M7.3-B3/C和M7.4–M7.7未实现。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -42,9 +42,9 @@ C4最新交付：A source-free NCS1/native-free预检77项、B实际准入/共�
 已有测试原样保留，新覆盖通过后才称补齐。
 实际范围、正变换限制及证据见[实施方案](M7_2_IMPLEMENTATION_PLAN.md)、[合同](M7_2_RUNTIME_CONTRACT.md)、[交付](M7_2_DELIVERY_REPORT.md)。材质面板人工操作/用户素材/目标环境/完整性能/1h验收仍待完成；下一阶段M7.3。
 
-## M7.3 环境光与IBL（A自动候选完成，B/C未实现）
+## M7.3 环境光与IBL（A/B1/B2自动候选完成，B3/C待实施）
 
-A有界线性HDR源/NCE1包、query13离线数值Cook和123项检查、完整Debug/Release/checked部署通过，见[分片方案](M7_3_IMPLEMENTATION_PLAN.md)、[A合同](M7_3_A_RUNTIME_CONTRACT.md)、[A交付](M7_3_A_DELIVERY_REPORT.md)。没有HDR/EXR文件解码器或环境GPU安装，GpuValidated=false；整个M7.3未完成，ambient仍不是IBL。下一片B真实DX11绑定与图像，再C正式宿主/配置/资产闭包。
+A离线资产/Cook123项、B1真实环境资源54项、B2独立环境Shader/场景绑定46项及各自完整Debug/Release/checked部署通过，见[分片方案](M7_3_IMPLEMENTATION_PLAN.md)、[B2合同](M7_3_B2_RUNTIME_CONTRACT.md)、[B2交付](M7_3_B2_DELIVERY_REPORT.md)。新合同显式接入真实IBL/强度/旋转/Off，正式默认宿主尚未切换、ambient仍不是IBL。没有HDR/EXR文件解码器，GpuValidated=false；整个M7.3未完成。下一片B3完整独立图像验收，再C正式宿主/配置/资产闭包。
 
 C#拥有环境资产/强度/旋转/配置与闭包；native执行环境纹理、diffuse irradiance、prefiltered specular
 及BRDF LUT数值工作。离线准备与精确hash/generation，默认环境可直接用，纯2D完全不分配。

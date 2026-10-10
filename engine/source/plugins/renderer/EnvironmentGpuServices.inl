@@ -13,6 +13,7 @@ uint32_t NCMA_CALL PublishEnvironmentGpu(uint64_t context,uint64_t handle,NcmaGp
  const auto d=*input;if(!Rendering::EnvironmentGpuKernel::Describe(d))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Environment layout.");
  auto previous=renderer->environments.find(old.value);
  if(old.value?(old.generation!=handle||previous==renderer->environments.end()):old.generation!=0)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+ if(old.value&&previous->second->scenePins)return NcmaPlugin::Error(error,NCMA_BUSY,"Environment is bound to a scene.");
  const uint64_t bytes=static_cast<uint64_t>(d.float_count)*4;
  if((!old.value&&renderer->environments.size()>=8)||renderer->environmentStats.resident_bytes+bytes>renderer->environmentStats.budget_bytes)return NcmaPlugin::Error(error,NCMA_BUSY,"Environment resource budget including candidate.");
  BusyScope scope;const std::vector<float> copied(d.values,d.values+d.float_count);
@@ -39,6 +40,7 @@ uint32_t NCMA_CALL PublishEnvironmentGpu(uint64_t context,uint64_t handle,NcmaGp
 uint32_t NCMA_CALL DestroyEnvironmentGpu(uint64_t context,uint64_t handle,NcmaGpuResourceV3 key,NcmaErrorV1* error) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=Instance(context,handle,error);if(valid)return valid;
  auto found=renderer->environments.find(key.value);if(key.generation!=handle||found==renderer->environments.end())return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+ if(found->second->scenePins)return NcmaPlugin::Error(error,NCMA_BUSY,"Environment is bound to a scene.");
  if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
  BusyScope scope;std::string message;Validation(*renderer);
  if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);

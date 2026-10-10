@@ -807,18 +807,18 @@ namespace NcmaEngine::Rhi
         ID3D11SamplerState* pixelSamplers[MaxPixelResources]{};
         for (std::size_t slot = 0; slot < MaxPixelResources; ++slot)
         {
-            if (!description.PixelTextures[slot])
-                continue;
-            const auto texture = m_Textures.find(description.PixelTextures[slot].Value);
-            const auto sampler = m_Samplers.find(description.PixelSamplers[slot].Value);
-            if (texture == m_Textures.end() || !texture->second.ShaderResourceView ||
-                sampler == m_Samplers.end())
-            {
-                error = "Draw references an unknown sampled texture or sampler";
-                return false;
+            if (description.PixelTextures[slot]) {
+                const auto texture = m_Textures.find(description.PixelTextures[slot].Value);
+                if (texture == m_Textures.end() || !texture->second.ShaderResourceView) {
+                    error = "Draw references an unknown sampled texture"; return false;
+                }
+                pixelTextures[slot] = texture->second.ShaderResourceView.Get();
             }
-            pixelTextures[slot] = texture->second.ShaderResourceView.Get();
-            pixelSamplers[slot] = sampler->second.Get();
+            if (description.PixelSamplers[slot]) {
+                const auto sampler = m_Samplers.find(description.PixelSamplers[slot].Value);
+                if (sampler == m_Samplers.end()) { error = "Draw references an unknown sampler"; return false; }
+                pixelSamplers[slot] = sampler->second.Get();
+            }
         }
         m_DeviceContext->PSSetShaderResources(
             0, static_cast<UINT>(MaxPixelResources), pixelTextures);

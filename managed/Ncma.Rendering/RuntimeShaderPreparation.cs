@@ -29,6 +29,7 @@ public sealed class RuntimeShaderPreparation : RegisteredShaderPreparation
     }
     public static RuntimeShaderPreparation Prepare(RendererSession renderer,RuntimeShaderPackage package,Func<bool> preparationAllowed) {
         ArgumentNullException.ThrowIfNull(renderer);ArgumentNullException.ThrowIfNull(package);ArgumentNullException.ThrowIfNull(preparationAllowed);
+        if(package.Profile==ShaderProfile.SceneEnvironment)throw new ArgumentException("Environment packages require independent whole admission.");
         renderer.BeginToneOperation();
         try {
             var candidate=new RuntimeShaderPreparation(renderer,package,preparationAllowed);
@@ -42,7 +43,7 @@ public sealed class RuntimeShaderPreparation : RegisteredShaderPreparation
         try{Verify(renderer);}finally{renderer.EndToneOperation();}
     }
     internal static RegisteredStageMetadata[] Metadata(RuntimeShaderPackage package) {
-        string[] roles=["ui.vertex","ui.pixel","geometry.vertex","geometry.pixel","tone.vertex","tone.pixel","shadow.vertex","shadow.pixel","skin.compute"];
+        string[] roles=["ui.vertex","ui.pixel","geometry.vertex","geometry.pixel","tone.vertex","tone.pixel","shadow.vertex","shadow.pixel","skin.compute","environment.geometry.vertex","environment.geometry.pixel"];
         return Enumerable.Range(0,(package.Count+7)/8).SelectMany(package.CopyPage)
             .Select(m=>new RegisteredStageMetadata(roles[(int)m.Role],package.ContentHash,m.AssetId,m.AuthorContentHash,m.BytecodeHash,true)).ToArray();
     }
@@ -63,6 +64,7 @@ public sealed unsafe partial class RendererSession
     }
     private ValidateRuntimeShadersNative? _validateRuntimeShaders;
     internal void ValidateRuntimeShaders(RuntimeShaderPackage package) {
+        if(package.Profile==ShaderProfile.SceneEnvironment)throw new ArgumentException("Environment packages require query15.");
         VerifyShaderPreparation();
         if(_validateRuntimeShaders is null) {
             if(sizeof(RuntimeShadersNative)!=176||sizeof(RuntimeShadersApi)!=24)throw new PlatformNotSupportedException("Runtime shader x64 ABI.");

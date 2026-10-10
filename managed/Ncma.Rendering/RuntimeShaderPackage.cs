@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace Ncma.Rendering;
 
-public enum RuntimeShaderRole { UiVertex, UiPixel, GeometryVertex, GeometryPixel, ToneVertex, TonePixel, ShadowVertex, ShadowPixel, SkinCompute }
+public enum RuntimeShaderRole { UiVertex, UiPixel, GeometryVertex, GeometryPixel, ToneVertex, TonePixel, ShadowVertex, ShadowPixel, SkinCompute, EnvironmentGeometryVertex, EnvironmentGeometryPixel }
 public sealed record RuntimeShaderInput(RuntimeShaderRole Role, CompiledShader Shader);
 public readonly record struct RuntimeShaderMetadata(RuntimeShaderRole Role, Guid AssetId, string AuthorContentHash,
     string BindingContractHash, string BytecodeHash, int BytecodeBytes, uint CompilerVersion, uint CompilerFlags);
@@ -44,8 +44,8 @@ public sealed class RuntimeShaderPackage
     private static RuntimeShaderRole[] Closure(ShaderProfile profile,bool shadows,bool skin)
     {
         if(profile==ShaderProfile.Flat2D && !shadows && !skin) return [RuntimeShaderRole.UiVertex,RuntimeShaderRole.UiPixel];
-        if(profile!=ShaderProfile.Scene3D) Fail("profile");
-        return new[]{RuntimeShaderRole.GeometryVertex,RuntimeShaderRole.GeometryPixel,RuntimeShaderRole.ToneVertex,RuntimeShaderRole.TonePixel}
+        if(profile is not (ShaderProfile.Scene3D or ShaderProfile.SceneEnvironment)) Fail("profile");
+        return new[]{profile==ShaderProfile.SceneEnvironment?RuntimeShaderRole.EnvironmentGeometryVertex:RuntimeShaderRole.GeometryVertex,profile==ShaderProfile.SceneEnvironment?RuntimeShaderRole.EnvironmentGeometryPixel:RuntimeShaderRole.GeometryPixel,RuntimeShaderRole.ToneVertex,RuntimeShaderRole.TonePixel}
             .Concat(shadows?new[]{RuntimeShaderRole.ShadowVertex,RuntimeShaderRole.ShadowPixel}:[])
             .Concat(skin?new[]{RuntimeShaderRole.SkinCompute}:[]).ToArray();
     }
@@ -61,7 +61,7 @@ public sealed class RuntimeShaderPackage
         using var stream=new MemoryStream();using var writer=new BinaryWriter(stream);
         writer.Write(new byte[HeaderBytes]);var ids=new HashSet<Guid>();
         foreach(var input in ordered){
-            var shader=input.Shader;var d=shader.Descriptor;var layout=ShaderRuntimeLayout.For(input.Role,shadows);
+            var shader=input.Shader;var d=shader.Descriptor;var layout=ShaderRuntimeLayout.For(input.Role,shadows,profile);
             if(!ids.Add(d.AssetId) || d.Profile!=layout.Profile || d.Stage!=layout.Stage || d.CopyDefinition().Dependencies.Length!=0) Fail("descriptor");
             if(shader.CompilerVersion!=47 || shader.CompilerFlags!=0x48800) Fail("compiler");
             ShaderBindingValidation.Validate(d,new(d.ContentHash,d.Stage,layout.Inputs,layout.Constants,layout.Resources));
@@ -88,7 +88,7 @@ public sealed class RuntimeShaderPackage
         if(Read(owned,0)!=Magic || Read(owned,4)!=Version) Fail("version");
         if(Read(owned,8)!=1) Fail("backend");
         uint profile=Read(owned,12),flags=Read(owned,16);
-        if(profile>1 || flags>3 || Read(owned,24)!=owned.Length) Fail("header");
+        if(profile is not (0 or 1 or 3) || flags>3 || Read(owned,24)!=owned.Length) Fail("header");
         var roles=Closure((ShaderProfile)profile,(flags&1)!=0,(flags&2)!=0);
         if(Read(owned,20)!=roles.Length || !SHA256.HashData(owned.AsSpan(HeaderBytes)).AsSpan().SequenceEqual(owned.AsSpan(28,32))) Fail("closure_hash");
         var entries=new Entry[roles.Length];var ids=new HashSet<Guid>();int at=HeaderBytes;
@@ -98,7 +98,7 @@ public sealed class RuntimeShaderPackage
             Guid id=new(owned.AsSpan(at+4,16));if(id==Guid.Empty || !ids.Add(id)) Fail("identity");
             string author=Convert.ToHexString(owned.AsSpan(at+20,32)),binding=Convert.ToHexString(owned.AsSpan(at+52,32));
             if(owned.AsSpan(at+20,32).IndexOfAnyExcept((byte)0)<0) Fail("identity");
-            var layout=ShaderRuntimeLayout.For(roles[i],(flags&1)!=0);
+            var layout=ShaderRuntimeLayout.For(roles[i],(flags&1)!=0,(ShaderProfile)profile);
             if(binding!=layout.Hash) Fail("binding_contract");
             uint compiler=Read(owned,at+84),compilerFlags=Read(owned,at+88),length=Read(owned,at+92);
             if(compiler!=47 || compilerFlags!=0x48800) Fail("compiler");
@@ -146,13 +146,16 @@ internal sealed record ShaderRuntimeLayout(ShaderProfile Profile,ShaderStage Sta
         Inputs=Inputs.OrderBy(x=>x.Semantic,StringComparer.Ordinal).ThenBy(x=>x.Index),
         Constants=Constants.OrderBy(x=>x.Slot).Select(x=>x with{Members=x.Members.OrderBy(m=>m.ByteOffset).ToArray()}),
         Resources=Resources.OrderBy(x=>ShaderContractCodec.Namespace(x.Kind)).ThenBy(x=>x.Slot)}));
-    public static ShaderRuntimeLayout For(RuntimeShaderRole role,bool shadows)=>role switch{
+    public static ShaderRuntimeLayout For(RuntimeShaderRole role,bool shadows,ShaderProfile profile=ShaderProfile.Scene3D)=>role switch{
         RuntimeShaderRole.UiVertex=>new(ShaderProfile.Flat2D,ShaderStage.Vertex,DefaultUiShaders.Inputs,DefaultUiShaders.Constants,[]),
         RuntimeShaderRole.UiPixel=>new(ShaderProfile.Flat2D,ShaderStage.Pixel,[],[],DefaultUiShaders.Resources),
-        RuntimeShaderRole.GeometryVertex or RuntimeShaderRole.ShadowVertex=>new(ShaderProfile.Scene3D,ShaderStage.Vertex,DefaultSceneShaders.Inputs,DefaultSceneTone.Constants,[]),
+        RuntimeShaderRole.GeometryVertex=>new(ShaderProfile.Scene3D,ShaderStage.Vertex,DefaultSceneShaders.Inputs,DefaultSceneTone.Constants,[]),
+        RuntimeShaderRole.ShadowVertex=>new(profile,ShaderStage.Vertex,DefaultSceneShaders.Inputs,DefaultSceneTone.Constants,[]),
+        RuntimeShaderRole.EnvironmentGeometryVertex=>new(ShaderProfile.SceneEnvironment,ShaderStage.Vertex,DefaultSceneShaders.Inputs,DefaultEnvironmentSceneShaders.Constants,[]),
+        RuntimeShaderRole.EnvironmentGeometryPixel=>new(ShaderProfile.SceneEnvironment,ShaderStage.Pixel,[],DefaultEnvironmentSceneShaders.Constants,DefaultEnvironmentSceneShaders.Resources(shadows)),
         RuntimeShaderRole.GeometryPixel=>new(ShaderProfile.Scene3D,ShaderStage.Pixel,[],DefaultSceneTone.Constants,DefaultSceneShaders.Resources(shadows)),
-        RuntimeShaderRole.ToneVertex=>new(ShaderProfile.Scene3D,ShaderStage.Vertex,DefaultSceneTone.Inputs,[],[]),
-        RuntimeShaderRole.TonePixel or RuntimeShaderRole.ShadowPixel=>new(ShaderProfile.Scene3D,ShaderStage.Pixel,[],DefaultSceneTone.Constants,DefaultSceneTone.Resources),
+        RuntimeShaderRole.ToneVertex=>new(profile,ShaderStage.Vertex,DefaultSceneTone.Inputs,[],[]),
+        RuntimeShaderRole.TonePixel or RuntimeShaderRole.ShadowPixel=>new(profile,ShaderStage.Pixel,[],DefaultSceneTone.Constants,DefaultSceneTone.Resources),
         RuntimeShaderRole.SkinCompute=>new(ShaderProfile.Skinning,ShaderStage.Compute,[],DefaultSkinShader.Constants,DefaultSkinShader.Resources),
         _=>throw new ShaderContractException("runtime_role","package")
     };

@@ -7,7 +7,7 @@ namespace Ncma.Rendering;
 
 // Declarations only. No shader compilation, GPU support registration, file IO or execution authority.
 public enum ShaderStage { Vertex, Pixel, Compute }
-public enum ShaderProfile { Flat2D, Scene3D, Skinning }
+public enum ShaderProfile { Flat2D, Scene3D, Skinning, SceneEnvironment }
 public enum ShaderScalar { Float32, Int32, UInt32 }
 public enum ShaderMatrixOrder { None, RowMajor, ColumnMajor }
 public enum ShaderResourceKind { Texture2D, TextureCube, StructuredBuffer, ByteAddressBuffer, Sampler, RWStructuredBuffer, RWByteAddressBuffer }
@@ -123,7 +123,7 @@ public static class ShaderContractCodec
         if (d.Name is null || d.Name.Length is < 1 or > 128 || d.Name.Any(char.IsControl) || string.IsNullOrWhiteSpace(d.Name)) Fail("name", "name");
         try { _ = Utf8.GetByteCount(d.Name); } catch (EncoderFallbackException) { Fail("name_encoding", "name"); }
         if (!Enum.IsDefined(d.Profile) || !Enum.IsDefined(d.Stage)) Fail("enum", "stage/profile");
-        if (d.Profile == ShaderProfile.Flat2D && d.Stage == ShaderStage.Compute || d.Profile == ShaderProfile.Skinning && d.Stage != ShaderStage.Compute) Fail("profile_stage", "stage/profile");
+        if (d.Profile is ShaderProfile.Flat2D or ShaderProfile.SceneEnvironment && d.Stage == ShaderStage.Compute || d.Profile == ShaderProfile.Skinning && d.Stage != ShaderStage.Compute) Fail("profile_stage", "stage/profile");
         Identifier(d.EntryPoint, "entryPoint");
         if (!IsHash(d.SourceHash) || HashSource(d.Source) != d.SourceHash) Fail("source_hash", "sourceHash");
         if (d.Inputs is null || d.Constants is null || d.Resources is null || d.Dependencies is null) Fail("collections", "$");

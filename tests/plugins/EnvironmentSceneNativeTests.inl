@@ -1,0 +1,55 @@
+static void EnvironmentSceneNativeTests(uint64_t context,uint64_t handle){
+ NcmaErrorV1 error{};NcmaEnvironmentSceneApiV1 api{};
+ Check(QuerySceneRender(context,15,&api,55,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==56&&!api.struct_size,"Environment scene short API atomic");
+ Check(QuerySceneRender(context,15,&api,56,&error)==NCMA_OK&&api.version==1&&api.capabilities==3&&api.copy_source&&api.validate&&api.create&&api.replace&&api.bind,"Environment scene query15/API1");
+ std::vector<uint8_t> sourceBytes(262144,123);uint32_t required=999;
+ Check(api.copy_source(context,handle,sourceBytes.data(),1,&required,&error)==NCMA_BUFFER_TOO_SMALL&&required==999&&sourceBytes[0]==123,"Environment short source atomic");
+ Check(api.copy_source(context,handle,sourceBytes.data(),262144,&required,&error)==NCMA_OK&&required>0,"Environment copied source");
+ const std::string environment="#define NCMA_NO_SCENE_SHADOW\n"+std::string(reinterpret_cast<char*>(sourceBytes.data()),required);
+ const std::string original(Rendering::ScenePipelineKernel::ShaderSource());
+ auto compile=[](std::string_view source,const char* entry,const char* target){ComPtr<ID3DBlob> code,diagnostics;
+  Check(SUCCEEDED(D3DCompile(source.data(),source.size(),"B2.Test",nullptr,nullptr,entry,target,ShaderCompilation::Flags,0,&code,&diagnostics)),"Environment actual shader compiler");return code;};
+ auto gv=compile(environment,"VSMain","vs_5_0"),gp=compile(environment,"PSMain","ps_5_0"),tv=compile(original,"VSTone","vs_5_0"),tp=compile(original,"PSTone","ps_5_0");
+ auto pair=[](ID3DBlob* v,ID3DBlob* p){return NcmaShaderPairV1{32,1,static_cast<uint32_t>(v->GetBufferSize()),static_cast<uint32_t>(p->GetBufferSize()),static_cast<const uint8_t*>(v->GetBufferPointer()),static_cast<const uint8_t*>(p->GetBufferPointer())};};
+ NcmaSceneShadersV1 shaders{104,2,pair(gv.Get(),gp.Get()),{},pair(tv.Get(),tp.Get())};
+ NcmaRuntimeShadersV1 runtime{176,2,3,0,{},shaders,{}};
+ Check(api.validate(context,handle,&runtime,&error)==NCMA_OK,"Environment complete actual runtime admission");
+ runtime.version=1;Check(api.validate(context,handle,&runtime,&error)==NCMA_ABI_MISMATCH,"Environment independent admission version");runtime.version=2;
+ runtime.flags=2;runtime.skin={24,1,static_cast<uint32_t>(gv->GetBufferSize()),0,static_cast<const uint8_t*>(gv->GetBufferPointer())};
+ Check(api.validate(context,handle,&runtime,&error)==NCMA_INVALID_ARGUMENT,"Whole package last optional skin rejection before install");runtime.flags=0;runtime.skin={};
+ auto oldGeometry=compile("#define NCMA_NO_SCENE_SHADOW\n"+original,"PSMain","ps_5_0");auto bad=shaders;bad.geometry.pixel=static_cast<const uint8_t*>(oldGeometry->GetBufferPointer());bad.geometry.pixel_bytes=static_cast<uint32_t>(oldGeometry->GetBufferSize());
+ NcmaScenePipelineDescriptionV4 desc{16,64,64,0};NcmaGpuResourceV3 key{123,456};const auto oldSceneStats=renderer->sceneStats;const auto oldEnvironmentStats=renderer->environmentStats;
+ Check(api.create(context,handle,&desc,&bad,&key,&error)==NCMA_INVALID_ARGUMENT&&key.value==123&&renderer->scenePipelines.empty()&&renderer->backend->GetLiveResourceCount()==0,"Old C400 actual group rejected before any GPU install");
+ testTonePreparationThrow=true;Check(api.create(context,handle,&desc,&shaders,&key,&error)==NCMA_INTERNAL_ERROR&&key.value==123&&renderer->scenePipelines.empty()&&renderer->backend->GetLiveResourceCount()==0,"Environment create diagnostic exception atomic");testTonePreparationThrow=false;
+ Check(api.create(context,handle,&desc,&shaders,&key,&error)==NCMA_OK,"Environment whole create");auto& scene=*renderer->scenePipelines.at(key.value);const auto oldProgram=scene.CopyPrograms().geometry;const auto count=renderer->backend->GetLiveResourceCount();
+ testTonePreparationThrow=true;Check(api.replace(context,handle,key,&shaders,&error)==NCMA_INTERNAL_ERROR&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Environment replace exception releases candidates retains old group");testTonePreparationThrow=false;
+ testWaitTimeout=true;Check(api.replace(context,handle,key,&shaders,&error)==NCMA_SHUTDOWN_TIMEOUT&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Environment replace timeout retains old group");testWaitTimeout=false;
+ Check(api.replace(context,handle,key,&bad,&error)==NCMA_INVALID_ARGUMENT&&scene.CopyPrograms().geometry==oldProgram,"Wrong actual late stage retains old");
+ for(const auto& mutation:std::array<std::pair<std::string,std::string>,2>{{{"Channels,ShadowParameters,EnvironmentSettings","Channels,EnvironmentSettings,ShadowParameters"},{"SpecularTex:register(t8)","SpecularTex:register(t10)"}}}){
+     std::string wrong=environment;const auto at=wrong.find(mutation.first);Check(at!=std::string::npos,"Environment actual mutation fixture");wrong.replace(at,mutation.first.size(),mutation.second);
+     auto code=compile(wrong,"PSMain","ps_5_0");auto rejected=shaders;rejected.geometry.pixel=static_cast<const uint8_t*>(code->GetBufferPointer());rejected.geometry.pixel_bytes=static_cast<uint32_t>(code->GetBufferSize());
+     Check(api.replace(context,handle,key,&rejected,&error)==NCMA_INVALID_ARGUMENT&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Actual environment last member offset/resource slot rejects before replacement");
+ }
+ NcmaEnvironmentGpuApiV1 gpu{};Check(QuerySceneRender(context,14,&gpu,56,&error)==NCMA_OK,"Environment GPU for binding");
+ std::vector<float> values(224,1);NcmaEnvironmentGpuDescriptionV1 d{40,1,2,2,2,2,224,0,values.data()};NcmaGpuResourceV3 env{};
+ Check(gpu.publish(context,handle,{},&d,&env,&error)==NCMA_OK,"Environment binding resources");auto& resource=*renderer->environments.at(env.value);
+ NcmaEnvironmentBindingV1 binding{40,1,env,1,0,0,0};
+ auto retained=[&](){return scene.environmentKey.value==0&&resource.scenePins==0;};
+ testEnvironmentGpuPublicationFault=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INTERNAL_ERROR&&retained(),"Bind diagnostic before publication atomic");testEnvironmentGpuPublicationFault=false;
+ testWaitTimeout=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_SHUTDOWN_TIMEOUT&&retained(),"Bind timeout no pin or settings publication");testWaitTimeout=false;
+ binding.reserved2=1;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INVALID_ARGUMENT&&retained(),"Late bind reserved rejects");binding.reserved2=0;
+ binding.environment.generation++;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INVALID_HANDLE&&retained(),"Bind exact renderer generation");binding.environment=env;
+ renderer->active=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_BUSY&&retained(),"Bind active frame rejected");renderer->active=false;
+ Check(api.bind(context,handle,key,&binding,&error)==NCMA_OK&&scene.environmentKey.value==env.value&&resource.scenePins==1,"Binding pins resource");
+ Check(gpu.destroy(context,handle,env,&error)==NCMA_BUSY,"Pinned destroy rejected");NcmaGpuResourceV3 refused{999,999};
+ Check(gpu.publish(context,handle,env,&d,&refused,&error)==NCMA_BUSY&&refused.value==999&&resource.scenePins==1,"Pinned replace output/counters unchanged");
+ Check(api.replace(context,handle,key,&shaders,&error)==NCMA_OK&&scene.environmentKey.value==env.value&&resource.scenePins==1,"Shader swap preserves binding pin");
+ binding.environment={};binding.strength=0;binding.rotation=1;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INVALID_ARGUMENT&&resource.scenePins==1,"Off controls exact zero");binding.rotation=0;
+ testWaitTimeout=true;Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_SHUTDOWN_TIMEOUT&&resource.scenePins==1&&renderer->scenePipelines.contains(key.value),"Scene close timeout retains binding pin");testWaitTimeout=false;
+ Check(api.bind(context,handle,key,&binding,&error)==NCMA_OK&&resource.scenePins==0&&!scene.environmentKey.value,"Off releases pin without allocation");
+ binding.environment=env;binding.strength=1;Check(api.bind(context,handle,key,&binding,&error)==NCMA_OK,"Rebind before close");
+ Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_OK&&resource.scenePins==0,"Scene close releases pin");
+ Check(gpu.destroy(context,handle,env,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"All environment scene resources retired");
+ Check(renderer->stats.validation_errors==0&&renderer->stats.validation_warnings==0,"Environment scene native API0/0");
+ renderer->sceneStats=oldSceneStats;renderer->environmentStats=oldEnvironmentStats;
+}

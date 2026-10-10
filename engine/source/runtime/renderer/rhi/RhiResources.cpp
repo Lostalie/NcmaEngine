@@ -200,8 +200,8 @@ namespace NcmaEngine::Rhi
         }
         for (std::size_t slot = 0; slot < MaxPixelResources; ++slot)
         {
-            if (static_cast<bool>(description.PixelTextures[slot]) !=
-                static_cast<bool>(description.PixelSamplers[slot]))
+            if ((description.PixelTextures[slot] && !description.PixelSamplers[slot]) ||
+                (!description.AllowSamplerOnlyBindings && !description.PixelTextures[slot] && description.PixelSamplers[slot]))
             {
                 error = "Each sampled pixel texture requires a matching sampler in the same slot";
                 return false;

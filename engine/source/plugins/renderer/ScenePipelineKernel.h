@@ -13,11 +13,19 @@ class ScenePipelineKernel final {
 public:
     Rhi::TextureHandle hdr,depth,shadow;
     uint32_t width=0,height=0,resolution=0;
+    bool environmentCapable=false;
+    NcmaGpuResourceV3 environmentKey{};
+    std::array<Rhi::TextureHandle,3> environmentTextures{};
+    Rhi::SamplerHandle environmentSampler{};
+    std::array<float,4> environmentSettings{0,1,0,0};
+    uint32_t ConstantBytes() const noexcept {return environmentCapable?416u:400u;}
     explicit ScenePipelineKernel(Rhi::IRenderBackend& b):backend(b){}
     ~ScenePipelineKernel();
     static std::string_view ShaderSource();
+    static std::string_view EnvironmentShaderSource();
     struct Programs { Rhi::GraphicsPipelineHandle geometry,shadow,tone; };
-    bool Initialize(const NcmaScenePipelineDescriptionV4&,std::string&,const NcmaShaderPairV1* = nullptr,const NcmaSceneShadersV1* = nullptr);
+    Programs CopyPrograms() const noexcept { return {geometry,shadowPipeline,tone}; }
+    bool Initialize(const NcmaScenePipelineDescriptionV4&,std::string&,const NcmaShaderPairV1* = nullptr,const NcmaSceneShadersV1* = nullptr,bool environment=false);
     bool PrepareShaders(const NcmaSceneShadersV1&,Programs&,std::string&);
     void ReleasePrograms(Programs& p) noexcept { backend.DestroyGraphicsPipeline(p.geometry);backend.DestroyGraphicsPipeline(p.shadow);backend.DestroyGraphicsPipeline(p.tone);p={}; }
     void PublishShaders(Programs& p) noexcept { Programs old{geometry,shadowPipeline,tone};geometry=p.geometry;shadowPipeline=p.shadow;tone=p.tone;p={};ReleasePrograms(old); }
