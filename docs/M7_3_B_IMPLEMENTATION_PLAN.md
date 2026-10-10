@@ -15,13 +15,13 @@
 
 ## B2：冻结旧合同之外的新环境 Shader/场景绑定（自动候选完成）
 
-46项实际DX11场景检查、原生故障与完整顺序Debug/Release/checked deployment通过，见[B2方案](M7_3_B2_IMPLEMENTATION_PLAN.md)、[合同](M7_3_B2_RUNTIME_CONTRACT.md)、[交付](M7_3_B2_DELIVERY_REPORT.md)。下一片B3；整个B/M7.3及C尚未完成。
+46项实际DX11场景检查、原生故障与完整顺序Debug/Release/checked deployment通过，见[B2方案](M7_3_B2_IMPLEMENTATION_PLAN.md)、[合同](M7_3_B2_RUNTIME_CONTRACT.md)、[交付](M7_3_B2_DELIVERY_REPORT.md)。后续B3也完成自动门禁，见下条；C/整个M7.3尚未完成。
 
 新增独立版本的 geometry binding（cube/mip/LUT/环境参数）；同一个公开合同支持 default/user shader、真实反射及 source-free shader package。旧 Scene shader 包不隐式升级。接入 B1 资源，显式强度/旋转/Off，无同步 cook/inference/IPC tick。整组候选与旧结果保护、阴影/skin 联合路径。
 
-## B3：真实 IBL 图像验收
+## B3：真实 IBL 图像验收（自动候选完成）
 
-常量/方向/HDR 环境、金属粗糙度、AO、旋转/强度/Off、default-user/独立积分与像素 oracle；真实静态/FBX/NCA/阴影/材质图像，API0/0、更新/关闭和有界成本。完成 B2/B3 才关闭整个 B。
+353项实际DX11、独立软件采样/解析常量方向积分/uniform BRDF、36个ASCII/Binary FBX-NCA动画skin/shadow/material整图、强度/旋转/Off/AO/normal/HDR、source-free/default-user、resize/update/8次scene关闭及有界成本通过；像素/积分最大1阶/API0/0。最终完整顺序Debug/Release/checked deployment、14份冻结源码、双配置备份及旧Shader闭包hash通过，见[B3方案](M7_3_B3_IMPLEMENTATION_PLAN.md)、[合同](M7_3_B3_RUNTIME_CONTRACT.md)、[交付](M7_3_B3_DELIVERY_REPORT.md)。B1–B3自动链闭合，提交推送/远端核对后下一片C；正式宿主/项目-NCP配置和整个M7.3、人工/用户素材/目标/自包含/完整性能/1h保持待办。
 
 ## 门禁
 
