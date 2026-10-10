@@ -132,7 +132,7 @@ public sealed unsafe partial class RendererSession : IDisposable
     public void Dispose()
     {
         if (_handle == 0) return; Verify();
-        if (_groups.Count != 0 || _gpuMeshes.Count != 0 || _resources.Count != 0 || _scenePipelines.Count != 0) throw new InvalidOperationException("Render resource leases remain.");
+        if (_toneOperation || _groups.Count != 0 || _gpuMeshes.Count != 0 || _resources.Count != 0 || _scenePipelines.Count != 0 || _environmentResources.Count != 0) throw new InvalidOperationException("Render resource leases/preparation remain.");
         PluginError error = default; PluginModule.Check(Module.Id, "destroy_renderer", _destroy(Module.Context, _handle, &error), error);
         _handle = 0; _platformLease?.Dispose(); _lease.Dispose();
     }

@@ -77,6 +77,15 @@ int main()
     invalidMipTexture.Height = 4;
     invalidMipTexture.MipLevels = 4;
     assert(!Rhi::Validate(invalidMipTexture, error));
+    std::array<float,16> cubeFace{};
+    Rhi::TextureDescription cube;
+    cube.Width=cube.Height=2;cube.Cube=true;cube.ArrayLayers=6;cube.Format=Rhi::TextureFormat::Rgba32Float;
+    cube.InitialMips.assign(6,{cubeFace.data(),32,64});
+    assert(Rhi::Validate(cube,error));
+    cube.ArrayLayers=5;assert(!Rhi::Validate(cube,error));cube.ArrayLayers=6;
+    cube.Height=1;assert(!Rhi::Validate(cube,error));cube.Height=2;
+    cube.InitialMips.back().RowPitch=16;assert(!Rhi::Validate(cube,error));cube.InitialMips.back().RowPitch=32;
+    cube.InitialMips.pop_back();assert(!Rhi::Validate(cube,error));
 
     Rhi::SamplerDescription shadowSampler;
     shadowSampler.AddressU = Rhi::SamplerAddressMode::ClampToBorder;

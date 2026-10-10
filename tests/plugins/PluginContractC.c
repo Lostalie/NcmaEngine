@@ -3,6 +3,10 @@
 _Static_assert(sizeof(NcmaGuiApiV1)==104 && sizeof(NcmaGuiApiV1_4)==112, "scoped toolbar additive table");
 #include "NcmaPhysics.h"
 #include "NcmaRenderer.h"
+#include "NcmaEnvironmentGpu.h"
+_Static_assert(sizeof(NcmaEnvironmentGpuDescriptionV1)==40,"environment GPU description");
+_Static_assert(sizeof(NcmaEnvironmentGpuStatsV1)==64,"environment GPU stats");
+_Static_assert(sizeof(NcmaEnvironmentGpuApiV1)==56,"environment GPU API");
 #include "NcmaResourceRender.h"
 #include "NcmaScenePipeline.h"
 #include "NcmaSkin.h"

@@ -15,7 +15,7 @@ namespace NcmaEngine::Rhi
 
     enum class BufferUsage : std::uint8_t { Vertex, Index, Constant, Storage };
     enum class MemoryUsage : std::uint8_t { GpuOnly, CpuToGpu, GpuToCpu };
-    enum class TextureFormat : std::uint8_t { Rgba8Unorm, Rgba8Srgb, Rgba16Float, D24S8, D32Float };
+    enum class TextureFormat : std::uint8_t { Rgba8Unorm, Rgba8Srgb, Rgba16Float, D24S8, D32Float, Rgba32Float, Rg32Float };
     enum class TextureUsage : std::uint8_t
     {
         None = 0,
@@ -102,6 +102,8 @@ namespace NcmaEngine::Rhi
         std::string DebugName;
         // Optional borrowed immutable initial data, valid synchronously during CreateTexture only.
         std::vector<TextureMipData> InitialMips;
+        // Immutable cube: six square faces, face-major declared mip chain initial data.
+        bool Cube = false;
     };
 
     struct SamplerDescription final

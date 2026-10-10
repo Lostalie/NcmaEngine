@@ -123,6 +123,7 @@ public sealed class EnvironmentPackage
         return new(bytes,values);
     }
     public byte[] CopyBytes()=>(byte[])_bytes.Clone();
+    public float[] CopyValues()=>(float[])_values.Clone();
     public float[] CopyIrradianceFace(int face)
     { Face(face);int count=checked((int)(Settings.IrradianceSize*Settings.IrradianceSize*4));return _values.AsSpan(face*count,count).ToArray(); }
     public float[] CopySpecularFace(int level,int face)

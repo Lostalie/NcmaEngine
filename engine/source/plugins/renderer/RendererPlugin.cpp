@@ -9,6 +9,7 @@
 #include "SkinKernel.h"
 #include "UiKernel.h"
 #include "EnvironmentCookKernel.h"
+#include "EnvironmentGpuKernel.h"
 #include "../contracts/NcmaUiTarget.h"
 #include "../contracts/NcmaShader.h"
 #include "../contracts/NcmaShaderPipeline.h"
@@ -72,6 +73,8 @@ struct Renderer {
     NcmaResourceStatsV3 resourceStats{sizeof(NcmaResourceStatsV3)};
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::ScenePipelineKernel>> scenePipelines;
     NcmaScenePipelineStatsV4 sceneStats{sizeof(NcmaScenePipelineStatsV4),4096};
+    std::unordered_map<uint64_t,std::unique_ptr<Rendering::EnvironmentGpuKernel>> environments;
+    NcmaEnvironmentGpuStatsV1 environmentStats{64,1,0,0,0,0,0,0,32ull*1024*1024};
     std::unique_ptr<Rendering::SkinKernel> skinKernel;
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::SkinInstance>> skins;
     NcmaSkinStatsV5 skinStats{sizeof(NcmaSkinStatsV5),32};
@@ -187,7 +190,7 @@ uint32_t NCMA_CALL Status(uint64_t context,NcmaModuleStatusV1* output,NcmaErrorV
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         const auto ui=renderer&&renderer->ui?renderer->ui->Stats(renderer->handle,renderer->pureUi):NcmaUiStatsV1{};
-        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size()+renderer->uiTargets.size()+renderer->uiLeases.size()+ui.images+ui.lists:0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
+        *output={sizeof(*output),renderer&&renderer->failed?2u:1u,renderer?1+renderer->groups.size()+renderer->scenePipelines.size()+renderer->environments.size()+renderer->meshes.size()+renderer->textures.size()+renderer->materials.size()+renderer->targets.size()+renderer->uiTargets.size()+renderer->uiLeases.size()+ui.images+ui.lists:0,0,renderer?renderer->stats.presents:0};return NCMA_OK;});
 }
 uint32_t NCMA_CALL Diagnostic(uint64_t context,uint8_t* output,uint32_t capacity,uint32_t* required,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Validate(context,error);if(valid)return valid;
@@ -556,12 +559,13 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
 #include "UiShadersServices.inl"
 #include "RuntimeShadersServices.inl"
 #include "EnvironmentCookServices.inl"
+#include "EnvironmentGpuServices.inl"
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>13)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>14)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):version==10?sizeof(NcmaShaderStagesApiV1):version==11?sizeof(NcmaUiShadersApiV1):version==12?sizeof(NcmaRuntimeShadersApiV1):sizeof(NcmaEnvironmentCookApiV1);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):version==10?sizeof(NcmaShaderStagesApiV1):version==11?sizeof(NcmaUiShadersApiV1):version==12?sizeof(NcmaRuntimeShadersApiV1):version==13?sizeof(NcmaEnvironmentCookApiV1):sizeof(NcmaEnvironmentGpuApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -579,7 +583,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==10) {const NcmaShaderStagesApiV1 shader{sizeof(shader),1,3,CopyStageSource,CreateRegisteredStages,ReplaceRegisteredStages,CreateRegisteredSkin,ReplaceRegisteredSkin};std::memcpy(output,&shader,sizeof(shader));}
         else if(version==11) {const NcmaUiShadersApiV1 shader{sizeof(shader),1,1,CopyUiShaderSource,CreateUiShaders,ReplaceUiShaders};std::memcpy(output,&shader,sizeof(shader));}
         else if(version==12) {const NcmaRuntimeShadersApiV1 shader{sizeof(shader),1,1,ValidateRuntimeShaders};std::memcpy(output,&shader,sizeof(shader));}
-        else {const NcmaEnvironmentCookApiV1 cook{sizeof(cook),1,1,CookEnvironment,ValidateEnvironmentCook};std::memcpy(output,&cook,sizeof(cook));}
+        else if(version==13) {const NcmaEnvironmentCookApiV1 cook{sizeof(cook),1,1,CookEnvironment,ValidateEnvironmentCook};std::memcpy(output,&cook,sizeof(cook));}
+        else {const NcmaEnvironmentGpuApiV1 gpu{sizeof(gpu),1,3,PublishEnvironmentGpu,DestroyEnvironmentGpu,CaptureEnvironmentGpu,EnvironmentGpuStats,ValidateEnvironmentGpu};std::memcpy(output,&gpu,sizeof(gpu));}
         return NCMA_OK;
     });
 }

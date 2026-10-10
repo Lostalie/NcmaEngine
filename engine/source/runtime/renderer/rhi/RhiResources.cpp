@@ -60,14 +60,23 @@ namespace NcmaEngine::Rhi
         }
         const bool depthFormat = description.Format == TextureFormat::D24S8 ||
             description.Format == TextureFormat::D32Float;
+        if(description.Cube && (description.ArrayLayers!=6 || description.Width!=description.Height ||
+            description.Usage!=TextureUsage::Sampled || description.InitialMips.empty() || depthFormat)) {
+            error="Immutable cube requires six square sampled faces";return false;
+        }
         if(!description.InitialMips.empty()) {
-            if(description.ArrayLayers!=1||description.Usage!=TextureUsage::Sampled||
-               (description.Format!=TextureFormat::Rgba8Unorm&&description.Format!=TextureFormat::Rgba8Srgb)||
-               description.InitialMips.size()!=description.MipLevels){error="Immutable texture initial-data contract";return false;}
-            uint32_t width=description.Width,height=description.Height;
-            for(const auto& mip:description.InitialMips){
-                if(!mip.Pixels||static_cast<uint64_t>(width)*4!=mip.RowPitch||static_cast<uint64_t>(mip.RowPitch)*height!=mip.Bytes){error="Immutable texture mip stride/bytes";return false;}
-                width=std::max(1u,width/2);height=std::max(1u,height/2);
+            const uint32_t pixelBytes=description.Format==TextureFormat::Rgba32Float?16u:
+                description.Format==TextureFormat::Rg32Float?8u:
+                (description.Format==TextureFormat::Rgba8Unorm||description.Format==TextureFormat::Rgba8Srgb)?4u:0u;
+            if((description.ArrayLayers!=1&&!description.Cube)||description.Usage!=TextureUsage::Sampled||!pixelBytes||
+               description.InitialMips.size()!=static_cast<uint64_t>(description.MipLevels)*description.ArrayLayers){error="Immutable texture initial-data contract";return false;}
+            for(uint32_t face=0;face<description.ArrayLayers;face++) {
+                uint32_t width=description.Width,height=description.Height;
+                for(uint32_t level=0;level<description.MipLevels;level++) {
+                    const auto& mip=description.InitialMips[static_cast<size_t>(face)*description.MipLevels+level];
+                    if(!mip.Pixels||static_cast<uint64_t>(width)*pixelBytes!=mip.RowPitch||static_cast<uint64_t>(mip.RowPitch)*height!=mip.Bytes){error="Immutable texture mip stride/bytes";return false;}
+                    width=std::max(1u,width/2);height=std::max(1u,height/2);
+                }
             }
         }
         const bool depthUsage = HasTextureUsage(description.Usage, TextureUsage::DepthStencil);

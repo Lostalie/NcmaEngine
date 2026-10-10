@@ -26,6 +26,8 @@ namespace NcmaEngine::Rhi
             case TextureFormat::Rgba8Unorm: return DXGI_FORMAT_R8G8B8A8_UNORM;
             case TextureFormat::Rgba8Srgb: return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
             case TextureFormat::Rgba16Float: return DXGI_FORMAT_R16G16B16A16_FLOAT;
+            case TextureFormat::Rgba32Float: return DXGI_FORMAT_R32G32B32A32_FLOAT;
+            case TextureFormat::Rg32Float: return DXGI_FORMAT_R32G32_FLOAT;
             case TextureFormat::D24S8:
             case TextureFormat::D32Float: break;
             }
@@ -453,6 +455,7 @@ namespace NcmaEngine::Rhi
         nativeDescription.ArraySize = description.ArrayLayers;
         nativeDescription.SampleDesc.Count = 1;
         nativeDescription.Usage = D3D11_USAGE_DEFAULT;
+        if(description.Cube)nativeDescription.MiscFlags=D3D11_RESOURCE_MISC_TEXTURECUBE;
 
         if (depth)
         {
@@ -489,7 +492,11 @@ namespace NcmaEngine::Rhi
             view.Format = depth
                 ? (description.Format == TextureFormat::D24S8 ? DXGI_FORMAT_R24_UNORM_X8_TYPELESS : DXGI_FORMAT_R32_FLOAT)
                 : nativeDescription.Format;
-            if (description.ArrayLayers > 1)
+            if(description.Cube) {
+                view.ViewDimension=D3D11_SRV_DIMENSION_TEXTURECUBE;
+                view.TextureCube.MipLevels=description.MipLevels;
+            }
+            else if (description.ArrayLayers > 1)
             {
                 view.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
                 view.Texture2DArray.MipLevels = description.MipLevels;

@@ -4,7 +4,7 @@
 
 ## A：环境资产与离线数值预计算（自动候选完成）
 
-最终123项与完整顺序Debug/Release/checked部署通过，见[合同](M7_3_A_RUNTIME_CONTRACT.md)、[交付](M7_3_A_DELIVERY_REPORT.md)。B/C未实现，整个M7.3未完成；以下是A的确切范围，不能升级为GPU IBL或用户HDR文件导入验收。
+最终123项与完整顺序Debug/Release/checked部署通过，见[合同](M7_3_A_RUNTIME_CONTRACT.md)、[交付](M7_3_A_DELIVERY_REPORT.md)。目前B1环境GPU资源也通过自动门禁，B2/B3/C未实现，整个M7.3未完成；以下是A的确切范围，不能升级为GPU IBL或用户HDR文件导入验收。
 
 - C#拥有复制的linear RGBA32F等距圆柱源（宽=高×2，高2–256，RGB0–65504，alpha1）、源UUID/hash、四个显式Cook参数和受控环境配置。源API接收可信解码后的值，本阶段不宣称HDR/EXR文件解码器或用户HDR素材验收。
 - 新NCE1 v1不可变包：独立asset/source UUID、非零generation、源SHA256、算法/布局/样本参数、规范diffuse cube/GGX specular mip cube/BRDF RG LUT。Header160，最多4MiB；不含源像素/路径/name/native handle。读取要求独立可信expectedHash，并逐项校验闭合header/layout/有限数值/alpha/系数/完整长度。不把hash称签名/可信Cook来源证明。
@@ -14,6 +14,8 @@
 - 独立常量环境E=pi×L、linear HDR无gamma/截断、方向环境解析E、单骨之外不涉及场景；LUT独立均匀半球quadrature与roughness1/NoV1解析A+B=1-ln2检查、有限非负/能量扫描；包损坏/重hash非法值/副本/取消/权限/owner/pureUI/寿命/缓存/无GPU进程测试。保留原全部断言，未知query改为14仅因13新增。
 
 ## B：真实 DX11 IBL 接入（A提交推送/远端核对后）
+
+按[B详细分片方案](M7_3_B_IMPLEMENTATION_PLAN.md)顺序执行B1真实环境GPU资源、B2新Shader/场景绑定、B3图像验收；不能以B1资源上传宣称整个B完成。
 
 新增有版本的环境GPU资源和绑定合同，完整候选准入/创建/发布/释放；旧Scene/Shader binding合同冻结，不偷偷扩展旧闭包。官方与user registered shader走同一合同、实际反射与source-free包。C#控制strength/rotation/off；native采样diffuse/specular/LUT，正确线性HDR合成。纯2D/Off不创建环境纹理；默认环境应明确是合成预设。实际GPU常量/方向/金属粗糙度图、独立积分/像素、default-user一致、错误候选保留active、resize/关闭/API0/0。
 
