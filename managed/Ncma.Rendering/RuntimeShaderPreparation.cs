@@ -103,6 +103,12 @@ public sealed class DefaultRuntimeShaderService(RendererSession renderer)
     }
     private readonly Dictionary<(ShaderProfile Profile,bool Shadows,bool Skin),RuntimeShaderPackage> _packages=[];
     public RuntimeShaderPreparation Prepare(ShaderProfile profile,bool shadows,bool skin,Func<bool> allowed) {
+        if(profile is not (ShaderProfile.Flat2D or ShaderProfile.Scene3D))throw new ArgumentException("Use the independent environment preparation contract.");
+        return RuntimeShaderPreparation.Prepare(renderer,Package(profile,shadows,skin,allowed),allowed);
+    }
+    public EnvironmentShaderPreparation PrepareEnvironment(bool shadows,bool skin,Func<bool> allowed) =>
+        EnvironmentShaderPreparation.Prepare(renderer,Package(ShaderProfile.SceneEnvironment,shadows,skin,allowed),allowed);
+    private RuntimeShaderPackage Package(ShaderProfile profile,bool shadows,bool skin,Func<bool> allowed) {
         ArgumentNullException.ThrowIfNull(allowed);
         RuntimeShaderPackage package;
         renderer.BeginToneOperation();
@@ -110,23 +116,27 @@ public sealed class DefaultRuntimeShaderService(RendererSession renderer)
             renderer.VerifyShaderPreparation();
             if(!allowed())throw new InvalidOperationException("Trusted startup shader preparation required.");
             renderer.VerifyShaderPreparation();
-            if(profile is not (ShaderProfile.Flat2D or ShaderProfile.Scene3D)||profile==ShaderProfile.Flat2D&&(shadows||skin))throw new ArgumentException("Default shader profile/features.");
+            if(profile is not (ShaderProfile.Flat2D or ShaderProfile.Scene3D or ShaderProfile.SceneEnvironment)||profile==ShaderProfile.Flat2D&&(shadows||skin))throw new ArgumentException("Default shader profile/features.");
             if (_files is not null) package = _files.Get(profile,shadows,skin);
             else if(!_packages.TryGetValue((profile,shadows,skin),out package!)) {
+                if(_packages.Count>=9)throw new ArgumentException("Default shader package cache budget.");
                 using var compiler=new ShaderCompilerService(renderer,allowed);var inputs=new List<RuntimeShaderInput>();
                 if(profile==ShaderProfile.Flat2D){
                     var selected=DefaultUiShaders.Select(DefaultUiShaders.CopyCatalog(renderer));
                     inputs.Add(new(RuntimeShaderRole.UiVertex,compiler.Prepare(selected.Vertex)));inputs.Add(new(RuntimeShaderRole.UiPixel,compiler.Prepare(selected.Pixel)));
                 }else{
-                    var selected=DefaultSceneShaders.Select(DefaultSceneShaders.CopyCatalog(renderer,shadows),shadows);
+                    bool environment=profile==ShaderProfile.SceneEnvironment;
+                    var selected=environment
+                        ?DefaultEnvironmentSceneShaders.Select(DefaultEnvironmentSceneShaders.CopyCatalog(renderer,shadows),shadows)
+                        :DefaultSceneShaders.Select(DefaultSceneShaders.CopyCatalog(renderer,shadows),shadows);
                     ShaderDescriptor[] shaders=shadows?[selected.GeometryVertex,selected.GeometryPixel,selected.ToneVertex,selected.TonePixel,selected.ShadowVertex!,selected.ShadowPixel!]:
                         [selected.GeometryVertex,selected.GeometryPixel,selected.ToneVertex,selected.TonePixel];
-                    for(int i=0;i<shaders.Length;i++)inputs.Add(new((RuntimeShaderRole)(i+2),compiler.Prepare(shaders[i])));
+                    for(int i=0;i<shaders.Length;i++)inputs.Add(new(environment&&i<2?(i==0?RuntimeShaderRole.EnvironmentGeometryVertex:RuntimeShaderRole.EnvironmentGeometryPixel):(RuntimeShaderRole)(i+2),compiler.Prepare(shaders[i])));
                     if(skin)inputs.Add(new(RuntimeShaderRole.SkinCompute,compiler.Prepare(DefaultSkinShader.Select(DefaultSkinShader.CopyCatalog(renderer)))));
                 }
                 package=RuntimeShaderPackage.Cook(profile,shadows,skin,inputs);_packages.Add((profile,shadows,skin),package);
             }
         }finally{renderer.EndToneOperation();}
-        return RuntimeShaderPreparation.Prepare(renderer,package,allowed);
+        return package;
     }
 }

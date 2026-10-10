@@ -18,18 +18,18 @@ public sealed record ShaderPackageSelection(
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     public ShaderPackageSelection CopyValidated()
     {
-        if (SchemaVersion != 1 || Packages is null || Packages.Length is < 1 or > 5)
+        if (SchemaVersion is not (1 or 2) || Packages is null || Packages.Length < 1 || Packages.Length > (SchemaVersion == 1 ? 5 : 9))
             throw new ArgumentException("Shader selection schema/budget.");
         var owned = (ShaderPackageFile[])Packages.Clone();
         var keys = new HashSet<(string, bool, bool)>(); var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var p in owned) {
-            if (p is null || p.Profile is not ("Flat2D" or "Scene3D") || p.Profile == "Flat2D" && (p.Shadows || p.Skinning) ||
+            if (p is null || p.Profile is not ("Flat2D" or "Scene3D" or "SceneEnvironment") || SchemaVersion == 1 && p.Profile == "SceneEnvironment" || p.Profile == "Flat2D" && (p.Shadows || p.Skinning) ||
                 p.Sha256 is null || p.Sha256.Length != 64 || p.Sha256.Any(c => !char.IsAsciiHexDigit(c)) ||
                 !keys.Add((p.Profile,p.Shadows,p.Skinning))) throw new ArgumentException("Shader selection closure/hash.");
             AssetPaths.Validate(p.Path);
             if (!p.Path.EndsWith(".ncshader",StringComparison.Ordinal) || !paths.Add(p.Path)) throw new ArgumentException("Shader package path.");
         }
-        foreach (var p in owned.Where(p => p.Profile == "Scene3D"))
+        foreach (var p in owned.Where(p => p.Profile is "Scene3D" or "SceneEnvironment"))
             if (!keys.Contains((p.Profile,!p.Shadows,p.Skinning))) throw new ArgumentException("Both scene shadow variants required.");
         return this with { Packages = owned };
     }

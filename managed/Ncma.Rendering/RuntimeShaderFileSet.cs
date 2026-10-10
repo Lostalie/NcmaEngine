@@ -54,14 +54,24 @@ public sealed class RuntimeShaderFileSet : IDisposable
                 cancellation.ThrowIfCancellationRequested();
                 var pin = new RuntimeReadPin(root,entry.Path); result._pins.Add(pin);
                 var package = RuntimeShaderPackage.Preflight(pin.Read(8*1024*1024,cancellation),entry.Sha256);
-                var profile = entry.Profile == "Flat2D" ? ShaderProfile.Flat2D : ShaderProfile.Scene3D;
+                var profile = entry.Profile switch { "Flat2D" => ShaderProfile.Flat2D, "Scene3D" => ShaderProfile.Scene3D,
+                    "SceneEnvironment" => ShaderProfile.SceneEnvironment, _ => throw new ArgumentException("Unknown selected shader profile.") };
                 if (package.Profile != profile || package.Shadows != entry.Shadows || package.Skinning != entry.Skinning)
                     throw new ArgumentException("Shader file differs from selected profile/features.");
                 result._packages.Add((profile,entry.Shadows,entry.Skinning),package);
             }
             foreach (var package in result._packages.Values.Where(p => p.Skinning && !p.Shadows))
-                if (!package.CopyBytecode(RuntimeShaderRole.SkinCompute).SequenceEqual(result._packages[(ShaderProfile.Scene3D,true,true)].CopyBytecode(RuntimeShaderRole.SkinCompute)))
+                if (!package.CopyBytecode(RuntimeShaderRole.SkinCompute).SequenceEqual(result._packages[(package.Profile,true,true)].CopyBytecode(RuntimeShaderRole.SkinCompute)))
                     throw new ArgumentException("Scene variants require identical shared skin bytecode.");
+            // The renderer owns ONE compute kernel for all live skin resources, including Edit
+            // and Play using different geometry profiles. Reject conflicting groups before use.
+            var skins=result._packages.Values.Where(p=>p.Skinning).ToArray();
+            if(skins.Length>1) {
+                byte[] shared=skins[0].CopyBytecode(RuntimeShaderRole.SkinCompute);
+                foreach(var package in skins.Skip(1))
+                    if(!shared.AsSpan().SequenceEqual(package.CopyBytecode(RuntimeShaderRole.SkinCompute)))
+                        throw new ArgumentException("Selected profiles require identical renderer-wide skin bytecode.");
+            }
             return result;
         } catch { result.Dispose(); throw; }
     }
@@ -84,7 +94,10 @@ public sealed class RuntimeShaderFileSet : IDisposable
     {
         Verify(); ArgumentNullException.ThrowIfNull(renderer);
         // Whole selection admission before publishing anything to the default service.
-        foreach (var package in _packages.Values) RuntimeShaderPreparation.Prepare(renderer,package,allowed);
+        foreach (var package in _packages.Values) {
+            if (package.Profile == ShaderProfile.SceneEnvironment) EnvironmentShaderPreparation.Prepare(renderer,package,allowed);
+            else RuntimeShaderPreparation.Prepare(renderer,package,allowed);
+        }
         renderer.DefaultRuntimeShaders.UseFiles(this,allowed);
     }
     public void Dispose() {

@@ -2,7 +2,7 @@
 
 基线：B3 `abe290ef87fb068e0416c59fda915f163889312a`，2026-10-10 开工前 local/remote main 一致。B 的真实 DX11 数值/图像证据保留；不把独立测试管线称为正式宿主接入。DX11 only，Vulkan/OpenGL 下一版本。
 
-当前：C1 自动候选完成，29 项资产/文件/包/历史测试与 1 项正式 Editor 命令拒绝测试、完整顺序 Debug/Release/checked deployment 通过，见[合同](M7_3_C1_RUNTIME_CONTRACT.md)、[交付](M7_3_C1_DELIVERY_REPORT.md)。C2/C3 未实现；正式宿主仍显式拒绝 enabled 环境，不能称已支持正式 IBL。
+当前：C1 自动候选完成，29 项资产/文件/包/历史测试与 1 项正式 Editor 命令拒绝测试、完整顺序 Debug/Release/checked deployment 通过，见[合同](M7_3_C1_RUNTIME_CONTRACT.md)、[交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2详细方案](M7_3_C2_IMPLEMENTATION_PLAN.md)、[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B/C和C3 未实现；正式宿主仍显式拒绝 enabled 环境，不能称已支持正式 IBL。
 
 ## C1：纯 C# 资产、场景配置与运行包合同（自动候选完成）
 
@@ -14,7 +14,7 @@
 - 配置使用原 `ncma.scene.transaction`/权限/session/revision/Undo/Redo/Play freeze，不新增 Agent 编译、GPU 或文件写权限。C1 不新增面板、不切换正式 shader 默认值；C2 前正式宿主显式拒绝 enabled 环境，避免默默忽略配置。
 - 验证闭合 JSON/输入副本、类型身份/重 hash 损坏、missing vs wrong、规范路径/项目/链接/大小写/锁/取消/线程、搬移包、两代并存/Play 隔离、失败保留旧出版物、单一历史/撤销重做/冻结/权限、空场景无资产 IO。全部原测试保留。
 
-## C2：Editor/Player 共用 SceneRenderSession
+## C2：Editor/Player 共用 SceneRenderSession（A自动候选完成，B/C待实施）
 
 新 profile3 环境 shader 闭包显式接入 SceneRuntimeShaders、默认注册服务与 source-free selection；两 shadow variants/shared skin 先实际准入，禁止旧 profile1 自动冒充。PreparedSceneAssetLease 的确切环境进入共享渲染服务，配置刷新在受控 owner/off-simulation 边界进行；GPU 候选准备完整后发布，失败保留旧有效组、正确释放 scene pins，关闭/resize/Play/Reload 顺序受测。提交只消费已准备资源，不读文件/Cook/HLSL/推理。Player 在 gameplay 初始化前核对完整环境和 shader 闭包。原 ambient 明确保留独立含义，不改成假 IBL。
 

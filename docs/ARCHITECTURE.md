@@ -143,11 +143,12 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 | 材质/贴图资产与六槽工作流 | M7.2闭合合同/ORM-MRA/预设/运行包及68项GPU自动检查通过；完整用户素材与人工验收待完成 |
 | 真实DX11 IBL | M7.3-B资源/绑定/353项独立图像自动验证通过，API0/0；正式Editor/Player接入C2未实现 |
 | 延迟/聚类渲染 | 未实现 |
+| 环境Shader文件与完整准入 | C2-A显式v2/最多9包/双变体/全profile共享skin/独立query15，71项与完整双配置通过；不等于正式宿主IBL |
 | 线性环境资产、离线IBL数值与场景配置 | M7.3-A数值123项；C1 ncenv/NCE read pins/NCP/值组件与原命令合同，新增29+1项和完整双配置通过；C2/C3默认宿主/部署未完成 |
 | 场景渲染提取与静态多对象 | M3.4 已实现，M3.5 增加 DX11 蒙皮；M3.6 候选 GUI1.3 合成视口纹理，G6未关闭 |
 | 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
-当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。环境CPU包始终GpuValidated=false；独立GPU IBL证据见[B3交付](M7_3_B3_DELIVERY_REPORT.md)，正式宿主当前拒绝enabled环境，资产/配置边界见[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)和[交付](M7_3_C1_DELIVERY_REPORT.md)。
+当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。环境CPU包始终GpuValidated=false；独立GPU IBL证据见[B3交付](M7_3_B3_DELIVERY_REPORT.md)，正式宿主当前拒绝enabled环境，资产/配置边界见[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)和[交付](M7_3_C1_DELIVERY_REPORT.md)，新增环境Shader文件与准备边界见[C2-A合同](M7_3_C2A_RUNTIME_CONTRACT.md)及[交付](M7_3_C2A_DELIVERY_REPORT.md)。
 构建和编辑器 smoke 通过不等于完成双 API 验证；不能宣称 Vulkan 已可渲染。
 
 ### 物理

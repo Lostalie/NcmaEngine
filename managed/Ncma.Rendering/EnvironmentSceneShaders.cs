@@ -74,6 +74,10 @@ public sealed class EnvironmentShaderPreparation:RegisteredShaderPreparation
         renderer.BeginToneOperation();try{var candidate=new EnvironmentShaderPreparation(renderer,package,preparationAllowed);candidate.Verify(renderer);renderer.AdmitEnvironmentShaders(package);candidate.Verify(renderer);return candidate;}finally{renderer.EndToneOperation();}
     }
     public RegisteredStageMetadata[] CopyMetadata()=>RuntimeShaderPreparation.Metadata(Package);
+    public void VerifyFor(RendererSession renderer) {
+        ArgumentNullException.ThrowIfNull(renderer);renderer.BeginToneOperation();
+        try{Verify(renderer);}finally{renderer.EndToneOperation();}
+    }
 }
 
 public sealed unsafe partial class RendererSession
