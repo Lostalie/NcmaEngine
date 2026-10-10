@@ -17,11 +17,14 @@ public sealed class GpuEnvironmentResource : IDisposable
     internal RendererSession Owner {get;}
     internal GpuMeshKey Token;
     private EnvironmentPackage _package;
+    private bool _cacheOwned;
     public EnvironmentPackage Package {get{Verify();return _package;}}
     internal GpuEnvironmentResource(RendererSession owner,EnvironmentPackage package){Owner=owner;_package=package;}
     internal void Verify(){_=Owner.Handle;ObjectDisposedException.ThrowIf(Token.Value==0,this);}
     internal void Publish(GpuMeshKey key,EnvironmentPackage package){Token=key;_package=package;}
-    public void Replace(EnvironmentPackage package,Func<bool> preparationAllowed)=>Owner.PublishEnvironment(this,package,preparationAllowed);
+    internal void MarkCacheOwned()=>_cacheOwned=true;
+    public void Replace(EnvironmentPackage package,Func<bool> preparationAllowed)
+    {if(_cacheOwned)throw new InvalidOperationException("Cached environment generations are immutable.");Owner.PublishEnvironment(this,package,preparationAllowed);}
     // Offline diagnostic only; bounded GPU copy/drain. Never call from simulation/render ticks.
     public float[] CaptureForDiagnostics(Func<bool> preparationAllowed)=>Owner.CaptureEnvironment(this,preparationAllowed);
     public void Dispose(){if(Token.Value==0)return;Owner.ReleaseEnvironment(this);Token=default;}
@@ -56,6 +59,8 @@ public sealed unsafe partial class RendererSession
         if(!allowed())throw new InvalidOperationException("Trusted off-simulation environment preparation approval required.");
         PluginModule.Check(Module.Id,"environment_gpu_boundary",_validateEnvironment!(Module.Context,Handle,&error),error);
     }
+    internal void VerifyEnvironmentPreparation(Func<bool> allowed)
+    { BeginToneOperation();try{EnvironmentBoundary(allowed);}finally{EndToneOperation();} }
     public EnvironmentGpuStatistics EnvironmentStats
     {
         get{EnsureEnvironmentApi();PluginError error=default;EnvironmentGpuStatistics result=default;

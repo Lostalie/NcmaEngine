@@ -43,6 +43,7 @@ public sealed partial class World
     public ulong Revision { get { VerifyAccess(); return _revision; } }
     public ulong Tick { get { VerifyAccess(); return _tick; } }
     internal bool IsUpdating { get { VerifyAccess(); return _updating; } }
+    internal bool IsCommittedBoundary { get { VerifyAccess(); return !_updating && !_preparing; } }
     public int Count { get { VerifyAccess(); return _objects.Count; } }
 
     public GameObject CreateObject(string name, Guid? persistentId = null)

@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项、B2独立Shader/场景绑定46项、B3完整自动图像353项及各自完整双配置/部署通过，见[B3交付](M7_3_B3_DELIVERY_REPORT.md)。B自动链闭合；C1环境资产/场景配置/运行包新增29+1项及完整双配置/部署通过，见[C1交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A显式环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B/C正式执行/宿主与C3默认部署/联合验收、整个M7.3和M7.4–M7.7未完成。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项、B2独立Shader/场景绑定46项、B3完整自动图像353项及各自完整双配置/部署通过，见[B3交付](M7_3_B3_DELIVERY_REPORT.md)。B自动链闭合；C1环境资产/场景配置/运行包新增29+1项及完整双配置/部署通过，见[C1交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A显式环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B共享场景执行87项及完整双配置/部署通过，见[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)；C2-C正式宿主与C3默认部署/联合验收、整个M7.3和M7.4–M7.7未完成。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -42,9 +42,9 @@ C4最新交付：A source-free NCS1/native-free预检77项、B实际准入/共�
 已有测试原样保留，新覆盖通过后才称补齐。
 实际范围、正变换限制及证据见[实施方案](M7_2_IMPLEMENTATION_PLAN.md)、[合同](M7_2_RUNTIME_CONTRACT.md)、[交付](M7_2_DELIVERY_REPORT.md)。材质面板人工操作/用户素材/目标环境/完整性能/1h验收仍待完成；下一阶段M7.3。
 
-## M7.3 环境光与IBL（A/B/C1/C2-A自动候选完成，C2-B/C及C3待实施）
+## M7.3 环境光与IBL（A/B/C1/C2-A/B自动候选完成，C2-C及C3待实施）
 
-A离线资产/Cook123项、B1真实环境资源54项、B2独立环境Shader/场景绑定46项、B3完整自动图像353项及各自完整Debug/Release/checked部署通过，见[分片方案](M7_3_IMPLEMENTATION_PLAN.md)、[B3交付](M7_3_B3_DELIVERY_REPORT.md)。C1追加29项资产/文件/包/历史与1项正式Editor命令测试，完整双配置/部署通过，见[C分片](M7_3_C_IMPLEMENTATION_PLAN.md)、[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_3_C1_DELIVERY_REPORT.md)。独立GPU合同已真实消费IBL；正式默认宿主尚未切换，enabled配置显式拒绝，ambient仍不是IBL。没有HDR/EXR文件解码器，GpuValidated=false；整个M7.3未完成。C2-A显式v2/9包/双变体/全profile共享skin与整组准入71项及完整双配置/部署通过，见[C2分片](M7_3_C2_IMPLEMENTATION_PLAN.md)、[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。下一片C2-B正式共享渲染执行，C2-C正式宿主验收，再C3默认部署/联合验收。
+A离线资产/Cook123项、B1真实环境资源54项、B2独立环境Shader/场景绑定46项、B3完整自动图像353项及各自完整Debug/Release/checked部署通过，见[分片方案](M7_3_IMPLEMENTATION_PLAN.md)、[B3交付](M7_3_B3_DELIVERY_REPORT.md)。C1追加29项资产/文件/包/历史与1项正式Editor命令测试，完整双配置/部署通过，见[C分片](M7_3_C_IMPLEMENTATION_PLAN.md)、[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_3_C1_DELIVERY_REPORT.md)。独立GPU合同已真实消费IBL；正式默认宿主尚未切换，enabled配置显式拒绝，ambient仍不是IBL。没有HDR/EXR文件解码器，GpuValidated=false；整个M7.3未完成。C2-A显式v2/9包/双变体/全profile共享skin与整组准入71项及完整双配置/部署通过，见[C2分片](M7_3_C2_IMPLEMENTATION_PLAN.md)、[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B共享服务87项及完整双配置已通过，见[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)。下一片C2-C正式宿主验收，再C3默认部署/联合验收。
 
 C#拥有环境资产/强度/旋转/配置与闭包；native执行环境纹理、diffuse irradiance、prefiltered specular
 及BRDF LUT数值工作。离线准备与精确hash/generation，默认环境可直接用，纯2D完全不分配。

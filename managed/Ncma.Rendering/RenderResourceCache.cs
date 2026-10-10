@@ -59,6 +59,15 @@ public sealed class RenderResourceCache : IDisposable
         if (version.ContentHash != data.ContentHash) throw new ArgumentException("Texture generation/hash mismatch.");
         return Acquire(2, version, "", data.ContentHash, (ulong)data.Pixels.Length, false, () => (_renderer.CreateTexture(data), Array.Empty<IDisposable>()));
     }
+    public RenderAssetLease<GpuEnvironmentResource> AcquireEnvironment(EnvironmentPackage package, Func<bool> preparationAllowed)
+    {
+        ArgumentNullException.ThrowIfNull(package); Verify();
+        // Recheck even a cache hit. Immutable CPU packages are not GPU installation credentials.
+        _renderer.VerifyEnvironmentPreparation(preparationAllowed);
+        var version=new RenderAssetVersion(package.AssetId,package.Generation,package.ContentHash);version.Validate();
+        return Acquire(5,version,"environment-v1",package.ContentHash,checked((ulong)package.Settings.FloatCount*4),false,
+            ()=> {var resource=_renderer.CreateEnvironment(package,preparationAllowed);resource.MarkCacheOwned();return (resource,Array.Empty<IDisposable>());});
+    }
     public RenderAssetLease<GpuMesh> AcquireBindPoseMesh(RenderAssetVersion version, BindPoseMeshUploadData data)
     {
         ArgumentNullException.ThrowIfNull(data); Verify(); version.Validate();
@@ -125,7 +134,7 @@ public sealed class RenderResourceCache : IDisposable
     {
         Verify();
         // Native material dependencies must be released BEFORE textures; a failed release stays resident.
-        foreach (int kind in new[] { 3, 1, 4, 2 }) foreach (var pair in _entries.Where(p => p.Key.Kind == kind && p.Value.References == 0).ToArray()) {
+        foreach (int kind in new[] { 3, 1, 4, 2, 5 }) foreach (var pair in _entries.Where(p => p.Key.Kind == kind && p.Value.References == 0).ToArray()) {
             var entry = pair.Value; if (entry.Resource is null) throw new InvalidOperationException("Unpublished resource candidate."); entry.Resource.Dispose(); foreach (var dependency in entry.Dependencies) dependency.Dispose();
             _entries.Remove(pair.Key); if (entry.Geometry) GeometryBytes -= entry.Bytes; else TextureBytes -= entry.Bytes;
         }
