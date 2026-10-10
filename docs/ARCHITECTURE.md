@@ -141,10 +141,11 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 | Vulkan 设备/交换链/绘制和双 API 参考场景一致性 | 未实现 |
 | OpenGL实际后端 | 未实现；与Vulkan实际渲染一并延后下一版本，本版本只保留扩展边界 |
 | 完整材质/贴图资产、IBL、延迟/聚类渲染 | 未实现 |
+| 线性环境资产与离线IBL数值预计算 | M7.3-A自动候选：C#值/包/策略、C++ query13有界数值；123项及完整双配置通过，GPU IBL和正式宿主仍未实现 |
 | 场景渲染提取与静态多对象 | M3.4 已实现，M3.5 增加 DX11 蒙皮；M3.6 候选 GUI1.3 合成视口纹理，G6未关闭 |
 | 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
-当前 D3D11 使用 HLSL shader model 5 编译；共享着色器反射/SPIR-V 管线未实现。
+当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。M7.3-A环境包始终GpuValidated=false，见[合同](M7_3_A_RUNTIME_CONTRACT.md)和[交付](M7_3_A_DELIVERY_REPORT.md)。
 构建和编辑器 smoke 通过不等于完成双 API 验证；不能宣称 Vulkan 已可渲染。
 
 ### 物理

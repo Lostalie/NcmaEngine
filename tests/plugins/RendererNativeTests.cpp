@@ -4,6 +4,8 @@
 #include "../../engine/source/plugins/contracts/NcmaPlatform.h"
 #include <iostream>
 #include <filesystem>
+#include <numbers>
+#include <limits>
 static void Check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 int main(int argc,char** argv) {
     try{
@@ -24,16 +26,42 @@ int main(int argc,char** argv) {
         uint64_t platformModule=0,renderModule=0,window=0,handle=0,group=0;
         Check(platform.module.initialize(nullptr,0,&platformModule,&error)==0,"Platform init");
         Check(api.module.initialize(nullptr,0,&renderModule,&error)==0,"Renderer init");
+        {
+            NcmaEnvironmentCookApiV1 env{};
+            Check(latest.query_scene_render(renderModule,13,&env,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Environment short table");
+            Check(latest.query_scene_render(renderModule,13,&env,32,&error)==NCMA_OK&&env.version==1&&env.capabilities==1&&env.cook&&env.validate_preparation,"Environment table negotiation");
+            Check(!renderer&&env.validate_preparation(renderModule,&error)==NCMA_OK,"Offline cook has no renderer/window/GPU");
+            std::vector<float> input(32,1);for(size_t i=0;i<input.size();i+=4){input[i]=2;input[i+1]=3;input[i+2]=4;}
+            NcmaEnvironmentCookV1 request{48,1,4,2,2,2,4,64,32,0,input.data()};Rendering::EnvironmentCook::Layout layout{};
+            Check(Rendering::EnvironmentCook::Describe(request,layout),"Environment bounded layout");
+            std::vector<float> values(layout.floats,-7);NcmaEnvironmentCookOutputV1 result{};result.struct_size=99;
+            auto unchanged=[&]{return result.struct_size==99&&std::all_of(values.begin(),values.end(),[](float x){return x==-7;});};
+            Check(env.cook(renderModule,&request,&result,values.data(),layout.floats-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==layout.floats*4&&unchanged(),"Environment short output atomic");
+            request.reserved=1;Check(env.cook(renderModule,&request,&result,values.data(),layout.floats,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Environment reserved atomic");request.reserved=0;
+            input[0]=std::numeric_limits<float>::quiet_NaN();Check(env.cook(renderModule,&request,&result,values.data(),layout.floats,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Environment late values atomic");input[0]=2;
+            uint32_t foreign=0;std::thread thread([&]{NcmaErrorV1 e{};foreign=env.cook(renderModule,&request,&result,values.data(),layout.floats,&e);});thread.join();
+            Check(foreign==NCMA_WRONG_THREAD&&unchanged(),"Environment owner thread");
+            testEnvironmentPublicationFault=true;Check(env.cook(renderModule,&request,&result,values.data(),layout.floats,&error)==NCMA_INTERNAL_ERROR&&unchanged(),"Environment post-compute exception atomic");testEnvironmentPublicationFault=false;
+            Check(env.cook(renderModule,&request,&result,values.data(),layout.floats,&error)==NCMA_OK&&result.struct_size==32&&result.algorithm==1&&!renderer,"Environment actual CPU kernel");
+            Check(std::abs(values[0]-2*std::numbers::pi)<.00001,"Environment constant irradiance analytic");
+        }
         const uint8_t title[]="Renderer native faults";
         NcmaWindowDescriptionV1 windowDesc{sizeof(windowDesc),256,256,0,title,sizeof(title)-1,0};
         Check(platform.create_window(platformModule,&windowDesc,&window,&error)==0,"Window create");
         NcmaRendererDescriptionV1 desc{sizeof(desc),1,1,0,platformModule,window,256,256,{0,0}};
         Check(api.create_renderer(renderModule,&desc,&handle,&error)==0,"Renderer create");
+        {
+            NcmaEnvironmentCookApiV1 env{};Check(latest.query_scene_render(renderModule,13,&env,32,&error)==NCMA_OK,"Environment renderer lifetime");
+            renderer->active=true;Check(env.validate_preparation(renderModule,&error)==NCMA_BUSY,"Environment active frame blocked");renderer->active=false;
+            renderer->failed=true;Check(env.validate_preparation(renderModule,&error)==NCMA_INTERNAL_ERROR,"Environment fail-stop blocked");renderer->failed=false;
+            busy=true;Check(env.validate_preparation(renderModule,&error)==NCMA_BUSY,"Environment native nonreentry");busy=false;
+            Check(env.validate_preparation(renderModule+1,&error)==NCMA_INVALID_HANDLE,"Environment foreign context");
+        }
         NcmaSceneRenderApiV1 scene{};
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,13,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,14,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");

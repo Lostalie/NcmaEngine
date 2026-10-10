@@ -181,6 +181,7 @@ if(WIN32)
 
     add_library(NcmaRenderer SHARED
         engine/source/plugins/renderer/RendererPlugin.cpp
+        engine/source/plugins/renderer/EnvironmentCookKernel.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
         engine/source/plugins/renderer/ResourceKernel.cpp
         engine/source/plugins/renderer/ScenePipelineKernel.cpp
@@ -231,6 +232,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     target_compile_options(NcmaCharacterNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
     set_target_properties(NcmaCharacterNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_executable(NcmaRendererNativeTests tests/plugins/RendererNativeTests.cpp
+        engine/source/plugins/renderer/EnvironmentCookKernel.cpp
         engine/source/plugins/renderer/UiKernel.cpp
         engine/source/plugins/renderer/SkinKernel.cpp
         engine/source/plugins/renderer/StaticMeshKernel.cpp
