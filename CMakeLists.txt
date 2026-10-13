@@ -431,6 +431,13 @@ if(NCMA_BUILD_TESTS)
                 "${CMAKE_SOURCE_DIR}/tests/assets/m2/render-legacy-reference.json"
                 "${CMAKE_SOURCE_DIR}" "$<TARGET_FILE:NcmaImportKernel>")
             set_tests_properties(NcmaRenderingTests PROPERTIES TIMEOUT 240 FIXTURES_REQUIRED kernel_reference_image)
+            # Keep build-time Cook/library coverage separately bounded; retain the original rendering deadline.
+            # The NcmaRenderingTests prefix includes this case in Build.bat's managed test selection/exclusion.
+            add_test(NAME NcmaRenderingTests.PostLibrary COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --post-library-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/post-library-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.PostLibrary PROPERTIES TIMEOUT 120)
             add_test(NAME NcmaCandidateGraphicsSmoke COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.App/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaEngine.dll"
                 --smoke-test --plugins "${CMAKE_BINARY_DIR}/m2/plugins")

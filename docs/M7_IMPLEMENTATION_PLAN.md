@@ -3,7 +3,7 @@
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
-真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项、B2独立Shader/场景绑定46项、B3完整自动图像353项及各自完整双配置/部署通过，见[B3交付](M7_3_B3_DELIVERY_REPORT.md)。B自动链闭合；C1环境资产/场景配置/运行包新增29+1项及完整双配置/部署通过，见[C1交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A显式环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B共享场景执行87项及完整双配置/部署通过，见[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)；C2-C正式宿主43项及完整双配置/部署通过，见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)；C3-A默认资源/部署83项及完整双配置通过，见[C3-A交付](M7_3_C3A_DELIVERY_REPORT.md)；C3-B1属性/状态8组、正式宿主51项及完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)；C3-B2预设可逆发布/独立目录授权完成，C3-C双配置490项产品检查/8个探针及完整回归通过，见[C3-C交付](M7_3_C3C_DELIVERY_REPORT.md)；M7.3自动候选链闭合；M7.4-A三种Tone预设/颜色流程与538项检查、完整双配置通过，见[A交付](M7_4_A_DELIVERY_REPORT.md)；B公开HDR图/Bloom/独立NPH1的172项及完整双配置通过，见[B交付](M7_4_B_DELIVERY_REPORT.md)，下一片M7.4-C。M7.4-C/D–M7.7及人工/用户素材/完整性能门禁未完成。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
+真实编译/反射B41项及完整门禁通过；C1 Tone24项、C2 Geometry/Shadow/Skin40项、C3独立Flat2D32项、C4-A77/B42/C62及各自最终顺序Debug/Release/checked deployment通过。M7.1自动候选闭合；M7.2材质合同/预设/运行包及68项真实GPU检查、完整双配置/部署通过，见[M7.2交付](M7_2_DELIVERY_REPORT.md)。M7.3-A离线环境资产/数值Cook的123项检查与完整双配置/部署通过；B1环境资源54项、B2独立Shader/场景绑定46项、B3完整自动图像353项及各自完整双配置/部署通过，见[B3交付](M7_3_B3_DELIVERY_REPORT.md)。B自动链闭合；C1环境资产/场景配置/运行包新增29+1项及完整双配置/部署通过，见[C1交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A显式环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B共享场景执行87项及完整双配置/部署通过，见[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)；C2-C正式宿主43项及完整双配置/部署通过，见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)；C3-A默认资源/部署83项及完整双配置通过，见[C3-A交付](M7_3_C3A_DELIVERY_REPORT.md)；C3-B1属性/状态8组、正式宿主51项及完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)；C3-B2预设可逆发布/独立目录授权完成，C3-C双配置490项产品检查/8个探针及完整回归通过，见[C3-C交付](M7_3_C3C_DELIVERY_REPORT.md)；M7.3自动候选链闭合；M7.4-A三种Tone预设/颜色流程与538项检查、完整双配置通过，见[A交付](M7_4_A_DELIVERY_REPORT.md)；B公开HDR图/Bloom/独立NPH1的172项及完整双配置通过，见[B交付](M7_4_B_DELIVERY_REPORT.md)；C1程序库149项及完整双配置通过，见[C1交付](M7_4_C1_DELIVERY_REPORT.md)，下一片M7.4-C2。M7.4-C2/C3/D–M7.7及人工/用户素材/完整性能门禁未完成。项目文件/运行包/18文件独立UI及联合结果见[C4-C交付](M7_1_C4C_DELIVERY_REPORT.md)，历史切片见[C1交付](M7_1_C1_DELIVERY_REPORT.md)、[C2交付](M7_1_C2_DELIVERY_REPORT.md)、[C3交付](M7_1_C3_DELIVERY_REPORT.md)、[C4-B交付](M7_1_C4B_DELIVERY_REPORT.md)。
 
 ## 本版本边界
 
@@ -51,9 +51,9 @@ C#拥有环境资产/强度/旋转/配置与闭包；native执行环境纹理、
 验证常量环境、方向环境、金属/粗糙度扫图、energy/色彩空间、损坏包、重新配置与GPU关闭。
 用独立数值预期，不仅与共享shader互相比较；任何环境生成器都不被称真实用户HDR素材验收。
 
-## M7.4 HDR后处理与简单定制（A/B自动候选完成，C/D未实现）
+## M7.4 HDR后处理与简单定制（A/B/C1自动候选完成，C2/C3/D未实现）
 
-分为A颜色流程/Tone预设、B真实HDR Feature/Bloom、C正式配置/编辑器/AI、D替换与产品联合，见[详细方案](M7_4_IMPLEMENTATION_PLAN.md)、[A合同](M7_4_A_RUNTIME_CONTRACT.md)。A新增538项检查及完整顺序Debug/Release门禁已通过，见[A交付](M7_4_A_DELIVERY_REPORT.md)；B新增公开HDR子图/独立NPH1/薄native执行及172项真实图像，完整顺序Debug/Release已通过，见[B合同](M7_4_B_RUNTIME_CONTRACT.md)、[B交付](M7_4_B_DELIVERY_REPORT.md)。下一片C，C/D尚未实现。
+分为A颜色流程/Tone预设、B真实HDR Feature/Bloom、C正式配置/编辑器/AI、D替换与产品联合，见[详细方案](M7_4_IMPLEMENTATION_PLAN.md)、[A合同](M7_4_A_RUNTIME_CONTRACT.md)。A新增538项检查及完整顺序Debug/Release门禁已通过，见[A交付](M7_4_A_DELIVERY_REPORT.md)；B新增公开HDR子图/独立NPH1/薄native执行及172项真实图像，完整顺序Debug/Release已通过，见[B合同](M7_4_B_RUNTIME_CONTRACT.md)、[B交付](M7_4_B_DELIVERY_REPORT.md)。C1程序库与产品闭包149项及完整双配置通过，见[C详细方案](M7_4_C_IMPLEMENTATION_PLAN.md)、[C1交付](M7_4_C1_DELIVERY_REPORT.md)。下一片C2，C2/C3/D尚未完成。
 
 明确linear HDR→tone→display/UI顺序；Exposure/Tone预设及可关闭Bloom等首版Feature。
 官方默认和用户registered Feature使用同一契约，依赖/尺寸/格式/生命周期自动校验。

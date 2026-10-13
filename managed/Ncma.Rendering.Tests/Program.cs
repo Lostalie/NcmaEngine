@@ -322,6 +322,8 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--registered-tone-tests") return RegisteredToneTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--tone-preset-tests") return TonePresetTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--post-process-tests") return PostProcessTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--post-library-tests") return PostLibraryTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--post-library-preflight") return PostLibraryChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--post-process-preflight") return PostProcessChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-stages-tests") return RegisteredStagesTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-ui-tests") return RegisteredUiTests(args[1], args[2]);

@@ -88,6 +88,11 @@ function Add-Shaders([string]$destination,[string]$profile) {
     foreach ($name in @('defaults.json','neutral-v1.nce')) {
         Copy-Exact (Join-Path $cooked ('assets\environments\' + $name)) (Join-Path $destination ('assets\environments\' + $name))
     }
+    # Exact bounded C1 closed library; no recursive copy of unrelated author files.
+    $postDirectory = Join-Path $cooked 'assets\postprocess'
+    $postFiles = @(Get-ChildItem -LiteralPath $postDirectory -File)
+    if ($postFiles.Count -ne 26) { throw 'Expected 24 Tone packages, Bloom NPH1 and one post library index.' }
+    foreach ($file in $postFiles) { Copy-Exact $file.FullName (Join-Path $destination ('assets\postprocess\' + $file.Name)) }
 }
 Publish-Candidate 'managed\Ncma.Editor.App\Ncma.Editor.App.csproj' $editor
 Publish-Candidate 'managed\Ncma.Asset.ImportWorker\Ncma.Asset.ImportWorker.csproj' (Join-Path $editor 'tools\import-worker')
