@@ -320,6 +320,7 @@ internal static unsafe partial class Program
         try {
             if (args.Length == 3 && args[0] == "--shader-compile-tests") return ShaderCompileTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-tone-tests") return RegisteredToneTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--tone-preset-tests") return TonePresetTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-stages-tests") return RegisteredStagesTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-ui-tests") return RegisteredUiTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--shader-package-tests") return ShaderPackageTests(args[1], args[2]);
@@ -374,6 +375,7 @@ internal static unsafe partial class Program
 
             ShaderCompileTests(root,output);
             RegisteredToneTests(root, Path.Combine(output, "registered-tone"));
+            TonePresetTests(root, Path.Combine(output, "tone-presets"));
             RegisteredStagesTests(root, Path.Combine(output, "registered-stages"));
             RegisteredUiTests(root, Path.Combine(output, "registered-ui"));
             ShaderPackageTests(root, Path.Combine(output, "shader-package"));

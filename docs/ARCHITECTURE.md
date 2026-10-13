@@ -13,6 +13,8 @@ A 方案已确认，AI 深度参与场景、动画、UI、工具和引擎扩展�
 Python 游戏脚本已移除；托管 World/固定步/事务基础已实现，C++ SceneWorld 和原生 World 导出已删除。
 编辑器及隔离 Play 已接入 C# World；统一 Editor.Core/EditSession 编辑链路已实现；正式默认入口已切换为 C# apphost，保留明确的部署恢复。Platform/GUI/DX11 Renderer 与独立 Physics 插件及 M2.5 A–F 业务迁移已落地，人工验收未完成，见 [H5 记录](M2_5_H5_DELIVERY_REPORT.md)。
 
+2026-10-14渲染增量：M7.4-A已实现纯C# Tone预设/EV和公开组合入口，复用原薄native执行/完整反射，三曲线与无源码包实际图像、显示域UI及完整双配置通过，见[合同](M7_4_A_RUNTIME_CONTRACT.md)、[交付](M7_4_A_DELIVERY_REPORT.md)。正式默认选项不变；Bloom和正式后处理设置/编辑器/AI仍归M7.4-B/C/D。
+
 ## 1. 总体分层
 
 ```text
@@ -149,7 +151,7 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 | 场景渲染提取与静态多对象 | M3.4 已实现，M3.5 增加 DX11 蒙皮；M3.6 候选 GUI1.3 合成视口纹理，G6未关闭 |
 | 独立 Renderer 插件和 C# 应用装载 | M2 候选 DX11 reference 已实现、自动测试通过；人工/生产验收未完成 |
 
-当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。环境CPU包始终GpuValidated=false；独立GPU IBL证据见[B3交付](M7_3_B3_DELIVERY_REPORT.md)，正式宿主已支持显式环境资产与shader的IBL，资产/配置边界见[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)和[交付](M7_3_C1_DELIVERY_REPORT.md)，新增环境Shader文件与准备边界见[C2-A合同](M7_3_C2A_RUNTIME_CONTRACT.md)及[交付](M7_3_C2A_DELIVERY_REPORT.md)。共享SceneRenderSession已通过87项真实图像/资源/边界/动画/自定义文件与完整双配置，见[C2-B合同](M7_3_C2B_RUNTIME_CONTRACT.md)、[交付](M7_3_C2B_DELIVERY_REPORT.md)；正式宿主C2-C的43项/独立像素误差0/API0/0与完整双配置通过，见[C2-C合同](M7_3_C2C_RUNTIME_CONTRACT.md)、[交付](M7_3_C2C_DELIVERY_REPORT.md)。C3-A合成默认环境/严格只读加载/部署83项及完整双配置通过，见[C3-A合同](M7_3_C3A_RUNTIME_CONTRACT.md)、[交付](M7_3_C3A_DELIVERY_REPORT.md)。C3-B1属性/状态8组、正式宿主扩展至51项及完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)。C3-B2预设发布/独立目录授权13组与正式宿主Debug102/Release111次检查、完整双配置通过，见[C3-B2合同](M7_3_C3B2_RUNTIME_CONTRACT.md)、[交付](M7_3_C3B2_DELIVERY_REPORT.md)。NCE保留不可变代次，ncenv与场景共用一条Undo；inspection固定上限17，旧资产schema不变。C3-C联合验收待完成。
+当前 D3D11 使用 HLSL shader model 5；M7.1已实现闭合官方/user Shader反射、source-free包和实际GPU准入，不是任意Shader安全沙箱；SPIR-V管线未实现。环境CPU包始终GpuValidated=false；独立GPU IBL证据见[B3交付](M7_3_B3_DELIVERY_REPORT.md)，正式宿主已支持显式环境资产与shader的IBL，资产/配置边界见[C1合同](M7_3_C1_RUNTIME_CONTRACT.md)和[交付](M7_3_C1_DELIVERY_REPORT.md)，新增环境Shader文件与准备边界见[C2-A合同](M7_3_C2A_RUNTIME_CONTRACT.md)及[交付](M7_3_C2A_DELIVERY_REPORT.md)。共享SceneRenderSession已通过87项真实图像/资源/边界/动画/自定义文件与完整双配置，见[C2-B合同](M7_3_C2B_RUNTIME_CONTRACT.md)、[交付](M7_3_C2B_DELIVERY_REPORT.md)；正式宿主C2-C的43项/独立像素误差0/API0/0与完整双配置通过，见[C2-C合同](M7_3_C2C_RUNTIME_CONTRACT.md)、[交付](M7_3_C2C_DELIVERY_REPORT.md)。C3-A合成默认环境/严格只读加载/部署83项及完整双配置通过，见[C3-A合同](M7_3_C3A_RUNTIME_CONTRACT.md)、[交付](M7_3_C3A_DELIVERY_REPORT.md)。C3-B1属性/状态8组、正式宿主扩展至51项及完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)。C3-B2预设发布/独立目录授权13组与正式宿主Debug102/Release111次检查、完整双配置通过，见[C3-B2合同](M7_3_C3B2_RUNTIME_CONTRACT.md)、[交付](M7_3_C3B2_DELIVERY_REPORT.md)。NCE保留不可变代次，ncenv与场景共用一条Undo；inspection固定上限17，旧资产schema不变。C3-C正式产品联合490项检查/8个探针及完整双配置通过，M7.3自动候选链闭合，见[C3-C交付](M7_3_C3C_DELIVERY_REPORT.md)；人工/用户素材/完整性能门禁保留。
 构建和编辑器 smoke 通过不等于完成双 API 验证；不能宣称 Vulkan 已可渲染。
 
 ### 物理
