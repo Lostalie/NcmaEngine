@@ -4,7 +4,7 @@
 
 ## 完整范围和顺序
 
-状态：D1的98项实际检查及完整顺序Debug/Release首轮通过，见[示例](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。下一片D2；D2/D3尚未完成。
+状态：D1的98项实际检查及完整顺序Debug/Release首轮通过，见[示例](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；下一片D3。D3尚未完成，整个D/M7.4不关闭。
 
 - D1：可编译公开C#示例：线性HDR Feature插入、几何stage替换、直接构建完整scene graph的pipeline替换（不是转发默认pipeline）。使用已有版本化图/程序/资源合同，不接触D3D、不添加新native ABI或远程代码加载。验证CPU-only、真实像素、独立标量/Half oracle、共享场景工厂与环境/后处理结合、失败原子性/owner/非重入、resize/关闭及暖态成本。
 - D2：实际静态/ASCII和Binary FBX→NCA→动画skin/PBR/IBL/shadow/HDR/Bloom/显示域UI联合。复用已经验证的独立软件积分/材质/滤波数值参考，但以联合图像和消融证据证明组合，不用同Shader自证。包含默认与定制路径、曝光/颜色域、UI不重复Tone、奇数尺寸/资源代次、失败恢复和成本。

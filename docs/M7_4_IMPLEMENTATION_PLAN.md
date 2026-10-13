@@ -34,9 +34,9 @@ C拆为C1受检程序库/产品闭包、C2正式配置/共享执行、C3编辑�
 
 Inspector presets/参数/Feature顺序通过现有可撤销事务和唯一历史；AI先读有界元数据，再提案及精确审批，同一Undo/Redo。未实现效果明确unsupported。更新受检发布闭包及NCP/项目选择；原默认资源不能无证据静默切换。Headless/纯UI仍无3D插件/后处理资产。
 
-### D：替换示例与产品联合验收（D1自动候选完成，D2/D3待实现）
+### D：替换示例与产品联合验收（D1/D2自动候选完成，D3待实现）
 
-按[D分片方案](M7_4_D_IMPLEMENTATION_PLAN.md)推进。D1公开C# Feature/stage/full graph示例已通过98项实际检查、独立标量/Half整图误差0、API0/0和完整顺序Debug/Release，见[示例与接入](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。下一片D2真实FBX/skin/IBL/shadow/Bloom/UI独立联合；随后D3搬移产品。不以D1关闭完整D。
+按[D分片方案](M7_4_D_IMPLEMENTATION_PLAN.md)推进。D1公开C# Feature/stage/full graph示例已通过98项实际检查、独立标量/Half整图误差0、API0/0和完整顺序Debug/Release，见[示例与接入](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；下一片D3搬移产品。独立参考分层验证，不声称完整CPU光栅/光照oracle，也不关闭完整D。
 
 公开Feature插入、stage replacement和full pipeline replacement实际示例；用户无需接触平台API。实际静态/FBX动画/PBR/IBL/shadow/HDR/Bloom/显示域UI联合图；独立数值而非同shader自证。搬移受检Editor/Player、源目录不可用、错误闭包pre-gameplay拒绝、Undo/Reload/resize/关闭；记录CPU/GPU/分配/上传/资源成本。
 

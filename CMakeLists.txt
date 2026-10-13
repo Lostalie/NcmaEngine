@@ -464,6 +464,11 @@ if(NCMA_BUILD_TESTS)
                 --customization-example-tests "${CMAKE_BINARY_DIR}/m2/plugins"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/customization-$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaRenderingTests.CustomizationExamples PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.JointPostImages COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --joint-post-image-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/joint-post-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.JointPostImages PROPERTIES TIMEOUT 180)
             set_tests_properties(NcmaCandidateGraphicsSmoke PROPERTIES TIMEOUT 60)
             add_test(NAME NcmaPresentationTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Presentation.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Presentation.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")

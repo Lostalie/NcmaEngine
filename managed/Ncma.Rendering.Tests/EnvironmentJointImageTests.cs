@@ -13,7 +13,7 @@ using Ncma.Scene.Rendering;
 internal static unsafe partial class Program
 {
     private static int EnvironmentJointImages(string root,string output,RendererSession renderer,RenderResourceCache cache,RegisteredSkinShader skin,
-        GpuEnvironmentResource environment,EnvironmentLightingConfiguration config,ref ulong frame)
+        GpuEnvironmentResource environment,EnvironmentLightingConfiguration config,ref ulong frame,JointImageObserver? observer=null)
     {
         int cases=0;void Pass(bool value,string message){Check(value,"M7.3-B3 joint "+message);cases++;}
         var build=Directory.GetParent(root)!.Parent!.FullName;
@@ -56,6 +56,7 @@ internal static unsafe partial class Program
                     var p=new Vector3((x+.5f)/256*6-3,1.25f-(y+.5f)/256*2.5f,-4);var result=oracle.Evaluate(p,Vector3.UnitZ,baseColor,204/255f,179/255f,153/255f,config.Strength,config.RotationRadians);
                     for(int c=0;c<3;c++)max=Math.Max(max,Math.Abs(actual[(y*256+x)*4+c]-(int)MathF.Round(result[c]*255)));pixels++;}
                 Pass(pixels>=10&&max<=3,"actual static FBX/NCA analytic interior IBL pixels="+pixels+" error="+max);File.WriteAllBytes(Path.Combine(output,"ibl-static-fbx.png"),Png(256,256,actual));
+                observer?.Invoke(draws,[],lights,lightVp,shadow,[],[],"static-fbx",ref frame);
             }
             foreach(string fixture in new[]{"blender_279_sausage_6100_ascii.fbx","blender_279_sausage_7400_binary.fbx"}){
                 var nca=SaveNca(fixture,false);var rigData=ModelPayloadCodec.DecodeSkeleton(nca.Blocks.Single(b=>b.AssetId==nca.Manifest.Skeleton!.Value).Data);using var rig=kernel.CreateRig(rigData);
@@ -90,6 +91,7 @@ internal static unsafe partial class Program
                             scene.ConfigureEnvironment(null,EnvironmentLightingConfiguration.Off,()=>true);renderer.UpdateSkins(frame,requests.ToArray(),palettes.ToArray());Render(new[]{floor}.Concat(actualDraws).ToArray(),actualDraws,alternate,frame++);int iblChanged=Changed(actual,alternate);Pass(iblChanged>100,"IBL actually contributes to joint image");scene.ConfigureEnvironment(environment,config,()=>true);
                             renderer.UpdateSkins(frame,requests.ToArray(),palettes.ToArray());Render(new[]{floor}.Concat(actualDraws).ToArray(),[],alternate,frame++);int shadowChanged=Changed(actual,alternate);Pass(shadowChanged>100,"actual geometry shadow has image effect");
                             evidence.Add(new{fixture,clip=clipId,time,duration=clip.Duration,maxVertexError,imageError,iblChanged,shadowChanged,ncaRestart=true});
+                            if(time==clip.Duration*.5)observer?.Invoke(new[]{floor}.Concat(actualDraws).ToArray(),actualDraws,lights,lightVp,shadow,requests.ToArray(),palettes.ToArray(),$"{fixture}-{clipId:N}",ref frame);
                             if(time==clip.Duration*.5)File.WriteAllBytes(Path.Combine(output,$"ibl-{fixture}-{clipId:N}.png"),Png(256,256,actual));
                         }
                     }
