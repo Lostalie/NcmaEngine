@@ -55,6 +55,7 @@ internal static unsafe partial class Program
         var meshes=document.World.GetObjects().Where(o=>o.Has<StaticMeshData>()).ToArray();var meshValues=meshes.Select(o=>o.Get<StaticMeshData>()).ToArray();
         for(int i=0;i<meshes.Length;i++)meshes[i].Set(meshValues[i] with{Visible=false,CastShadow=false});settings.Set(active);Prepare();
         Pass(!session.Submit(frame++,128,128,camera,target:target)&&session.PreparedPostProcess.ToneModule==PostProcessLibrarySelection.ReinhardModule,"culled view does not publish uninstalled settings");
+        Pass(!session.IsPostProcessReady,"culled view cannot report post ready");
         for(int i=0;i<meshes.Length;i++)meshes[i].Set(meshValues[i]);Bad(()=>session.Submit(frame++,128,128,camera,target:target));Prepare();Tick();Pass(image.SequenceEqual(bloom),"visible-again prepares requested graph");
         Bad(()=>session.Submit(frame++,127,127,camera,target:target));Prepare(127);Pass(session.Submit(frame++,127,127,camera,target:target),"odd resize off-frame");renderer.Present();Prepare();
         light.Set(light.Get<DirectionalLightData>() with{CastShadow=true});Bad(()=>session.Submit(frame++,128,128,camera,target:target));Prepare();Tick();Pass(session.Plan!.Resources.Any(r=>r.Role==RenderRole.SceneShadow),"shadow variant paired");

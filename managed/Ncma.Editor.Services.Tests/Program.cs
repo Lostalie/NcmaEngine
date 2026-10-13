@@ -28,6 +28,7 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
 }
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
+if(args.Length==3&&args[2]=="--post-author-cpu-probe"){PostProcessAuthoringTests.CpuProbe(output);return 0;}
 static void Compare(JsonElement a,JsonElement b) {
     Check(a.ValueKind==b.ValueKind);
     switch(a.ValueKind) {
@@ -792,6 +793,8 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
     }),
 }).ToArray();
 cases = cases.Concat(EnvironmentAuthoringTests.Cases(output,root)).ToArray();
+cases = cases.Concat(PostProcessAuthoringTests.Cases(output,root)).ToArray();
+if (args.Length == 3 && args[2] == "--post-authoring-tests") cases=cases.Where(c=>c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-authoring-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal)).ToArray();
 foreach (var (name, run) in cases) { try { run(); Console.WriteLine("PASS: " + name); } catch (Exception e) { Console.Error.WriteLine("FAIL: " + name + "\n" + e); return 1; } }

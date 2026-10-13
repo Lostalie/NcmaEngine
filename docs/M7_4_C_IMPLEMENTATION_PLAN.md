@@ -16,13 +16,15 @@ RuntimePostProcessLibrary使用原RuntimeReadPin，校验canonical路径、repar
 
 ## C2：高层配置与正式共享执行（自动候选完成）
 
-67项模块/52项共享、双配置各71次正式宿主检查及最终顺序完整Debug第二轮/Release首轮通过。见[C2合同](M7_4_C2_RUNTIME_CONTRACT.md)、[C2交付](M7_4_C2_DELIVERY_REPORT.md)。首轮注册数量断言遗漏已修正；间歇File.Replace失败保留，独立及最终完整复测通过，不宣称原因已修复。下一片C3，D/人工/性能门禁保留。
+67项模块/52项共享、双配置各71次正式宿主检查及最终顺序完整Debug第二轮/Release首轮通过。见[C2合同](M7_4_C2_RUNTIME_CONTRACT.md)、[C2交付](M7_4_C2_DELIVERY_REPORT.md)。首轮注册数量断言遗漏已修正；间歇File.Replace失败保留，独立及最终完整复测通过，不宣称原因已修复。C3后续结果见下节，D/人工/性能门禁保留。
 
 增加单一scene-wide后处理配置，以精确注册模块UUID/版本和闭合有界参数表达，而非Shader文本/路径。默认Off；Off不准备子图资源。官方Bloom与可信启动时注册的用户Feature使用同一目录/图构建接口，明确Tone在末尾及线性域依赖，不能用无意义的任意重排序伪装定制。
 
 项目选择明确绑定程序库外部hash；运行包和scene配置闭包在gameplay前验证。Editor/Player共用SceneRenderSession的off-frame准备和就绪状态，world/revision/Play/资源代次绑定；更换Tone/Bloom/尺寸/shadow/environment必须准备完整候选，不在Submit编译/读文件/等待IPC。失败保留上一安装，但宿主清除过期视口并显示诊断，不把旧图作为新配置。保持同一skin kernel、资源cache/lease、Play隔离与Reload/Undo失效规则。Headless验证持久值但不创建渲染资源；纯UI完全轻量。
 
-## C3：编辑器与AI同一事务
+## C3：编辑器与AI同一事务（自动候选完成）
+
+9组作者测试、真实stdio权限/审批/撤销、正式DX11控件联动/用户模块/失败清屏与最终顺序完整Debug首轮/Release第二轮通过，见[C3实施](M7_4_C3_IMPLEMENTATION_PLAN.md)、[合同](M7_4_C3_RUNTIME_CONTRACT.md)、[交付](M7_4_C3_DELIVERY_REPORT.md)。Release首轮原File.Replace间歇失败及独立复测记录保留，根因未确认。C自动候选链闭合，下一片D。
 
 Inspector提供预设、EV、Bloom阈值/soft knee/强度/层数/散射，以及已注册模块的有界参数/合法顺序。直接操作和AI提案均使用现有原命令、精确对象权限、会话/版本、唯一Undo/Redo；独立只读模块目录权限不得隐含执行/文件/编译权限。预览/对照结果有world/revision/stamp，不授权Agent直接访问World/GPU。未接入推理服务保持真实标识。
 

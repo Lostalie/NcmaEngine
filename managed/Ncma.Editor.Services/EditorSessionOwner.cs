@@ -23,6 +23,8 @@ public sealed class EditorSessionOwner : IDisposable
     private AssetProjectAuthoring? _assets;
     private AssetInspectionService? _assetInspections;
     private EditorEnvironmentWorkspace? _environments;
+    private EditorPostProcessWorkspace? _postProcessing;
+    private readonly Ncma.Rendering.Scene.PostProcessModules? _postModules;
     private IDisposable? _playAssets;
     private ImportCoordinator? _imports;
     private PreparedSceneAssetLease? _renderAssets, _playRenderAssets;
@@ -37,9 +39,12 @@ public sealed class EditorSessionOwner : IDisposable
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null,
         Action<SceneDocumentSnapshot>? validateComposition = null, Func<PlaySession, IDisposable?>? composePlay = null, Action? beforePlayStop = null,
-        Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? composePreparedPlay = null, TimeProvider? workflowTime = null)
+        Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? composePreparedPlay = null, TimeProvider? workflowTime = null,
+        Ncma.Rendering.Scene.PostProcessModules? postProcessModules = null)
     {
-        _compositionPolicy = validateComposition;
+        _postModules=components?.Describe().Any(c=>c.TypeId==PostProcessData.TypeId)==true?postProcessModules??Ncma.Rendering.Scene.PostProcessModules.Official():null;
+        if(postProcessModules is not null&&_postModules is null)throw new ArgumentException("Post modules require the registered scene value component.");
+        _compositionPolicy = snapshot=>{validateComposition?.Invoke(snapshot);if(_postModules is not null)Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(snapshot,_postModules);};
         _workflowTime = workflowTime;
         _composePlay = composePlay;
         if(composePlay is not null&&composePreparedPlay is not null)throw new ArgumentException("Choose one Play composition contract.");
@@ -60,6 +65,7 @@ public sealed class EditorSessionOwner : IDisposable
     public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
     public AssetInspectionService? AssetInspections { get { Verify(); return _assetInspections; } }
     public EditorEnvironmentWorkspace? Environments { get { Verify(); return _environments; } }
+    public EditorPostProcessWorkspace? PostProcessing { get { Verify(); return _postProcessing; } }
     public void ConfigureEnvironments(string root,Guid project,Func<Ncma.Assets.EnvironmentPresetLibrary> loadPreset,TimeProvider? time=null,Action<string>? fault=null)
     {
         Verify();if(_assets is null||_environments is not null||_play is not null||_renderAssetPackage is not null)throw new InvalidOperationException("Environment authoring requires fresh source-project startup.");
@@ -127,6 +133,7 @@ public sealed class EditorSessionOwner : IDisposable
         if (_edit is not null) throw new InvalidOperationException("Editor is already activated.");
         _edit = new(_document); RefreshCatalog();
         _workflows = new(_edit, _workflowTime);
+        if(_postModules is not null)_postProcessing=new(new EditorWorkspace(this),_postModules,_workflowTime);
     }
     public void RefreshCatalog() { Verify(); _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); }
     public void ConfigureEndpoint(bool enabled, string projectRoot)
@@ -141,6 +148,7 @@ public sealed class EditorSessionOwner : IDisposable
         _workflows!.Bind(candidate);
         _assetInspections?.Revoke(); // A replacement endpoint never inherits old asset-read approval.
         _environments?.RevokeRead();
+        _postProcessing?.RevokeRead();
     }
     public int LoadGameplay(string path)
     {
@@ -213,6 +221,8 @@ public sealed class EditorSessionOwner : IDisposable
         _renderAssets = null;
         try { _environments?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _environments = null;
+        try { _postProcessing?.Dispose(); } catch (Exception e) { errors.Add(e); }
+        _postProcessing=null;
         try { _assets?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _assets = null;
         _assetInspections?.Revoke(); _assetInspections = null;

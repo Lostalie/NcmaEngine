@@ -10,6 +10,8 @@ public sealed partial class SceneRenderSession
     private bool _postReady,_postViewEmpty;
     private float _postInputExposure;
     public PostProcessData PreparedPostProcess { get { Verify();return _postPrepared; } }
+    public bool IsPostProcessReady { get { Verify();return _postObservedRevision==_world.Revision&&(_postRuntime is null?!_postObserved.Enabled:
+        _postReady&&!_postViewEmpty&&_postPrepared==_postObserved&&_postEnvironment==_environment); } }
     private void InitializePostProcess(PostProcessRuntime? runtime,PostProcessData startup)
     {
         _postRuntime=runtime;var current=ScenePostProcessState.Read(_world,WorldId);
@@ -39,7 +41,7 @@ public sealed partial class SceneRenderSession
             bool shadows=view.PrimaryLight is {Data.CastShadow:true};uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
             float effective=value.Enabled?exposure*SceneTonePresets.ExposureFromStops(value.ExposureEv):exposure;
             if(!float.IsFinite(effective)||effective is <.01f or >16)throw new ArgumentException("Combined Tone exposure must remain within the existing [.01,16] contract.");
-            if(_pipeline is not null&&_postReady&&value==_postPrepared&&_postEnvironment==_environment&&_width==w&&_height==h&&_shadows==shadows&&_postInputExposure==exposure&&_ambient==ambient)return;
+            if(_pipeline is not null&&_postReady&&value==_postPrepared&&_postEnvironment==_environment&&_width==w&&_height==h&&_shadows==shadows&&_postInputExposure==exposure&&_ambient==ambient){_postObserved=value;_postObservedRevision=_world.Revision;return;}
             PreparedPostView? post=value.Enabled?runtime.Prepare(value,w,h,_environmentShaders is not null,shadows,_hasSkin):null;
             ScenePipelineSession? candidate=null;
             try {

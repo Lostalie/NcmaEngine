@@ -4,7 +4,7 @@ using Ncma.Rendering;
 namespace Ncma.Editor.Services;
 // No private rendering history. Configuration is a value component on an ordinary flat GameObject;
 // existing scoped Core transactions/inspection/persistence/Undo/Redo are the only mutation path.
-public static class RenderingEditorAdapter
+public static partial class RenderingEditorAdapter
 {
     private static JsonElement Json(string value){using var doc=JsonDocument.Parse(value);return doc.RootElement.Clone();}
     public static void RegisterInspections(EditSession edit,RenderPipelineService service,RendererSession renderer)

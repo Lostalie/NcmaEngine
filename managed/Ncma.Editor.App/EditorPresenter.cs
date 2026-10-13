@@ -78,7 +78,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public void ShowRenderDiagnostics(IReadOnlyList<Ncma.Scene.Rendering.SceneRenderDiagnostic>? diagnostics) {
         _renderDiagnostics=diagnostics?.Take(4).Select(d=>$"Render: {d.Code}; object={d.ObjectId}; asset={d.AssetId}").ToArray()??[];
     }
-    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelGraph();CancelUi();CancelEnvironmentReview();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
+    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelGraph();CancelUi();CancelEnvironmentReview();CancelPostReview();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
     private static string BoundMessage(string message, int limit) {
         if (message.Length <= limit) return message;
         if (char.IsHighSurrogate(message[limit - 1])) limit--;
@@ -271,6 +271,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 }
                 if (component.TypeId == Ncma.Scene.Rendering.EnvironmentLightingData.TypeId)
                     BuildEnvironmentInspector(selected.Id, component.Data.Deserialize<Ncma.Scene.Rendering.EnvironmentLightingData>(DataJson), ref control, ref labelId, writable);
+                if(component.TypeId==Ncma.Scene.Rendering.PostProcessData.TypeId)
+                    BuildPostInspector(selected.Id,component.Data.Deserialize<Ncma.Scene.Rendering.PostProcessData>(DataJson),ref control,ref labelId,writable);
                 Button(control++, "Remove " + component.TypeId, "transaction", writable, selected.Id, new { op = "remove_component", objectId = selected.Id, typeId = component.TypeId });
             }
             if (!selected.Components.Any(c => c.TypeId == "ncma.transform"))
@@ -280,6 +282,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 Button(control++, "添加环境配置（关闭）", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id,
                     typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1, data = workspace.Owner.Document.World.Components.Encode(Ncma.Scene.Rendering.EnvironmentLightingData.Off) });
             BuildEnvironmentAuthoring(selected.Id,ref control,ref labelId,writable);
+            BuildPostCatalog(selected.Id,ref control,ref labelId,writable);
             _bindingOffset = Math.Clamp(_bindingOffset,0,Math.Max(0,(selected.Behaviours.Length-1)/8*8));
             Button(32,"Previous bindings","bindings_previous",_bindingOffset>0);
             Line();
@@ -552,7 +555,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyLayout(action,e))continue;
                 if(ApplyUi(action,e,text))continue;
                 if(ApplyGraphEditor(action,e,text))continue;
-                if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "environment_field" or "export")
+                if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "environment_field" or "post_field" or "export")
                 {
                     if (e.Phase == 1) {
                         workspace.BeginDraft(stamp, action.Object, "Edit " + action.Kind);
@@ -568,6 +571,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 }
                 if (e.Phase != 3) continue;
                 if(ApplyEnvironmentAction(action,e.Value))continue;
+                if(ApplyPostAction(action,e.Value))continue;
                 if(ApplyAssetAction(action,e.Value,text,stamp))continue;
                 if(ApplyViewportAction(action,e.Value,text,stamp))continue;
                 if(ApplyCharacterAction(action,e.Value))continue;
@@ -686,6 +690,10 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     private object Operation(ActionView action, string text, double number)
     {
+        if(action.Kind=="post_field") {
+            var modules=workspace.Owner.PostProcessing!.Modules;
+            return RenderingEditorAdapter.PostOperation(modules,action.Object,RenderingEditorAdapter.PostField(modules,PostValue(),action.Field,number));
+        }
         if (action.Kind == "environment_field")
             return RenderingEditorAdapter.EnvironmentFieldOperation(action.Object,
                 _page!.Selected!.Components.Single(c => c.TypeId == Ncma.Scene.Rendering.EnvironmentLightingData.TypeId).Data.Deserialize<Ncma.Scene.Rendering.EnvironmentLightingData>(DataJson), action.Field, number);

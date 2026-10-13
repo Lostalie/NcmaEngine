@@ -98,7 +98,7 @@ internal static class EnvironmentAuthoringTests
                 var undo=new CapabilityRequest(2,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.history.undo",JsonSerializer.SerializeToElement(new{}));Check(!edit.Invoke(undo,new(["ncma.history.undo",EditorEnvironmentWorkspace.ApplyCapability],objectScope:[])).Changed);
             }
         });
-        yield return("M7.3-C3-B2 bounded 17 inspections and failed paired registration leaves no partial capability",()=>{
+        yield return("M7.3-C3-B2 bounded inspection capacity and failed paired registration leaves no partial capability",()=>{
             var edit=new EditSession(new SceneDocument());var schema=JsonSerializer.SerializeToElement(new{type="object"});for(int i=0;i<EditSession.MaxRegisteredInspections;i++)edit.RegisterInspection(new("test."+i,"test",MutationRisk.ReadOnly,schema,schema),_=>new{});
             var participant=new Participant(()=>JsonSerializer.SerializeToElement(Array.Empty<object>()));Reject(()=>edit.RegisterCommandParticipant(EditorEnvironmentWorkspace.ApplyDescriptor,participant,(EditorEnvironmentWorkspace.ListDescriptor,_=>new{})));
             Check(!edit.Describe().Any(d=>d.Name==EditorEnvironmentWorkspace.ApplyCapability));Reject(()=>edit.RegisterInspection(EditorEnvironmentWorkspace.ListDescriptor,_=>new{}));

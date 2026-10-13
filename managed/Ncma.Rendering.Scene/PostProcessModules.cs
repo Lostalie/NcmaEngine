@@ -3,11 +3,13 @@ using Ncma.Assets;
 using Ncma.Scene.Rendering;
 namespace Ncma.Rendering.Scene;
 
-public sealed record PostParameterRule(string Name, float Minimum, float Maximum, bool Integer = false);
+public sealed record PostParameterRule(string Name, float Minimum, float Maximum, bool Integer = false, float? Default = null);
 public sealed record PostFeatureRegistration(Guid ModuleId, int Version, int Order,
     PostParameterRule[] Parameters, Guid[] Requires,
-    Func<uint, uint, IReadOnlyDictionary<string, float>, PostProcessPackage, PostProcessPlan?> Build);
-public sealed record PostToneRegistration(Guid ModuleId, int Version);
+    Func<uint, uint, IReadOnlyDictionary<string, float>, PostProcessPackage, PostProcessPlan?> Build, string? Name = null);
+public sealed record PostToneRegistration(Guid ModuleId, int Version, string? Name = null);
+public sealed record PostModuleDescription(Guid ModuleId, int Version, string Kind, string Name, int Order,
+    PostParameterRule[] Parameters, Guid[] Requires);
 public sealed record ComposedPostProcess(PostProcessPlan Plan, PostProcessPackage Programs);
 
 // Trusted startup code only: delegates are neither serialized nor loaded from configuration.
@@ -15,23 +17,24 @@ public sealed record ComposedPostProcess(PostProcessPlan Plan, PostProcessPackag
 public sealed class PostProcessModules
 {
     private readonly Dictionary<Guid, PostFeatureRegistration> _features = [];
-    private readonly Dictionary<Guid, int> _tones = [];
+    private readonly Dictionary<Guid, PostToneRegistration> _tones = [];
     private readonly int _owner = Environment.CurrentManagedThreadId;
     private bool _building;
     public PostProcessModules(IEnumerable<PostToneRegistration> tones, IEnumerable<PostFeatureRegistration> features)
     {
         ArgumentNullException.ThrowIfNull(tones); ArgumentNullException.ThrowIfNull(features);
         foreach (var tone in tones.Take(33))
-            if (tone is null || tone.ModuleId == Guid.Empty || tone.Version < 1 || _tones.Count == 32 || !_tones.TryAdd(tone.ModuleId, tone.Version))
+            if (tone is null || tone.ModuleId == Guid.Empty || tone.Version < 1 || !ValidLabel(tone.Name) || _tones.Count == 32 || !_tones.TryAdd(tone.ModuleId, tone))
                 throw new ArgumentException("Post Tone registration.");
         foreach (var feature in features.Take(33)) {
-            if (feature is null || feature.ModuleId == Guid.Empty || feature.Version < 1 || feature.Order is < 0 or > 1024 ||
+            if (feature is null || feature.ModuleId == Guid.Empty || feature.Version < 1 || !ValidLabel(feature.Name) || feature.Order is < 0 or > 1024 ||
                 feature.Parameters is null || feature.Parameters.Length > 16 || feature.Requires is null || feature.Requires.Length > 8 || feature.Build is null ||
                 _features.Count == 32 || _tones.ContainsKey(feature.ModuleId) || _features.ContainsKey(feature.ModuleId)) throw new ArgumentException("Post Feature registration.");
             var names = new HashSet<string>(StringComparer.Ordinal);
             foreach (var rule in feature.Parameters)
                 if (rule is null || !PostProcessData.ValidName(rule.Name) || !names.Add(rule.Name) || !float.IsFinite(rule.Minimum) || !float.IsFinite(rule.Maximum) ||
-                    rule.Minimum < -65504 || rule.Maximum > 65504 || rule.Minimum > rule.Maximum || rule.Integer && (rule.Minimum != MathF.Truncate(rule.Minimum) || rule.Maximum != MathF.Truncate(rule.Maximum)))
+                    rule.Minimum < -65504 || rule.Maximum > 65504 || rule.Minimum > rule.Maximum || rule.Integer && (rule.Minimum != MathF.Truncate(rule.Minimum) || rule.Maximum != MathF.Truncate(rule.Maximum)) ||
+                    rule.Default is {} d&&(!float.IsFinite(d)||d<rule.Minimum||d>rule.Maximum||rule.Integer&&d!=MathF.Truncate(d)))
                     throw new ArgumentException("Post parameter registration.");
             if (feature.Requires.Any(id => id == Guid.Empty || id == feature.ModuleId) || feature.Requires.Distinct().Count() != feature.Requires.Length)
                 throw new ArgumentException("Post dependency registration.");
@@ -43,10 +46,17 @@ public sealed class PostProcessModules
         foreach (var id in _features.Keys) Visit(id);
     }
     private void Verify() { if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Post module owner thread."); if (_building) throw new InvalidOperationException("Nonreentrant post module build."); }
+    private static bool ValidLabel(string? name)=>name is null||name.Length is >0 and <=64&&!name.Any(char.IsControl);
+    public PostModuleDescription[] Describe()
+    {
+        Verify();return _tones.Values.Select(t=>new PostModuleDescription(t.ModuleId,t.Version,"tone",t.Name??t.ModuleId.ToString("D"),0,[],[]))
+            .Concat(_features.Values.Select(f=>new PostModuleDescription(f.ModuleId,f.Version,"feature",f.Name??f.ModuleId.ToString("D"),f.Order,f.Parameters.ToArray(),f.Requires.ToArray())))
+            .OrderBy(m=>m.Kind,StringComparer.Ordinal).ThenBy(m=>m.Order).ThenBy(m=>m.ModuleId).ToArray();
+    }
     public PostProcessData Validate(PostProcessData settings)
     {
         Verify(); settings = PostProcessData.Validate(settings);
-        if (!_tones.TryGetValue(settings.ToneModule, out int version) || version != settings.ToneVersion) throw new ArgumentException("Unknown exact Tone module/version.");
+        if (!_tones.TryGetValue(settings.ToneModule, out var tone) || tone.Version != settings.ToneVersion) throw new ArgumentException("Unknown exact Tone module/version.");
         var seen = new HashSet<Guid>(); int order = -1;
         foreach (var feature in PostProcessData.DecodeStack(settings.StackJson)) {
             if (!_features.TryGetValue(feature.ModuleId, out var module) || module.Version != feature.Version || module.Order < order || module.Requires.Any(id => !seen.Contains(id)))
@@ -80,10 +90,10 @@ public sealed class PostProcessModules
         } finally { _building = false; }
     }
     public static PostProcessModules Official() => new(
-        new[] { PostProcessLibrarySelection.AcesModule, PostProcessLibrarySelection.ReinhardModule, PostProcessLibrarySelection.LinearModule }.Select(id => new PostToneRegistration(id, 1)),
+        [new(PostProcessLibrarySelection.AcesModule,1,"ACES fitted"),new(PostProcessLibrarySelection.ReinhardModule,1,"Reinhard"),new(PostProcessLibrarySelection.LinearModule,1,"Linear Clamp")],
         [new(PostProcessLibrarySelection.BloomModule, 1, 100,
-            [new("levels",1,6,true),new("threshold",0,16),new("softKnee",0,1),new("intensity",0,4),new("scatter",0,1)], [],
-            (w,h,p,bytes) => BloomFeature.Build(w,h,new(Levels:(int)p["levels"],Threshold:p["threshold"],SoftKnee:p["softKnee"],Intensity:p["intensity"],Scatter:p["scatter"]),bytes))]);
+            [new("levels",1,6,true,4),new("threshold",0,16,Default:1),new("softKnee",0,1,Default:.5f),new("intensity",0,4,Default:.08f),new("scatter",0,1,Default:.7f)], [],
+            (w,h,p,bytes) => BloomFeature.Build(w,h,new(Levels:(int)p["levels"],Threshold:p["threshold"],SoftKnee:p["softKnee"],Intensity:p["intensity"],Scatter:p["scatter"]),bytes),"Bloom")]);
     public static PostFeatureInput Bloom(BloomSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings); settings.Validate();

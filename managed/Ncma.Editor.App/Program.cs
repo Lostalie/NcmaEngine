@@ -141,7 +141,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
             validateComposition: RequireComposition,
-            composePreparedPlay:ComposePreparedPlay,
+            composePreparedPlay:ComposePreparedPlay,postProcessModules:_postModules,
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         var graphRuntime=new AnimationRuntimeInspectionService(_editor,()=>_sceneRuntime,()=>_playScene);graphRuntime.Register();
@@ -367,6 +367,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                 var environmentWorld = _editor.Play?.Document.World ?? _editor.Document.World;
                 _presenter?.ShowEnvironmentPreparation(environmentWorld.Identity, environmentWorld.Revision, _editor.Play?.SessionId ?? Guid.Empty,
                     scene is not null, _scenePreparationError is not null, scene?.PreparedEnvironment);
+                _presenter?.ShowPostPreparation(environmentWorld.Identity,environmentWorld.Revision,_editor.Play?.SessionId??Guid.Empty,
+                    scene?.IsPostProcessReady??false,_scenePreparationError is not null,scene?.PreparedPostProcess,frame.FrameId);
                 _presenter?.SetViewportFrame(_editor.Play is null?scene:null,frame.FrameId);
             } else {
             if (_graph is null || width != _viewWidth || height != _viewHeight) {

@@ -326,6 +326,7 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--post-module-tests") return PostModuleTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--post-scene-tests") return PostSceneTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--post-host-tests") return PostHostTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--post-author-host-tests") return PostHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--post-library-preflight") return PostLibraryChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--post-process-preflight") return PostProcessChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-stages-tests") return RegisteredStagesTests(args[1], args[2]);

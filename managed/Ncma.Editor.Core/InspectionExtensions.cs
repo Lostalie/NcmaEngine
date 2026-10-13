@@ -2,8 +2,8 @@ using System.Text.Json;
 namespace Ncma.Editor.Core;
 public sealed partial class EditSession
 {
-    // The source-project host registers the original 16 plus the independent environment catalog.
-    public const int MaxRegisteredInspections = 17;
+    // Original 16, independent environment catalog, and registered post module catalog.
+    public const int MaxRegisteredInspections = 18;
     private readonly Dictionary<string,Func<JsonElement,object>> _inspections = new(StringComparer.Ordinal);
     // Prevalidate a trusted startup batch before registering any descriptor.
     public void RegisterInspections((CapabilityDescriptor Descriptor, Func<JsonElement,object> Inspect)[] entries)
