@@ -28,13 +28,15 @@ C#拥有效果组合、参数、注册、依赖与编辑事务；C++只执行GPU
 
 ### C：正式共享宿主、配置与编辑器/AI
 
-C拆为C1受检程序库/产品闭包、C2正式配置/共享执行、C3编辑器/AI，见[C详细方案](M7_4_C_IMPLEMENTATION_PLAN.md)。C1已通过149项检查与最终顺序完整Debug/Release，见[C1合同](M7_4_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_4_C1_DELIVERY_REPORT.md)。C2正式配置/共享执行已通过67项模块/52项共享及双配置各71次正式宿主检查、完整顺序Debug/Release，见[C2合同](M7_4_C2_RUNTIME_CONTRACT.md)、[C2交付](M7_4_C2_DELIVERY_REPORT.md)。C3专用编辑器/AI目录与同一事务完成9组作者测试、正式DX11控件联动和完整顺序Debug/Release，见[C3合同](M7_4_C3_RUNTIME_CONTRACT.md)、[C3交付](M7_4_C3_DELIVERY_REPORT.md)。默认Off；C自动候选链闭合，下一片D；不替代D联合或人工验收。
+C拆为C1受检程序库/产品闭包、C2正式配置/共享执行、C3编辑器/AI，见[C详细方案](M7_4_C_IMPLEMENTATION_PLAN.md)。C1已通过149项检查与最终顺序完整Debug/Release，见[C1合同](M7_4_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_4_C1_DELIVERY_REPORT.md)。C2正式配置/共享执行已通过67项模块/52项共享及双配置各71次正式宿主检查、完整顺序Debug/Release，见[C2合同](M7_4_C2_RUNTIME_CONTRACT.md)、[C2交付](M7_4_C2_DELIVERY_REPORT.md)。C3专用编辑器/AI目录与同一事务完成9组作者测试、正式DX11控件联动和完整顺序Debug/Release，见[C3合同](M7_4_C3_RUNTIME_CONTRACT.md)、[C3交付](M7_4_C3_DELIVERY_REPORT.md)。默认Off；C自动候选链闭合，D进展见下节；不替代D联合或人工验收。
 
 增加受控版本化高层后处理设置，绑定精确注册模块和参数，不接受Shader文本/路径。Editor与Player共享已准备程序/资源；配置变更在安全边界准备，tick不编译、不读文件、不等待推理。对照图和失败诊断可检查当前world/revision/资源代次，不呈现旧图为新配置。
 
 Inspector presets/参数/Feature顺序通过现有可撤销事务和唯一历史；AI先读有界元数据，再提案及精确审批，同一Undo/Redo。未实现效果明确unsupported。更新受检发布闭包及NCP/项目选择；原默认资源不能无证据静默切换。Headless/纯UI仍无3D插件/后处理资产。
 
-### D：替换示例与产品联合验收
+### D：替换示例与产品联合验收（D1自动候选完成，D2/D3待实现）
+
+按[D分片方案](M7_4_D_IMPLEMENTATION_PLAN.md)推进。D1公开C# Feature/stage/full graph示例已通过98项实际检查、独立标量/Half整图误差0、API0/0和完整顺序Debug/Release，见[示例与接入](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。下一片D2真实FBX/skin/IBL/shadow/Bloom/UI独立联合；随后D3搬移产品。不以D1关闭完整D。
 
 公开Feature插入、stage replacement和full pipeline replacement实际示例；用户无需接触平台API。实际静态/FBX动画/PBR/IBL/shadow/HDR/Bloom/显示域UI联合图；独立数值而非同shader自证。搬移受检Editor/Player、源目录不可用、错误闭包pre-gameplay拒绝、Undo/Reload/resize/关闭；记录CPU/GPU/分配/上传/资源成本。
 
