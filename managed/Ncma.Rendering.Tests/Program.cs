@@ -334,6 +334,8 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--environment-render-session-tests") return EnvironmentRenderSessionTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-host-tests") return EnvironmentHostTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-preset-tests") return EnvironmentPresetTests(args[1],args[2]);
+            if (args.Length == 2 && args[0] == "--environment-product-child") return EnvironmentProductBootstrap.Run(args[1]);
+            if (args.Length == 3 && args[0] == "--environment-product-tests") return EnvironmentProductTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-authoring-host-tests") return EnvironmentAuthoringHostTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-preflight") return EnvironmentChild(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--shader-package-preflight") return ShaderPackageChild(args[1], args[2]);
@@ -387,6 +389,7 @@ internal static unsafe partial class Program
             EnvironmentHostTests(root,Path.Combine(output,"environment-hosts"));
             EnvironmentPresetTests(root,Path.Combine(output,"environment-presets"));
             EnvironmentAuthoringHostTests(root,Path.Combine(output,"environment-authoring-hosts"));
+            EnvironmentProductTests(root,Path.Combine(output,"environment-products"));
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");

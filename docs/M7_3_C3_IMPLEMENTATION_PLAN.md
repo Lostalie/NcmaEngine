@@ -1,6 +1,6 @@
 # M7.3-C3 默认环境、配置面板与联合验收
 
-2026-10-14。C2-C 已完成完整 Debug/Release、checked deployment 和提交推送，开工时local/remote main `9ac83b213f0cad8131d3907925ece85ee0faad09` 已核对。C3-A的83项及完整顺序Debug/Release/checked部署已通过，见[交付记录](M7_3_C3A_DELIVERY_REPORT.md)。C3-B1现有绑定属性/状态8组与正式宿主51项、完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)。C3-B2预设发布/目录授权13组与正式宿主Debug102/Release111次检查、完整顺序双配置通过，见[C3-B2交付](M7_3_C3B2_DELIVERY_REPORT.md)。下一片C3-C。C3 按 A → B → C 推进；每片测试失败先修复，最终双配置通过后提交推送，再进入下一片。
+2026-10-14。C2-C 已完成完整 Debug/Release、checked deployment 和提交推送，开工时local/remote main `9ac83b213f0cad8131d3907925ece85ee0faad09` 已核对。C3-A的83项及完整顺序Debug/Release/checked部署已通过，见[交付记录](M7_3_C3A_DELIVERY_REPORT.md)。C3-B1现有绑定属性/状态8组与正式宿主51项、完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)。C3-B2预设发布/目录授权13组与正式宿主Debug102/Release111次检查、完整顺序双配置通过，见[C3-B2交付](M7_3_C3B2_DELIVERY_REPORT.md)。C3-C已通过双配置490项产品检查/8个探针与完整门禁，见[C3-C交付](M7_3_C3C_DELIVERY_REPORT.md)；C3自动链完成，下一片M7.4。C3 按 A → B → C 推进；每片测试失败先修复，最终双配置通过后提交推送，再进入下一片。
 
 ## C3-A：构建期默认环境与产品部署闭包（自动候选完成）
 
@@ -23,7 +23,7 @@
 
 验证命令/拒绝/过期/取消/Undo/Redo/重启保存/Play冻结，以及批准后的真实视口变化；错误准备保留最后有效资源并显示失败，不呈现过期画面。人工输入/DPI/真实第三方MCP继续单独登记。
 
-## C3-C：正式产品联合验收
+## C3-C：正式产品联合验收（自动候选完成，人工/性能门禁保留）
 
 在已受检可搬移的 Editor/DX11 Player 中运行源目录不可用的 NCP 与预设 shader/NCE，核对启动先验证后 gameplay 的顺序；坏闭包必须在初始化前拒绝。纯 UI 与 Headless 不加载环境 GPU 或部署3D文件。静态与真实 ASCII/Binary FBX → NCA 动画、阴影、PBR材质、环境旋转/强度/Off、动态资源代次、resize、Play/Reload/关闭运行在正式共享服务。
 

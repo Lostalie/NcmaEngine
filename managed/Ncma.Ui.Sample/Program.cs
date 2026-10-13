@@ -53,6 +53,7 @@ try {
     }
     canvas.Dispose(); textService.Dispose(); var stats = renderer.Stats;
     if (stats.ValidationErrors != 0 || stats.ValidationWarnings != 0) throw new InvalidOperationException("UI sample graphics validation failed.");
-    if(renderer.PipelineStats.Pipelines != 0 || renderer.SkinStats.Meshes != 0 || renderer.UiStats.PureUi != 1 || renderer.UiShaderGeneration != 1) throw new InvalidOperationException("Independent registered UI closure failed.");
-    Console.WriteLine(JsonSerializer.Serialize(new { sample = "M7.1-C4-C packaged UI", runtimeShaderPackage = shaderFiles is not null, frames = frame - 1, registeredUi = true, shaderGeneration = renderer.UiShaderGeneration, worldInitialized = false, physicsInitialized = false, imguiInitialized = false, validationErrors = stats.ValidationErrors, validationWarnings = stats.ValidationWarnings }));
+    var environment=renderer.EnvironmentStats;
+    if(renderer.PipelineStats.Pipelines != 0 || renderer.SkinStats.Meshes != 0 || renderer.UiStats.PureUi != 1 || renderer.UiShaderGeneration != 1 || environment.Live != 0 || environment.ResidentBytes != 0 || environment.Publications != 0 || environment.UploadedBytes != 0) throw new InvalidOperationException("Independent registered UI closure failed.");
+    Console.WriteLine(JsonSerializer.Serialize(new { sample = "M7.1-C4-C packaged UI", runtimeShaderPackage = shaderFiles is not null, frames = frame - 1, registeredUi = true, shaderGeneration = renderer.UiShaderGeneration, worldInitialized = false, physicsInitialized = false, imguiInitialized = false, environmentLive = environment.Live, environmentResidentBytes = environment.ResidentBytes, environmentPublications = environment.Publications, environmentUploadedBytes = environment.UploadedBytes, validationErrors = stats.ValidationErrors, validationWarnings = stats.ValidationWarnings }));
 } catch (Exception error) { Console.Error.WriteLine(error); Environment.ExitCode = 1; }

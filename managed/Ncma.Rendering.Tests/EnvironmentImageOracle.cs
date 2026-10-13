@@ -4,7 +4,7 @@ using Ncma.Assets;
 internal static unsafe partial class Program
 {
     // Independent test-side numerical consumer, not production shader/cook code.
-    private sealed class IblImageOracle
+    internal sealed class IblImageOracle
     {
         private readonly float[][] _irr;
         private readonly float[][][] _spec;

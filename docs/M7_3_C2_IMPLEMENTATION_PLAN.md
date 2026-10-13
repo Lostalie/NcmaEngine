@@ -2,7 +2,7 @@
 
 基线：C1 `2efb4db76432bbe0b4aaf52df00da6c49e5e3423`，2026-10-10 开工前核对 local/remote main 一致。目标仍是正式 Editor/Player 共用 IBL，不以独立测试管线替代。C2 按相互依赖的合同、共享执行、宿主验收三片实施；每片完整自动回归和提交推送后再进入下一片。
 
-当前C2-A/B/C自动候选完成：C2-A71项、C2-B共享场景执行87项及各自最终顺序无Skip Debug/Release/checked deployment通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)、[C2-B合同](M7_3_C2B_RUNTIME_CONTRACT.md)、[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)。C2-C正式宿主43项及完整双配置/部署通过，C2自动链完成；下一片C3。见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)。
+当前C2-A/B/C自动候选完成：C2-A71项、C2-B共享场景执行87项及各自最终顺序无Skip Debug/Release/checked deployment通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)、[C2-B合同](M7_3_C2B_RUNTIME_CONTRACT.md)、[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)。C2-C正式宿主43项及完整双配置/部署通过，C2自动链完成；后续C3自动联合验收也已通过，见[C3-C交付](M7_3_C3C_DELIVERY_REPORT.md)。见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)。
 
 ## C2-A：显式 Shader 文件选择与完整准入（自动候选完成）
 
@@ -18,7 +18,7 @@
 
 ## C2-C：正式宿主前置检查与联合验收（自动候选完成）
 
-正式 Player 在 gameplay 初始化前核对源无关 shader/环境资产完整闭包并完成实际准入；初始化或运行中改变配置不能绕过，动态资源未准备必须明确失败而非静默忽略。Editor 启动/批准命令/Undo/Redo/Edit-Play-Stop/Reload 使用同一个共享服务和唯一历史；准备失败保留最后有效资源并报告，不造新 Agent GPU/编译权限。只有真正实现后才替换 C1 pending guards 和针对这些已移除 guards 的阶段测试；保留等价且更强的缺包/损坏/prestart 断言。实际正式 Editor/Player、源无关自定义 v2 包、静态和 FBX/NCA、API0/0、resize/关闭、纯UI/Headless闭包验证。C3 的 build-only 合成默认环境/部署与可视面板仍独立待实现；用户HDR解码/人工/目标/自包含/完整性能/1h不由自动测试关闭。
+正式 Player 在 gameplay 初始化前核对源无关 shader/环境资产完整闭包并完成实际准入；初始化或运行中改变配置不能绕过，动态资源未准备必须明确失败而非静默忽略。Editor 启动/批准命令/Undo/Redo/Edit-Play-Stop/Reload 使用同一个共享服务和唯一历史；准备失败保留最后有效资源并报告，不造新 Agent GPU/编译权限。只有真正实现后才替换 C1 pending guards 和针对这些已移除 guards 的阶段测试；保留等价且更强的缺包/损坏/prestart 断言。实际正式 Editor/Player、源无关自定义 v2 包、静态和 FBX/NCA、API0/0、resize/关闭、纯UI/Headless闭包验证。C3 的 build-only 合成默认环境/部署、可视面板与产品联合验收自动候选现已完成（见C3-C交付）；用户HDR解码/人工/目标/自包含/完整性能/1h不由自动测试关闭。
 
 ## 每片门禁
 
