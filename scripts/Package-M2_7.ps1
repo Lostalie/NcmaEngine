@@ -85,6 +85,9 @@ function Add-Shaders([string]$destination,[string]$profile) {
     foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $cooked 'assets\shaders') -File)) {
         Copy-Exact $file.FullName (Join-Path $destination ('assets\shaders\' + $file.Name))
     }
+    foreach ($name in @('defaults.json','neutral-v1.nce')) {
+        Copy-Exact (Join-Path $cooked ('assets\environments\' + $name)) (Join-Path $destination ('assets\environments\' + $name))
+    }
 }
 Publish-Candidate 'managed\Ncma.Editor.App\Ncma.Editor.App.csproj' $editor
 Publish-Candidate 'managed\Ncma.Asset.ImportWorker\Ncma.Asset.ImportWorker.csproj' (Join-Path $editor 'tools\import-worker')

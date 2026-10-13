@@ -2,7 +2,7 @@
 
 基线：B3 `abe290ef87fb068e0416c59fda915f163889312a`，2026-10-10 开工前 local/remote main 一致。B 的真实 DX11 数值/图像证据保留；不把独立测试管线称为正式宿主接入。DX11 only，Vulkan/OpenGL 下一版本。
 
-当前：C1 自动候选完成，29 项资产/文件/包/历史测试与 1 项正式 Editor 命令拒绝测试、完整顺序 Debug/Release/checked deployment 通过，见[合同](M7_3_C1_RUNTIME_CONTRACT.md)、[交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2详细方案](M7_3_C2_IMPLEMENTATION_PLAN.md)、[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B共享场景执行87项及完整双配置/checked部署通过，见[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)；C2-C正式宿主43项及完整双配置/checked部署通过，见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)；正式IBL支持显式环境资产与shader。C3默认部署/面板待实现。
+当前：C1 自动候选完成，29 项资产/文件/包/历史测试与 1 项正式 Editor 命令拒绝测试、完整顺序 Debug/Release/checked deployment 通过，见[合同](M7_3_C1_RUNTIME_CONTRACT.md)、[交付](M7_3_C1_DELIVERY_REPORT.md)。C2-A环境Shader文件/整组准入71项及完整双配置/部署通过，见[C2详细方案](M7_3_C2_IMPLEMENTATION_PLAN.md)、[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)。C2-B共享场景执行87项及完整双配置/checked部署通过，见[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)；C2-C正式宿主43项及完整双配置/checked部署通过，见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)；正式IBL支持显式环境资产与shader。C3-A默认资源/部署83项与完整双配置通过，见[C3-A交付](M7_3_C3A_DELIVERY_REPORT.md)；C3-B面板/发布与C3-C联合验收待实现。
 
 ## C1：纯 C# 资产、场景配置与运行包合同（自动候选完成）
 
