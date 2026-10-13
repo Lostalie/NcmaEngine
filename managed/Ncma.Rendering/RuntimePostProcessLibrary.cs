@@ -22,6 +22,8 @@ public sealed class RuntimePostProcessLibrary : IDisposable
     public RuntimeShaderPackage Tone(Guid module,ShaderProfile profile,bool shadows,bool skin){Verify();return _tones.TryGetValue((module,profile,shadows,skin),out var p)?p:throw new ArgumentException("Missing exact tone variant; no fallback.");}
     public static RuntimePostProcessLibrary Load(string root,string expectedIndexHash,CancellationToken cancellation=default)=>LoadCore(root,expectedIndexHash,false,cancellation);
     public static RuntimePostProcessLibrary LoadDeployment(string root,CancellationToken cancellation=default)=>LoadCore(root,null,true,cancellation);
+    public static RuntimePostProcessLibrary ForHost(string deploymentRoot,string? projectRoot,PostProcessLibraryReference? selection)
+        => selection is null ? LoadDeployment(deploymentRoot) : Load(projectRoot??throw new ArgumentException("Explicit post library requires a project root."),selection.Validate().IndexHash);
     private static RuntimePostProcessLibrary LoadCore(string root,string? expectedIndexHash,bool deployed,CancellationToken cancellation)
     {
         var result=new RuntimePostProcessLibrary();try{

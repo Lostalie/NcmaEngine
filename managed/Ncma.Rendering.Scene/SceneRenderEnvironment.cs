@@ -69,7 +69,7 @@ public sealed partial class SceneRenderSession
                     throw new ArgumentException("Environment promotion must retain the existing shared skin kernel.");
                 shaders.VerifyFor(_renderer);cpu=assets.AcquireLease();gpu=_cache.AcquireEnvironment(package,EnvironmentApproved);
             }
-            if(_pipeline is not null) {
+            if(_pipeline is not null&&_postRuntime is null) {
                 if(_environmentShaders is null&&shaders is not null) {
                     pipeline=CreateEnvironmentPipeline(shaders,gpu,value,_width,_height,_exposure,_ambient,_shadows);
                     _pipeline.Dispose();
@@ -97,7 +97,7 @@ public sealed partial class SceneRenderSession
     public void PrepareEnvironmentView(uint width,uint height,Guid sceneCamera,SceneCameraView? browserCamera=null,float exposure=1,float ambient=.03f)
     {
         Verify();if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
-        VerifyPreparedEnvironment();if(_environmentShaders is null)return;
+        VerifyPreparedEnvironment();if(_postRuntime is not null){PreparePostView(width,height,sceneCamera,browserCamera,exposure,ambient);return;}if(_environmentShaders is null)return;
         using var read=SceneEnvironmentState.BeginRead(_world,WorldId);_environmentPreparing=true;
         try {
             _renderer.VerifyEnvironmentPreparation(EnvironmentApproved);

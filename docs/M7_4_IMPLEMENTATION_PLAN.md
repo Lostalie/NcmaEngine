@@ -28,7 +28,7 @@ C#拥有效果组合、参数、注册、依赖与编辑事务；C++只执行GPU
 
 ### C：正式共享宿主、配置与编辑器/AI
 
-C拆为C1受检程序库/产品闭包、C2正式配置/共享执行、C3编辑器/AI，见[C详细方案](M7_4_C_IMPLEMENTATION_PLAN.md)。C1已通过149项检查与最终顺序完整Debug/Release，见[C1合同](M7_4_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_4_C1_DELIVERY_REPORT.md)。默认行为不变；下一片C2。C1不替代C2/C3或D联合验收。
+C拆为C1受检程序库/产品闭包、C2正式配置/共享执行、C3编辑器/AI，见[C详细方案](M7_4_C_IMPLEMENTATION_PLAN.md)。C1已通过149项检查与最终顺序完整Debug/Release，见[C1合同](M7_4_C1_RUNTIME_CONTRACT.md)、[C1交付](M7_4_C1_DELIVERY_REPORT.md)。C2正式配置/共享执行已通过67项模块/52项共享及双配置各71次正式宿主检查、完整顺序Debug/Release，见[C2合同](M7_4_C2_RUNTIME_CONTRACT.md)、[C2交付](M7_4_C2_DELIVERY_REPORT.md)。默认Off；下一片C3专用编辑器/AI。C1/C2不替代C3或D联合验收。
 
 增加受控版本化高层后处理设置，绑定精确注册模块和参数，不接受Shader文本/路径。Editor与Player共享已准备程序/资源；配置变更在安全边界准备，tick不编译、不读文件、不等待推理。对照图和失败诊断可检查当前world/revision/资源代次，不呈现旧图为新配置。
 

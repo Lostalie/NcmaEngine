@@ -438,6 +438,19 @@ if(NCMA_BUILD_TESTS)
                 --post-library-tests "${CMAKE_BINARY_DIR}/m2/plugins"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/post-library-$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaRenderingTests.PostLibrary PROPERTIES TIMEOUT 120)
+            foreach(post_case IN ITEMS Modules Scene Hosts)
+                string(TOLOWER "${post_case}" post_arg)
+                if(post_case STREQUAL "Modules")
+                    set(post_arg "module")
+                elseif(post_case STREQUAL "Hosts")
+                    set(post_arg "host")
+                endif()
+                add_test(NAME NcmaRenderingTests.Post${post_case} COMMAND "${DOTNET_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                    --post-${post_arg}-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                    "${CMAKE_SOURCE_DIR}/out/verification/m2/post-${post_arg}-$<IF:$<CONFIG:Debug>,Debug,Release>")
+                set_tests_properties(NcmaRenderingTests.Post${post_case} PROPERTIES TIMEOUT 120)
+            endforeach()
             add_test(NAME NcmaCandidateGraphicsSmoke COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.App/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/NcmaEngine.dll"
                 --smoke-test --plugins "${CMAKE_BINARY_DIR}/m2/plugins")

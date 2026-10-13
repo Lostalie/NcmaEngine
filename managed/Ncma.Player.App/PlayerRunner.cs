@@ -13,19 +13,20 @@ public static class PlayerRunner
 {
     // Trusted local host only. No EditorEndpoint, hidden EditSession or Agent execution channel.
     public static PlayerReport Run(PlayerOptions options, Func<bool>? cancelled = null, string? pluginRoot = null,
-        bool visible = true, Action<PlaySession, ulong>? trustedInput = null)
-        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null);
+        bool visible = true, Action<PlaySession, ulong>? trustedInput = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null)
+        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules);
     // Internal bounded diagnostic hook, not a production/Agent screenshot or execution capability.
     internal static PlayerReport RunForVerification(PlayerOptions options,string pluginRoot,Action<byte[],uint,uint> capture,
-        Action<PlaySession,ulong>? trustedInput=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture);
+        Action<PlaySession,ulong>? trustedInput=null,Ncma.Rendering.Scene.PostProcessModules? postModules=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules);
     private static PlayerReport RunCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
-        Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture)
+        Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture,Ncma.Rendering.Scene.PostProcessModules? postModules=null)
     {
         ArgumentNullException.ThrowIfNull(options);
         var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
         PhysicsService? physics = null; PlayerPresentation? presentation = null; PlayStatus? status = null;
         Ncma.Scene.Rendering.PreparedSceneAssetLease? renderAssets = null;
         RuntimeShaderFileSet? shaderFiles = null;
+        RuntimePostProcessLibrary? postLibrary=null;postModules??=Ncma.Rendering.Scene.PostProcessModules.Official();
         int exit = 0, count = 0; string reason = "completed", renderer = options.Headless ? "null" : "unknown";
         string? digest = null; string phase = "configuration"; var errors = new List<string>(); PlayerModule[] modules = [];
         ulong rendered = 0, validationErrors = 0, validationWarnings = 0; bool running = false;
@@ -42,6 +43,11 @@ public static class PlayerRunner
                     Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
                     Ncma.Characters.CharacterComponents.RequireComposition);
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
+                Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(document.CaptureSnapshot(),postModules);
+                if(options.Headless&&project.Configuration.PostProcessLibrary is not null&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasSettings(document.CaptureSnapshot())&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasGeometry(document.CaptureSnapshot())) {
+                    phase="dependencies";postLibrary=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.PostProcessLibrary);
+                    Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateFiles(document.CaptureSnapshot(),postLibrary);
+                }
                 bool hasPhysics = Ncma.Characters.CharacterComponents.HasPhysics(document.CaptureSnapshot());
                 if(hasPhysics && !project.Configuration.PhysicsEnabled)throw new ArgumentException("physics_bindings_require_enabled_project");
                 if (options.Headless && (project.Configuration.AssetPackage is not null || document.World.GetObjects().Any(o=>o.Has<Ncma.Animation.RootMotionData>() || o.Has<Ncma.Animation.AnimatorData>()))) {
@@ -54,6 +60,10 @@ public static class PlayerRunner
                     var startup = document.CaptureSnapshot();
                     shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.ShaderPackages);
                     Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(shaderFiles,startup);
+                    if(Ncma.Rendering.Scene.ScenePostProcessPreflight.HasSettings(startup)&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasGeometry(startup)) {
+                        postLibrary=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.PostProcessLibrary);
+                        Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateFiles(startup,postLibrary);
+                    }
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage);
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
@@ -68,7 +78,7 @@ public static class PlayerRunner
                 if (physics.Inspect() is { Enabled: true } inspected) modules = [new("ncma.physics", inspected.AbiMajor, inspected.AbiMinor, (ulong)inspected.Capabilities)];
                 if (!options.Headless)
                 {
-                    presentation = new(plugins, visible); presentation.Start(shaderFiles);
+                    presentation = new(plugins, visible); presentation.Start(shaderFiles,postLibrary,postModules);
                     presentation.PrepareBeforeGameplay(document,renderAssets!);
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }
@@ -120,6 +130,7 @@ public static class PlayerRunner
             // Derived animation/GPU resources close before coupled solver and its module.
             if(Close(presentation, "presentation_shutdown_failed")) {
                 Close(shaderFiles,"shader_files_shutdown_failed");
+                Close(postLibrary,"post_library_shutdown_failed");
                 if(Close(owner, "runtime_shutdown_failed")) { Close(physics, "physics_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed"); }
             }
         }

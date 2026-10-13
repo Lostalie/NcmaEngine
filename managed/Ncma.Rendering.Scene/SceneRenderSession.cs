@@ -51,7 +51,7 @@ public sealed partial class SceneRenderSession : IDisposable
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false,
         Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false,SceneRuntimeShaders? shaders=null,
-        SceneEnvironmentRuntimeShaders? environmentShaders=null,Func<bool>? environmentPreparationAllowed=null)
+        SceneEnvironmentRuntimeShaders? environmentShaders=null,Func<bool>? environmentPreparationAllowed=null,PostProcessRuntime? postProcessing=null)
     {
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
@@ -62,6 +62,7 @@ public sealed partial class SceneRenderSession : IDisposable
             bool hasSkin=startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId));
             bool hasGeometry=hasSkin||startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==StaticMeshData.TypeId));
             _hasGeometry=hasGeometry;_hasSkin=hasSkin;
+            InitializePostProcess(postProcessing,ScenePostProcessState.Read(startup));
             var environment=SceneEnvironmentState.Read(startup);
             if(environment!=SceneEnvironmentState.Read(world,WorldId))throw new ArgumentException("Stale startup environment configuration.");
             _environmentObservedRevision=world.Revision;_environmentObserved=environment;
@@ -91,7 +92,7 @@ public sealed partial class SceneRenderSession : IDisposable
     public bool Submit(ulong frame, uint width, uint height, Guid sceneCamera, SceneCameraView? browserCamera = null,
         float exposure = 1, float ambient = .03f, SceneShadowSettings? shadow = null, GpuViewTarget? target = null, Vector2 origin = default, Vector4 clear = default)
     {
-        Verify();if(_environmentPreparing)throw new InvalidOperationException("Cannot submit during environment preparation.");VerifyPreparedEnvironment(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
+        Verify();if(_environmentPreparing)throw new InvalidOperationException("Cannot submit during environment preparation.");VerifyPreparedEnvironment();VerifyPreparedPostProcess(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
         IReadOnlyDictionary<Guid,TransformData>? transforms=null;
         if(_interpolateTransforms && _play is not null) {
             if(_play.Document.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
@@ -113,7 +114,11 @@ public sealed partial class SceneRenderSession : IDisposable
         int casters = shadows ? _resources.Encode(view.ShadowCasters, camera.ViewProjection, lightVP, _casters, _diagnostics) : 0;
         if (geo == 0 && casters == 0) { Costs = new(extraction, Stopwatch.GetElapsedTime(time).TotalMilliseconds, 0, 0, false); return false; }
         uint w = Math.Max(1, (uint)(width * camera.Data.ViewportWidth)), h = Math.Max(1, (uint)(height * camera.Data.ViewportHeight));
-        if(_environmentShaders is not null) {
+        if(_postRuntime is not null) {
+            if(!_postReady||_postViewEmpty||_pipeline is null||_width!=w||_height!=h||_shadows!=shadows||_postInputExposure!=exposure||_ambient!=ambient)
+                throw new InvalidOperationException("Post view requires explicit off-frame preparation.");
+        }
+        else if(_environmentShaders is not null) {
             if(_pipeline is null||_width!=w||_height!=h||_shadows!=shadows||_exposure!=exposure||_ambient!=ambient)
                 throw new InvalidOperationException("Environment view requires explicit off-frame preparation.");
         }

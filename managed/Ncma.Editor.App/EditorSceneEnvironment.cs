@@ -28,6 +28,7 @@ internal sealed unsafe partial class CandidatePresentation
     private Action<byte[],uint,uint>? _verificationCapture;
     private IDisposable? ComposePreparedPlay(PlaySession play,PreparedSceneAssetLease? assets)
     {
+        PreflightPost(play.Document.World,play.Document.CaptureSnapshot());
         using var preflight=_renderer is not null&&assets is not null?
             SceneEnvironmentPreflight.Prepare(_renderer,_sceneCache!,play.Document.World,assets,play.Document.CaptureSnapshot(),()=>!_closed):null;
         _sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics??throw new InvalidOperationException("Physics service not initialized."),assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;

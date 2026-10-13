@@ -4,7 +4,7 @@
 
 ## C1：受检程序库与产品闭包（自动候选完成）
 
-149项实际检查及最终顺序完整Debug/Release通过，见[C1交付](M7_4_C1_DELIVERY_REPORT.md)。默认行为未切换；下一片C2。初次超时、主动中止和旧场景文件替换间歇失败的记录均保留。
+149项实际检查及最终顺序完整Debug/Release通过，见[C1交付](M7_4_C1_DELIVERY_REPORT.md)。默认行为未切换；C2交付状态见下节。初次超时、主动中止和旧场景文件替换间歇失败的记录均保留。
 
 独立严格v1索引，分开列出具名模块UUID的NPH1数值Feature程序包和Tone用NCS1完整scene变体。精确UUID/hash/profile/shadow/skin，最多8个Feature包、32个Tone变体、总32MiB、索引16KiB；每个Tone模块/profile/skin要求双shadow变体。只复制有界值，不接受远程源码/编译器选项或绝对路径。旧shader selection/NCS1/NPH1格式不改。
 
@@ -14,7 +14,9 @@ RuntimePostProcessLibrary使用原RuntimeReadPin，校验canonical路径、repar
 
 验证严格索引/所有文件/manifest/租约/取消/失败重试、CPU-only子进程、真实全部变体准入、用户Tone与官方同路径、真实像素、错误非Tone程序/共享skin/末项拒绝无部分结果、owner/reentry/revoke/关闭、实际Editor/Player部署与UI/Null排除。完整旧测试保留，新增文件计数按真实闭包更新而非削弱manifest检查。
 
-## C2：高层配置与正式共享执行
+## C2：高层配置与正式共享执行（自动候选完成）
+
+67项模块/52项共享、双配置各71次正式宿主检查及最终顺序完整Debug第二轮/Release首轮通过。见[C2合同](M7_4_C2_RUNTIME_CONTRACT.md)、[C2交付](M7_4_C2_DELIVERY_REPORT.md)。首轮注册数量断言遗漏已修正；间歇File.Replace失败保留，独立及最终完整复测通过，不宣称原因已修复。下一片C3，D/人工/性能门禁保留。
 
 增加单一scene-wide后处理配置，以精确注册模块UUID/版本和闭合有界参数表达，而非Shader文本/路径。默认Off；Off不准备子图资源。官方Bloom与可信启动时注册的用户Feature使用同一目录/图构建接口，明确Tone在末尾及线性域依赖，不能用无意义的任意重排序伪装定制。
 

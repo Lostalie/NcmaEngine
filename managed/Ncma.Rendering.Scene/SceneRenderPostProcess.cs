@@ -1,0 +1,65 @@
+using Ncma.Scene.Rendering;
+namespace Ncma.Rendering.Scene;
+
+public sealed partial class SceneRenderSession
+{
+    private PostProcessRuntime? _postRuntime;
+    private PostProcessData _postPrepared=PostProcessData.Off,_postObserved=PostProcessData.Off;
+    private EnvironmentLightingData _postEnvironment=EnvironmentLightingData.Off;
+    private ulong _postObservedRevision;
+    private bool _postReady,_postViewEmpty;
+    private float _postInputExposure;
+    public PostProcessData PreparedPostProcess { get { Verify();return _postPrepared; } }
+    private void InitializePostProcess(PostProcessRuntime? runtime,PostProcessData startup)
+    {
+        _postRuntime=runtime;var current=ScenePostProcessState.Read(_world,WorldId);
+        if(startup!=current)throw new ArgumentException("Stale startup post-process settings.");
+        if(runtime is null&&current.Enabled)throw new ArgumentException("Enabled post processing requires explicit trusted runtime.");
+        if(runtime is not null){using var read=SceneEnvironmentState.BeginRead(_world,WorldId);runtime.VerifyFor(_renderer);_=runtime.Validate(current);}
+        _postObserved=current;_postObservedRevision=_world.Revision;
+    }
+    private void VerifyPreparedPostProcess()
+    {
+        if(_postObservedRevision!=_world.Revision){_postObserved=ScenePostProcessState.Read(_world,WorldId);_postObservedRevision=_world.Revision;}
+        if(_postRuntime is null){if(_postObserved.Enabled)throw new InvalidOperationException("Post runtime must be prepared before enabling post processing.");return;}
+        if(_hasGeometry&&!_postViewEmpty&&(!_postReady||_postObserved!=_postPrepared||_postEnvironment!=_environment))throw new InvalidOperationException("Post view requires explicit off-frame preparation.");
+    }
+    private void PreparePostView(uint width,uint height,Guid sceneCamera,SceneCameraView? browserCamera,float exposure,float ambient)
+    {
+        using var read=SceneEnvironmentState.BeginRead(_world,WorldId);
+        if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene post preparation.");
+        var runtime=_postRuntime!;_environmentPreparing=true;
+        try {
+            runtime.VerifyFor(_renderer);
+            var value=runtime.Validate(ScenePostProcessState.Read(_world,WorldId));
+            var view=_extractor.Extract(_resources.Metadata,browserCamera is null?sceneCamera:Guid.Empty,width,height,browserCamera,_animation is not null);
+            // A culled/missing-camera view has no installed candidate. Do not stamp old GPU state
+            // as the newly requested settings; returning geometry must prepare it first.
+            if(view.Camera is not {} camera||view.Geometry.Count==0&&view.ShadowCasters.Count==0){_postObserved=value;_postObservedRevision=_world.Revision;_postViewEmpty=true;_postReady=false;return;}
+            bool shadows=view.PrimaryLight is {Data.CastShadow:true};uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
+            float effective=value.Enabled?exposure*SceneTonePresets.ExposureFromStops(value.ExposureEv):exposure;
+            if(!float.IsFinite(effective)||effective is <.01f or >16)throw new ArgumentException("Combined Tone exposure must remain within the existing [.01,16] contract.");
+            if(_pipeline is not null&&_postReady&&value==_postPrepared&&_postEnvironment==_environment&&_width==w&&_height==h&&_shadows==shadows&&_postInputExposure==exposure&&_ambient==ambient)return;
+            PreparedPostView? post=value.Enabled?runtime.Prepare(value,w,h,_environmentShaders is not null,shadows,_hasSkin):null;
+            ScenePipelineSession? candidate=null;
+            try {
+                candidate=runtime.Install(()=>{
+                    ScenePipelineSession? created=null;
+                    try {
+                        var pipeline=_pipelineFactory(effective,ambient,shadows);
+                        if(_environmentShaders is not null) {
+                            created=new(_renderer,pipeline,w,h,environmentShaders:post?.Environment??(shadows?_environmentShaders.Shadowed:_environmentShaders.Unshadowed).Scene);
+                            created.ConfigureEnvironment(_environmentGpu?.Resource,_environment.ToConfiguration(),EnvironmentApproved);
+                        } else created=new(_renderer,pipeline,w,h,shaders:post?.Scene??(shadows?_shaders!.Shadowed:_shaders!.Unshadowed).Scene);
+                        if(post?.Plan is not null)created.ConfigurePostProcess(post.Plan,post.Programs,runtime.BindingAllowed);
+                        var result=created;created=null;return result;
+                    }finally{created?.Dispose();}
+                });
+                // Complete scene + environment + post candidate before releasing installed output.
+                _pipeline?.Dispose();_pipeline=candidate;candidate=null;
+                _width=w;_height=h;_shadows=shadows;_exposure=effective;_ambient=ambient;_postInputExposure=exposure;
+                _postPrepared=value;_postObserved=value;_postObservedRevision=_world.Revision;_postEnvironment=_environment;_postViewEmpty=false;_postReady=true;
+            }finally{candidate?.Dispose();}
+        }finally{_environmentPreparing=false;}
+    }
+}

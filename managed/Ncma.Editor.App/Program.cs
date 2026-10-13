@@ -58,7 +58,7 @@ internal static class Program
     }
 }
 internal sealed unsafe partial class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview,
-    Func<Ncma.Assets.EnvironmentPresetLibrary>? environmentPresets = null) : IApplicationService, IFramePipeline
+    Func<Ncma.Assets.EnvironmentPresetLibrary>? environmentPresets = null, Ncma.Rendering.Scene.PostProcessModules? postProcessModules = null) : IApplicationService, IFramePipeline
 {
     internal static void RequireComposition(Ncma.Scene.SceneDocumentSnapshot snapshot)
     {
@@ -163,6 +163,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                     _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _assetWorkflow.IsSourceApproved);
             }
             _editor.PrepareRenderAssets(project.Root, project.Configuration.ProjectId,project.Configuration.AssetPackage);
+            PreflightPost(_editor.Document.World,_editor.Document.CaptureSnapshot());
             if(_renderer is not null)_environmentStartup=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer,_sceneCache!,_editor.Document.World,_editor.RenderAssets!,_editor.Document.CaptureSnapshot(),()=>!_closed);
             _editor.LoadGameplay(project.GameplayAssemblyPath);
             foreach (var diagnostic in _editor.RenderAssets!.Diagnostics.Take(64))
@@ -239,7 +240,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         if(_editor.RenderAssets is { } edit && (_editAssets!=edit.Assets.Identity || _editScene?.WorldId!=_editor.Document.World.Identity || _editScene.PreparedRevision!=_editor.Document.World.Revision)) {
             var snapshot = _editor.Document.CaptureSnapshot();
             edit=PrepareCurrentEnvironmentAssets(edit,snapshot);
-            var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,snapshot,poseKernel:PoseFor(snapshot),environmentPreparationAllowed:()=>!_closed);
+            var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,snapshot,poseKernel:PoseFor(snapshot),environmentPreparationAllowed:()=>!_closed,
+                postProcessing:PreparePostRuntime(_editor.Document.World,snapshot));
             try { _editScene?.Dispose(); } catch { candidate.Dispose(); throw; }
             _editScene=candidate; _editAssets=edit.Assets.Identity;
         }
@@ -250,7 +252,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity || _playScene?.WorldId!=play.Document.World.Identity) {
                 var snapshot = play.Document.CaptureSnapshot();
                 var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play,
-                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime,animators:_sceneRuntime?.Animators,environmentPreparationAllowed:()=>!_closed);
+                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime,animators:_sceneRuntime?.Animators,environmentPreparationAllowed:()=>!_closed,
+                    postProcessing:PreparePostRuntime(play.Document.World,snapshot));
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }
@@ -413,6 +416,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _playScene?.Dispose(); _playScene = null;
         _editScene?.Dispose(); _editScene = null;
         _environmentStartup?.Dispose();_environmentStartup=null;
+        _postRuntime?.Dispose();_postRuntime=null;_postLibrary?.Dispose();_postLibrary=null;
         _sceneCache?.Dispose(); _sceneCache = null;
         _graphPreview?.Dispose();_graphPreview=null;
         _poseKernel?.Dispose(); _poseKernel = null;
