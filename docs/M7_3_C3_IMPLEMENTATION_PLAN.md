@@ -1,6 +1,6 @@
 # M7.3-C3 默认环境、配置面板与联合验收
 
-2026-10-14。C2-C 已完成完整 Debug/Release、checked deployment 和提交推送，开工时local/remote main `9ac83b213f0cad8131d3907925ece85ee0faad09` 已核对。C3-A的83项及完整顺序Debug/Release/checked部署已通过，见[交付记录](M7_3_C3A_DELIVERY_REPORT.md)。C3-B1现有绑定属性/状态8组与正式宿主51项、完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)。下一片C3-B2。C3 按 A → B → C 推进；每片测试失败先修复，最终双配置通过后提交推送，再进入下一片。
+2026-10-14。C2-C 已完成完整 Debug/Release、checked deployment 和提交推送，开工时local/remote main `9ac83b213f0cad8131d3907925ece85ee0faad09` 已核对。C3-A的83项及完整顺序Debug/Release/checked部署已通过，见[交付记录](M7_3_C3A_DELIVERY_REPORT.md)。C3-B1现有绑定属性/状态8组与正式宿主51项、完整双配置通过，见[C3-B1交付](M7_3_C3B1_DELIVERY_REPORT.md)。C3-B2预设发布/目录授权13组与正式宿主Debug102/Release111次检查、完整顺序双配置通过，见[C3-B2交付](M7_3_C3B2_DELIVERY_REPORT.md)。下一片C3-C。C3 按 A → B → C 推进；每片测试失败先修复，最终双配置通过后提交推送，再进入下一片。
 
 ## C3-A：构建期默认环境与产品部署闭包（自动候选完成）
 
@@ -15,7 +15,7 @@
 执行拆分（2026-10-14）：核对发现运行时环境 read pin 禁止文件写入/rename/delete，已有磁盘 participant 仅处理作者文件且不同时改变场景。为验证这一协调边界，按 B1 → B2 推进，各片完成后独立完整 Debug/Release、提交推送；没有减少原 C3-B 验收要求。
 
 - B1：现有绑定属性 Inspector、显式添加 Off、强度/角度/关闭、World/revision/Play 绑定准备状态。定向8组与正式宿主51项、完整顺序无Skip Debug/Release/checked部署已通过；合同见 [C3-B1](M7_3_C3B1_RUNTIME_CONTRACT.md)。不增磁盘/Agent权限。
-- B2：预设选择、项目资产可逆发布、read pin/Undo/失败恢复协调，以及独立有界环境目录与精确授权；尚未实现。不得通过宽化公共磁盘路径白名单、直接复制或释放活跃 Play 租约绕过问题。
+- B2（自动候选完成）：预设选择、不可变NCE显式准备、ncenv+scene单条历史、read pin下Undo/Redo/故障恢复与独立有界目录授权。新增13组服务/文件/Core/UI/真实stdio检查；正式宿主Debug102/Release111次检查、独立像素误差0/API0/0及完整双配置通过。见[合同](M7_3_C3B2_RUNTIME_CONTRACT.md)、[交付](M7_3_C3B2_DELIVERY_REPORT.md)。Undo保留NCE缓存，仅撤销项目可见性与场景；不宽化磁盘路径、释放活跃Play租约或隐含Agent权限。
 
 在现有 Inspector 中新增环境启用、预设选择、强度、Y旋转和当前资源代次/准备错误显示。组件存在性、单配置、有限数值和精确 UUID/generation/hash 校验沿用 EnvironmentLightingData。创建对象/挂组件/设置参数都使用现有可撤销事务与版本检查；选择预设涉及文件发布时使用已有可逆磁盘事务，不以直接 File.Copy 绕过 Undo。不自动修改用户旧场景。
 

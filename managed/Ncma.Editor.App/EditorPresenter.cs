@@ -78,7 +78,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public void ShowRenderDiagnostics(IReadOnlyList<Ncma.Scene.Rendering.SceneRenderDiagnostic>? diagnostics) {
         _renderDiagnostics=diagnostics?.Take(4).Select(d=>$"Render: {d.Code}; object={d.ObjectId}; asset={d.AssetId}").ToArray()??[];
     }
-    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelGraph();CancelUi();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
+    public void CancelInteraction() { if(_layoutBefore is not null){_layout=_layoutBefore;_layoutBefore=null;}CancelGraph();CancelUi();CancelEnvironmentReview();workspace.CancelDraft(); _jsonEdit = null; _activeMenu = -1; _generation = checked(_generation + 1); }
     private static string BoundMessage(string message, int limit) {
         if (message.Length <= limit) return message;
         if (char.IsHighSurrogate(message[limit - 1])) limit--;
@@ -279,6 +279,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 !workspace.HasSceneComponent(Ncma.Scene.Rendering.EnvironmentLightingData.TypeId))
                 Button(control++, "添加环境配置（关闭）", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id,
                     typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1, data = workspace.Owner.Document.World.Components.Encode(Ncma.Scene.Rendering.EnvironmentLightingData.Off) });
+            BuildEnvironmentAuthoring(selected.Id,ref control,ref labelId,writable);
             _bindingOffset = Math.Clamp(_bindingOffset,0,Math.Max(0,(selected.Behaviours.Length-1)/8*8));
             Button(32,"Previous bindings","bindings_previous",_bindingOffset>0);
             Line();
@@ -566,6 +567,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                     continue;
                 }
                 if (e.Phase != 3) continue;
+                if(ApplyEnvironmentAction(action,e.Value))continue;
                 if(ApplyAssetAction(action,e.Value,text,stamp))continue;
                 if(ApplyViewportAction(action,e.Value,text,stamp))continue;
                 if(ApplyCharacterAction(action,e.Value))continue;

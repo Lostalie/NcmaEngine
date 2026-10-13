@@ -9,6 +9,14 @@ public sealed record ParticipantMemento(byte[] Before, byte[] After);
 // Enables endpoint review without invoking the participant's durable Prepare operation.
 public interface IEditCommandProposal { void ValidateProposal(JsonElement input); }
 
+// Optional trusted, pure projection of a durable command onto the ORIGINAL scene operations.
+// No file IO, grants or live World writes here. Core validates these operations/impact before
+// Prepare and commits the scene plus compensatable participant as one history entry.
+public interface IEditCommandSceneParticipant : IEditCommandParticipant
+{
+    JsonElement SceneOperations(JsonElement input);
+}
+
 // Trusted composition only. Implementations own their scope/revision validation and durable journal.
 // Core owns the sole history, no filesystem or asset implementation. Publish must be compensatable;
 // an unsuccessful compensation freezes the session for explicit recovery, never claims rollback.
@@ -32,7 +40,8 @@ public sealed partial class EditSession
         public int Bytes => checked(Memento.Before.Length + Memento.After.Length);
     }
 
-    public void RegisterCommandParticipant(CapabilityDescriptor descriptor, IEditCommandParticipant participant)
+    public void RegisterCommandParticipant(CapabilityDescriptor descriptor, IEditCommandParticipant participant,
+        (CapabilityDescriptor Descriptor, Func<JsonElement,object> Inspect)? inspection = null)
     {
         _document.VerifyAccess(); ArgumentNullException.ThrowIfNull(descriptor); ArgumentNullException.ThrowIfNull(participant);
         if (_invoking || _frozen || InteractionBusy || _history.Length != 0 || _participants.Count >= 16)
@@ -42,13 +51,32 @@ public sealed partial class EditSession
             descriptor.InputSchema.ValueKind != JsonValueKind.Object || descriptor.OutputSchema.ValueKind != JsonValueKind.Object ||
             descriptor.InputSchema.GetRawText().Length > MaxInputBytes || descriptor.OutputSchema.GetRawText().Length > MaxInputBytes ||
             _capabilities.ContainsKey(descriptor.Name)) throw new ArgumentException("Invalid reversible participant descriptor.");
+        if (inspection is { } read) {
+            ArgumentNullException.ThrowIfNull(read.Descriptor); ArgumentNullException.ThrowIfNull(read.Inspect);
+            if (_inspections.Count >= MaxRegisteredInspections || read.Descriptor.Name == descriptor.Name) throw new ArgumentException("Participant inspection capacity/name.");
+            ValidateInspection(read.Descriptor);
+        }
         _capabilities.Add(descriptor.Name, descriptor with { InputSchema = descriptor.InputSchema.Clone(), OutputSchema = descriptor.OutputSchema.Clone() });
         _participants.Add(descriptor.Name, participant);
+        if (inspection is { } extra) RegisterInspection(extra.Descriptor, extra.Inspect);
     }
 
     private CapabilityResult ParticipantTransaction(CapabilityRequest request, CapabilityPermissions permissions, string fingerprint)
     {
         var owner = _participants[request.Capability];
+        byte[] before = _document.CaptureBytes();
+        var candidate = SceneDocumentCodec.Decode(before);
+        CapabilityRequest? impactRequest = null;
+        if (owner is IEditCommandSceneParticipant sceneOwner) {
+            impactRequest = ParticipantSceneRequest(request, sceneOwner);
+            foreach (var op in impactRequest.Input.GetProperty("operations").EnumerateArray()) {
+                AuthorizeIntent(permissions, op); candidate = Apply(candidate, op);
+                if (permissions.RequireTrustedBindings && Text(op,"op") == "set_bindings")
+                    foreach (var binding in candidate.Objects.Single(o => o.Id == Uuid(op,"objectId")).Behaviours) RequireBinding(binding);
+            }
+            // Validate the complete proposed World before even preparing durable side effects.
+            _ = _document.PrepareRestore(candidate, request.ExpectedRevision);
+        }
         ParticipantMemento prepared;
         using (_document.World.ReadOnly()) prepared = owner.Prepare(request.Input);
         if (prepared is null || prepared.Before is null || prepared.After is null ||
@@ -56,9 +84,18 @@ public sealed partial class EditSession
             throw new ArgumentException("Participant memento exceeds history budget.");
         var memento = new ParticipantMemento((byte[])prepared.Before.Clone(), (byte[])prepared.After.Clone());
         using (_document.World.ReadOnly()) owner.Authorize(memento);
-        byte[] before = _document.CaptureBytes();
-        return Commit(request, fingerprint, SceneDocumentCodec.Decode(before), before, _capabilities[request.Capability].Description,
-            request.Capability, null, _selection, permissions: permissions, participant: new(owner, memento));
+        return Commit(request, fingerprint, candidate, before, _capabilities[request.Capability].Description,
+            request.Capability, null, _selection, permissions: permissions, participant: new(owner, memento), impactRequest: impactRequest);
+    }
+
+    private CapabilityRequest ParticipantSceneRequest(CapabilityRequest request, IEditCommandSceneParticipant owner)
+    {
+        JsonElement operations;
+        using (_document.World.ReadOnly()) operations = owner.SceneOperations(request.Input).Clone();
+        if (operations.ValueKind != JsonValueKind.Array || operations.GetArrayLength() is < 1 or > MaxOperations)
+            throw new ArgumentException("Participant requires bounded original scene operations.");
+        var input = JsonSerializer.SerializeToElement(new { operations }); CheckInput(input);
+        return request with { Capability = "ncma.scene.transaction", Input = input };
     }
 
     private void InstallWithParticipant(ParticipantEntry? entry, bool forward, Action install, Func<bool> authorized)

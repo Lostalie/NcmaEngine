@@ -2,12 +2,14 @@ using System.Text.Json;
 namespace Ncma.Editor.Core;
 public sealed partial class EditSession
 {
+    // The source-project host registers the original 16 plus the independent environment catalog.
+    public const int MaxRegisteredInspections = 17;
     private readonly Dictionary<string,Func<JsonElement,object>> _inspections = new(StringComparer.Ordinal);
     // Prevalidate a trusted startup batch before registering any descriptor.
     public void RegisterInspections((CapabilityDescriptor Descriptor, Func<JsonElement,object> Inspect)[] entries)
     {
         _document.VerifyAccess(); ArgumentNullException.ThrowIfNull(entries);
-        if (_invoking || _frozen || InteractionBusy || entries.Length == 0 || entries.Length > 16 - _inspections.Count)
+        if (_invoking || _frozen || InteractionBusy || entries.Length == 0 || entries.Length > MaxRegisteredInspections - _inspections.Count)
             throw new InvalidOperationException("Inspection batch requires idle trusted startup and available capacity.");
         if (entries.Any(e => e.Descriptor is null || e.Inspect is null) || entries.Select(e => e.Descriptor.Name).Distinct(StringComparer.Ordinal).Count() != entries.Length)
             throw new ArgumentException("Invalid inspection batch.");
@@ -26,7 +28,7 @@ public sealed partial class EditSession
     public void RegisterInspection(CapabilityDescriptor descriptor,Func<JsonElement,object> inspect)
     {
         _document.VerifyAccess(); ArgumentNullException.ThrowIfNull(descriptor);ArgumentNullException.ThrowIfNull(inspect);
-        if(_invoking || _frozen || InteractionBusy || _inspections.Count>=16)throw new InvalidOperationException("Inspection registration requires idle trusted startup.");
+        if(_invoking || _frozen || InteractionBusy || _inspections.Count>=MaxRegisteredInspections)throw new InvalidOperationException("Inspection registration requires idle trusted startup.");
         ValidateInspection(descriptor);
         var copy=descriptor with{InputSchema=descriptor.InputSchema.Clone(),OutputSchema=descriptor.OutputSchema.Clone()};
         _capabilities.Add(copy.Name,copy);_inspections.Add(copy.Name,inspect);

@@ -57,7 +57,8 @@ internal static class Program
         catch (Exception e) { Console.Error.WriteLine("candidate_failed: " + e.Message); return 4; }
     }
 }
-internal sealed unsafe partial class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview) : IApplicationService, IFramePipeline
+internal sealed unsafe partial class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview,
+    Func<Ncma.Assets.EnvironmentPresetLibrary>? environmentPresets = null) : IApplicationService, IFramePipeline
 {
     internal static void RequireComposition(Ncma.Scene.SceneDocumentSnapshot snapshot)
     {
@@ -154,6 +155,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                 _uiWorkspace=new(workspace,project.Root);
                 _animationGraphs=new(workspace,project.Root,project.Configuration.ProjectId);
                 _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope,_uiWorkspace.Scope,_animationGraphs.Scope); // Exact human approvals only; Agent cannot manufacture grants.
+                if(project.Configuration.AssetPackage is null)
+                    _editor.ConfigureEnvironments(project.Root,project.Configuration.ProjectId,environmentPresets??(()=>Ncma.Assets.EnvironmentPresetLibrary.LoadDeployment(AppContext.BaseDirectory)));
                 if(_renderer is not null)_uiPreview=new(_renderer,plugins);
                 if(_renderer is not null)_graphPreview=new(_renderer,()=>_poseKernel??=new(Path.Combine(plugins,"NcmaAnimationKernel.dll"),Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(plugins,"NcmaAnimationKernel.dll"))))));
                 if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
@@ -219,6 +222,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     }
     public void PumpAgent(FrameContext frame) {
         _editor!.RefreshAssets();_assetWorkflow?.Pump(); _editor.Endpoint?.Pump();
+        SynchronizeEnvironmentCatalog();
         if(_presenter?.ConsumeScrub() is { } scrub)_editScene?.Animation?.SetPreviewTime(scrub);
         if (_presenter?.ConsumeRenderAssetRefresh()==true) {
             try { _editor.RefreshRenderAssets(); }

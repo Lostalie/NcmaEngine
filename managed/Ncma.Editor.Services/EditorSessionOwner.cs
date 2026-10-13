@@ -22,6 +22,7 @@ public sealed class EditorSessionOwner : IDisposable
     private EditorEndpoint? _endpoint;
     private AssetProjectAuthoring? _assets;
     private AssetInspectionService? _assetInspections;
+    private EditorEnvironmentWorkspace? _environments;
     private IDisposable? _playAssets;
     private ImportCoordinator? _imports;
     private PreparedSceneAssetLease? _renderAssets, _playRenderAssets;
@@ -58,6 +59,13 @@ public sealed class EditorSessionOwner : IDisposable
     public PlaySession? Play { get { Verify(); return _play; } }
     public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
     public AssetInspectionService? AssetInspections { get { Verify(); return _assetInspections; } }
+    public EditorEnvironmentWorkspace? Environments { get { Verify(); return _environments; } }
+    public void ConfigureEnvironments(string root,Guid project,Func<Ncma.Assets.EnvironmentPresetLibrary> loadPreset,TimeProvider? time=null,Action<string>? fault=null)
+    {
+        Verify();if(_assets is null||_environments is not null||_play is not null||_renderAssetPackage is not null)throw new InvalidOperationException("Environment authoring requires fresh source-project startup.");
+        if(Path.GetFullPath(root)!=_assetRoot||project!=_assetProject)throw new ArgumentException("Foreign environment authoring project.");
+        _environments=new(new EditorWorkspace(this),root,project,loadPreset,time,fault);
+    }
     public ImportCoordinator? Imports { get { Verify(); return _imports; } }
     public PreparedSceneAssetLease? RenderAssets { get { Verify(); return _renderAssets; } }
     public PreparedSceneAssetLease? PlayRenderAssets { get { Verify(); return _playRenderAssets; } }
@@ -132,6 +140,7 @@ public sealed class EditorSessionOwner : IDisposable
         _endpoint = candidate;
         _workflows!.Bind(candidate);
         _assetInspections?.Revoke(); // A replacement endpoint never inherits old asset-read approval.
+        _environments?.RevokeRead();
     }
     public int LoadGameplay(string path)
     {
@@ -202,6 +211,8 @@ public sealed class EditorSessionOwner : IDisposable
         _workflows?.Close();
         try { _renderAssets?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _renderAssets = null;
+        try { _environments?.Dispose(); } catch (Exception e) { errors.Add(e); }
+        _environments = null;
         try { _assets?.Dispose(); } catch (Exception e) { errors.Add(e); }
         _assets = null;
         _assetInspections?.Revoke(); _assetInspections = null;

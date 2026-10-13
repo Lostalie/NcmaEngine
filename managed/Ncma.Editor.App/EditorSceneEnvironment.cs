@@ -15,6 +15,16 @@ internal sealed unsafe partial class CandidatePresentation
     private (Guid World,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld)? _failedSceneSync;
     private (SceneRenderSession Scene,EnvironmentLightingData Environment,Guid Assets,ulong Revision,uint Width,uint Height,float Exposure,float Ambient)? _failedEnvironment;
     private string? _scenePreparationError;
+    private ulong? _failedEnvironmentCatalog;
+    private void SynchronizeEnvironmentCatalog()
+    {
+        if(_editor?.Environments is not {} environments||_editor.Assets is not {} assets||_failedEnvironmentCatalog==assets.Clock.Revision)return;
+        try { environments.Synchronize();_failedEnvironmentCatalog=null; }
+        catch(Exception error)when(PreparationError(error)) {
+            _failedEnvironmentCatalog=assets.Clock.Revision;environments.RevokeRead();
+            _log!.Write("error","environment.catalog",error.Message,_correlation);
+        }
+    }
     private Action<byte[],uint,uint>? _verificationCapture;
     private IDisposable? ComposePreparedPlay(PlaySession play,PreparedSceneAssetLease? assets)
     {

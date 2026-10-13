@@ -185,12 +185,12 @@ public sealed partial class EditSession
     }
     private CapabilityResult Commit(CapabilityRequest request, string fingerprint, SceneDocumentSnapshot candidate,
         byte[] before, string label, string capability, Guid? target, Guid? selection,
-        FileContext? replacementFile = null, CapabilityPermissions? permissions = null, ParticipantEntry? participant = null)
+        FileContext? replacementFile = null, CapabilityPermissions? permissions = null, ParticipantEntry? participant = null, CapabilityRequest? impactRequest = null)
     {
         byte[] after = [];
         Action install = _document.PrepareRestore(candidate, request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));
         permissions ??= CapabilityPermissions.ReadOnly;
-        var impact = RequestedImpact(request, Impact(before, after, _selection, selection, replacementFile is not null));
+        var impact = RequestedImpact(impactRequest ?? request, Impact(before, after, _selection, selection, replacementFile is not null));
         if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
         if (before.AsSpan().SequenceEqual(after) && (replacementFile is null || replacementFile == _file) &&
             (participant is null || participant.Memento.Before.AsSpan().SequenceEqual(participant.Memento.After)))

@@ -70,6 +70,7 @@ public sealed partial class EditSession
                 ComponentTypes = (string[])entry.Impact.ComponentTypes.Clone(), Bindings = (Guid[])entry.Impact.Bindings.Clone() }, entry.Capability, entry.Target);
         }
         byte[] before = _document.CaptureBytes(); var candidate = SceneDocumentCodec.Decode(before); Guid? target = null; Guid? selection = _selection;
+        var impactRequest = request;
         if (request.Capability == "ncma.scene.delete_object")
         {
             Closed(request.Input, ["objectId"], ["objectId"]); target = Uuid(request.Input, "objectId");
@@ -84,6 +85,10 @@ public sealed partial class EditSession
             foreach (var op in ops.EnumerateArray()) candidate = Apply(candidate, op);
             if (request.Input.TryGetProperty("selection", out var chosen)) selection = chosen.ValueKind == JsonValueKind.Null ? null : Uuid(request.Input, "selection");
         }
+        else if (_participants.TryGetValue(request.Capability, out var sceneParticipant) && sceneParticipant is IEditCommandSceneParticipant sceneOwner) {
+            impactRequest = ParticipantSceneRequest(request, sceneOwner);
+            foreach (var op in impactRequest.Input.GetProperty("operations").EnumerateArray()) candidate = Apply(candidate, op);
+        }
         else if (_participants.TryGetValue(request.Capability, out var participant) && participant is IEditCommandProposal proposal) {
             using (_document.World.ReadOnly()) proposal.ValidateProposal(request.Input);
             return (new([], [], [], [], false), request.Capability, null); // Independent participant scope owns file/resource authority.
@@ -91,7 +96,7 @@ public sealed partial class EditSession
         else throw new ArgumentException("Not a mutation proposal.");
         byte[] after = [];
         _ = _document.PrepareRestore(candidate, request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));
-        return (RequestedImpact(request, Impact(before, after, _selection, selection, false)), request.Capability, target);
+        return (RequestedImpact(impactRequest, Impact(before, after, _selection, selection, false)), request.Capability, target);
     }
     public bool CachedRequestExists(Guid id) { _document.VerifyAccess(); return _cache.ContainsKey(id); }
 }

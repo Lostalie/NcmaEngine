@@ -123,6 +123,15 @@ public sealed class EnvironmentPackage
         return new(bytes,values);
     }
     public byte[] CopyBytes()=>(byte[])_bytes.Clone();
+    // Explicit authoring duplication: new persistent identity, identical immutable numerical payload.
+    // This is not a new Cook, source decoder, provenance certificate or GPU admission.
+    public EnvironmentPackage CloneForAsset(Guid asset, ulong generation)
+    {
+        if (asset == Guid.Empty || asset == SourceId || generation == 0) throw new ArgumentException("Environment clone identity.");
+        byte[] bytes = CopyBytes(); asset.TryWriteBytes(bytes.AsSpan(48,16));
+        BinaryPrimitives.WriteUInt64LittleEndian(bytes.AsSpan(80),generation);
+        return Decode(bytes,Hash(bytes));
+    }
     public float[] CopyValues()=>(float[])_values.Clone();
     public float[] CopyIrradianceFace(int face)
     { Face(face);int count=checked((int)(Settings.IrradianceSize*Settings.IrradianceSize*4));return _values.AsSpan(face*count,count).ToArray(); }

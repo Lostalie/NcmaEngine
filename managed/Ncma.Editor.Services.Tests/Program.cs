@@ -791,7 +791,9 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         Check(verification.Module!.Status.LiveResources==0 && verification.Module.Status.LiveJobs==0);
     }),
 }).ToArray();
+cases = cases.Concat(EnvironmentAuthoringTests.Cases(output,root)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
+if (args.Length == 3 && args[2] == "--environment-authoring-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal)).ToArray();
 foreach (var (name, run) in cases) { try { run(); Console.WriteLine("PASS: " + name); } catch (Exception e) { Console.Error.WriteLine("FAIL: " + name + "\n" + e); return 1; } }
 Console.WriteLine($"Editor services: {cases.Length}/{cases.Length} passed.");
 return 0;
