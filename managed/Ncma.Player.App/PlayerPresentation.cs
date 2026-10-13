@@ -12,6 +12,8 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     private RenderPipelineService? _pipeline;
     private RenderResourceCache? _cache;
     private Ncma.Rendering.Scene.SceneRenderSession? _scene;
+    private Ncma.Rendering.Scene.SceneEnvironmentPreflight? _environmentPreflight;
+    private Ncma.Scene.Rendering.PreparedSceneAssetLease? _assets;
     private Ncma.Animation.Native.PoseKernel? _poseKernel;
     private Guid _camera;
     private readonly WindowInputAccumulator _input = new();
@@ -34,18 +36,23 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         _pipeline = new(_renderer);
         _cache = new(_renderer);
     }
+    public void PrepareBeforeGameplay(Ncma.Scene.SceneDocument document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets)
+    {
+        if(_environmentPreflight is not null)throw new InvalidOperationException("Startup already prepared.");
+        _environmentPreflight=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer!,_cache!,document.World,assets,document.CaptureSnapshot(),()=>!_disposed);
+    }
     public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera,Ncma.Animation.IRootMotionPresentation? rootMotion=null,Ncma.Scene.Rendering.SceneAnimatorRuntime? animators=null)
     {
         if (_scene is not null) throw new InvalidOperationException("Scene already bound.");
         var snapshot=play.Document.CaptureSnapshot();
-        if (Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(snapshot))
-            throw new NotSupportedException("environment_host_integration_pending");
         if(snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
             _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
         }
         _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play,
-            interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators); _camera = camera ?? Guid.Empty;
+            interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators,
+            environmentPreparationAllowed:()=>!_disposed); _camera = camera ?? Guid.Empty;_assets=assets;
+        _environmentPreflight?.Dispose();_environmentPreflight=null;
     }
     public bool Pump(PlaySession play)
     {
@@ -56,30 +63,34 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
         play.SubmitInput(new(play.SessionId, _input.Sequence, _input.Focused, _held, _pressed, _released, dx, dy));
         return true;
     }
-    public void Present(PlaySession play)
+    public void Present(PlaySession play,Action<byte[],uint,uint>? verificationCapture=null)
     {
         if (_state.Minimized != 0 || _state.FramebufferWidth == 0 || _state.FramebufferHeight == 0) { _window!.Wait(.01); return; }
         var objects = play.Document.World.GetObjects();
-        if (objects.Any(o => o.Has<Ncma.Scene.Rendering.EnvironmentLightingData>() && o.Get<Ncma.Scene.Rendering.EnvironmentLightingData>().Enabled))
-            throw new NotSupportedException("environment_host_integration_pending");
         var configurations = objects.Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
         if (configurations.Length > 1) throw new ArgumentException("ambiguous_render_configuration");
         var config = configurations.Length == 1 ? configurations[0].Get<RenderConfiguration>() : RenderConfiguration.Default(play.SessionId);
         _renderer!.Resize(_state.FramebufferWidth, _state.FramebufferHeight);
         ulong frame = ++_frame;
         var follow=Ncma.Characters.CharacterPlayRuntime.FollowView(play,_camera,_state.FramebufferWidth,_state.FramebufferHeight);
+        var environments=objects.Where(o=>o.Has<Ncma.Scene.Rendering.EnvironmentLightingData>()).Take(2).ToArray();
+        if(environments.Length>1)throw new ArgumentException("ambiguous_environment_configuration");
+        var environment=environments.Length==1?environments[0].Get<Ncma.Scene.Rendering.EnvironmentLightingData>():Ncma.Scene.Rendering.EnvironmentLightingData.Off;
+        if(_scene!.PreparedEnvironment!=environment)_scene.RefreshEnvironment(_assets!,()=>!_disposed);
+        _scene.PrepareEnvironmentView(_state.FramebufferWidth,_state.FramebufferHeight,_camera,follow,config.Exposure,config.Ambient);
         if (!_scene!.Submit(frame, _state.FramebufferWidth, _state.FramebufferHeight, _camera,follow, exposure: config.Exposure, ambient: config.Ambient)) {
             // Empty, culled or missing-camera views clear; never substitute a reference cube.
             _pipeline!.Configure(config with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false},_state.FramebufferWidth,_state.FramebufferHeight);
             _pipeline.Submit(frame);
         }
+        if(verificationCapture is not null){var pixels=new byte[checked((int)(_state.FramebufferWidth*_state.FramebufferHeight*4))];_renderer.Capture(pixels);verificationCapture(pixels,_state.FramebufferWidth,_state.FramebufferHeight);}
         _renderer.Present();
     }
     public void Dispose()
     {
         if (_disposed) return;
         // Stop at the first failed release: never unload dependencies while a live native lease remains.
-        _scene?.Dispose(); _scene = null; _cache?.Dispose(); _cache = null;
+        _scene?.Dispose(); _scene = null;_environmentPreflight?.Dispose();_environmentPreflight=null;_assets=null; _cache?.Dispose(); _cache = null;
         _poseKernel?.Dispose(); _poseKernel=null;
         _pipeline?.Dispose(); _pipeline = null; _renderer?.Dispose(); _renderer = null;
         _window?.Dispose(); _window = null; _loader.Dispose(); _disposed = true;

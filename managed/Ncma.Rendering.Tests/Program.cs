@@ -332,6 +332,7 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--environment-image-tests") return EnvironmentImageTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-shader-file-tests") return EnvironmentShaderFileTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-render-session-tests") return EnvironmentRenderSessionTests(args[1],args[2]);
+            if (args.Length == 3 && args[0] == "--environment-host-tests") return EnvironmentHostTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-preflight") return EnvironmentChild(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--shader-package-preflight") return ShaderPackageChild(args[1], args[2]);
             TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
@@ -381,6 +382,7 @@ internal static unsafe partial class Program
             EnvironmentImageTests(root,Path.Combine(output,"environment-image"));
             EnvironmentShaderFileTests(root,Path.Combine(output,"environment-shader-files"));
             EnvironmentRenderSessionTests(root,Path.Combine(output,"environment-render-session"));
+            EnvironmentHostTests(root,Path.Combine(output,"environment-hosts"));
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");

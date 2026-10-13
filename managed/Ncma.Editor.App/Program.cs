@@ -57,13 +57,11 @@ internal static class Program
         catch (Exception e) { Console.Error.WriteLine("candidate_failed: " + e.Message); return 4; }
     }
 }
-internal sealed unsafe class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview) : IApplicationService, IFramePipeline
+internal sealed unsafe partial class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview) : IApplicationService, IFramePipeline
 {
     internal static void RequireComposition(Ncma.Scene.SceneDocumentSnapshot snapshot)
     {
         Ncma.Characters.CharacterComponents.RequireComposition(snapshot);
-        if (Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(snapshot))
-            throw new ArgumentException("environment_host_integration_pending");
     }
     private bool ReferencePreview => (preview||smoke) && project is null;
     private readonly PluginLoader _loader = new();
@@ -114,11 +112,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
     private string _lastPlatformDiagnostic = "";
     public void Start()
     {
-        // Removed by the explicit C2 host integration, not by a compatibility fallback.
-        if (project is not null && Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(
-            Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath))))
-            throw new NotSupportedException("environment_host_integration_pending");
         if (!cpuOnly) _shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShaderPackages);
+        if(project is not null&&!cpuOnly)Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(_shaderFiles,
+            Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath)));
         _log = new(Path.Combine(project?.Root ?? AppContext.BaseDirectory, "out/user/logs/editor-candidate.jsonl"));
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
@@ -144,7 +140,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
             validateComposition: RequireComposition,
-            composePreparedPlay:(play,assets)=>{_sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics,assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;},
+            composePreparedPlay:ComposePreparedPlay,
             beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         var graphRuntime=new AnimationRuntimeInspectionService(_editor,()=>_sceneRuntime,()=>_playScene);graphRuntime.Register();
@@ -163,8 +159,9 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                 if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
                     _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _assetWorkflow.IsSourceApproved);
             }
+            _editor.PrepareRenderAssets(project.Root, project.Configuration.ProjectId,project.Configuration.AssetPackage);
+            if(_renderer is not null)_environmentStartup=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer,_sceneCache!,_editor.Document.World,_editor.RenderAssets!,_editor.Document.CaptureSnapshot(),()=>!_closed);
             _editor.LoadGameplay(project.GameplayAssemblyPath);
-            _editor.PrepareRenderAssets(project.Root, project.Configuration.ProjectId);
             foreach (var diagnostic in _editor.RenderAssets!.Diagnostics.Take(64))
                 _log.Write("warning", "render.asset." + diagnostic.Code, diagnostic.AssetId.ToString("D"), _correlation);
         }
@@ -187,6 +184,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if(ReferencePreview) RenderingEditorAdapter.RegisterInspections(_editor.Edit,_renderService,_renderer);
             else SceneRenderInspections.Register(_editor.Edit,_renderer,()=>_editor.Play is null?_editScene:_playScene);
             SynchronizeSceneResources();
+            _sceneSynchronizationOk=true;_environmentStartup?.Dispose();_environmentStartup=null;
         }
         string[] labels = ["NcmaEngine candidate", "C# frame loop / native GPU execution", cpuOnly ? "CPU GUI 验证模式" : ReferencePreview ? "C# 渲染图 / DX11 PBR 参考预览" : "C# 渲染图 / DX11 静态场景", "中文输入诊断（非场景编辑）"];
         _labels = Encoding.UTF8.GetBytes(string.Concat(labels)); _labelsLength=(uint)_labels.Length; _text=new byte[_labels.Length+4096];
@@ -227,7 +225,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             catch(Exception e) when(e is ArgumentException or IOException or UnauthorizedAccessException) { _log!.Write("error","render.asset_refresh",e.Message,_correlation); }
         }
         // Trusted preparation boundary BEFORE simulation/render; snapshots only on explicit resource/session changes.
-        SynchronizeSceneResources();
+        SynchronizeSceneResourcesChecked();
         _presenter?.SynchronizeUi();
         _presenter?.SynchronizeGraph();
     }
@@ -236,7 +234,8 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         if(_renderer is null || _sceneCache is null || _editor is null)return;
         if(_editor.RenderAssets is { } edit && (_editAssets!=edit.Assets.Identity || _editScene?.WorldId!=_editor.Document.World.Identity || _editScene.PreparedRevision!=_editor.Document.World.Revision)) {
             var snapshot = _editor.Document.CaptureSnapshot();
-            var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,snapshot,poseKernel:PoseFor(snapshot));
+            edit=PrepareCurrentEnvironmentAssets(edit,snapshot);
+            var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,snapshot,poseKernel:PoseFor(snapshot),environmentPreparationAllowed:()=>!_closed);
             try { _editScene?.Dispose(); } catch { candidate.Dispose(); throw; }
             _editScene=candidate; _editAssets=edit.Assets.Identity;
         }
@@ -247,7 +246,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             if(_playSession!=play.SessionId || _playAssets!=pins.Assets.Identity || _playScene?.WorldId!=play.Document.World.Identity) {
                 var snapshot = play.Document.CaptureSnapshot();
                 var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,poseKernel:PoseFor(snapshot),play:play,
-                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime,animators:_sceneRuntime?.Animators);
+                    interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime,animators:_sceneRuntime?.Animators,environmentPreparationAllowed:()=>!_closed);
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }
@@ -333,8 +332,6 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             var configurationWorld=_editor.Play?.Document.World??_editor.Document.World;
             if (_configurationRevision != configurationWorld.Revision || _configurationWorld != configurationWorld.Identity) {
                 var objects = configurationWorld.GetObjects();
-                if (objects.Any(item => item.Has<Ncma.Scene.Rendering.EnvironmentLightingData>() && item.Get<Ncma.Scene.Rendering.EnvironmentLightingData>().Enabled))
-                    throw new NotSupportedException("environment_host_integration_pending");
                 var configurations=objects.Where(item=>item.Has<RenderConfiguration>()).Take(2).ToArray();
                 if(configurations.Length>1) _log!.Write("warning","render.ambiguous_configuration","Multiple render configurations; keeping the last valid configuration.",_correlation);
                 else _configuration=configurations.Length==1?configurations[0].Get<RenderConfiguration>():RenderConfiguration.Default(_editor.Edit.SessionId);
@@ -346,6 +343,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                 if(_presenter?.GraphPreviewSubmitted!=true){_renderService!.Configure(ClearConfiguration(_configuration),_state.FramebufferWidth,_state.FramebufferHeight);_renderService.Submit(frame.FrameId,0,0);}
             } else if (!ReferencePreview) {
                 var scene=_editor.Play is null?_editScene:_playScene;
+                if(!_sceneSynchronizationOk)scene=null;
                 if(_editor.Play?.State==Ncma.Gameplay.PlayState.Faulted)scene=null; // Invalid coupled snapshots are never rendered as synchronized.
                 Guid camera=_presenter?.SceneCamera??project?.Configuration.SceneCamera??Guid.Empty;
                 Ncma.Scene.Rendering.SceneCameraView? browser=null;
@@ -353,6 +351,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
                 if(camera==Guid.Empty) {
                     browser=_presenter?.BrowserCamera(width,height)??new EditorOrbitCamera().View(width,height);
                 }
+                if(scene is not null&&!PrepareSceneEnvironmentView(scene,width,height,camera,browser,_configuration))scene=null;
                 if(scene?.Submit(frame.FrameId,width,height,camera,browser,_configuration.Exposure,_configuration.Ambient,target:_viewportTarget,origin:new(x,y))!=true) {
                     if(_viewportTarget is not null)_renderer.SubmitResources(frame.FrameId,[],new(0,0,width,height),new(.015f,.02f,.03f,1),new(System.Numerics.Vector3.Zero,System.Numerics.Vector3.UnitY,System.Numerics.Vector4.One),_viewportTarget);
                     else {_renderService!.Configure(ClearConfiguration(_configuration),width,height);_renderService.Submit(frame.FrameId,x,y);}
@@ -378,7 +377,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
             }
             _renderService.Submit(frame.FrameId,x,y,hasModel ? model : default);
             }
-            _gui.RenderGpu(); _renderer.Present();
+            CaptureVerificationViewport();_gui.RenderGpu(); _renderer.Present();
             _uiPreview?.ReleasePresentation();
             var gpuStats=_renderer.Stats;
             if(gpuStats.ValidationErrors!=0 || gpuStats.ValidationWarnings!=0) throw new InvalidOperationException("DX11 validation failed.");
@@ -406,6 +405,7 @@ internal sealed unsafe class CandidatePresentation(string plugins, ProjectContex
         _fbxPreview?.Dispose(); _fbxPreview = null;
         _playScene?.Dispose(); _playScene = null;
         _editScene?.Dispose(); _editScene = null;
+        _environmentStartup?.Dispose();_environmentStartup=null;
         _sceneCache?.Dispose(); _sceneCache = null;
         _graphPreview?.Dispose();_graphPreview=null;
         _poseKernel?.Dispose(); _poseKernel = null;

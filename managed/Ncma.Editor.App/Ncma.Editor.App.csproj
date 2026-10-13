@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../Ncma.Characters/Ncma.Characters.csproj" />
     <InternalsVisibleTo Include="Ncma.Editor.Services.Tests" />
+    <InternalsVisibleTo Include="Ncma.Rendering.Tests" />
     <ProjectReference Include="../Ncma.Application/Ncma.Application.csproj" />
     <ProjectReference Include="../Ncma.Editor.Services/Ncma.Editor.Services.csproj" />
     <ProjectReference Include="../Ncma.Scene.Rendering/Ncma.Scene.Rendering.csproj" />

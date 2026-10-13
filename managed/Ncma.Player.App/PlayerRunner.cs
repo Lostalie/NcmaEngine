@@ -14,6 +14,12 @@ public static class PlayerRunner
     // Trusted local host only. No EditorEndpoint, hidden EditSession or Agent execution channel.
     public static PlayerReport Run(PlayerOptions options, Func<bool>? cancelled = null, string? pluginRoot = null,
         bool visible = true, Action<PlaySession, ulong>? trustedInput = null)
+        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null);
+    // Internal bounded diagnostic hook, not a production/Agent screenshot or execution capability.
+    internal static PlayerReport RunForVerification(PlayerOptions options,string pluginRoot,Action<byte[],uint,uint> capture,
+        Action<PlaySession,ulong>? trustedInput=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture);
+    private static PlayerReport RunCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
+        Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture)
     {
         ArgumentNullException.ThrowIfNull(options);
         var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
@@ -47,14 +53,8 @@ public static class PlayerRunner
                     phase = "dependencies";
                     var startup = document.CaptureSnapshot();
                     shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.ShaderPackages);
-                    if (shaderFiles is not null && startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.StaticMeshData.TypeId || c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
-                        bool skin=startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId));
-                        _=shaderFiles.Get(ShaderProfile.Scene3D,false,skin); _=shaderFiles.Get(ShaderProfile.Scene3D,true,skin);
-                    }
+                    Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(shaderFiles,startup);
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage);
-                    // C1 understands the asset contract but must not silently ignore active IBL.
-                    if (Ncma.Scene.Rendering.SceneAssetPreparation.HasEnabledEnvironment(startup))
-                        throw new NotSupportedException("environment_host_integration_pending");
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
                         phase = "configuration";
@@ -69,6 +69,7 @@ public static class PlayerRunner
                 if (!options.Headless)
                 {
                     presentation = new(plugins, visible); presentation.Start(shaderFiles);
+                    presentation.PrepareBeforeGameplay(document,renderAssets!);
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }
                 Ncma.Characters.ScenePlayRuntime? sceneRuntime=null;
@@ -90,7 +91,7 @@ public static class PlayerRunner
                     {
                         double now = clock.Elapsed.TotalSeconds;
                         status = play.AdvanceFrame(now - previous); previous = now;
-                        presentation!.Present(play);
+                        presentation!.Present(play,capture);
                     }
                     if (status.State == PlayState.Faulted) { exit = 5; reason = "gameplay_fault"; break; }
                 }

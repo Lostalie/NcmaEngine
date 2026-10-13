@@ -2,7 +2,7 @@
 
 基线：C1 `2efb4db76432bbe0b4aaf52df00da6c49e5e3423`，2026-10-10 开工前核对 local/remote main 一致。目标仍是正式 Editor/Player 共用 IBL，不以独立测试管线替代。C2 按相互依赖的合同、共享执行、宿主验收三片实施；每片完整自动回归和提交推送后再进入下一片。
 
-当前C2-A/B自动候选完成：C2-A71项、C2-B共享场景执行87项及各自最终顺序无Skip Debug/Release/checked deployment通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)、[C2-B合同](M7_3_C2B_RUNTIME_CONTRACT.md)、[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)。下一片C2-C正式宿主；pending guards保持，整个C2未完成。
+当前C2-A/B/C自动候选完成：C2-A71项、C2-B共享场景执行87项及各自最终顺序无Skip Debug/Release/checked deployment通过，见[C2-A交付](M7_3_C2A_DELIVERY_REPORT.md)、[C2-B合同](M7_3_C2B_RUNTIME_CONTRACT.md)、[C2-B交付](M7_3_C2B_DELIVERY_REPORT.md)。C2-C正式宿主43项及完整双配置/部署通过，C2自动链完成；下一片C3。见[C2-C交付](M7_3_C2C_DELIVERY_REPORT.md)。
 
 ## C2-A：显式 Shader 文件选择与完整准入（自动候选完成）
 
@@ -16,7 +16,7 @@
 
 构造/显式刷新接收确切 PreparedSceneAssetLease 与值配置；启用时使用 profile3 双变体/shared skin，不允许 profile1 冒充。环境 GPU 创建和配置更换在可信帧外/非 simulation 边界进行；提交只消费已准备数据，不读文件/Cook/IPC/推理。候选 shader、环境及 scene binding 完整准备后安装，失败保留旧有效组；旧 pipeline 先释放 scene pins，再释放环境 GPU 和资产租约。Off 不创建环境资源，纯2D/空场景不初始化3D。resize/shadow variant 切换沿用正确绑定，不重复 Cook/上传；同代 strength/rotation 刷新不重建环境。新增配置变动、错误代次、过期 world、失败保留、实际图像、动画共享 skin-shadow、租约/关闭与暖态成本测试。
 
-## C2-C：正式宿主前置检查与联合验收
+## C2-C：正式宿主前置检查与联合验收（自动候选完成）
 
 正式 Player 在 gameplay 初始化前核对源无关 shader/环境资产完整闭包并完成实际准入；初始化或运行中改变配置不能绕过，动态资源未准备必须明确失败而非静默忽略。Editor 启动/批准命令/Undo/Redo/Edit-Play-Stop/Reload 使用同一个共享服务和唯一历史；准备失败保留最后有效资源并报告，不造新 Agent GPU/编译权限。只有真正实现后才替换 C1 pending guards 和针对这些已移除 guards 的阶段测试；保留等价且更强的缺包/损坏/prestart 断言。实际正式 Editor/Player、源无关自定义 v2 包、静态和 FBX/NCA、API0/0、resize/关闭、纯UI/Headless闭包验证。C3 的 build-only 合成默认环境/部署与可视面板仍独立待实现；用户HDR解码/人工/目标/自包含/完整性能/1h不由自动测试关闭。
 

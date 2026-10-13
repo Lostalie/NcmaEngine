@@ -236,19 +236,23 @@ internal static partial class Program
                 var f = new EnvironmentFixture(); string path = Path.Combine(f.Root, "assets/game.ncpak"); File.WriteAllBytes(path, SceneAssetPreparation.CreateRuntimePackage(f.Root, f.Project, f.Scene().CaptureSnapshot(), []));
                 for (int i = 0; i < 32; i++) { var owner = RuntimeAssetPackage.Prepare(f.Root, "assets/game.ncpak", f.Project, [Ref(f.Id, AssetKind.Environment)]); using (var lease = owner.AcquireLease()) { owner.Dispose(); Check(Locked(path) && EnvironmentAsset(lease, f.Id).Generation == 1); } Check(!Locked(path)); }
             }),
-            ("M7.3-C1 Player active environment explicitly pending before gameplay", () => {
+            ("M7.3-C2-C Player missing plugins and corrupt environment reject before gameplay", () => {
                 var f = new AssetFixture(); var e = new EnvironmentFixture(); var descriptor = EnvironmentAssetDescriptor.FromPackage(f.Project, e.Package);
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(f.Root, descriptor.Path))!); File.WriteAllBytes(Path.Combine(f.Root, descriptor.Path), e.Package.CopyBytes()); File.WriteAllBytes(Path.Combine(f.Root, "assets/environment.ncenv"), descriptor.Encode());
                 var scene = f.Scene(); scene.World.CreateObject("Environment").Set(e.Configuration); var options = f.Player(scene);
+                var project = Ncma.Application.ProjectContext.Load(options.Project!).Configuration with {
+                    SceneCamera = scene.World.GetObjects().Single(o => o.Has<CameraData>()).PersistentId };
+                File.WriteAllBytes(options.Project!, JsonSerializer.SerializeToUtf8Bytes(project,
+                    new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
                 var report = Ncma.Player.App.PlayerRunner.Run(options, pluginRoot: Path.Combine(f.Root, "missing-plugins"), visible: false);
-                Check(report.ExitCode == 7 && report.Reason == "feature_unimplemented" && report.Tick == 0 && report.RenderedFrames == 0 && report.Modules.Length == 0 && report.ShutdownErrors.Length == 0);
+                Check(report.ExitCode == 3 && report.Reason == "dependency_failed" && report.Tick == 0 && report.RenderedFrames == 0 && report.Modules.Length == 0 && report.ShutdownErrors.Length == 0 && report.SessionId==Guid.Empty);
                 Check(!Locked(Path.Combine(f.Root, descriptor.Path)) && !Locked(f.GenerationPath));
                 byte[] bad = e.Package.CopyBytes(); bad[^1] ^= 1; File.WriteAllBytes(Path.Combine(f.Root, descriptor.Path), bad);
                 var rejected = Ncma.Player.App.PlayerRunner.Run(options with { Report = Path.Combine(f.Root, "corrupt-environment-report.json") }, pluginRoot: Path.Combine(f.Root, "missing-plugins"), visible: false);
                 Check(rejected.ExitCode == 3 && rejected.Reason == "dependency_failed" && rejected.Tick == 0 && rejected.Modules.Length == 0 && rejected.RenderedFrames == 0);
                 Check(!Locked(Path.Combine(f.Root, descriptor.Path)) && !Locked(f.GenerationPath));
             }),
-            ("M7.3-C1 Editor apphost active environment rejected before plugins", () => {
+            ("M7.3-C2-C Editor apphost invalid dependency does not start gameplay or render", () => {
                 var f = new AssetFixture(); var e = new EnvironmentFixture(); var scene = f.Scene(); scene.World.CreateObject("Environment").Set(e.Configuration); var options = f.Player(scene);
                 var repository = new DirectoryInfo(AppContext.BaseDirectory); while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "Build.bat"))) repository = repository.Parent;
                 string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
@@ -259,7 +263,7 @@ internal static partial class Program
                 var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
                 if (!process.WaitForExit(15000)) throw new Exception("Formal Editor pending preflight timed out.");
                 string text = stdout.GetAwaiter().GetResult() + stderr.GetAwaiter().GetResult();
-                Check(process.ExitCode == 4 && text.Contains("environment_host_integration_pending", StringComparison.Ordinal) && !Directory.Exists(Path.Combine(f.Root, "out/user")));
+                Check(process.ExitCode == 2 && text.Contains("invalid_configuration: Invalid plugin root or count.", StringComparison.Ordinal) && !text.Contains("candidate_dx11_scene frames=",StringComparison.Ordinal), text);
             })
         });
     }

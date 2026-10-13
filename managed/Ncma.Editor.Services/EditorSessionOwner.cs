@@ -27,6 +27,7 @@ public sealed class EditorSessionOwner : IDisposable
     private PreparedSceneAssetLease? _renderAssets, _playRenderAssets;
     private string? _assetRoot;
     private Guid _assetProject;
+    private string? _renderAssetPackage;
     private readonly Action<SceneDocumentSnapshot>? _compositionPolicy;
     private readonly Func<PlaySession, IDisposable?>? _composePlay;
     private readonly Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? _composePreparedPlay;
@@ -79,17 +80,17 @@ public sealed class EditorSessionOwner : IDisposable
         _assetInspections.Register(); // Defaults to zero visible UUIDs; pairing is not a file grant.
     }
     // Explicit startup/refresh; never called from a simulation/render tick or an Agent callback.
-    public void PrepareRenderAssets(string projectRoot, Guid projectId)
+    public void PrepareRenderAssets(string projectRoot, Guid projectId,string? package=null)
     {
         Verify(); if (_play is not null) throw new InvalidOperationException("Initial render asset preparation requires idle Edit.");
         if (_assetRoot is not null && (_assetRoot != Path.GetFullPath(projectRoot) || _assetProject != projectId)) throw new ArgumentException("Foreign asset project.");
-        var candidate = SceneAssetPreparation.Prepare(projectRoot, projectId, _document.CaptureSnapshot(), false);
-        _renderAssets?.Dispose(); _renderAssets = candidate; _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;
+        var candidate = SceneAssetPreparation.Prepare(projectRoot, projectId, _document.CaptureSnapshot(), false,package);
+        _renderAssets?.Dispose(); _renderAssets = candidate; _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;_renderAssetPackage=package;
     }
     public void RefreshRenderAssets()
     {
         Verify(); if (_assetRoot is null) throw new InvalidOperationException("No configured render asset project.");
-        var candidate = SceneAssetPreparation.Prepare(_assetRoot, _assetProject, _document.CaptureSnapshot(), false);
+        var candidate = SceneAssetPreparation.Prepare(_assetRoot, _assetProject, _document.CaptureSnapshot(), false,_renderAssetPackage);
         _renderAssets?.Dispose(); _renderAssets = candidate;
     }
     public bool RefreshAssets(bool force = false)
