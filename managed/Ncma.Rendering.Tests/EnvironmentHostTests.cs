@@ -97,6 +97,16 @@ internal static unsafe partial class Program
             byte[] Draw(){byte[]? pixels=null;editor.CaptureNextViewportForVerification((data,w,h)=>pixels=data);Pass(editor.PumpPlatform(),"formal Editor window pump");var context=new FrameContext(++frame,1d/60);editor.ApplyEditorIntents(context);editor.PumpAgent(context);editor.BeginPresentation(context);editor.SubmitInput(context);editor.AdvancePlay(context);editor.Present(context);return pixels??throw new Exception("Missing verified frame");}
             byte[] baseline=Draw();var size=editor.VerificationViewport;Pixel(baseline,size.Width,size.Height,.5f);File.WriteAllBytes(Path.Combine(output,"formal-editor.png"),Png(size.Width,size.Height,baseline));
             var owner=editor.VerificationEditor;var permission=new CapabilityPermissions(["ncma.scene.transaction","ncma.history.undo","ncma.history.redo"]);
+            var workspace=new EditorWorkspace(owner);workspace.Select(workspace.Stamp,environmentId);Draw();
+            var inspector=editor.VerificationPresenter;
+            Pass(inspector.EnvironmentPreparationStatus.Contains("就绪"),"C3-B1 actual prepared status");
+            var strengthItem=inspector.Items.ToArray().Single(i=>System.Text.Encoding.UTF8.GetString(inspector.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))=="环境光强度");
+            Ncma.Gui.GuiEvent Field(uint phase,double value=0)=>new(){Kind=strengthItem.Kind,WidgetHigh=strengthItem.WidgetHigh,WidgetLow=strengthItem.WidgetLow,Phase=phase,Value=value,
+                Frame=inspector.Frame.Frame,ViewGeneration=inspector.Frame.ViewGeneration,DocumentGeneration=inspector.Frame.DocumentGeneration,Revision=inspector.Frame.Revision};
+            inspector.Apply([Field(1),Field(2,.25),Field(3,.25)],[]);
+            var inspectorImage=Draw();Pixel(inspectorImage,size.Width,size.Height,.125f);
+            Pass(!inspectorImage.SequenceEqual(baseline)&&owner.Document.World.FindObject(environmentId).Get<EnvironmentLightingData>().Strength==.25f,"C3-B1 actual Inspector events change IBL pixels");
+            workspace.History(workspace.Stamp,false);Pass(Draw().SequenceEqual(baseline),"C3-B1 Inspector Undo restores actual image");
             Pass(owner.Edit!.Invoke(RenderingEditorAdapter.EnvironmentRequest(owner.Edit,environmentId,envValue with{Strength=.5f},owner.Edit.Revision)).Status=="denied","formal Editor Agent default read-only");
             Pass(owner.Edit.Invoke(RenderingEditorAdapter.EnvironmentRequest(owner.Edit,environmentId,envValue with{Strength=.5f},owner.Edit.Revision),permission).Changed,"formal command shared history");
             var half=Draw();Pixel(half,size.Width,size.Height,.25f);Pass(!half.SequenceEqual(baseline),"formal editor committed strength actual pixels");
@@ -105,7 +115,9 @@ internal static unsafe partial class Program
             Pass(owner.Edit.Invoke(History("ncma.history.redo"),permission).Changed,"formal redo");Pass(Draw().SequenceEqual(half),"redo IBL image");
             var play=owner.StartPlay();Pass(Draw().SequenceEqual(half),"Edit/Play shared IBL image");play.Pause();owner.ReloadGameplay(Path.Combine(fixture.Root,"gameplay.dll"));Pass(Draw().SequenceEqual(half),"Reload retains exact shader/environment");owner.StopPlay();Pass(Draw().SequenceEqual(half),"Stop preserves Edit image");
             owner.Document.World.FindObject(environmentId).Set(envValue with{Generation=99});var failed=Draw();Pass(!failed.SequenceEqual(half)&&failed.Where((b,i)=>b!=failed[i%4]).Any()==false,"failed prepare uniform themed clear rather than stale configuration");File.WriteAllBytes(Path.Combine(output,"formal-editor-failed-clear.png"),Png(size.Width,size.Height,failed));Draw();
+            Pass(inspector.EnvironmentPreparationStatus.Contains("失败"),"C3-B1 failed resource preparation visible in Inspector");
             owner.Document.World.FindObject(environmentId).Set(envValue with{Strength=.5f});Pass(Draw().SequenceEqual(half),"explicit committed recovery restores retained resources");
+            Pass(inspector.EnvironmentPreparationStatus.Contains("就绪")&&!inspector.EnvironmentPreparationStatus.Contains("失败"),"C3-B1 actual successful recovery clears error");
             Pass(editor.VerificationStats.ValidationErrors==0&&editor.VerificationStats.ValidationWarnings==0,"formal Editor DX11 API0/0");
         }
         // Original actual ASCII/binary imported animation, now through the formal Player.

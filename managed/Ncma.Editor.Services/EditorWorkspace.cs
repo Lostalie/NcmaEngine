@@ -17,10 +17,17 @@ public sealed class EditorWorkspace(EditorSessionOwner owner)
         "ncma.assets.metadata.edit", "ncma.assets.files.edit", "ncma.assets.import.commit", "ncma.ui.document.commit", "ncma.animgraph.transaction"];
     private static readonly CapabilityPermissions Local = new(LocalCapabilities);
     private SceneDocumentSnapshot? _cache, _preview;
+    private HashSet<string>? _componentTypes;
     private ulong _cachedRevision = ulong.MaxValue, _cachedGeneration;
     private Guid? _draft, _draftObject;
     public EditorSessionOwner Owner { get; } = owner;
     public int SnapshotReads { get; private set; }
+    public bool HasSceneComponent(string typeId)
+    {
+        var snapshot = Snapshot();
+        _componentTypes ??= snapshot.Objects.SelectMany(o => o.Components).Select(c => c.TypeId).ToHashSet(StringComparer.Ordinal);
+        return _componentTypes.Contains(typeId);
+    }
     private EditSession Edit => Owner.Edit ?? throw new InvalidOperationException("Editor required.");
     public EditorViewStamp Stamp => new(Edit.SessionId, Edit.DocumentGeneration, Edit.Revision);
     public bool HasDraft { get { _ = Edit.State; return _draft.HasValue; } }
@@ -35,6 +42,7 @@ public sealed class EditorWorkspace(EditorSessionOwner owner)
         if (_cache is null || _cachedRevision != stamp.Revision || _cachedGeneration != stamp.Generation)
         {
             _cache = Owner.Document.CaptureSnapshot(); SnapshotReads++;
+            _componentTypes = null;
             _cachedRevision = stamp.Revision; _cachedGeneration = stamp.Generation;
         }
         return _cache;

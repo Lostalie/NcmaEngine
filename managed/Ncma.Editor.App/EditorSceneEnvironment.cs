@@ -77,4 +77,5 @@ internal sealed unsafe partial class CandidatePresentation
         var callback=_verificationCapture;_verificationCapture=null;callback(pixels,target.Width,target.Height);
     }
     internal RendererStats VerificationStats=>_renderer!.Stats;
+    internal EditorPresenter VerificationPresenter=>_presenter??throw new InvalidOperationException("Presenter not started.");
 }

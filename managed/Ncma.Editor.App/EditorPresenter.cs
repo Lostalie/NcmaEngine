@@ -269,10 +269,16 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                     Add(GuiItemKind.Checkbox,2,control++,"Contact shadows",new("render_field",selected.Id,"contactEnabled"),number:config.ContactEnabled?1:0,max:1,enabled:writable);
                     Add(GuiItemKind.Label, 3, labelId++, "Reference PBR/soft shadow controls; 4 cascades × 2048. Not a material asset authoring system.");
                 }
+                if (component.TypeId == Ncma.Scene.Rendering.EnvironmentLightingData.TypeId)
+                    BuildEnvironmentInspector(selected.Id, component.Data.Deserialize<Ncma.Scene.Rendering.EnvironmentLightingData>(DataJson), ref control, ref labelId, writable);
                 Button(control++, "Remove " + component.TypeId, "transaction", writable, selected.Id, new { op = "remove_component", objectId = selected.Id, typeId = component.TypeId });
             }
             if (!selected.Components.Any(c => c.TypeId == "ncma.transform"))
                 Button(control++, "Add Transform", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id, typeId = "ncma.transform", version = 1, data = workspace.Owner.Document.World.Components.Encode(TransformData.Identity) });
+            if (workspace.Owner.Document.World.Components.Describe().Any(c => c.TypeId == Ncma.Scene.Rendering.EnvironmentLightingData.TypeId) &&
+                !workspace.HasSceneComponent(Ncma.Scene.Rendering.EnvironmentLightingData.TypeId))
+                Button(control++, "添加环境配置（关闭）", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id,
+                    typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1, data = workspace.Owner.Document.World.Components.Encode(Ncma.Scene.Rendering.EnvironmentLightingData.Off) });
             _bindingOffset = Math.Clamp(_bindingOffset,0,Math.Max(0,(selected.Behaviours.Length-1)/8*8));
             Button(32,"Previous bindings","bindings_previous",_bindingOffset>0);
             Line();
@@ -545,7 +551,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyLayout(action,e))continue;
                 if(ApplyUi(action,e,text))continue;
                 if(ApplyGraphEditor(action,e,text))continue;
-                if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "export")
+                if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "environment_field" or "export")
                 {
                     if (e.Phase == 1) {
                         workspace.BeginDraft(stamp, action.Object, "Edit " + action.Kind);
@@ -678,6 +684,9 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     private object Operation(ActionView action, string text, double number)
     {
+        if (action.Kind == "environment_field")
+            return RenderingEditorAdapter.EnvironmentFieldOperation(action.Object,
+                _page!.Selected!.Components.Single(c => c.TypeId == Ncma.Scene.Rendering.EnvironmentLightingData.TypeId).Data.Deserialize<Ncma.Scene.Rendering.EnvironmentLightingData>(DataJson), action.Field, number);
         if (action.Kind == "name") return new { op = "rename", objectId = action.Object, name = text };
         if (action.Kind == "render_field")
         {

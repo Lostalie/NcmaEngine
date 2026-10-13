@@ -42,6 +42,25 @@ public static class RenderingEditorAdapter
         return new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,expectedRevision,"ncma.scene.transaction",input);
     }
     // Builds existing scoped input only. This does not approve, write files or touch GPU resources.
+    public static object EnvironmentFieldOperation(Guid objectId, Ncma.Scene.Rendering.EnvironmentLightingData current, string field, double value)
+    {
+        if (objectId == Guid.Empty || !double.IsFinite(value)) throw new ArgumentException("Environment field identity/value.");
+        Ncma.Scene.Rendering.EnvironmentLightingData.Validate(current);
+        // Off is deliberately identity-free. Re-enabling requires a reviewed resource selection,
+        // not a hidden remembered UUID which could outlive its approval or project generation.
+        if (!current.Enabled) throw new ArgumentException("Select an approved environment before enabling or editing it.");
+        var next = field switch {
+            "strength" when value is >= 0 and <= 16 => current with { Strength = (float)value },
+            "rotationDegrees" when value is >= -180 and <= 180 => current with { RotationRadians = (float)(value * Math.PI / 180) },
+            "enabled" when value == 0 => Ncma.Scene.Rendering.EnvironmentLightingData.Off,
+            "enabled" when value == 1 => current,
+            _ => throw new ArgumentException("Unsupported environment field or range.")
+        };
+        Ncma.Scene.Rendering.EnvironmentLightingData.Validate(next);
+        return new { op = "set_component", objectId, typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1,
+            data = JsonSerializer.SerializeToElement(next, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) };
+    }
+
     public static CapabilityRequest EnvironmentRequest(EditSession edit, Guid objectId, Ncma.Scene.Rendering.EnvironmentLightingData configuration, ulong expectedRevision)
     {
         var data = edit.Document.World.Components.Encode(configuration);

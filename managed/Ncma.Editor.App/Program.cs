@@ -357,6 +357,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                     else {_renderService!.Configure(ClearConfiguration(_configuration),width,height);_renderService.Submit(frame.FrameId,x,y);}
                 }
                 _presenter?.ShowRenderDiagnostics(scene?.Diagnostics);
+                var environmentWorld = _editor.Play?.Document.World ?? _editor.Document.World;
+                _presenter?.ShowEnvironmentPreparation(environmentWorld.Identity, environmentWorld.Revision, _editor.Play?.SessionId ?? Guid.Empty,
+                    scene is not null, _scenePreparationError is not null, scene?.PreparedEnvironment);
                 _presenter?.SetViewportFrame(_editor.Play is null?scene:null,frame.FrameId);
             } else {
             if (_graph is null || width != _viewWidth || height != _viewHeight) {

@@ -93,7 +93,7 @@ static WeakReference CurrentCatalogContext(Ncma.Scripting.ScriptCatalogService c
     var instance=catalog.Instantiate(binding);
     return new(System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(instance.GetType().Assembly)!);
 }
-var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTests.Cases(output, root, args[1])).Concat(EditorPrefabTests.Cases()).Concat(GraphInspectionTests.Cases(output,root)).Concat(GraphAuthoringTests.Cases(output,root,args[1])).Concat(GraphSequenceTests.Cases(output,root)).Concat(BlendSpaceAuthoringTests.Cases(output,root,args[1])).Concat(LayerAuthoringTests.Cases(output,root,args[1])).Concat(MontageAuthoringTests.Cases(output,root,args[1])).Concat(MontageSequenceTests.Cases(output,root,args[1])).Concat(WorkflowTests.Cases(output,root,args[1])).Concat(new (string, Action)[] {
+var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.Cases(output, root)).Concat(AssetAuthorizationTests.Cases(output, root, args[1])).Concat(EditorPrefabTests.Cases()).Concat(GraphInspectionTests.Cases(output,root)).Concat(GraphAuthoringTests.Cases(output,root,args[1])).Concat(GraphSequenceTests.Cases(output,root)).Concat(BlendSpaceAuthoringTests.Cases(output,root,args[1])).Concat(LayerAuthoringTests.Cases(output,root,args[1])).Concat(MontageAuthoringTests.Cases(output,root,args[1])).Concat(MontageSequenceTests.Cases(output,root,args[1])).Concat(WorkflowTests.Cases(output,root,args[1])).Concat(new (string, Action)[] {
     ("Direct catalog exported values, candidate ownership and failed load preserve metadata", () => {
         string path=Path.Combine(root,"out/managed/Ncma.Gameplay.Sample.dll");
         using var catalog=new Ncma.Scripting.ScriptCatalogService();using var other=new Ncma.Scripting.ScriptCatalogService();
@@ -791,6 +791,7 @@ var cases = AssetInspectionTests.Cases(output, root).Concat(AssetAuthorizationTe
         Check(verification.Module!.Status.LiveResources==0 && verification.Module.Status.LiveJobs==0);
     }),
 }).ToArray();
+if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
 foreach (var (name, run) in cases) { try { run(); Console.WriteLine("PASS: " + name); } catch (Exception e) { Console.Error.WriteLine("FAIL: " + name + "\n" + e); return 1; } }
 Console.WriteLine($"Editor services: {cases.Length}/{cases.Length} passed.");
 return 0;
