@@ -13,7 +13,7 @@ A 方案已确认，AI 深度参与场景、动画、UI、工具和引擎扩展�
 Python 游戏脚本已移除；托管 World/固定步/事务基础已实现，C++ SceneWorld 和原生 World 导出已删除。
 编辑器及隔离 Play 已接入 C# World；统一 Editor.Core/EditSession 编辑链路已实现；正式默认入口已切换为 C# apphost，保留明确的部署恢复。Platform/GUI/DX11 Renderer 与独立 Physics 插件及 M2.5 A–F 业务迁移已落地，人工验收未完成，见 [H5 记录](M2_5_H5_DELIVERY_REPORT.md)。
 
-2026-10-14渲染增量：M7.4-A已实现纯C# Tone预设/EV和公开组合入口，复用原薄native执行/完整反射，三曲线与无源码包实际图像、显示域UI及完整双配置通过，见[合同](M7_4_A_RUNTIME_CONTRACT.md)、[交付](M7_4_A_DELIVERY_REPORT.md)。正式默认选项不变；Bloom和正式后处理设置/编辑器/AI仍归M7.4-B/C/D。
+2026-10-14渲染增量：M7.4-A已实现纯C# Tone预设/EV和公开组合入口，复用原薄native执行/完整反射，三曲线与无源码包实际图像、显示域UI及完整双配置通过，见[合同](M7_4_A_RUNTIME_CONTRACT.md)、[交付](M7_4_A_DELIVERY_REPORT.md)。正式默认选项不变；M7.4-B新增公开C#线性HDR子图/官方与用户同合同Bloom、独立NPH1和薄原生query16执行，172项实际图像及完整双配置通过，见[B合同](M7_4_B_RUNTIME_CONTRACT.md)、[B交付](M7_4_B_DELIVERY_REPORT.md)。C正式配置/宿主/编辑器/AI与D产品联合未完成。
 
 ## 1. 总体分层
 

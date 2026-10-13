@@ -9,6 +9,7 @@
 static void Check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
 #include "EnvironmentGpuNativeTests.inl"
 #include "EnvironmentSceneNativeTests.inl"
+#include "PostProcessNativeTests.inl"
 int main(int argc,char** argv) {
     try{
         if(argc!=2)return 2;
@@ -54,6 +55,7 @@ int main(int argc,char** argv) {
         Check(api.create_renderer(renderModule,&desc,&handle,&error)==0,"Renderer create");
         EnvironmentGpuNativeTests(renderModule,handle);
         EnvironmentSceneNativeTests(renderModule,handle);
+        PostProcessNativeTests(renderModule,handle);
         {
             NcmaEnvironmentCookApiV1 env{};Check(latest.query_scene_render(renderModule,13,&env,32,&error)==NCMA_OK,"Environment renderer lifetime");
             renderer->active=true;Check(env.validate_preparation(renderModule,&error)==NCMA_BUSY,"Environment active frame blocked");renderer->active=false;
@@ -65,7 +67,7 @@ int main(int argc,char** argv) {
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,16,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,17,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");

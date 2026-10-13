@@ -133,7 +133,7 @@ bool ScenePipelineKernel::Tone(const NcmaSceneFrameV4& f,Rhi::TextureHandle outp
  for(int i=0;i<3;++i){float x=f.base.clear[i]*exposure;x=std::clamp(x*(2.51f*x+.03f)/(x*(2.43f*x+.59f)+.14f),0.f,1.f);p.ClearColorValue[i]=x<=.0031308f?12.92f*x:1.055f*std::pow(x,1.f/2.4f)-.055f;}p.ClearColorValue[3]=1;
  if(!backend.BeginRenderPass(p,e))return false;
  float c[104]{};c[88]=exposure;if(!backend.UpdateBuffer(constants,c,ConstantBytes(),0,e))return false;
- Rhi::DrawDescription d{};d.Pipeline=tone;d.VertexCount=3;d.PixelConstantBuffer=constants;d.PixelTextures[0]=hdr;d.PixelSamplers[0]=sampler;
+ Rhi::DrawDescription d{};d.Pipeline=tone;d.VertexCount=3;d.PixelConstantBuffer=constants;d.PixelTextures[0]=post?post->Output():hdr;d.PixelSamplers[0]=sampler;
  d.ViewportX=f.base.viewport[0];d.ViewportY=f.base.viewport[1];d.ViewportWidth=f.base.viewport[2];d.ViewportHeight=f.base.viewport[3];bool result=backend.Draw(d,e);backend.EndRenderPass();return result;
 }
 }

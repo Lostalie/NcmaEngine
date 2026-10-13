@@ -6,7 +6,7 @@
 
 C#拥有效果组合、参数、注册、依赖与编辑事务；C++只执行GPU数值工作。所有效果使用同一公开契约，官方实现没有特权旁路。当前版本DX11only；纯2D不部署或分配3D后处理。不能把当前后置Exposure重复Tone示例当成Bloom或通用HDR中间阶段。
 
-### A：颜色流程与可复用Tone预设（本轮）
+### A：颜色流程与可复用Tone预设（自动候选已完成）
 
 明确输入为非负scene-linear RGBA16F；曝光倍率先作用于线性值，然后Tone压缩，再精确sRGB显示编码一次；输出opaque RGBA8，游戏UI/编辑器GUI在显示域合成，不再套一次Tone。
 
@@ -16,7 +16,9 @@ C#拥有效果组合、参数、注册、依赖与编辑事务；C++只执行GPU
 
 实际GPU验证三曲线、暗部/中灰/超1HDR/曝光边界/高亮饱和、RGBA16F量化和独立标量/全图oracle；Scene3D/SceneEnvironment、shadow开关、用户stage、source-free包、失败保留旧管线、resize/close、UI显示色不受Tone、纯UI无3D，以及暖机CPU分配/上传/资源统计。原M6/M7所有测试保留。A不宣称Bloom、正式设置面板或整个M7.4完成。
 
-### B：线性HDR Feature和Bloom真实执行
+### B：线性HDR Feature和Bloom真实执行（自动候选已完成）
+
+2026-10-14进入B，开工前A本地/远端 `acffae59b14f629f3ba3578e26394f304f76db6b` 一致。B详细执行与预算见[运行合同](M7_4_B_RUNTIME_CONTRACT.md)，测试/完整回归状态见[交付记录](M7_4_B_DELIVERY_REPORT.md)。B不包含C正式宿主/配置/编辑器/AI或D产品联合验收。
 
 独立版本化执行扩展，不挪用旧C400/ScenePass保留字段。C#描述读取/写入、线性颜色域、尺寸/格式、单写者与有界依赖；薄native执行已验证的有界batch和opaque资源。候选资源/程序完整验证和创建后才交换；失败保留active plan，异常数值阶段fail-stop不伪造回滚。
 

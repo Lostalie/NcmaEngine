@@ -115,7 +115,7 @@ public sealed class RuntimeShaderPackage
     private static void Write(Span<byte> bytes,int at,uint value)=>BinaryPrimitives.WriteUInt32LittleEndian(bytes.Slice(at,4),value);
     // Structural SM5 envelope only, not instruction/RDEF/signature verification or code safety.
     // Reject debug/private/source chunks; source authoring is never embedded in our O3 compiler output.
-    private static void ValidateDxbc(ReadOnlySpan<byte> bytes,ShaderStage stage)
+    internal static void ValidateDxbc(ReadOnlySpan<byte> bytes,ShaderStage stage)
     {
         if(bytes.Length<32 || bytes.Length>1048576 || Read(bytes,0)!=0x43425844 || Read(bytes,20)!=1 || Read(bytes,24)!=bytes.Length) Fail("dxbc_header");
         uint count=Read(bytes,28);if(count is <1 or >16 || 32+count*4>bytes.Length) Fail("dxbc_chunks");

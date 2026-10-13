@@ -3,6 +3,8 @@
 #include "contracts/NcmaScenePipeline.h"
 #include "contracts/NcmaShaderPipeline.h"
 #include "contracts/NcmaShaderStages.h"
+#include "PostProcessKernel.h"
+#include <memory>
 namespace NcmaEngine::Rendering {
 class ScenePipelineKernel final {
     Rhi::IRenderBackend& backend;
@@ -11,6 +13,7 @@ class ScenePipelineKernel final {
     Rhi::SamplerHandle sampler,shadowSampler;
     Rhi::TextureHandle white,normal;
 public:
+    std::unique_ptr<PostProcessKernel> post;
     Rhi::TextureHandle hdr,depth,shadow;
     uint32_t width=0,height=0,resolution=0;
     bool environmentCapable=false;

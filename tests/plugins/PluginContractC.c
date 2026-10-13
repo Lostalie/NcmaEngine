@@ -5,6 +5,9 @@ _Static_assert(sizeof(NcmaGuiApiV1)==104 && sizeof(NcmaGuiApiV1_4)==112, "scoped
 #include "NcmaRenderer.h"
 #include "NcmaEnvironmentGpu.h"
 #include "NcmaEnvironmentScene.h"
+#include "NcmaPostProcess.h"
+_Static_assert(sizeof(NcmaPostApiV1)==40&&sizeof(NcmaPostDescriptionV1)==56&&sizeof(NcmaPostProgramV1)==40,"post API/description/program");
+_Static_assert(sizeof(NcmaPostPassV1)==32&&sizeof(NcmaPostTargetV1)==16&&sizeof(NcmaPostStatsV1)==72,"post fixed POD");
 _Static_assert(sizeof(NcmaEnvironmentBindingV1)==40,"environment binding");
 _Static_assert(sizeof(NcmaEnvironmentSceneApiV1)==56,"environment scene API");
 _Static_assert(sizeof(NcmaEnvironmentGpuDescriptionV1)==40,"environment GPU description");

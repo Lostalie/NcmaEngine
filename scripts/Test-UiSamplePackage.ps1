@@ -44,6 +44,7 @@ try {
 } finally { Pop-Location }
 $uiSummary = ($uiResult | Select-Object -Last 1) | ConvertFrom-Json
 if ($uiSummary.environmentLive -ne 0 -or $uiSummary.environmentResidentBytes -ne 0 -or $uiSummary.environmentPublications -ne 0 -or $uiSummary.environmentUploadedBytes -ne 0) { throw 'Pure UI unexpectedly initialized environment GPU resources.' }
+if ($uiSummary.postBindings -ne 0 -or $uiSummary.postResidentBytes -ne 0 -or $uiSummary.postTargets -ne 0 -or $uiSummary.postPrograms -ne 0 -or $uiSummary.postDraws -ne 0 -or $uiSummary.postPublications -ne 0) { throw 'Pure UI unexpectedly initialized HDR post processing.' }
 if (-not $uiSummary.runtimeShaderPackage -or -not $uiSummary.registeredUi -or $uiSummary.frames -ne 4 -or $uiSummary.shaderGeneration -ne 1 -or $uiSummary.validationErrors -ne 0 -or $uiSummary.validationWarnings -ne 0) { throw 'UI apphost validation evidence mismatch.' }
 $uiAfter = @(Get-DeploymentFiles $uiWorkspace $uiPackage)
 if (($uiAfter | ConvertTo-Json -Depth 8 -Compress) -cne ($uiFiles | ConvertTo-Json -Depth 8 -Compress)) { throw 'UI apphost modified its package.' }

@@ -25,6 +25,7 @@ uint32_t NCMA_CALL DestroyScenePipeline(uint64_t context,uint64_t handle,NcmaGpu
   renderer->backend->GetDeviceContext()->ClearState();const auto& p=*renderer->scenePipelines.at(key.value);
   Validation(*renderer);
   if(p.environmentKey.value)--renderer->environments.at(p.environmentKey.value)->scenePins;
+  if(p.post){auto& s=renderer->postStats;--s.bindings;s.targets-=p.post->TargetCount();s.programs-=p.post->ProgramCount();s.resident_bytes-=p.post->bytes;}
   renderer->sceneStats.resident_bytes-=static_cast<uint64_t>(p.width)*p.height*12+static_cast<uint64_t>(p.resolution)*p.resolution*4+p.ConstantBytes()+8;renderer->scenePipelines.erase(key.value);return NCMA_OK;
  });
 }
@@ -58,6 +59,7 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
    else if(p.operation==8){if(!hasGeometry||p.parameters[0]<.01f||p.parameters[0]>16||p.parameters[1]||p.parameters[2])return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);tones++;}
    else return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE);
   }if(!hasGeometry||!tones||operations.back().operation!=8||(!shadows&&f.caster_count)||(shadows&&!pipeline.resolution))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+  if(pipeline.post&&tones!=1)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"post_requires_single_tone");
   auto validateDraw=[&](const NcmaSceneDrawV4& item)->bool{const auto& d=item.draw;
    if(d.mesh.generation!=handle||!renderer->meshes.contains(d.mesh.value)||d.material.generation!=handle||!renderer->materials.contains(d.material.value))return false;
    if(renderer->skins.contains(d.mesh.value)&&renderer->skins.at(d.mesh.value)->frame!=b.frame)return false;
@@ -79,7 +81,8 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
   for(const auto& p:operations){
    if(p.operation==6){if(!pipeline.BeginShadow(message))return Failure(error,message);for(const auto& d:caster){const auto& m=*renderer->materials.at(d.draw.material.value);if(!pipeline.Draw(*renderer->meshes.at(d.draw.mesh.value),d,m.description,m.textures,f,true,shadows,0,message))return Failure(error,message);}renderer->backend->EndRenderPass();}
    else if(p.operation==7){if(!pipeline.BeginGeometry(f,message))return Failure(error,message);for(const auto& d:geo){const auto& m=*renderer->materials.at(d.draw.material.value);if(!pipeline.Draw(*renderer->meshes.at(d.draw.mesh.value),d,m.description,m.textures,f,false,shadows,p.parameters[0],message))return Failure(error,message);}renderer->backend->EndRenderPass();}
-   else if(!pipeline.Tone(f,target,p.parameters[0],message))return Failure(error,message);
+   else {if(pipeline.post){if(!pipeline.post->Execute(pipeline.hdr,message))return Failure(error,message);renderer->postStats.draws+=pipeline.post->PassCount();renderer->postStats.constant_upload_bytes+=pipeline.post->PassCount()*16;}
+    if(!pipeline.Tone(f,target,p.parameters[0],message))return Failure(error,message);}
   }
   if(b.target.value)renderer->targets.at(b.target.value)->lastFrame=b.frame;
   renderer->active=true;renderer->lastFrame=b.frame;renderer->stats.submitted_frames++;renderer->sceneStats.geometry_draws+=b.draw_count;renderer->sceneStats.shadow_draws+=f.caster_count;

@@ -1,0 +1,54 @@
+static void PostProcessNativeTests(uint64_t context,uint64_t handle){
+    NcmaErrorV1 error{};NcmaPostApiV1 api{};const auto oldSceneStats=renderer->sceneStats;const auto oldStats=renderer->postStats;
+    Check(QuerySceneRender(context,16,&api,39,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==40&&!api.struct_size,"Post short query atomic");
+    Check(QuerySceneRender(context,16,&api,40,&error)==NCMA_OK&&api.version==1&&api.capabilities==3&&api.validate&&api.bind&&api.stats,"Post query16 API1");
+    auto compile=[](std::string_view source,const char* entry,const char* target){ComPtr<ID3DBlob> code;
+        Check(SUCCEEDED(D3DCompile(source.data(),source.size(),"Post.NativeTest",nullptr,nullptr,entry,target,ShaderCompilation::Flags,0,&code,nullptr)),"Post compiler");return code;};
+    auto vs=compile(PostProcess::source,"VSPost","vs_5_0"),ps=compile(PostProcess::source,"PSOne","ps_5_0");
+    NcmaPostProgramV1 program{{32,1,static_cast<uint32_t>(vs->GetBufferSize()),static_cast<uint32_t>(ps->GetBufferSize()),static_cast<const uint8_t*>(vs->GetBufferPointer()),static_cast<const uint8_t*>(ps->GetBufferPointer())},1,0};
+    Check(api.validate(context,handle,&program,1,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"Post actual reflection no GPU allocation");
+    Check(api.validate(context,handle,&program,9,&error)==NCMA_INVALID_ARGUMENT,"Post program count bounded before reads");
+    auto invalid=program;invalid.inputs=2;Check(api.validate(context,handle,&invalid,1,&error)==NCMA_INVALID_ARGUMENT,"Post actual texture arity cannot be forged");
+    for(const auto& change:std::array<std::pair<std::string,std::string>,3>{{{"Input0:register(t0)","Input0:register(t2)"},{"PSOne(Full i):SV_TARGET","PSOne(Full i):SV_TARGET1"},{"float4 Params;","float4 Before;float4 Params;"}}}){
+        std::string source=PostProcess::source;const auto at=source.find(change.first);Check(at!=std::string::npos,"Post bad fixture");source.replace(at,change.first.size(),change.second);
+        auto bad=compile(source,"PSOne","ps_5_0");invalid=program;invalid.shaders.pixel=static_cast<const uint8_t*>(bad->GetBufferPointer());invalid.shaders.pixel_bytes=static_cast<uint32_t>(bad->GetBufferSize());
+        Check(api.validate(context,handle,&invalid,1,&error)==NCMA_INVALID_ARGUMENT&&renderer->backend->GetLiveResourceCount()==0,"Post wrong real slot/output/last offset rejected");
+    }
+    NcmaScenePipelineDescriptionV4 desc{16,16,16,0};NcmaGpuResourceV3 key{};
+    Check(CreateScenePipeline(context,handle,&desc,&key,&error)==NCMA_OK,"Post target scene");auto& scene=*renderer->scenePipelines.at(key.value);auto initial=renderer->backend->GetLiveResourceCount();
+    NcmaPostTargetV1 target{16,16,1,1};NcmaPostPassV1 pass{0,0,UINT32_MAX,1,{1,1,1,1}};
+    NcmaPostDescriptionV1 d{56,1,16,16,1,1,1,1,&program,&target,&pass};
+    auto unchanged=[&](){return !scene.post&&renderer->postStats.resident_bytes==0&&renderer->postStats.bindings==0&&renderer->backend->GetLiveResourceCount()==initial;};
+    pass.input0=1;Check(api.bind(context,handle,key,&d,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Post alias/uninitialized no allocation");pass.input0=0;
+    target.color_space=2;Check(api.bind(context,handle,key,&d,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Post rejects display-domain target");target.color_space=1;
+    pass.parameters[3]=std::numeric_limits<float>::infinity();Check(api.bind(context,handle,key,&d,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Post finite last parameter");pass.parameters[3]=1;
+    d.pass_count=33;Check(api.bind(context,handle,key,&d,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Post pass budget before reads");d.pass_count=1;
+    PostProcess::testThrow=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_INTERNAL_ERROR&&unchanged(),"Post prepublication exception releases candidate");PostProcess::testThrow=false;
+    testWaitTimeout=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_SHUTDOWN_TIMEOUT&&unchanged(),"Post drain timeout retains old null binding");testWaitTimeout=false;
+    Check(api.bind(context,handle,key,&d,&error)==NCMA_OK&&scene.post&&renderer->postStats.resident_bytes==16*16*8+16,"Post publishes complete candidate");
+    auto* prior=scene.post.get();const auto count=renderer->backend->GetLiveResourceCount();const auto publications=renderer->postStats.publications;
+    pass.parameters[0]=.5f;testWaitTimeout=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_OK&&scene.post.get()==prior&&renderer->backend->GetLiveResourceCount()==count&&renderer->postStats.publications==publications+1,"Post scalar update same resources/programs and no GPU drain");testWaitTimeout=false;
+    PostProcess::testThrow=true;pass.parameters[0]=.25f;Check(api.bind(context,handle,key,&d,&error)==NCMA_INTERNAL_ERROR&&scene.post.get()==prior&&renderer->postStats.publications==publications+1,"Post failed scalar publication keeps prior");PostProcess::testThrow=false;
+    std::array<NcmaPostTargetV1,2> replacementTargets{{{8,8,1,1},{16,16,1,1}}};
+    std::array<NcmaPostPassV1,2> replacementPasses{{{0,0,UINT32_MAX,1,{1,1,1,1}},{0,1,UINT32_MAX,2,{1,1,1,1}}}};
+    NcmaPostDescriptionV1 replacement{56,1,16,16,1,2,2,2,&program,replacementTargets.data(),replacementPasses.data()};
+    auto priorRetained=[&](){return scene.post.get()==prior&&renderer->backend->GetLiveResourceCount()==count&&renderer->postStats.publications==publications+1&&renderer->postStats.bindings==1&&renderer->postStats.targets==1&&renderer->postStats.resident_bytes==2064;};
+    PostProcess::testThrow=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INTERNAL_ERROR&&priorRetained(),"Post complete different-layout candidate exception retains live graph");PostProcess::testThrow=false;
+    testWaitTimeout=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_SHUTDOWN_TIMEOUT&&priorRetained(),"Post complete replacement timeout retains live graph and retires candidate");testWaitTimeout=false;
+    replacementTargets[0]={4096,4096,1,1};Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INVALID_ARGUMENT&&priorRetained(),"Post oversized candidate refuses before GPU allocation");replacementTargets[0]={8,8,1,1};
+    Check(renderer->validation!=nullptr,"Post diagnostic fixture requires real DX11 InfoQueue");
+    const auto warnings=renderer->stats.validation_warnings;const auto diagnostics=renderer->diagnostics;
+    PostProcess::testDiagnostic=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INTERNAL_ERROR&&priorRetained()&&renderer->stats.validation_warnings==warnings+1,"Post actual diagnostic refuses replacement before publication");PostProcess::testDiagnostic=false;
+    // Only the deliberate test injection is restored; production has no diagnostic reset API.
+    renderer->stats.validation_warnings=warnings;renderer->diagnostics=diagnostics;
+    PostProcess::testDiagnostic=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_INTERNAL_ERROR&&priorRetained()&&renderer->stats.validation_warnings==warnings+1,"Post actual diagnostic refuses scalar update before publication");PostProcess::testDiagnostic=false;
+    renderer->stats.validation_warnings=warnings;renderer->diagnostics=diagnostics;
+    renderer->active=true;Check(api.bind(context,handle,key,nullptr,&error)==NCMA_BUSY&&scene.post.get()==prior,"Post frame Off rejected");renderer->active=false;
+    uint32_t foreign=0;std::thread worker([&]{NcmaErrorV1 e{};foreign=api.bind(context,handle,key,nullptr,&e);});worker.join();Check(foreign==NCMA_WRONG_THREAD&&scene.post.get()==prior,"Post owner thread");
+    testWaitTimeout=true;Check(api.bind(context,handle,key,nullptr,&error)==NCMA_SHUTDOWN_TIMEOUT&&scene.post.get()==prior,"Post Off timeout retains resources");testWaitTimeout=false;
+    Check(api.bind(context,handle,key,nullptr,&error)==NCMA_OK&&unchanged(),"Post Off releases all effect resources");
+    renderer->pureUi=true;Check(api.validate(context,handle,&program,1,&error)==NCMA_UNSUPPORTED_FEATURE&&unchanged(),"Post pureUI guard before allocation");renderer->pureUi=false;
+    Check(api.bind(context,handle,key,&d,&error)==NCMA_OK,"Post rebind before close");
+    Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_OK&&renderer->postStats.bindings==0&&renderer->postStats.resident_bytes==0&&renderer->backend->GetLiveResourceCount()==0,"Post scene shutdown releases all");
+    Check(renderer->stats.validation_errors==0&&renderer->stats.validation_warnings==0,"Post native API0/0");renderer->sceneStats=oldSceneStats;renderer->postStats=oldStats;
+}
