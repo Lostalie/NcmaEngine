@@ -29,6 +29,7 @@ public static class PlayerRunner
         PhysicsService? physics = null; PlayerPresentation? presentation = null; PlayStatus? status = null;
         Ncma.Scene.Rendering.PreparedSceneAssetLease? renderAssets = null;
         RuntimeShaderFileSet? shaderFiles = null;
+        Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage = null;
         RuntimePostProcessLibrary? postLibrary=null;postModules??=Ncma.Rendering.Scene.PostProcessModules.Official();
         int exit = 0, count = 0; string reason = "completed", renderer = options.Headless ? "null" : "unknown";
         string? digest = null; string phase = "configuration"; var errors = new List<string>(); PlayerModule[] modules = [];
@@ -46,6 +47,11 @@ public static class PlayerRunner
                     Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
                     Ncma.Characters.CharacterComponents.RequireComposition);
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
+                if (project.Configuration.UiPackage is { } uiSelection) {
+                    phase = "dependencies";
+                    uiPackage = Ncma.Ui.Rendering.RuntimeUiPackage.Open(project.Root, project.Configuration.ProjectId, uiSelection);
+                    Ncma.Ui.Rendering.SceneUiPresentation.Validate(uiPackage);
+                }
                 Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(document.CaptureSnapshot(),postModules);
                 if(options.Headless&&project.Configuration.PostProcessLibrary is not null&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasSettings(document.CaptureSnapshot())&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasGeometry(document.CaptureSnapshot())) {
                     phase="dependencies";postLibrary=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.PostProcessLibrary);
@@ -62,6 +68,7 @@ public static class PlayerRunner
                     phase = "dependencies";
                     var startup = document.CaptureSnapshot();
                     shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.ShaderPackages);
+                    if (uiPackage is not null && shaderFiles is not null) _ = shaderFiles.Get(ShaderProfile.Flat2D,false,false);
                     Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(shaderFiles,startup);
                     if(Ncma.Rendering.Scene.ScenePostProcessPreflight.HasSettings(startup)&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasGeometry(startup)) {
                         postLibrary=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.PostProcessLibrary);
@@ -82,7 +89,7 @@ public static class PlayerRunner
                 if (!options.Headless)
                 {
                     presentation = new(plugins, visible, pipelineFactory); presentation.Start(shaderFiles,postLibrary,postModules);
-                    presentation.PrepareBeforeGameplay(document,renderAssets!);
+                    presentation.PrepareBeforeGameplay(document,renderAssets!,uiPackage);
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }
                 Ncma.Characters.ScenePlayRuntime? sceneRuntime=null;
@@ -134,6 +141,7 @@ public static class PlayerRunner
             if(Close(presentation, "presentation_shutdown_failed")) {
                 Close(shaderFiles,"shader_files_shutdown_failed");
                 Close(postLibrary,"post_library_shutdown_failed");
+                Close(uiPackage,"ui_package_shutdown_failed");
                 if(Close(owner, "runtime_shutdown_failed")) { Close(physics, "physics_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed"); }
             }
         }

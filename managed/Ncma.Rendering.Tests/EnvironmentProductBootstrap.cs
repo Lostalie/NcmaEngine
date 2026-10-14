@@ -26,7 +26,7 @@ internal static class EnvironmentProductBootstrap
         AppContext.SetData("APP_CONTEXT_BASE_DIRECTORY",root+Path.DirectorySeparatorChar);
         if(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)!=Path.TrimEndingDirectorySeparator(root))throw new Exception("Product base-directory override failed.");
         string kind=value.GetProperty("kind").GetString()!;
-        string probeType=value.TryGetProperty("probe",out var selected)&&selected.GetString()=="pipeline"?"PipelineHostProbe":kind=="editor"?"EnvironmentEditorProductProbe":"EnvironmentPlayerProductProbe";
+        string probeType=value.TryGetProperty("probe",out var selected)&&selected.GetString()=="scene-ui"?"SceneUiHostProbe":value.TryGetProperty("probe",out selected)&&selected.GetString()=="pipeline"?"PipelineHostProbe":kind=="editor"?"EnvironmentEditorProductProbe":"EnvironmentPlayerProductProbe";
         var type=probe.GetType(probeType,true)!;
         try { type.GetMethod("Run",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[requestPath]); }
         catch(TargetInvocationException e){throw new Exception("Checked product probe failed.",e.InnerException);}

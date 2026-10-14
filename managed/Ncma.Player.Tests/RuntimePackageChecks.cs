@@ -4,6 +4,7 @@ using System.Text.Json;
 using Ncma.Application;
 using Ncma.Assets.Runtime;
 using Ncma.Player.App;
+using Ncma.Rendering;
 using Ncma.Scene;
 using Ncma.Scene.Rendering;
 
@@ -22,9 +23,9 @@ internal static class RuntimePackageChecks
         using var baseline = JsonDocument.Parse(File.ReadAllBytes(referenceIndex)); string template = baseline.RootElement.GetProperty("playerDx11").GetString()!;
         DeploymentManifest.Validate(template);
         using(var shaderFiles=Ncma.Rendering.RuntimeShaderFileSet.Load(template)) {
-            Check(shaderFiles.Count==8,"Standalone DX11 Player requires both exact four-variant scene profiles");
+            Check(shaderFiles.Count==9&&shaderFiles.Get(ShaderProfile.Flat2D,false,false).Profile==ShaderProfile.Flat2D,"Standalone DX11 Player retains both exact four-variant scene profiles plus HUD");
             string shaders=Path.Combine(package,"assets/shaders");Directory.CreateDirectory(shaders);
-            var shaderPaths=Directory.GetFiles(Path.Combine(template,"assets/shaders"));Check(shaderPaths.Length==9,"Exact shader variants and selection index");
+            var shaderPaths=Directory.GetFiles(Path.Combine(template,"assets/shaders"));Check(shaderPaths.Length==10,"Exact original8 plus HUD and selection index");
             foreach(string file in shaderPaths)File.Copy(file,Path.Combine(shaders,Path.GetFileName(file)));
         }
         foreach (var file in Directory.EnumerateFiles(template).Where(p => Path.GetFileName(p) != DeploymentManifest.FileName && Path.GetExtension(p) is not (".pdb" or ".xml"))) File.Copy(file, Path.Combine(package, Path.GetFileName(file)));

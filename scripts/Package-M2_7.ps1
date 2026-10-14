@@ -69,6 +69,7 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
             @{ id = 'ncma.text'; abiVersion = 1; path = 'plugins/NcmaText.dll'; lazy = $true }
         } elseif ($product -eq 'NcmaPlayer-dx11-candidate') {
             @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
+            @{ id = 'ncma.text'; abiVersion = 1; path = 'plugins/NcmaText.dll'; lazy = $true }
         }) }
     [IO.File]::WriteAllText((Join-Path $destination 'deployment-manifest.json'), ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 }
@@ -109,6 +110,7 @@ foreach ($file in @('NcmaPlatform.dll', 'NcmaRenderer.dll', 'glfw3.dll')) {
     Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $playerDx11 "plugins\$file")
 }
 foreach ($file in @('NcmaGui.dll', 'NcmaPhysics.dll', 'NcmaText.dll')) { Copy-Exact (Join-Path $NativePluginRoot $file) (Join-Path $editor "plugins\$file") }
+Copy-Exact (Join-Path $NativePluginRoot 'NcmaText.dll') (Join-Path $playerDx11 'plugins\NcmaText.dll')
 # FBX numerical resource kernel is only in Editor, never a Player/Gameplay dependency.
 $characterKernel = Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaNative.dll'
 Copy-Exact $characterKernel (Join-Path $editor 'plugins\NcmaNative.dll')

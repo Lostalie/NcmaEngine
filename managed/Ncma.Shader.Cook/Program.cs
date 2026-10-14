@@ -16,7 +16,8 @@ try {
     using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"Shader package cook",64,64,false);
     using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,64,64,pureUi:args[2]=="ui");
     var packages=new List<RuntimeShaderPackage>();
-    if(args[2]!="player")packages.Add(renderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Flat2D,false,false,()=>true).Package);
+    // Formal Player HUDs need the same checked UI shader closure as Editor/standalone UI.
+    packages.Add(renderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Flat2D,false,false,()=>true).Package);
     if(args[2]!="ui")foreach(bool skin in new[]{false,true})foreach(bool shadows in new[]{false,true})
         packages.Add(renderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Scene3D,shadows,skin,()=>true).Package);
     if(args[2]!="ui")foreach(bool skin in new[]{false,true})foreach(bool shadows in new[]{false,true})

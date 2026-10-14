@@ -16,6 +16,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     private Ncma.Rendering.Scene.PostProcessRuntime? _postRuntime;
     private Ncma.Scene.Rendering.PreparedSceneAssetLease? _assets;
     private Ncma.Animation.Native.PoseKernel? _poseKernel;
+    private Ncma.Ui.Rendering.SceneUiPresentation? _ui;
     private Guid _camera;
     private readonly WindowInputAccumulator _input = new();
     private WindowState _state;
@@ -23,7 +24,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     private ulong _frame;
     private double _x, _y;
     private bool _focused, _disposed;
-    public PlayerModule[] Modules => _loader.Modules.Select(m => new PlayerModule(m.Id, m.AbiMajor, m.AbiMinor, m.Capabilities)).ToArray();
+    public PlayerModule[] Modules => _loader.Modules.Concat(_ui?.Modules ?? []).Select(m => new PlayerModule(m.Id, m.AbiMajor, m.AbiMinor, m.Capabilities)).ToArray();
     public RendererStats Stats => _renderer!.Stats;
     public void Start(RuntimeShaderFileSet? shaderFiles = null, RuntimePostProcessLibrary? postLibrary = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null)
     {
@@ -38,12 +39,15 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
         _pipeline = new(_renderer);
         _cache = new(_renderer);
     }
-    public void PrepareBeforeGameplay(Ncma.Scene.SceneDocument document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets)
+    public void PrepareBeforeGameplay(Ncma.Scene.SceneDocument document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets,Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage=null)
     {
         if(_environmentPreflight is not null)throw new InvalidOperationException("Startup already prepared.");
         Ncma.Rendering.Scene.ScenePostProcessPreflight.Prepare(_renderer!,document.World,document.CaptureSnapshot(),_postRuntime);
         Ncma.Rendering.Scene.ScenePipelineStartup.Prepare(_renderer!,document.World,document.CaptureSnapshot(),pipelineFactory,_postRuntime,()=>!_disposed);
         _environmentPreflight=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer!,_cache!,document.World,assets,document.CaptureSnapshot(),()=>!_disposed);
+        if (uiPackage is not null) {
+            _ui = new(); _ui.Prepare(uiPackage, _renderer!, plugins, new(1280,720,1,default));
+        }
     }
     public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera,Ncma.Animation.IRootMotionPresentation? rootMotion=null,Ncma.Scene.Rendering.SceneAnimatorRuntime? animators=null)
     {
@@ -82,6 +86,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
         if(environments.Length>1)throw new ArgumentException("ambiguous_environment_configuration");
         var environment=environments.Length==1?environments[0].Get<Ncma.Scene.Rendering.EnvironmentLightingData>():Ncma.Scene.Rendering.EnvironmentLightingData.Off;
         try {
+            _ui?.PrepareView(new(_state.FramebufferWidth,_state.FramebufferHeight,1,default));
             if(_scene!.PreparedEnvironment!=environment)_scene.RefreshEnvironment(_assets!,()=>!_disposed);
             _scene.PrepareEnvironmentView(_state.FramebufferWidth,_state.FramebufferHeight,_camera,follow,config.Exposure,config.Ambient);
         } catch(Exception preparationFailure) {
@@ -100,6 +105,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
             _pipeline!.Configure(config with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false},_state.FramebufferWidth,_state.FramebufferHeight);
             _pipeline.Submit(frame);
         }
+        _ui?.Submit(frame);
         if(verificationCapture is not null){var pixels=new byte[checked((int)(_state.FramebufferWidth*_state.FramebufferHeight*4))];_renderer.Capture(pixels);verificationCapture(pixels,_state.FramebufferWidth,_state.FramebufferHeight);}
         _renderer.Present();
     }
@@ -107,6 +113,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     {
         if (_disposed) return;
         // Stop at the first failed release: never unload dependencies while a live native lease remains.
+        _ui?.Dispose(); _ui = null;
         _scene?.Dispose(); _scene = null;_environmentPreflight?.Dispose();_environmentPreflight=null;_assets=null; _cache?.Dispose(); _cache = null;
         _postRuntime?.Dispose();_postRuntime=null;
         _poseKernel?.Dispose(); _poseKernel=null;

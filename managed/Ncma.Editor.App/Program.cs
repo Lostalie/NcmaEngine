@@ -114,6 +114,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     private string _lastPlatformDiagnostic = "";
     public void Start()
     {
+        // D3-B supplies the formal Player HUD; Editor viewport composition is the next D3-C gate.
+        // Reject an active selection instead of silently showing a scene without its HUD.
+        if (project?.Configuration.UiPackage is not null) throw new NotSupportedException("Editor scene HUD composition pending D3-C.");
         if (!cpuOnly) _shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShaderPackages);
         if(project is not null&&!cpuOnly)Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(_shaderFiles,
             Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath)));

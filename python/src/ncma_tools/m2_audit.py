@@ -257,6 +257,7 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
     if not isinstance(kernels, list) or any(not isinstance(k, dict) for k in kernels):
         raise ValueError("Resource-kernel metadata must be an array of records.")
     expected_pose = ("ncma.pose", 1, "plugins/NcmaAnimationKernel.dll")
+    expected_text = ("ncma.text", 1, "plugins/NcmaText.dll")
     if product == "NcmaPlayer-null-candidate" and any("ncmaanimationkernel" in p for p in seen):
         raise ValueError("Pose kernel deployed in Null Player.")
     kernel_ids = [(k["id"], k["abiVersion"], k["path"]) for k in kernels]
@@ -275,7 +276,6 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
                                  expected_pose[2].casefold() not in seen)
         if not previous_without_pose:
             required_kernels.add(expected_pose)
-        expected_text = ("ncma.text", 1, "plugins/NcmaText.dll")
         previous_without_text = (directory == "out/bin" and product == "NcmaEngine-editor" and
                                  expected_text[2].casefold() not in seen)
         if not previous_without_text:
@@ -292,8 +292,19 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
                         modules.get("ncma.gui") in ((1, 2), (1, 3), (1, 4), (1, 5), (1, 6)) else 7)
         if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, previous_gui), "ncma.physics": (1, 1)}:
             raise ValueError("Editor module ABI metadata mismatch.")
-    elif set(kernel_ids) != ({expected_pose} if product == "NcmaPlayer-dx11-candidate" else set()) or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):
-        raise ValueError("Editor resource/GUI deployed in Player.")
+    else:
+        allowed_kernels = {expected_pose} if product == "NcmaPlayer-dx11-candidate" else set()
+        # Text is a shared, optional HUD numerical resource, not the Editor/ImGui service.
+        # Require its exact checked DLL and lazy declaration; Null may never deploy it.
+        if any("ncmatext" in p for p in seen) or any(k["id"] == "ncma.text" for k in kernels):
+            text_metadata = next((k for k in kernels if k["id"] == "ncma.text"), {})
+            if (product != "NcmaPlayer-dx11-candidate" or expected_text[2].casefold() not in seen or
+                    any("ncmatext" in p and p != expected_text[2].casefold() for p in seen) or
+                    type(text_metadata.get("abiVersion")) is not int or text_metadata.get("lazy") is not True):
+                raise ValueError("Player HUD text must be exact, versioned, lazy and graphical-only.")
+            allowed_kernels.add(expected_text)
+        if set(kernel_ids) != allowed_kernels or any("ncmanative" in p or "ncmagui" in p or "ncmaimportkernel" in p or "ncma.asset.import" in p or p.startswith("tools/import-worker/") for p in seen):
+            raise ValueError("Editor resource/GUI deployed in Player.")
     return {"product": product, "directory": directory, "files_verified": len(seen),
             "manifest_sha256": digest(manifest_path), "publish_mode": data["publishMode"],
             "production": data["production"], "manual_acceptance": data["manualAcceptance"],

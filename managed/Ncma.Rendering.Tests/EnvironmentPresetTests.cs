@@ -32,7 +32,7 @@ internal static unsafe partial class Program
         var index=EnvironmentPresetIndex.Decode(indexBytes);
         Pass(packageBytes.SequenceEqual(File.ReadAllBytes(Path.Combine(player,index.Path)))&&indexBytes.SequenceEqual(File.ReadAllBytes(Path.Combine(player,EnvironmentPresetIndex.IndexPath))),"independent cooks deterministic");
         using(var files=RuntimeShaderFileSet.Load(editor))Pass(files.Count==9,"Editor9");
-        using(var files=RuntimeShaderFileSet.Load(player))Pass(files.Count==8,"Player8");
+        using(var files=RuntimeShaderFileSet.Load(player))Pass(files.Count==9&&files.Get(ShaderProfile.Flat2D,false,false).Profile==ShaderProfile.Flat2D,"Player original8 plus checked HUD profile");
         using(var files=RuntimeShaderFileSet.Load(ui))Pass(files.Count==1&&Directory.GetFiles(ui,"*",SearchOption.AllDirectories).Length==2&&!Directory.Exists(Path.Combine(ui,"assets/environments")),"UI1+index only");
         var originals=new Dictionary<string,string>{
             ["Flat2D-0-0.ncshader"]="23EBD59DF449AE1A8A9CEE8073E22156A5586D46FD7A44FF1626B02FA3971193",
@@ -106,7 +106,7 @@ internal static unsafe partial class Program
             foreach(string kind in new[]{"editor","playerDx11","playerNull"}){
                 string directory=staged.RootElement.GetProperty(kind).GetString()!;Ncma.Application.DeploymentManifest.Validate(directory);
                 if(kind=="playerNull")Pass(!Directory.Exists(Path.Combine(directory,"assets/environments"))&&!Directory.Exists(Path.Combine(directory,"assets/shaders")),"checked Null no3D files");
-                else{using var library=EnvironmentPresetLibrary.LoadDeployment(directory);using var files=RuntimeShaderFileSet.Load(directory);Pass(library.Package.ContentHash==index.Sha256&&files.Count==(kind=="editor"?9:8),"checked product manifest/environment closure "+kind);}
+                else{using var library=EnvironmentPresetLibrary.LoadDeployment(directory);using var files=RuntimeShaderFileSet.Load(directory);Pass(library.Package.ContentHash==index.Sha256&&files.Count==9&&files.Get(ShaderProfile.Flat2D,false,false).Profile==ShaderProfile.Flat2D,"checked product manifest/environment plus HUD closure "+kind);}
             }
         }
         File.WriteAllText(Path.Combine(output,"preset-results.json"),JsonSerializer.Serialize(new{cases,maxPixelError,index.Sha256,index.ByteCount,synthetic=true,defaultSceneMutation=false}));

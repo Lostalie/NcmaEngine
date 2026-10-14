@@ -229,14 +229,14 @@ internal static unsafe partial class Program
         foreach(string file in Directory.GetFiles(binaries).Where(p=>Path.GetExtension(p) is ".dll" or ".json" or ".exe" or ".ico"))File.Copy(file,Path.Combine(moved,Path.GetFileName(file)));
         Directory.CreateDirectory(Path.Combine(moved,"plugins"));foreach(string name in new[]{"NcmaPlatform.dll","NcmaRenderer.dll","NcmaPhysics.dll","NcmaAnimationKernel.dll","glfw3.dll"})File.Copy(Path.Combine(plugins,name),Path.Combine(moved,"plugins",name));
         // Relocated formal apphosts now require their build-cooked source-free shader closure.
-        // Copy the checked DX11 package's two exact four-variant profiles + index.
+        // Copy the checked DX11 package's two exact four-variant profiles + HUD + index.
         using(var packageIndex=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository,"out/verification/m2-7",build,"packages.json")))) {
             string packageRoot=packageIndex.RootElement.GetProperty("playerDx11").GetString()!;
             Ncma.Application.DeploymentManifest.Validate(packageRoot);
             using var pins=RuntimeShaderFileSet.Load(packageRoot);
-            Check(pins.Count==8,"M6 Player exact eight scene shader packages");
+            Check(pins.Count==9&&pins.Get(ShaderProfile.Flat2D,false,false).Profile==ShaderProfile.Flat2D,"M6 Player original eight scene shader packages plus HUD");
             string source=Path.Combine(packageRoot,"assets/shaders"),destination=Path.Combine(moved,"assets/shaders");Directory.CreateDirectory(destination);
-            var shaderFiles=Directory.GetFiles(source);Check(shaderFiles.Length==9,"M6 Player shader files and index");
+            var shaderFiles=Directory.GetFiles(source);Check(shaderFiles.Length==10,"M6 Player original scene plus HUD shader files and index");
             foreach(string file in shaderFiles)File.Copy(file,Path.Combine(destination,Path.GetFileName(file)));
         }
         string[] forbidden=["Ncma.Editor","Ncma.Gui","Ncma.Mcp","Ncma.Asset.Import","Ncma.Assets.Authoring","NcmaNative",".fbx",".ncmeta",".ncmaanim",".nca",".py"];

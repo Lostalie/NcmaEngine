@@ -184,6 +184,46 @@ class M2AuditTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate()
 
+    def test_player_hud_text_is_exact_lazy_optional_and_never_in_null(self):
+        base, data = self.package()
+        (base / "plugins").mkdir()
+        for name in ("NcmaAnimationKernel.dll", "NcmaText.dll"):
+            path = base / "plugins" / name
+            path.write_bytes(b"test-owned numerical fixture")
+            data["files"].append({"path": "plugins/" + name, "size": path.stat().st_size,
+                                  "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+        pose = {"id": "ncma.pose", "abiVersion": 1, "path": "plugins/NcmaAnimationKernel.dll", "lazy": True}
+        text = {"id": "ncma.text", "abiVersion": 1, "path": "plugins/NcmaText.dll", "lazy": True}
+        data["product"] = "NcmaPlayer-dx11-candidate"
+        data["resourceKernels"] = [pose, text]
+        def validate():
+            (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
+            return validate_package(self.root, "package", data["product"], "Debug")
+        self.assertEqual(validate()["files_verified"], 4)
+        for field, wrong in (("id", "ncma.gui"), ("abiVersion", 2), ("abiVersion", True), ("path", "plugins/other.dll"), ("lazy", False)):
+            data["resourceKernels"] = [pose, dict(text, **{field: wrong})]
+            with self.assertRaises(ValueError):
+                validate()
+        data["resourceKernels"] = [pose]
+        with self.assertRaises(ValueError):
+            validate()  # A present Text DLL cannot omit its declaration.
+        data["resourceKernels"] = [pose, text, dict(text)]
+        with self.assertRaises(ValueError):
+            validate()
+        data["resourceKernels"] = [pose, text]
+        data["product"] = "NcmaPlayer-null-candidate"
+        with self.assertRaises(ValueError):
+            validate()
+        # Independently reject Text in Null even without pose metadata/DLL.
+        (base / "plugins/NcmaAnimationKernel.dll").unlink()  # Exact test-owned fixture.
+        data["files"] = [f for f in data["files"] if f["path"] != pose["path"]]
+        data["resourceKernels"] = [text]
+        with self.assertRaises(ValueError):
+            validate()
+        data["resourceKernels"] = []
+        with self.assertRaises(ValueError):
+            validate()
+
     def test_kernel_reference_evidence_rejects_wrong_scope_or_pixel_budget(self):
         directory = self.root / "out/verification/m2-8/kernel-Debug"
         directory.mkdir(parents=True)

@@ -9,5 +9,6 @@
     <EmbeddedResource Include="Schemas/*.json" />
     <InternalsVisibleTo Include="Ncma.Assets.Runtime" />
     <InternalsVisibleTo Include="Ncma.Rendering" />
+    <InternalsVisibleTo Include="Ncma.Ui.Rendering" />
   </ItemGroup>
 </Project>
