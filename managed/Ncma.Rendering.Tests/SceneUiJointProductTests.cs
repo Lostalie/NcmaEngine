@@ -11,7 +11,7 @@ using Ncma.Ui.Rendering;
 
 internal static unsafe partial class Program
 {
-    private static int SceneUiJointProductTests(string plugins,string output)
+    private static int SceneUiJointProductTests(string plugins,string output,bool highShadow=false)
     {
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);int checks=0;
         void Pass(bool ok,string label){Check(ok,"D3-C full joint "+label);checks++;}
@@ -26,10 +26,21 @@ internal static unsafe partial class Program
             string fbx=Path.Combine(repo.FullName,"tests/assets/fbx",file);SkinFixture skin;
             using(var importer=new Ncma.Asset.Import.ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath)))))skin=new(folder,importer.LoadAndCopy(fbx,30));
             var(doc,camera,objects)=skin.Scene();var blocks=DerivedAssetCodec.Decode(skin.Plan.DerivedBytes);
+            if(highShadow)doc.World.CreateObject("High shadow quality").Set(new SceneShadowData(1,SceneShadowQuality.High));
             var rig=ModelPayloadCodec.DecodeSkeleton(blocks.Single(b=>b.AssetId==skin.Manifest.Skeleton!.Value).Data);
             var mesh=ModelPayloadCodec.DecodeMesh(blocks.Single(b=>b.AssetId==skin.Manifest.Meshes[0].Mesh).Data);var bounds=BindPoseMeshUploadData.Prepare(mesh,rig).Bounds;
             float scale=2.5f/Math.Max(bounds.Max.X-bounds.Min.X,Math.Max(bounds.Max.Y-bounds.Min.Y,bounds.Max.Z-bounds.Min.Z));var character=doc.World.FindObject(objects[0]);
             character.Set(Ncma.Runtime.TransformData.Identity with{Position=-(bounds.Min+bounds.Max)*(.5f*scale)+new Vector3(0,0,-3.5f),Scale=new(scale)});
+            if(highShadow){
+                // The original HUD joint fixture had no shadow receiver: it cannot prove
+                // a visible High/Off transition. Add a real packaged static receiver.
+                var floor=new SceneGpuFixture(folder);var record=AssetRecordCodec.Decode(File.ReadAllBytes(Path.Combine(floor.Root,"assets/model.fbx.ncmeta")));
+                var generation=record.Generation! with{RelativePath=record.Generation!.RelativePath.Replace(floor.Project.ToString("N"),skin.Project.ToString("N"),StringComparison.Ordinal)};
+                string target=Path.Combine(skin.Root,generation.RelativePath);Directory.CreateDirectory(Path.GetDirectoryName(target)!);File.Copy(floor.GenerationPath,target);
+                File.WriteAllBytes(Path.Combine(skin.Root,"assets/floor.fbx.ncmeta"),AssetRecordCodec.Encode(record with{SourcePath="assets/floor.fbx",Generation=generation}));
+                File.Copy(Path.Combine(floor.Root,"assets/default.ncmaterial"),Path.Combine(skin.Root,"assets/floor.ncmaterial"));File.Copy(Path.Combine(floor.Root,"assets/default.ncmatset"),Path.Combine(skin.Root,"assets/floor.ncmatset"));
+                var receiver=doc.World.CreateObject("Shadow receiver");receiver.Set(Ncma.Runtime.TransformData.Identity with{Position=new(0,0,-5.5f),Scale=new(4,4,1)});receiver.Set(new StaticMeshData(floor.Mesh,floor.Set,true,false,uint.MaxValue));
+            }
             var clips=skin.Manifest.Clips.Select(id=>(Id:id,Clip:ModelPayloadCodec.DecodeClip(blocks.Single(b=>b.AssetId==id).Data).Clip)).ToArray();
             var animated=clips.OrderByDescending(c=>c.Clip.Tracks.Sum(t=>t.Keys.Count(k=>k.Value!=t.Keys[0].Value))).First();
             Pass(animated.Clip.Tracks.Any(t=>t.Keys.Any(k=>k.Value!=t.Keys[0].Value)),label+" real non-bind clip");character.Set(character.Get<Ncma.Animation.ClipPlaybackData>() with{ClipId=animated.Id});
@@ -55,10 +66,15 @@ internal static unsafe partial class Program
             var nextUi=ui with{Elements=[ui.Elements[0],rect with{Style=rect.Style with{Fill=new(.8f,.3f,.1f,1)}}]};byte[] nextHud=RuntimeUiPackage.Encode(skin.Project,3,nextUi,[],[]);File.WriteAllBytes(Path.Combine(runtime,"assets/hud-next.ncupak"),nextHud);
             Bad("next-ui",SceneUiData.TypeId,doc.World.Components.Encode(SceneUiData.From(new(1,ui.AssetId,3,"assets/hud-next.ncupak",Convert.ToHexString(SHA256.HashData(nextHud))))));
             var postValue=doc.World.GetObjects().Single(o=>o.Has<PostProcessData>()).Get<PostProcessData>();Bad("bad-post-module",PostProcessData.TypeId,doc.World.Components.Encode(postValue with{StackJson=PostProcessData.EncodeStack([new(Guid.NewGuid(),1,[])])}));
+            if(highShadow){
+                Bad("bad-shadow-quality",SceneShadowData.TypeId,JsonSerializer.SerializeToElement(new{version=1,quality=4}));
+                var badLibrary=ProjectContext.Load(Path.Combine(runtime,"project.ncmaproject")).Configuration with{ShadowLibrary=new(1,new string('0',64))};
+                File.WriteAllBytes(Path.Combine(runtime,"bad-shadow-library.ncmaproject"),JsonSerializer.SerializeToUtf8Bytes(badLibrary,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
+            }
             Pass(!Directory.GetFiles(runtime,"*",SearchOption.AllDirectories).Any(p=>new[]{".fbx",".nca",".ncmeta",".nce",".ncenv",".ncmaui",".hlsl"}.Contains(Path.GetExtension(p))),"runtime no author sources");
             var pins=Directory.GetFiles(skin.Root,"*",SearchOption.AllDirectories).Append(fbx).Select(p=>new FileStream(p,FileMode.Open,FileAccess.Read,FileShare.None)).ToArray();
             try{SceneUiPublicationProducts(repo.FullName,runtime,folder,Pass,"scene-ui-joint");}finally{foreach(var pin in pins)pin.Dispose();}
         }
-        File.WriteAllText(Path.Combine(output,"joint-results.json"),JsonSerializer.Serialize(new{checks,configuration,fullShadingOracle=false,manualAccepted=false,wholeD3Accepted=false}));Console.WriteLine($"PASS full FBX IBL shadow Bloom HUD products: {checks}; {output}");return 0;
+        File.WriteAllText(Path.Combine(output,"joint-results.json"),JsonSerializer.Serialize(new{checks,configuration,highShadow,fullShadingOracle=false,manualAccepted=false,wholeD3Accepted=false}));Console.WriteLine($"PASS full FBX IBL shadow Bloom HUD products: {checks}; High={highShadow}; {output}");return 0;
     }
 }

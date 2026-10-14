@@ -36,6 +36,7 @@ try {
     if(verified.Count!=packages.Count || renderer.Stats.ValidationErrors!=0 || renderer.Stats.ValidationWarnings!=0)throw new InvalidOperationException("Cook verification failed.");
     if(args[2]!="ui") {
         PostLibraryCook.Write(renderer,destination,verified);
+        ShadowLibraryCook.Write(renderer,destination,verified);
         using var cook=new EnvironmentCookService(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),()=>true);
         var environment=cook.Cook(EnvironmentPresetIndex.NeutralAssetId,1,HdrEnvironmentSource.Neutral(EnvironmentPresetIndex.NeutralSourceId),EnvironmentCookSettings.Default);
         var index=EnvironmentPresetIndex.FromPackage(environment);byte[] indexBytes=index.Encode();

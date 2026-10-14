@@ -25,9 +25,10 @@ internal sealed unsafe partial class CandidatePresentation
     private void PreflightPost(World world,SceneDocumentSnapshot scene)
     {
         var runtime=PreparePostRuntime(world,scene);
+        var high=PrepareShadowRuntime(world,scene);
         if(_renderer is not null){
             ScenePostProcessPreflight.Prepare(_renderer,world,scene,runtime);
-            ScenePipelineStartup.Prepare(_renderer,world,scene,pipelineFactory,runtime,()=>!_closed);
+            ScenePipelineStartup.Prepare(_renderer,world,scene,pipelineFactory,runtime,()=>!_closed,high);
         }
     }
 }

@@ -33,6 +33,7 @@ public static class DefaultEnvironmentSceneShaders
 // actual whole-group reflection; neither package hashes nor this wrapper are a safety sandbox.
 public sealed class RegisteredEnvironmentSceneShaders:RegisteredShaderPreparation
 {
+    internal string GeometryPixelHash => _runtime is null ? _programs[1].Descriptor.ContentHash : RuntimeShaderPreparation.Metadata(_runtime).Single(m => m.Role == "environment.geometry.pixel").ContentHash;
     private readonly CompiledShader[] _programs=[];
     private readonly RuntimeShaderPackage? _runtime;
     public bool Shadows {get;}

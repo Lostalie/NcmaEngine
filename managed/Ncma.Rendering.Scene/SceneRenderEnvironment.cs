@@ -71,7 +71,7 @@ public sealed partial class SceneRenderSession
             }
             if(_pipeline is not null&&_postRuntime is null) {
                 if(_environmentShaders is null&&shaders is not null) {
-                    pipeline=CreateEnvironmentPipeline(shaders,gpu,value,_width,_height,_exposure,_ambient,_shadows);
+                    pipeline=CreateEnvironmentPipeline(shaders,gpu,value,_width,_height,_exposure,_ambient,_shadows,_shadowPrepared);
                     _pipeline.Dispose();
                 } else if(_environmentShaders is not null) _pipeline.ConfigureEnvironment(gpu?.Resource,value.ToConfiguration(),EnvironmentApproved);
             }
@@ -86,35 +86,42 @@ public sealed partial class SceneRenderSession
         finally{_environmentPreparing=false;}
     }
     private ScenePipelineSession CreateEnvironmentPipeline(SceneEnvironmentRuntimeShaders shaders,RenderAssetLease<GpuEnvironmentResource>? gpu,
-        EnvironmentLightingData value,uint width,uint height,float exposure,float ambient,bool shadows)
+        EnvironmentLightingData value,uint width,uint height,float exposure,float ambient,bool shadows,SceneShadowData? selection)
     {
         shaders.VerifyFor(_renderer);
-        var candidate=new ScenePipelineSession(_renderer,_pipelineFactory(exposure,ambient,shadows),width,height,
-            environmentShaders:(shadows?shaders.Shadowed:shaders.Unshadowed).Scene);
+        var programs=SelectShadowPrograms(null,shadows?shaders.Shadowed:shaders.Unshadowed,shadows,selection);
+        var candidate=new ScenePipelineSession(_renderer,CreateSelectedPipeline(exposure,ambient,shadows,selection,ShaderProfile.SceneEnvironment),width,height,
+            environmentShaders:programs.Environment);
         try{candidate.ConfigureEnvironment(gpu?.Resource,value.ToConfiguration(),EnvironmentApproved);return candidate;}
         catch{candidate.Dispose();throw;}
     }
     public void PrepareEnvironmentView(uint width,uint height,Guid sceneCamera,SceneCameraView? browserCamera=null,float exposure=1,float ambient=.03f)
     {
         Verify();if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
-        VerifyPreparedEnvironment();if(_postRuntime is not null){PreparePostView(width,height,sceneCamera,browserCamera,exposure,ambient);return;}
-        if(_environmentShaders is null&&(!_hasCustomPipeline||_shaders is null))return;
+        VerifyPreparedEnvironment();var selection=ObserveShadowSelection();if(_postRuntime is not null){PreparePostView(width,height,sceneCamera,browserCamera,exposure,ambient);return;}
+        if(_environmentShaders is null&&_shaders is null)return;
+        // Preserve the original lazy default path when no scene policy is selected.
+        // An explicit->absent transition still prepares once to retire its old graph.
+        // Do not extract an extra view/allocate read scopes for ordinary legacy callers.
+        if(_environmentShaders is null&&!_hasCustomPipeline&&selection is null&&_shadowPrepared is null)return;
         using var read=SceneEnvironmentState.BeginRead(_world,WorldId);_environmentPreparing=true;
         try {
             _renderer.VerifyEnvironmentPreparation(EnvironmentApproved);
             var view=_extractor.Extract(_resources.Metadata,browserCamera is null?sceneCamera:Guid.Empty,width,height,browserCamera,_animation is not null);
             if(view.Camera is not {} camera||view.Geometry.Count==0&&view.ShadowCasters.Count==0)return;
-            bool shadows=view.PrimaryLight is {Data.CastShadow:true};
+            bool shadows=SceneShadowPipelinePolicy.EffectiveShadows(selection,view.PrimaryLight is {Data.CastShadow:true});
             uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
-            if(_pipeline is null||_width!=w||_height!=h||_shadows!=shadows) {
+            if(_pipeline is null||_width!=w||_height!=h||_shadows!=shadows||_shadowPrepared!=selection) {
                 var candidate=_environmentShaders is not null?
-                    CreateEnvironmentPipeline(_environmentShaders,_environmentGpu,_environment,w,h,exposure,ambient,shadows):
-                    new ScenePipelineSession(_renderer,_pipelineFactory(exposure,ambient,shadows),w,h,shaders:(shadows?_shaders!.Shadowed:_shaders!.Unshadowed).Scene);
-                try{_pipeline?.Dispose();}catch{candidate.Dispose();throw;}
+                    CreateEnvironmentPipeline(_environmentShaders,_environmentGpu,_environment,w,h,exposure,ambient,shadows,selection):
+                    new ScenePipelineSession(_renderer,CreateSelectedPipeline(exposure,ambient,shadows,selection,ShaderProfile.Scene3D),w,h,
+                        shaders:SelectShadowPrograms(shadows?_shaders!.Shadowed:_shaders!.Unshadowed,null,shadows,selection).Scene);
+                try{_renderer.VerifyEnvironmentPreparation(EnvironmentApproved);_pipeline?.Dispose();}catch{candidate.Dispose();throw;}
                 _pipeline=candidate;_width=w;_height=h;_shadows=shadows;_exposure=exposure;_ambient=ambient;
             } else if(_exposure!=exposure||_ambient!=ambient){
-                _pipeline.Configure(_pipelineFactory(exposure,ambient,shadows));_exposure=exposure;_ambient=ambient;
+                _pipeline.Configure(CreateSelectedPipeline(exposure,ambient,shadows,selection,_environmentShaders is null?ShaderProfile.Scene3D:ShaderProfile.SceneEnvironment));_exposure=exposure;_ambient=ambient;
             }
+            CommitShadowSelection(selection);
         }finally{_environmentPreparing=false;}
     }
     private void ReleaseEnvironmentLeases()

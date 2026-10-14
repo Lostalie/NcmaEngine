@@ -15,6 +15,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     private Ncma.Rendering.Scene.SceneRenderSession? _scene;
     private Ncma.Rendering.Scene.SceneEnvironmentPreflight? _environmentPreflight;
     private Ncma.Rendering.Scene.PostProcessRuntime? _postRuntime;
+    private PreparedShadowLibrary? _highShadows;
     private Ncma.Scene.Rendering.PreparedSceneAssetLease? _assets;
     private Ncma.Animation.Native.PoseKernel? _poseKernel;
     private Ncma.Ui.Rendering.SceneUiPresentation? _ui;
@@ -30,7 +31,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     private bool _focused, _disposed;
     public PlayerModule[] Modules => _loader.Modules.Concat(_ui?.Modules ?? []).Select(m => new PlayerModule(m.Id, m.AbiMajor, m.AbiMinor, m.Capabilities)).ToArray();
     public RendererStats Stats => _renderer!.Stats;
-    public void Start(RuntimeShaderFileSet? shaderFiles = null, RuntimePostProcessLibrary? postLibrary = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null)
+    public void Start(RuntimeShaderFileSet? shaderFiles = null, RuntimePostProcessLibrary? postLibrary = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null,RuntimeShadowLibrary? shadowLibrary=null)
     {
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
@@ -39,6 +40,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory, "NcmaEngine.ico"));
         _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, 1280, 720);
         shaderFiles?.InstallSelection(_renderer,()=>!_disposed);
+        if(shadowLibrary is not null)_highShadows=shadowLibrary.Prepare(_renderer,shaderFiles??throw new ArgumentException("High shadows require checked scene shader files."),()=>!_disposed);
         if(postLibrary is not null)_postRuntime=new(_renderer,shaderFiles??throw new ArgumentException("Checked scene shaders required."),postLibrary,postModules??Ncma.Rendering.Scene.PostProcessModules.Official(),()=>!_disposed);
         _pipeline = new(_renderer);
         _cache = new(_renderer);
@@ -47,7 +49,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     {
         if(_environmentPreflight is not null)throw new InvalidOperationException("Startup already prepared.");
         Ncma.Rendering.Scene.ScenePostProcessPreflight.Prepare(_renderer!,document.World,document.CaptureSnapshot(),_postRuntime);
-        Ncma.Rendering.Scene.ScenePipelineStartup.Prepare(_renderer!,document.World,document.CaptureSnapshot(),pipelineFactory,_postRuntime,()=>!_disposed);
+        Ncma.Rendering.Scene.ScenePipelineStartup.Prepare(_renderer!,document.World,document.CaptureSnapshot(),pipelineFactory,_postRuntime,()=>!_disposed,_highShadows);
         _environmentPreflight=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer!,_cache!,document.World,assets,document.CaptureSnapshot(),()=>!_disposed);
         if (uiPackage is not null) {
             uiActions?.Validate(uiPackage.Capture());
@@ -65,7 +67,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
         _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,
             pipelineFactory:Ncma.Rendering.Scene.ScenePipelineStartup.Bind(_renderer!,play.Document.World,pipelineFactory,()=>!_disposed),poseKernel:_poseKernel,play:play,
             interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators,
-            environmentPreparationAllowed:()=>!_disposed,postProcessing:_postRuntime); _camera = camera ?? Guid.Empty;_assets=assets;
+            environmentPreparationAllowed:()=>!_disposed,postProcessing:_postRuntime,highShadows:_highShadows); _camera = camera ?? Guid.Empty;_assets=assets;
         _environmentPreflight?.Dispose();_environmentPreflight=null;
         if (_ui is not null && _uiActions is not null) _uiInput = new(_ui.Runtime,play,_uiActions);
     }

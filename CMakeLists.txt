@@ -509,6 +509,46 @@ if(NCMA_BUILD_TESTS)
                 --scene-ui-joint-products-tests "${CMAKE_BINARY_DIR}/m2/plugins"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-joint-products-$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaRenderingTests.SceneUiJointProducts PROPERTIES TIMEOUT 300)
+            add_test(NAME NcmaRenderingTests.ShadowPresets COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-preset-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-presets-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowPresets PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.ShadowFilterImages COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-filter-image-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-filter-images-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowFilterImages PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.ShadowLibrary COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-library-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-library-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowLibrary PROPERTIES TIMEOUT 180)
+            add_test(NAME NcmaRenderingTests.ShadowScene COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-scene-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-scene-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowScene PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.ShadowHosts COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-host-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-hosts-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowHosts PROPERTIES TIMEOUT 180)
+            add_test(NAME NcmaRenderingTests.ShadowAnimation COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-animation-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-animation-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowAnimation PROPERTIES TIMEOUT 240)
+            add_test(NAME NcmaRenderingTests.ShadowBoundaryImages COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-boundary-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-boundary-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowBoundaryImages PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.ShadowJointProducts COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --shadow-joint-products-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-joint-products-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ShadowJointProducts PROPERTIES TIMEOUT 300)
             set_tests_properties(NcmaCandidateGraphicsSmoke PROPERTIES TIMEOUT 60)
             add_test(NAME NcmaPresentationTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Presentation.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Presentation.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")

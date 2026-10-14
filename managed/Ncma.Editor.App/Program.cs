@@ -261,7 +261,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             edit=PrepareCurrentEnvironmentAssets(edit,snapshot);
             var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,_editor.Document.World,edit,snapshot,
                 pipelineFactory:Ncma.Rendering.Scene.ScenePipelineStartup.Bind(_renderer,_editor.Document.World,pipelineFactory,()=>!_closed),poseKernel:PoseFor(snapshot),environmentPreparationAllowed:()=>!_closed,
-                postProcessing:PreparePostRuntime(_editor.Document.World,snapshot));
+                postProcessing:PreparePostRuntime(_editor.Document.World,snapshot),highShadows:PrepareShadowRuntime(_editor.Document.World,snapshot));
             try { _editScene?.Dispose(); } catch { candidate.Dispose(); throw; }
             _editScene=candidate; _editAssets=edit.Assets.Identity;
         }
@@ -274,7 +274,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                 var candidate=new Ncma.Rendering.Scene.SceneRenderSession(_renderer,_sceneCache,play.Document.World,pins,snapshot,
                     pipelineFactory:Ncma.Rendering.Scene.ScenePipelineStartup.Bind(_renderer,play.Document.World,pipelineFactory,()=>!_closed),poseKernel:PoseFor(snapshot),play:play,
                     interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:_characterRuntime,animators:_sceneRuntime?.Animators,environmentPreparationAllowed:()=>!_closed,
-                    postProcessing:PreparePostRuntime(play.Document.World,snapshot));
+                    postProcessing:PreparePostRuntime(play.Document.World,snapshot),highShadows:PrepareShadowRuntime(play.Document.World,snapshot));
                 try { _playScene?.Dispose(); } catch { candidate.Dispose(); throw; }
                 _playScene=candidate; _playSession=play.SessionId; _playAssets=pins.Assets.Identity;
             }
@@ -447,6 +447,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _editScene?.Dispose(); _editScene = null;
         _environmentStartup?.Dispose();_environmentStartup=null;
         _postRuntime?.Dispose();_postRuntime=null;_postLibrary?.Dispose();_postLibrary=null;
+        _shadowLibrary?.Dispose();_shadowLibrary=null;_highShadows=null;
         _sceneCache?.Dispose(); _sceneCache = null;
         _graphPreview?.Dispose();_graphPreview=null;
         _poseKernel?.Dispose(); _poseKernel = null;

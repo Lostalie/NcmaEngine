@@ -274,6 +274,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                     BuildEnvironmentInspector(selected.Id, component.Data.Deserialize<Ncma.Scene.Rendering.EnvironmentLightingData>(DataJson), ref control, ref labelId, writable);
                 if(component.TypeId==Ncma.Scene.Rendering.PostProcessData.TypeId)
                     BuildPostInspector(selected.Id,component.Data.Deserialize<Ncma.Scene.Rendering.PostProcessData>(DataJson),ref control,ref labelId,writable);
+                if(component.TypeId==Ncma.Scene.Rendering.SceneShadowData.TypeId)
+                    BuildShadowInspector(selected.Id,component.Data.Deserialize<Ncma.Scene.Rendering.SceneShadowData>(DataJson),ref control,ref labelId,writable);
                 Button(control++, "Remove " + component.TypeId, "transaction", writable, selected.Id, new { op = "remove_component", objectId = selected.Id, typeId = component.TypeId });
             }
             if (!selected.Components.Any(c => c.TypeId == "ncma.transform"))
@@ -284,6 +286,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                     typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1, data = workspace.Owner.Document.World.Components.Encode(Ncma.Scene.Rendering.EnvironmentLightingData.Off) });
             BuildEnvironmentAuthoring(selected.Id,ref control,ref labelId,writable);
             BuildPostCatalog(selected.Id,ref control,ref labelId,writable);
+            BuildShadowSelection(selected.Id,ref control,writable);
             _bindingOffset = Math.Clamp(_bindingOffset,0,Math.Max(0,(selected.Behaviours.Length-1)/8*8));
             Button(32,"Previous bindings","bindings_previous",_bindingOffset>0);
             Line();

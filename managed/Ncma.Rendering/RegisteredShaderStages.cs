@@ -83,6 +83,7 @@ public abstract class RegisteredShaderPreparation
 }
 public sealed class RegisteredSceneShaders:RegisteredShaderPreparation
 {
+    internal string GeometryPixelHash => _runtime is null ? Programs[1].Descriptor.ContentHash : RuntimeShaderPreparation.Metadata(_runtime).Single(m => m.Role == "geometry.pixel").ContentHash;
     internal CompiledShader[] Programs { get; } = [];
     private readonly RuntimeShaderPackage? _runtime;
     internal RegisteredSceneShaders(RendererSession renderer,RuntimeShaderPackage package,Func<bool> allowed):base(renderer,package.ContentHash,allowed){_runtime=package;Shadows=package.Shadows;}

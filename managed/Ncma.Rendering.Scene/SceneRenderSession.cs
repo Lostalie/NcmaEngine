@@ -52,7 +52,8 @@ public sealed partial class SceneRenderSession : IDisposable
     public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false,
         Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false,SceneRuntimeShaders? shaders=null,
-        SceneEnvironmentRuntimeShaders? environmentShaders=null,Func<bool>? environmentPreparationAllowed=null,PostProcessRuntime? postProcessing=null)
+        SceneEnvironmentRuntimeShaders? environmentShaders=null,Func<bool>? environmentPreparationAllowed=null,PostProcessRuntime? postProcessing=null,
+        PreparedShadowLibrary? highShadows=null)
     {
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
@@ -65,6 +66,7 @@ public sealed partial class SceneRenderSession : IDisposable
             bool hasSkin=startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId));
             bool hasGeometry=hasSkin||startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==StaticMeshData.TypeId));
             _hasGeometry=hasGeometry;_hasSkin=hasSkin;
+            InitializeShadows(startup,highShadows);
             InitializePostProcess(postProcessing,ScenePostProcessState.Read(startup));
             var environment=SceneEnvironmentState.Read(startup);
             if(environment!=SceneEnvironmentState.Read(world,WorldId))throw new ArgumentException("Stale startup environment configuration.");
@@ -95,7 +97,7 @@ public sealed partial class SceneRenderSession : IDisposable
     public bool Submit(ulong frame, uint width, uint height, Guid sceneCamera, SceneCameraView? browserCamera = null,
         float exposure = 1, float ambient = .03f, SceneShadowSettings? shadow = null, GpuViewTarget? target = null, Vector2 origin = default, Vector4 clear = default)
     {
-        Verify();if(_environmentPreparing)throw new InvalidOperationException("Cannot submit during environment preparation.");VerifyPreparedEnvironment();VerifyPreparedPostProcess(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
+        Verify();if(_environmentPreparing)throw new InvalidOperationException("Cannot submit during environment preparation.");VerifyPreparedEnvironment();VerifyPreparedPostProcess();ObserveShadowSelection(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
         IReadOnlyDictionary<Guid,TransformData>? transforms=null;
         if(_interpolateTransforms && _play is not null) {
             if(_play.Document.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
@@ -109,9 +111,10 @@ public sealed partial class SceneRenderSession : IDisposable
         if (view.Camera is not { } camera) { Costs = new(extraction, 0, 0, 0, false); return false; }
         // Pure empty/2D scenes have no pipeline/shadow/HDR initialization. Application may clear via its lightweight path.
         if (view.Geometry.Count == 0 && view.ShadowCasters.Count == 0) { Costs = new(extraction, 0, 0, 0, false); return false; }
-        time = Stopwatch.GetTimestamp(); bool shadows = view.PrimaryLight is { Data.CastShadow: true };
+        VerifyPreparedShadows();
+        time = Stopwatch.GetTimestamp(); bool shadows = SceneShadowPipelinePolicy.EffectiveShadows(_shadowPrepared,view.PrimaryLight is { Data.CastShadow: true });
         Vector3 toLight = view.PrimaryLight is { } light ? -light.Direction : Vector3.UnitY;
-        var settings=shadow??new SceneShadowSettings();
+        var settings=SceneShadowPipelinePolicy.Settings(_shadowPrepared,shadow);
         var lightVP = ShadowVolume.Create(camera, toLight,settings.Distance);
         int geo = _resources.Encode(view.Geometry, camera.ViewProjection, null, _geometry, _diagnostics, view.PrimaryLight?.Data.LayerMask??uint.MaxValue);
         int casters = shadows ? _resources.Encode(view.ShadowCasters, camera.ViewProjection, lightVP, _casters, _diagnostics) : 0;
@@ -121,19 +124,20 @@ public sealed partial class SceneRenderSession : IDisposable
             if(!_postReady||_postViewEmpty||_pipeline is null||_width!=w||_height!=h||_shadows!=shadows||_postInputExposure!=exposure||_ambient!=ambient)
                 throw new InvalidOperationException("Post view requires explicit off-frame preparation.");
         }
-        else if(_environmentShaders is not null) {
+        else if(_environmentShaders is not null||_shadowPrepared is not null) {
             if(_pipeline is null||_width!=w||_height!=h||_shadows!=shadows||_exposure!=exposure||_ambient!=ambient)
                 throw new InvalidOperationException("Environment view requires explicit off-frame preparation.");
         }
         else if (_pipeline is null || _width != w || _height != h || _shadows != shadows)
         {
             var programs=(shadows?_shaders?.Shadowed:_shaders?.Unshadowed)?.Scene??throw new InvalidOperationException("Scene shaders were not prepared.");
-            var candidate = new ScenePipelineSession(_renderer, _pipelineFactory(exposure, ambient, shadows), w, h,shaders:programs);
+            var candidate = new ScenePipelineSession(_renderer, CreateSelectedPipeline(exposure, ambient, shadows,_shadowPrepared,ShaderProfile.Scene3D), w, h,shaders:programs);
             try { _pipeline?.Dispose(); } catch { candidate.Dispose(); throw; }
             _pipeline = candidate; _width = w; _height = h; _exposure = exposure; _ambient = ambient; _shadows = shadows;
+            CommitShadowSelection(_shadowPrepared);
         }
         else if (_exposure != exposure || _ambient != ambient) {
-            _pipeline.Configure(_pipelineFactory(exposure,ambient,shadows)); _exposure=exposure; _ambient=ambient;
+            _pipeline.Configure(CreateSelectedPipeline(exposure,ambient,shadows,_shadowPrepared,ShaderProfile.Scene3D)); _exposure=exposure; _ambient=ambient;
         }
         Vector4 color = view.PrimaryLight is { } l ? new(l.Data.Red, l.Data.Green, l.Data.Blue, l.Data.Intensity) : new(1, 1, 1, 0);
         double encoding = Stopwatch.GetElapsedTime(time).TotalMilliseconds;

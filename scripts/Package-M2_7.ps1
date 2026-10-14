@@ -94,6 +94,10 @@ function Add-Shaders([string]$destination,[string]$profile) {
     $postFiles = @(Get-ChildItem -LiteralPath $postDirectory -File)
     if ($postFiles.Count -ne 26) { throw 'Expected 24 Tone packages, Bloom NPH1 and one post library index.' }
     foreach ($file in $postFiles) { Copy-Exact $file.FullName (Join-Path $destination ('assets\postprocess\' + $file.Name)) }
+    $shadowDirectory = Join-Path $cooked 'assets\shadows'
+    $shadowFiles = @(Get-ChildItem -LiteralPath $shadowDirectory -File)
+    if ($shadowFiles.Count -ne 5) { throw 'Expected four High shadow packages and one exact shadow library index.' }
+    foreach ($file in $shadowFiles) { Copy-Exact $file.FullName (Join-Path $destination ('assets\shadows\' + $file.Name)) }
 }
 Publish-Candidate 'managed\Ncma.Editor.App\Ncma.Editor.App.csproj' $editor
 Publish-Candidate 'managed\Ncma.Asset.ImportWorker\Ncma.Asset.ImportWorker.csproj' (Join-Path $editor 'tools\import-worker')

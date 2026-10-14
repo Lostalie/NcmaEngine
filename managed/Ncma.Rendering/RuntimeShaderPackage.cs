@@ -77,6 +77,29 @@ public sealed class RuntimeShaderPackage
         SHA256.HashData(bytes.AsSpan(HeaderBytes)).CopyTo(bytes,28);
         return Preflight(bytes,Hash(bytes));
     }
+    // Source-free composition, not compilation/admission/permission. Only the geometry pixel
+    // comes from replacement. Other non-Tone programs must be identical; Tone stays from basis.
+    // Actual whole-group reflection and exact host-approved file closure remain mandatory.
+    public static RuntimeShaderPackage ComposeGeometryPixel(RuntimeShaderPackage basis,RuntimeShaderPackage replacement)
+    {
+        ArgumentNullException.ThrowIfNull(basis);ArgumentNullException.ThrowIfNull(replacement);
+        if(basis.Profile is not (ShaderProfile.Scene3D or ShaderProfile.SceneEnvironment)||basis.Profile!=replacement.Profile||
+            !basis.Shadows||!replacement.Shadows||basis.Skinning!=replacement.Skinning)Fail("composition_profile");
+        var pixel=basis.Profile==ShaderProfile.SceneEnvironment?RuntimeShaderRole.EnvironmentGeometryPixel:RuntimeShaderRole.GeometryPixel;
+        foreach(var entry in basis._entries.Where(e=>e.Metadata.Role!=pixel&&e.Metadata.Role is not (RuntimeShaderRole.ToneVertex or RuntimeShaderRole.TonePixel)))
+            if(!basis.CopyBytecode(entry.Metadata.Role).AsSpan().SequenceEqual(replacement.CopyBytecode(entry.Metadata.Role)))Fail("composition_non_pixel");
+        using var stream=new MemoryStream();stream.Write(new byte[HeaderBytes]);
+        foreach(var original in basis._entries){
+            var owner=original.Metadata.Role==pixel?replacement:basis;
+            var entry=owner._entries.Single(e=>e.Metadata.Role==original.Metadata.Role);
+            int length=checked(EntryHeaderBytes+entry.Metadata.BytecodeBytes);
+            if(stream.Length+length>MaxBytes)Fail("budget");
+            stream.Write(owner._bytes.AsSpan(entry.Offset-EntryHeaderBytes,length));
+        }
+        byte[] bytes=stream.ToArray();basis._bytes.AsSpan(0,28).CopyTo(bytes);Write(bytes,24,(uint)bytes.Length);
+        SHA256.HashData(bytes.AsSpan(HeaderBytes)).CopyTo(bytes,28);
+        return Preflight(bytes,Hash(bytes));
+    }
     // expectedHash MUST come from a separately trusted project/package selection, not the blob.
     // Pure managed: before plugin/renderer/gameplay initialization, no native calls or author source.
     public static RuntimeShaderPackage Preflight(ReadOnlySpan<byte> bytes,string expectedHash)

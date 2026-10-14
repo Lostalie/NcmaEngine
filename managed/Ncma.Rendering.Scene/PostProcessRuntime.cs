@@ -37,13 +37,18 @@ public sealed class PostProcessRuntime : IDisposable
         Verify();if(_preparing)throw new InvalidOperationException("Post runtime preparation is nonreentrant.");
         _preparing=true;try{_prepared.VerifyFor(renderer);}finally{_preparing=false;}
     }
-    internal PreparedPostView Prepare(PostProcessData settings,uint width,uint height,bool environment,bool shadows,bool skin)
+    internal PreparedPostView Prepare(PostProcessData settings,uint width,uint height,bool environment,bool shadows,bool skin,PreparedShadowLibrary? highShadows=null)
     {
         VerifyFor(_renderer);settings=_modules.Validate(settings);if(!settings.Enabled)throw new ArgumentException("Off requires original scene programs, not post preparation.");
         _preparing=true;
         try {
             var scene=environment?null:_prepared.SceneTone(_renderer,settings.ToneModule,shadows,skin).Scene;
             var env=environment?_prepared.EnvironmentTone(_renderer,settings.ToneModule,shadows,skin).Scene:null;
+            if(highShadows is not null){
+                if(!shadows)throw new ArgumentException("Unshadowed view cannot select High shadow programs.");
+                var high=highShadows.Resolve(_library.Tone(settings.ToneModule,environment?ShaderProfile.SceneEnvironment:ShaderProfile.Scene3D,true,skin));
+                scene=high.Scene;env=high.Environment;
+            }
             var key=(settings,width,height);
             if(!_compositions.TryGetValue(key,out var value)) {
                 ComposedPostProcess? composed;

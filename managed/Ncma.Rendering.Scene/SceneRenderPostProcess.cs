@@ -34,25 +34,27 @@ public sealed partial class SceneRenderSession
         try {
             runtime.VerifyFor(_renderer);
             var value=runtime.Validate(ScenePostProcessState.Read(_world,WorldId));
+            var selection=ObserveShadowSelection();
             var view=_extractor.Extract(_resources.Metadata,browserCamera is null?sceneCamera:Guid.Empty,width,height,browserCamera,_animation is not null);
             // A culled/missing-camera view has no installed candidate. Do not stamp old GPU state
             // as the newly requested settings; returning geometry must prepare it first.
             if(view.Camera is not {} camera||view.Geometry.Count==0&&view.ShadowCasters.Count==0){_postObserved=value;_postObservedRevision=_world.Revision;_postViewEmpty=true;_postReady=false;return;}
-            bool shadows=view.PrimaryLight is {Data.CastShadow:true};uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
+            bool shadows=SceneShadowPipelinePolicy.EffectiveShadows(selection,view.PrimaryLight is {Data.CastShadow:true});uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
             float effective=value.Enabled?exposure*SceneTonePresets.ExposureFromStops(value.ExposureEv):exposure;
             if(!float.IsFinite(effective)||effective is <.01f or >16)throw new ArgumentException("Combined Tone exposure must remain within the existing [.01,16] contract.");
-            if(_pipeline is not null&&_postReady&&value==_postPrepared&&_postEnvironment==_environment&&_width==w&&_height==h&&_shadows==shadows&&_postInputExposure==exposure&&_ambient==ambient){_postObserved=value;_postObservedRevision=_world.Revision;return;}
-            PreparedPostView? post=value.Enabled?runtime.Prepare(value,w,h,_environmentShaders is not null,shadows,_hasSkin):null;
+            if(_pipeline is not null&&_postReady&&value==_postPrepared&&_postEnvironment==_environment&&_width==w&&_height==h&&_shadows==shadows&&_postInputExposure==exposure&&_ambient==ambient&&_shadowPrepared==selection){_postObserved=value;_postObservedRevision=_world.Revision;CommitShadowSelection(selection);return;}
+            var high=shadows&&selection?.Quality==Ncma.Assets.SceneShadowQuality.High?(_highShadows??throw new InvalidOperationException("Checked High shadow library required.")):null;
+            PreparedPostView? post=value.Enabled?runtime.Prepare(value,w,h,_environmentShaders is not null,shadows,_hasSkin,high):null;
             ScenePipelineSession? candidate=null;
             try {
                 candidate=runtime.Install(()=>{
                     ScenePipelineSession? created=null;
                     try {
-                        var pipeline=_pipelineFactory(effective,ambient,shadows);
+                        var pipeline=CreateSelectedPipeline(effective,ambient,shadows,selection,_environmentShaders is null?ShaderProfile.Scene3D:ShaderProfile.SceneEnvironment);
                         if(_environmentShaders is not null) {
-                            created=new(_renderer,pipeline,w,h,environmentShaders:post?.Environment??(shadows?_environmentShaders.Shadowed:_environmentShaders.Unshadowed).Scene);
+                            created=new(_renderer,pipeline,w,h,environmentShaders:post?.Environment??SelectShadowPrograms(null,shadows?_environmentShaders.Shadowed:_environmentShaders.Unshadowed,shadows,selection).Environment);
                             created.ConfigureEnvironment(_environmentGpu?.Resource,_environment.ToConfiguration(),EnvironmentApproved);
-                        } else created=new(_renderer,pipeline,w,h,shaders:post?.Scene??(shadows?_shaders!.Shadowed:_shaders!.Unshadowed).Scene);
+                        } else created=new(_renderer,pipeline,w,h,shaders:post?.Scene??SelectShadowPrograms(shadows?_shaders!.Shadowed:_shaders!.Unshadowed,null,shadows,selection).Scene);
                         if(post?.Plan is not null)created.ConfigurePostProcess(post.Plan,post.Programs,runtime.BindingAllowed);
                         var result=created;created=null;return result;
                     }finally{created?.Dispose();}
@@ -61,6 +63,7 @@ public sealed partial class SceneRenderSession
                 _pipeline?.Dispose();_pipeline=candidate;candidate=null;
                 _width=w;_height=h;_shadows=shadows;_exposure=effective;_ambient=ambient;_postInputExposure=exposure;
                 _postPrepared=value;_postObserved=value;_postObservedRevision=_world.Revision;_postEnvironment=_environment;_postViewEmpty=false;_postReady=true;
+                CommitShadowSelection(selection);
             }finally{candidate?.Dispose();}
         }finally{_environmentPreparing=false;}
     }

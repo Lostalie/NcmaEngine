@@ -19,6 +19,18 @@ public sealed class RenderGraph
     private RenderResourceId? _output;
     private ulong _revision;
     private CompiledRenderGraph? _cache;
+    private string? _requiredSceneGeometryPixel;
+    // Public exact program dependency. The compiled graph carries it through wrappers;
+    // actual scene installation/replacement still verifies reflection and trusted approval.
+    public void RequireSceneGeometryPixel(ShaderDescriptor pixel)
+    {
+        ArgumentNullException.ThrowIfNull(pixel);
+        if (pixel.Stage != ShaderStage.Pixel || pixel.CopyDefinition().Profile is not (ShaderProfile.Scene3D or ShaderProfile.SceneEnvironment))
+            Fail("shader_dependency", "Exact scene geometry pixel descriptor required.");
+        if (_requiredSceneGeometryPixel is not null && _requiredSceneGeometryPixel != pixel.ContentHash)
+            Fail("shader_dependency", "Conflicting scene geometry pixel requirements.");
+        if (_requiredSceneGeometryPixel != pixel.ContentHash) { _requiredSceneGeometryPixel = pixel.ContentHash; _revision++; }
+    }
     private sealed record Pass(string Name, RenderOperation Operation, RenderResourceId[] Reads, RenderResourceId[] Writes, int[] Dependencies, uint Shader, float[] Parameters);
     public RenderResourceId AddResource(RenderResource resource)
     {
@@ -105,7 +117,9 @@ public sealed class RenderGraph
                 Fail("resource_dimensions","Scene output versions share one physical target.");
         }
         var operations = order.Select(i => new CompiledRenderGraph.Operation(_passes[i].Name, _passes[i].Operation, _passes[i].Shader, (float[])_passes[i].Parameters.Clone())).ToArray();
-        _cache = new(_revision, capabilities, operations, _resources.ToArray()); return _cache;
+        if (_requiredSceneGeometryPixel is not null && !_passes.Any(p => p.Operation == RenderOperation.SceneGeometry))
+            Fail("shader_dependency", "Geometry pixel requirement needs a scene geometry pass.");
+        _cache = new(_revision, capabilities, operations, _resources.ToArray(), _requiredSceneGeometryPixel); return _cache;
     }
     private void ValidateId(RenderResourceId id) { if (id.Index < 0 || id.Index >= _resources.Count) Fail("resource_handle", "Unknown logical resource."); }
     private void ValidateContract(Pass p, RenderCapabilities caps)
@@ -150,17 +164,18 @@ public sealed class CompiledRenderGraph
     public bool RequiresReferenceResources { get; }
     public bool RequiresResourceService { get; }
     public bool RequiresSceneService { get; }
+    public string? RequiredSceneGeometryPixelHash { get; }
     internal ScenePassV4[] SceneOperations => _operations.Select(p => new ScenePassV4 { Operation = (uint)p.Code, Parameter = p.Parameters[0] }).ToArray();
     internal ReadOnlySpan<float> ResourceParameters => _operations[0].Parameters;
     public IReadOnlyList<string> PassNames { get; }
     public IReadOnlyList<RenderResource> Resources { get; }
-    internal CompiledRenderGraph(ulong revision, RenderCapabilities capabilities, Operation[] operations, RenderResource[] resources)
+    internal CompiledRenderGraph(ulong revision, RenderCapabilities capabilities, Operation[] operations, RenderResource[] resources, string? requiredSceneGeometryPixel)
     {
         var output=resources.First(r=>r.Role is RenderRole.Output or RenderRole.ResourceOutput or RenderRole.SceneOutput);Width=output.Width;Height=output.Height;
         RequiresReferenceResources=operations.Any(p=>p.Code is RenderOperation.Shadow or RenderOperation.Geometry or RenderOperation.ToneMap);
         RequiresResourceService=operations.Any(p=>p.Code==RenderOperation.ResourceGeometry);
         RequiresSceneService=operations.Any(p=>p.Code is RenderOperation.SceneShadow or RenderOperation.SceneGeometry or RenderOperation.SceneTone);
-        Revision = revision; Capabilities = capabilities; _operations = operations;
+        Revision = revision; Capabilities = capabilities; _operations = operations; RequiredSceneGeometryPixelHash = requiredSceneGeometryPixel;
         PassNames = Array.AsReadOnly(operations.Select(p => p.Name).ToArray()); Resources = Array.AsReadOnly(resources);
     }
     internal unsafe void Encode(Span<RenderPass> destination, ulong resources)

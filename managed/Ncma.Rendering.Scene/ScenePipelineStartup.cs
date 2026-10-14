@@ -23,10 +23,12 @@ public static class ScenePipelineStartup
     // Viewport-sized candidates are still validated again; this is not a code sandbox,
     // future-callback guarantee or permission to call a factory inside a simulation tick.
     public static void Prepare(RendererSession renderer, World world, SceneDocumentSnapshot scene,
-        Func<float, float, bool, RenderPipeline>? factory, PostProcessRuntime? post, Func<bool> allowed)
+        Func<float, float, bool, RenderPipeline>? factory, PostProcessRuntime? post, Func<bool> allowed,PreparedShadowLibrary? highShadows=null)
     {
-        if (factory is null) return;
         using var read = SceneEnvironmentState.BeginRead(world, world.Identity);
+        var shadowSelection=SceneShadowState.Read(world,world.Identity);
+        if(shadowSelection!=SceneShadowState.Read(scene))throw new ArgumentException("Stale pipeline startup shadow selection.");
+        if (factory is null&&shadowSelection is null) return;
         if (!ScenePostProcessPreflight.HasGeometry(scene)) return;
         var settings = world.GetObjects().Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
         if (settings.Length > 1) throw new ArgumentException("Ambiguous render configuration.");
@@ -37,12 +39,13 @@ public static class ScenePipelineStartup
         if (environment != SceneEnvironmentState.Read(scene).Enabled) throw new ArgumentException("Stale pipeline startup environment.");
         bool skin = scene.Objects.Any(o => o.Components.Any(c => c.TypeId == SkinnedMeshData.TypeId));
         float exposure = value.Enabled ? config.Exposure * SceneTonePresets.ExposureFromStops(value.ExposureEv) : config.Exposure;
-        var bound = Bind(renderer, world, factory, allowed)!;
-        foreach (bool shadows in new[] { false, true })
+        var bound = Bind(renderer, world, factory, allowed);
+        foreach (bool shadows in shadowSelection?.Quality==Ncma.Assets.SceneShadowQuality.Off?new[]{false}:new[] { false, true })
         {
             renderer.VerifyEnvironmentPreparation(allowed);
+            var high=shadows&&shadowSelection?.Quality==Ncma.Assets.SceneShadowQuality.High?(highShadows??throw new ArgumentException("High startup requires checked shadow library.")):null;
             var prepared = value.Enabled ? (post ?? throw new ArgumentException("Checked post runtime required."))
-                .Prepare(value, 16, 16, environment, shadows, skin) : null;
+                .Prepare(value, 16, 16, environment, shadows, skin,high) : null;
             RegisteredSceneShaders? shaders = prepared?.Scene;
             RegisteredEnvironmentSceneShaders? environmentShaders = prepared?.Environment;
             if (prepared is null)
@@ -50,17 +53,20 @@ public static class ScenePipelineStartup
                 if (environment)
                 {
                     var pair = SceneEnvironmentRuntimeShaders.PrepareDefault(renderer, skin, allowed);
-                    environmentShaders = (shadows ? pair.Shadowed : pair.Unshadowed).Scene;
+                    var variant=shadows ? pair.Shadowed : pair.Unshadowed;
+                    environmentShaders = high is null?variant.Scene:high.Resolve(variant.Package).Environment;
                 }
                 else
                 {
                     var pair = SceneRuntimeShaders.PrepareDefault(renderer, skin, allowed);
-                    shaders = (shadows ? pair.Shadowed : pair.Unshadowed).Scene;
+                    var variant=shadows ? pair.Shadowed : pair.Unshadowed;
+                    shaders = high is null?variant.Scene:high.Resolve(variant.Package).Scene;
                 }
             }
             ScenePipelineSession Create()
             {
-                var candidate = new ScenePipelineSession(renderer, bound(exposure, config.Ambient, shadows), 16, 16,
+                var pipeline=SceneShadowPipelinePolicy.Create(bound,exposure,config.Ambient,shadows,shadowSelection,environment?ShaderProfile.SceneEnvironment:ShaderProfile.Scene3D);
+                var candidate = new ScenePipelineSession(renderer, pipeline, 16, 16,
                     shaders: shaders, environmentShaders: environmentShaders);
                 try
                 {

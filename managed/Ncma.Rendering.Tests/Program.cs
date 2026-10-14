@@ -318,6 +318,16 @@ internal static unsafe partial class Program
         if(args.Length==4 && args[0]=="--graph-root-player-child")
             return Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
+            if (args.SequenceEqual(new[] { "--shadow-preset-contract-tests" })) { ShadowPresetContracts(); return 0; }
+            if (args.Length == 3 && args[0] == "--shadow-preset-tests") return ShadowPresetTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-filter-image-tests") return ShadowFilterImageTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-library-tests") return ShadowLibraryTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-scene-tests") return ShadowSceneTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-host-tests") return ShadowHostTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-animation-tests") return ShadowAnimationTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-boundary-tests") return ShadowBoundaryImageTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--shadow-joint-products-tests") return SceneUiJointProductTests(args[1], args[2],true);
+            if (args.Length == 3 && args[0] == "--shadow-library-preflight") return ShadowLibraryChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--shader-compile-tests") return ShaderCompileTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-tone-tests") return RegisteredToneTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--tone-preset-tests") return TonePresetTests(args[1], args[2]);

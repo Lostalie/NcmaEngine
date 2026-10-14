@@ -16,13 +16,23 @@ internal static class SceneUiJointEditorProbe
         using var e=new UiPublicationProductEvidence(requestPath);string[] native=[];var costs=new List<object>();int builds=0;byte[]? defaultImage=null;
         foreach(int mode in new[]{0,1,2}){
             var context=ProjectContext.Load(e.Project);
-            RenderPipeline Factory(float exposure,float ambient,bool shadows){builds++;return mode==1?SceneCustomizationExamples.ReplaceGeometryStage(exposure*.5f,ambient,shadows):SceneCustomizationExamples.ReplacePipeline(exposure*.5f,ambient,shadows);}
+            bool high=ShadowJointPipelines.SelectedHigh(context);
+            RenderPipeline Factory(float exposure,float ambient,bool shadows){builds++;return high?ShadowJointPipelines.Create(mode,exposure*.5f,ambient,shadows):mode==1?SceneCustomizationExamples.ReplaceGeometryStage(exposure*.5f,ambient,shadows):SceneCustomizationExamples.ReplacePipeline(exposure*.5f,ambient,shadows);}
             using(var editor=new CandidatePresentation(e.Plugins,context,true,false,false,pipelineFactory:mode==0?null:Factory)){
                 editor.Start();ulong frame=0;uint width=0;byte[] Draw(bool capture=true){byte[]? pixels=null;if(capture)editor.CaptureNextCompositeViewportForVerification((p,w,h)=>{pixels=p;width=w;});editor.PumpPlatform();var f=new FrameContext(++frame,0);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);return pixels??[];}
                 Draw();byte[] baseline=Draw();void Hud(byte[] pixels){float scale=width/editor.VerificationPresenter.Viewport.Width;int at=((int)(20*scale)*(int)width+(int)(20*scale))*4;e.Pass(Math.Abs(pixels[at]-51)<=1&&Math.Abs(pixels[at+1]-102)<=1&&Math.Abs(pixels[at+2]-204)<=1,"final HUD color after full scene Tone");}
                 Hud(baseline);if(mode==0)defaultImage=baseline;else e.Pass(!baseline.SequenceEqual(defaultImage!),"custom pipeline changes actual joint image");
                 var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;
                 e.Pass(renderer.SkinStats.Meshes>0&&renderer.SkinStats.Batches>0&&renderer.PipelineStats.GeometryDraws>0&&renderer.PipelineStats.ShadowDraws>0&&renderer.EnvironmentStats.Live>0&&renderer.PostStats.Bindings==1&&renderer.UiTargetStats.Targets==1,"all real FBX skin geometry shadow IBL Bloom HUD subsystems live");
+                if(high){
+                    var selected=owner.Document.World.GetObjects().Single(o=>o.Has<SceneShadowData>());Guid shadowId=selected.PersistentId;
+                    var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=shadowId,typeId=SceneShadowData.TypeId,version=1,data=owner.Document.World.Components.Encode(new SceneShadowData(1,Ncma.Assets.SceneShadowQuality.Off))}}}));
+                    e.Pass(edit.Invoke(command).Status=="denied","joint shadow default Agent denied");
+                    e.Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[shadowId],componentScope:[SceneShadowData.TypeId])).Changed,"joint scoped shadow Off");
+                    ulong casts=renderer.PipelineStats.ShadowDraws;var off=Draw();Hud(off);File.WriteAllText(Path.Combine(e.Output,$"shadow-transition-{mode}.json"),JsonSerializer.Serialize(new{before=casts,after=renderer.PipelineStats.ShadowDraws,equal=off.SequenceEqual(baseline)}));e.Pass(renderer.PipelineStats.ShadowDraws==casts&&!off.SequenceEqual(baseline),"Off removes real animated shadow and map, retains IBL/Bloom/HUD");
+                    workspace.History(workspace.Stamp,false);e.Pass(Draw().SequenceEqual(baseline),"High exact joint Undo");
+                    workspace.History(workspace.Stamp,true);e.Pass(Draw().SequenceEqual(off),"Off exact joint Redo");workspace.History(workspace.Stamp,false);Draw();
+                }
                 var post=owner.Document.World.GetObjects().Single(o=>o.Has<PostProcessData>());Guid id=post.PersistentId;var original=post.Get<PostProcessData>();
                 void Set(PostProcessData value){var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=id,typeId=PostProcessData.TypeId,version=1,data=owner.Document.World.Components.Encode(value)}}}));e.Pass(edit.Invoke(command).Status=="denied","default Agent cannot mutate");e.Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[id],componentScope:[PostProcessData.TypeId])).Changed,"original scoped joint command");}
                 Set(original with{ExposureEv=-1});var changed=Draw();Hud(changed);e.Pass(!changed.SequenceEqual(baseline),"scene exposure changes without re-toning HUD");
@@ -53,7 +63,7 @@ internal static class SceneUiJointEditorProbe
             }
             e.Pass(EnvironmentProductEvidence.NativePaths(e.Root).Length==0,"all resources unload after each mode");
         }
-        foreach(string name in new[]{"bad-model","bad-environment","bad-ui","bad-post-module"}){
+        foreach(string name in new[]{"bad-model","bad-environment","bad-ui","bad-post-module"}.Concat(ShadowJointPipelines.SelectedHigh(ProjectContext.Load(e.Project))?new[]{"bad-shadow-quality","bad-shadow-library"}:[])){
             bool rejected=false;using(var editor=new CandidatePresentation(e.Plugins,ProjectContext.Load(Path.Combine(Path.GetDirectoryName(e.Project)!,name+".ncmaproject")),true,false,false)){
                 try{editor.Start();}catch(Exception error)when(error is ArgumentException or InvalidOperationException or IOException or NotSupportedException){rejected=true;}
             }

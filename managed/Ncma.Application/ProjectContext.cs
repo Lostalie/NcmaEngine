@@ -8,7 +8,7 @@ public sealed record ProjectPlugin(string Id, string Path);
 public sealed record ProjectConfiguration(int SchemaVersion, Guid ProjectId, string Name,
     string StartupScene, string GameplayAssembly, string Renderer, ProjectPlugin[] Plugins, bool PhysicsEnabled = false, Guid? SceneCamera = null, string? AssetPackage = null,
     Ncma.Assets.ShaderPackageSelection? ShaderPackages = null, Ncma.Assets.PostProcessLibraryReference? PostProcessLibrary = null,
-    Ncma.Assets.UiPackageReference? UiPackage = null);
+    Ncma.Assets.UiPackageReference? UiPackage = null, Ncma.Assets.ShadowLibraryReference? ShadowLibrary = null);
 public sealed class ProjectContext
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
@@ -27,7 +27,7 @@ public sealed class ProjectContext
             string.IsNullOrWhiteSpace(configuration.Name) || configuration.Name.Length > 256 ||
             configuration.Renderer is not ("Direct3D11" or "Vulkan" or "Null") || configuration.Plugins is null ||
             configuration.Plugins.Length > 64 || configuration.SceneCamera == Guid.Empty) throw new ArgumentException("Invalid project configuration.");
-        _configuration = configuration with { Plugins = (ProjectPlugin[])configuration.Plugins.Clone(), ShaderPackages = configuration.ShaderPackages?.CopyValidated(), PostProcessLibrary = configuration.PostProcessLibrary?.Validate(), UiPackage = configuration.UiPackage?.Validate() };
+        _configuration = configuration with { Plugins = (ProjectPlugin[])configuration.Plugins.Clone(), ShaderPackages = configuration.ShaderPackages?.CopyValidated(), PostProcessLibrary = configuration.PostProcessLibrary?.Validate(), UiPackage = configuration.UiPackage?.Validate(), ShadowLibrary = configuration.ShadowLibrary?.Validate() };
         StartupScenePath = Resolve(configuration.StartupScene, ".ncmascene");
         if (new FileInfo(StartupScenePath).Length > Ncma.Scene.SceneDocumentCodec.MaxBytes) throw new ArgumentException("Startup scene exceeds budget.");
         _ = Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(StartupScenePath));
