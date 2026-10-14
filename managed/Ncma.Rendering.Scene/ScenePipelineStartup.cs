@@ -1,0 +1,115 @@
+using Ncma.Runtime;
+using Ncma.Scene;
+using Ncma.Scene.Rendering;
+
+namespace Ncma.Rendering.Scene;
+
+// Trusted C# startup only. Not serialized, dynamically loaded or exposed through an Agent.
+// Both the factory and Build callback run at an exact committed, read-only World boundary.
+public static class ScenePipelineStartup
+{
+    public static Func<float, float, bool, RenderPipeline>? Bind(RendererSession renderer, World world,
+        Func<float, float, bool, RenderPipeline>? factory, Func<bool> allowed)
+    {
+        ArgumentNullException.ThrowIfNull(renderer);
+        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(allowed);
+        if (factory is null) return null;
+        var binding = new Binding(renderer, world, factory, allowed);
+        return binding.Create;
+    }
+
+    // Validate both shadow variants with real bounded bindings BEFORE gameplay is loaded.
+    // Viewport-sized candidates are still validated again; this is not a code sandbox,
+    // future-callback guarantee or permission to call a factory inside a simulation tick.
+    public static void Prepare(RendererSession renderer, World world, SceneDocumentSnapshot scene,
+        Func<float, float, bool, RenderPipeline>? factory, PostProcessRuntime? post, Func<bool> allowed)
+    {
+        if (factory is null) return;
+        using var read = SceneEnvironmentState.BeginRead(world, world.Identity);
+        if (!ScenePostProcessPreflight.HasGeometry(scene)) return;
+        var settings = world.GetObjects().Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
+        if (settings.Length > 1) throw new ArgumentException("Ambiguous render configuration.");
+        var config = settings.Length == 0 ? RenderConfiguration.Default(Guid.Empty) : settings[0].Get<RenderConfiguration>();
+        var value = ScenePostProcessState.Read(world, world.Identity);
+        if (value != ScenePostProcessState.Read(scene)) throw new ArgumentException("Stale pipeline startup post settings.");
+        bool environment = SceneEnvironmentState.Read(world, world.Identity).Enabled;
+        if (environment != SceneEnvironmentState.Read(scene).Enabled) throw new ArgumentException("Stale pipeline startup environment.");
+        bool skin = scene.Objects.Any(o => o.Components.Any(c => c.TypeId == SkinnedMeshData.TypeId));
+        float exposure = value.Enabled ? config.Exposure * SceneTonePresets.ExposureFromStops(value.ExposureEv) : config.Exposure;
+        var bound = Bind(renderer, world, factory, allowed)!;
+        foreach (bool shadows in new[] { false, true })
+        {
+            renderer.VerifyEnvironmentPreparation(allowed);
+            var prepared = value.Enabled ? (post ?? throw new ArgumentException("Checked post runtime required."))
+                .Prepare(value, 16, 16, environment, shadows, skin) : null;
+            RegisteredSceneShaders? shaders = prepared?.Scene;
+            RegisteredEnvironmentSceneShaders? environmentShaders = prepared?.Environment;
+            if (prepared is null)
+            {
+                if (environment)
+                {
+                    var pair = SceneEnvironmentRuntimeShaders.PrepareDefault(renderer, skin, allowed);
+                    environmentShaders = (shadows ? pair.Shadowed : pair.Unshadowed).Scene;
+                }
+                else
+                {
+                    var pair = SceneRuntimeShaders.PrepareDefault(renderer, skin, allowed);
+                    shaders = (shadows ? pair.Shadowed : pair.Unshadowed).Scene;
+                }
+            }
+            ScenePipelineSession Create()
+            {
+                var candidate = new ScenePipelineSession(renderer, bound(exposure, config.Ambient, shadows), 16, 16,
+                    shaders: shaders, environmentShaders: environmentShaders);
+                try
+                {
+                    if (prepared?.Plan is not null) candidate.ConfigurePostProcess(prepared.Plan, prepared.Programs, post!.BindingAllowed);
+                    return candidate;
+                }
+                catch { candidate.Dispose(); throw; }
+            }
+            using var binding = post is null ? Create() : post.Install(Create);
+        }
+    }
+
+    private sealed class Binding(RendererSession renderer, World world,
+        Func<float, float, bool, RenderPipeline> factory, Func<bool> allowed)
+    {
+        private readonly Guid _identity = world.Identity;
+        private readonly int _owner = Environment.CurrentManagedThreadId;
+        private bool _building;
+        internal RenderPipeline Create(float exposure, float ambient, bool shadows) => new BoundPipeline(this, exposure, ambient, shadows);
+        private RenderGraph Build(float exposure, float ambient, bool shadows, uint width, uint height)
+        {
+            if (_owner != Environment.CurrentManagedThreadId || _building)
+                throw new InvalidOperationException("Owner-thread, nonreentrant scene pipeline preparation required.");
+            using var read = SceneEnvironmentState.BeginRead(world, _identity);
+            _building = true;
+            try
+            {
+                renderer.VerifyEnvironmentPreparation(allowed);
+                RenderGraph graph;
+                renderer.BeginToneOperation();
+                try
+                {
+                    graph = (factory(exposure, ambient, shadows) ?? throw new ArgumentException("Null scene pipeline."))
+                        .Build(width, height) ?? throw new ArgumentException("Null scene graph.");
+                    var plan = graph.Compile(RenderCapabilities.SceneDx11);
+                    if (!plan.RequiresSceneService || plan.Width != width || plan.Height != height ||
+                        plan.Resources.Any(r => r.Role == RenderRole.SceneShadow) != shadows ||
+                        plan.SceneOperations.Count(p => p.Operation == (uint)RenderOperation.SceneTone) != 1)
+                        throw new ArgumentException("Formal scene pipeline requires exact dimensions/shadow variant and one final Tone.");
+                }
+                finally { renderer.EndToneOperation(); }
+                renderer.VerifyEnvironmentPreparation(allowed);
+                return graph;
+            }
+            finally { _building = false; }
+        }
+        private sealed class BoundPipeline(Binding owner, float exposure, float ambient, bool shadows) : RenderPipeline
+        {
+            public override RenderGraph Build(uint width, uint height) => owner.Build(exposure, ambient, shadows, width, height);
+        }
+    }
+}

@@ -4,7 +4,7 @@ using Ncma.Platform;
 using Ncma.Rendering;
 namespace Ncma.Player.App;
 
-internal sealed class PlayerPresentation(string plugins, bool visible) : IDisposable
+internal sealed class PlayerPresentation(string plugins, bool visible, Func<float,float,bool,RenderPipeline>? pipelineFactory = null) : IDisposable
 {
     private readonly PluginLoader _loader = new();
     private PlatformWindow? _window;
@@ -42,6 +42,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
     {
         if(_environmentPreflight is not null)throw new InvalidOperationException("Startup already prepared.");
         Ncma.Rendering.Scene.ScenePostProcessPreflight.Prepare(_renderer!,document.World,document.CaptureSnapshot(),_postRuntime);
+        Ncma.Rendering.Scene.ScenePipelineStartup.Prepare(_renderer!,document.World,document.CaptureSnapshot(),pipelineFactory,_postRuntime,()=>!_disposed);
         _environmentPreflight=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer!,_cache!,document.World,assets,document.CaptureSnapshot(),()=>!_disposed);
     }
     public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera,Ncma.Animation.IRootMotionPresentation? rootMotion=null,Ncma.Scene.Rendering.SceneAnimatorRuntime? animators=null)
@@ -52,7 +53,8 @@ internal sealed class PlayerPresentation(string plugins, bool visible) : IDispos
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
             _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
         }
-        _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,poseKernel:_poseKernel,play:play,
+        _scene = new(_renderer!, _cache!, play.Document.World, assets, snapshot,
+            pipelineFactory:Ncma.Rendering.Scene.ScenePipelineStartup.Bind(_renderer!,play.Document.World,pipelineFactory,()=>!_disposed),poseKernel:_poseKernel,play:play,
             interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators,
             environmentPreparationAllowed:()=>!_disposed,postProcessing:_postRuntime); _camera = camera ?? Guid.Empty;_assets=assets;
         _environmentPreflight?.Dispose();_environmentPreflight=null;

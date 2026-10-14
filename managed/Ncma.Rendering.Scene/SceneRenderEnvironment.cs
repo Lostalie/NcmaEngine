@@ -97,7 +97,8 @@ public sealed partial class SceneRenderSession
     public void PrepareEnvironmentView(uint width,uint height,Guid sceneCamera,SceneCameraView? browserCamera=null,float exposure=1,float ambient=.03f)
     {
         Verify();if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
-        VerifyPreparedEnvironment();if(_postRuntime is not null){PreparePostView(width,height,sceneCamera,browserCamera,exposure,ambient);return;}if(_environmentShaders is null)return;
+        VerifyPreparedEnvironment();if(_postRuntime is not null){PreparePostView(width,height,sceneCamera,browserCamera,exposure,ambient);return;}
+        if(_environmentShaders is null&&(!_hasCustomPipeline||_shaders is null))return;
         using var read=SceneEnvironmentState.BeginRead(_world,WorldId);_environmentPreparing=true;
         try {
             _renderer.VerifyEnvironmentPreparation(EnvironmentApproved);
@@ -106,7 +107,9 @@ public sealed partial class SceneRenderSession
             bool shadows=view.PrimaryLight is {Data.CastShadow:true};
             uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
             if(_pipeline is null||_width!=w||_height!=h||_shadows!=shadows) {
-                var candidate=CreateEnvironmentPipeline(_environmentShaders,_environmentGpu,_environment,w,h,exposure,ambient,shadows);
+                var candidate=_environmentShaders is not null?
+                    CreateEnvironmentPipeline(_environmentShaders,_environmentGpu,_environment,w,h,exposure,ambient,shadows):
+                    new ScenePipelineSession(_renderer,_pipelineFactory(exposure,ambient,shadows),w,h,shaders:(shadows?_shaders!.Shadowed:_shaders!.Unshadowed).Scene);
                 try{_pipeline?.Dispose();}catch{candidate.Dispose();throw;}
                 _pipeline=candidate;_width=w;_height=h;_shadows=shadows;_exposure=exposure;_ambient=ambient;
             } else if(_exposure!=exposure||_ambient!=ambient){

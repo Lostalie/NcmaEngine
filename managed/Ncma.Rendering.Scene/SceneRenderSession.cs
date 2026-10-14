@@ -33,6 +33,7 @@ public sealed partial class SceneRenderSession : IDisposable
     public ulong SkinBackpressureFrames { get; private set; }
     public double SkinAbiMilliseconds { get; private set; }
     private readonly Func<float, float, bool, RenderPipeline> _pipelineFactory;
+    private readonly bool _hasCustomPipeline;
     private ScenePipelineSession? _pipeline;
     private readonly SceneGpuDraw[] _geometry = new SceneGpuDraw[4096], _casters = new SceneGpuDraw[4096];
     private readonly List<SceneRenderDiagnostic> _diagnostics = new(8192);
@@ -55,6 +56,8 @@ public sealed partial class SceneRenderSession : IDisposable
     {
         _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
+        _hasCustomPipeline = pipelineFactory is not null;
+        _environmentApproval = environmentPreparationAllowed ?? (()=>!_disposed);
         WorldId = world.Identity; PreparedRevision = world.Revision; _play = play;
         _publication=assets.Assets.Identity;
         _interpolateTransforms=interpolateTransforms;

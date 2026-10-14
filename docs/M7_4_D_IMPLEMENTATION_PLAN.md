@@ -4,7 +4,7 @@
 
 ## 完整范围和顺序
 
-状态：D1的98项实际检查及完整顺序Debug/Release首轮通过，见[示例](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；下一片D3。D3尚未完成，整个D/M7.4不关闭。
+状态：D1的98项实际检查及完整顺序Debug/Release首轮通过，见[示例](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；D3-A正式宿主可信管线定制、599项源/搬移检查及完整顺序Debug/Release通过，见[D3-A合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[D3-A交付](M7_4_D3A_DELIVERY_REPORT.md)；下一片D3-B场景UI产品入口，随后D3-C完整FBX/后处理/UI搬移联合。整个D3/D/M7.4未关闭。D3尚未完成，整个D/M7.4不关闭。
 
 - D1：可编译公开C#示例：线性HDR Feature插入、几何stage替换、直接构建完整scene graph的pipeline替换（不是转发默认pipeline）。使用已有版本化图/程序/资源合同，不接触D3D、不添加新native ABI或远程代码加载。验证CPU-only、真实像素、独立标量/Half oracle、共享场景工厂与环境/后处理结合、失败原子性/owner/非重入、resize/关闭及暖态成本。
 - D2：实际静态/ASCII和Binary FBX→NCA→动画skin/PBR/IBL/shadow/HDR/Bloom/显示域UI联合。复用已经验证的独立软件积分/材质/滤波数值参考，但以联合图像和消融证据证明组合，不用同Shader自证。包含默认与定制路径、曝光/颜色域、UI不重复Tone、奇数尺寸/资源代次、失败恢复和成本。
@@ -13,6 +13,8 @@
 每片定向测试与修复后冻结源码，顺序完整无Skip Debug/Release Build.bat、所有原测试/工具/三轮profile/audit/部署恢复，验证清单/备份/Complete journal/实际EXE，更新文档并提交推送核对远端后进入下一片。不能因D1示例通过就关闭D、M7.4或产品联合门禁。
 
 ## 边界
+
+D3 执行切片：D3-A 正式宿主可信管线工厂及启动前/真实视口校验、599项检查和完整双配置已经通过，见[D3-A 合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[交付](M7_4_D3A_DELIVERY_REPORT.md)。D3-B 补齐正式 Player 场景 UI 加载/合成入口及受检闭包；D3-C 完成真实 FBX/环境/后处理/UI 搬移产品联合与闭包错误验收。D3-A 单独通过不关闭整个 D3；现有低层 UI 图像和环境产品测试不能代替缺失的正式 UI 入口。
 
 整pipeline替换指当前已支持的scene图与公开HDR子图组合，不等于任意未实现GPU操作；未知操作依旧拒绝。stage配置与Shader程序替换分层，程序仍需显式UUID/文件hash/完整反射/审批。示例是可信C#启动代码，不是代码沙箱，也不授权Agent编译/执行/直接World或GPU写入。编辑器/AI只处理已注册模块的有界元数据和原可撤销命令。
 

@@ -13,13 +13,16 @@ public static class PlayerRunner
 {
     // Trusted local host only. No EditorEndpoint, hidden EditSession or Agent execution channel.
     public static PlayerReport Run(PlayerOptions options, Func<bool>? cancelled = null, string? pluginRoot = null,
-        bool visible = true, Action<PlaySession, ulong>? trustedInput = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null)
-        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules);
+        bool visible = true, Action<PlaySession, ulong>? trustedInput = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null,
+        Func<float,float,bool,RenderPipeline>? pipelineFactory = null)
+        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules,pipelineFactory);
     // Internal bounded diagnostic hook, not a production/Agent screenshot or execution capability.
     internal static PlayerReport RunForVerification(PlayerOptions options,string pluginRoot,Action<byte[],uint,uint> capture,
-        Action<PlaySession,ulong>? trustedInput=null,Ncma.Rendering.Scene.PostProcessModules? postModules=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules);
+        Action<PlaySession,ulong>? trustedInput=null,Ncma.Rendering.Scene.PostProcessModules? postModules=null,
+        Func<float,float,bool,RenderPipeline>? pipelineFactory=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules,pipelineFactory);
     private static PlayerReport RunCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
-        Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture,Ncma.Rendering.Scene.PostProcessModules? postModules=null)
+        Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture,Ncma.Rendering.Scene.PostProcessModules? postModules=null,
+        Func<float,float,bool,RenderPipeline>? pipelineFactory=null)
     {
         ArgumentNullException.ThrowIfNull(options);
         var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
@@ -78,7 +81,7 @@ public static class PlayerRunner
                 if (physics.Inspect() is { Enabled: true } inspected) modules = [new("ncma.physics", inspected.AbiMajor, inspected.AbiMinor, (ulong)inspected.Capabilities)];
                 if (!options.Headless)
                 {
-                    presentation = new(plugins, visible); presentation.Start(shaderFiles,postLibrary,postModules);
+                    presentation = new(plugins, visible, pipelineFactory); presentation.Start(shaderFiles,postLibrary,postModules);
                     presentation.PrepareBeforeGameplay(document,renderAssets!);
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }

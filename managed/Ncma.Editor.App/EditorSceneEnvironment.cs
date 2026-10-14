@@ -46,7 +46,7 @@ internal sealed unsafe partial class CandidatePresentation
         if(_scenePreparationError!=message)_log!.Write("error","render.scene_prepare",message,_correlation);
         _scenePreparationError=message;
     }
-    private static bool PreparationError(Exception error)=>error is ArgumentException or InvalidOperationException or IOException or NotSupportedException or PluginException;
+    private static bool PreparationError(Exception error)=>error is ArgumentException or InvalidOperationException or IOException or NotSupportedException or PluginException or RenderGraphException;
     private (Guid World,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld) SceneSyncKey()=>
         (_editor!.Document.World.Identity,_editor.Document.Revision,_editor.RenderAssets?.Assets.Identity??Guid.Empty,
          _editor.Play?.SessionId??Guid.Empty,_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty,_editor.Play?.Document.World.Identity??Guid.Empty);

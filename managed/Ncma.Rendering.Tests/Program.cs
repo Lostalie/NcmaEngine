@@ -329,6 +329,8 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--post-author-host-tests") return PostHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--customization-example-tests") return CustomizationExampleTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--joint-post-image-tests") return JointPostImageTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--pipeline-host-tests") return PipelineHostTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--pipeline-host-source-tests") return PipelineHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--post-library-preflight") return PostLibraryChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--post-process-preflight") return PostProcessChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-stages-tests") return RegisteredStagesTests(args[1], args[2]);
