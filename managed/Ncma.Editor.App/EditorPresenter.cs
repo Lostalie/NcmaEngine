@@ -69,6 +69,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public GuiFrame Frame => _frame;
     public string LastMessage => _messages.LastOrDefault() ?? "";
     public (float X, float Y, float Width, float Height) Viewport { get; private set; }
+    internal bool SceneHudInputAllowed => !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && _layoutBefore is null;
     public SceneObjectData? Selected => _page?.Selected;
     public Guid SceneCamera { get; private set; }
     private bool _refreshRenderAssets;
@@ -494,11 +495,17 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         return _frame;
     }
     // Adds the renderer's opaque target identity to a copied view, never a native pointer.
-    public GuiFrame AttachViewport(GuiImageToken token)
+    public GuiFrame AttachViewport(GuiImageToken token,GuiCachedImageToken? hud = null)
     {
         Panel(5,workspaceStyle?"场景视口":"Scene Viewport",Viewport.X-8,Viewport.Y-(workspaceStyle?42:28),Viewport.Width+16,Viewport.Height+(workspaceStyle?50:36));
         _items.Add(GuiItem.Image(15,1,token,Viewport.X,Viewport.Y,Viewport.Width,Viewport.Height,enabled:_page is {State.Frozen:false,State.HistoryInvalidated:false}));
         _actions.Add((15,1),new("viewport"));
+        if (hud is {} image) {
+            Add(GuiItemKind.OverlayBegin,15,2,"");
+            var clip=_items[^1];clip.Rect[0]=Viewport.X;clip.Rect[1]=Viewport.Y;clip.Rect[2]=Viewport.Width;clip.Rect[3]=Viewport.Height;_items[^1]=clip;
+            _items.Add(GuiItem.CachedImage(15,3,image,Viewport.X,Viewport.Y,Viewport.Width,Viewport.Height));
+            Add(GuiItemKind.CanvasEnd,15,4,"");
+        }
         End();_frame.ItemCount=(uint)_items.Count;_frame.TextBytes=(uint)_text.Count;return _frame;
     }
     private void ChooseFile(string operation)

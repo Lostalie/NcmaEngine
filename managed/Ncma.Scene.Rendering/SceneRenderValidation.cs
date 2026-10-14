@@ -40,6 +40,7 @@ public static class SceneRenderValidation
     {
         ArgumentNullException.ThrowIfNull(snapshot); bool validateActionReferences=assets is not null; assets ??= PreparedSceneAssets.Empty;
         _ = ScenePostProcessState.Read(snapshot);
+        _ = SceneUiState.Read(snapshot);
         var diagnostics = new List<SceneRenderDiagnostic>(); int primaryLights = 0, environments = 0;
         foreach (var obj in snapshot.Objects)
         {

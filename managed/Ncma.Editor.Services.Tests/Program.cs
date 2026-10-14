@@ -29,6 +29,14 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
 if(args.Length==3&&args[2]=="--post-author-cpu-probe"){PostProcessAuthoringTests.CpuProbe(output);return 0;}
+if(args.Length==3&&args[2]=="--ui-package-preparation-tests"){
+    int count=0;foreach(var(name,test)in UiPackagePreparationTests.Cases(output)){test();Console.WriteLine("PASS "+name);count++;}
+    Console.WriteLine($"UI package preparation: {count} groups passed; {output}");return 0;
+}
+if(args.Length==3&&args[2]=="--ui-selection-tests"){
+    int count=0;foreach(var(name,test)in UiSelectionTests.Cases(output)){test();Console.WriteLine("PASS "+name);count++;}
+    Console.WriteLine($"UI selection: {count} groups passed; {output}");return 0;
+}
 static void Compare(JsonElement a,JsonElement b) {
     Check(a.ValueKind==b.ValueKind);
     switch(a.ValueKind) {

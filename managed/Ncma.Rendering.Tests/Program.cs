@@ -331,6 +331,12 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--joint-post-image-tests") return JointPostImageTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--pipeline-host-tests") return PipelineHostTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--scene-ui-host-tests") return SceneUiHostTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--scene-ui-surface-tests") return SceneUiSurfaceTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--scene-ui-interaction-tests") return SceneUiInteractionTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--scene-ui-relocated-interaction-tests") return SceneUiInteractionTests(args[1], args[2],true);
+            if (args.Length == 3 && args[0] == "--scene-ui-publication-tests") return SceneUiPublicationTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--scene-ui-publication-products-tests") return SceneUiPublicationTests(args[1], args[2],true);
+            if (args.Length == 3 && args[0] == "--scene-ui-joint-products-tests") return SceneUiJointProductTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--scene-ui-host-source-tests") return SceneUiHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--pipeline-host-source-tests") return PipelineHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--post-library-preflight") return PostLibraryChild(args[1], args[2]);

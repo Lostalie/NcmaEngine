@@ -174,6 +174,7 @@ var cases = new (string, Action)[]
 };
 foreach (var (name, run) in cases) { run(); Console.WriteLine("PASS " + name); }
 Console.WriteLine($"M2.1 application/services: {cases.Length} cases passed.");
+SceneUiRoutingTests.Run();
 
 [MethodImpl(MethodImplOptions.NoInlining)]
 static WeakReference Probe(string path)

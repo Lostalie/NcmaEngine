@@ -13,7 +13,7 @@ public sealed record PlayStatus(Guid SessionId, Guid WorldId, PlayState State, u
     int StepsExecuted, double DroppedSeconds, double TotalDroppedSeconds, PlayFault? Fault);
 
 // Owns lifecycle and the sole runner. Editor supplies a clone; Player owns its runtime document directly.
-public sealed class PlaySession : IDisposable, IGameplayContext
+public sealed partial class PlaySession : IDisposable, IGameplayContext
 {
     private sealed class Instance(Guid objectId, BehaviourBindingData binding, Behaviour behaviour)
     {
@@ -136,6 +136,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         if (State != PlayState.Stopped) throw new InvalidOperationException("Play session is already started.");
         _attemptTick = Tick;
         _busy = true; State = PlayState.Starting; SessionId = Guid.NewGuid(); Fault = null;
+        _uiRegistrationFrozen = true; CancelUiInputCore();
         _input.Clear(resetSequence: true); _facade.SetContext(this); _factory = createBehaviour;
         _phase = "prepare"; _current = null;
         try
@@ -236,6 +237,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         Control();
         if (State is not (PlayState.Running or PlayState.Paused)) throw new InvalidOperationException("Pause requires active Play.");
         _runner.ClearAccumulator(); _input.Clear(); State = PlayState.Paused; _steps = 0; _dropped = 0;
+        CancelUiInputCore();
         return Status;
     }
     public PlayStatus Resume()
@@ -243,6 +245,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         Control();
         if (State != PlayState.Paused) throw new InvalidOperationException("Resume requires Paused.");
         _runner.ClearAccumulator(); _input.Clear(); State = PlayState.Running; _steps = 0; _dropped = 0;
+        CancelUiInputCore();
         return Status;
     }
     public PlayStatus Step()
@@ -309,6 +312,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     {
         Control();
         if (State == PlayState.Stopped) return;
+        CancelUiInputCore();
         _busy = true; State = PlayState.Stopping;
         Exception[] errors;
         try
@@ -354,6 +358,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
         CleanupRetired();
         _commands.Begin(_document.CaptureSnapshot());
         _stepInput = _input.Read();
+        var uiInput = PrepareUiStep();
         _facade.BeginPhase();
         long setupAt = Stamp();
         try
@@ -364,7 +369,10 @@ public sealed class PlaySession : IDisposable, IGameplayContext
                 if (!item.Created) { item.Created = true; Invoke(item, "create", item.Behaviour.DispatchCreate); }
                 if (item.Binding.Enabled && !item.Activated) { item.Activated = true; Invoke(item, "enable", item.Behaviour.DispatchEnable); }
             }
-            update(); callbacksAt = Stamp();
+            _stepUiInput = uiInput;
+            try { update(); }
+            finally { _stepUiInput = null; }
+            callbacksAt = Stamp();
             _phase = "prepare"; _current = null;
             Action consume = _input.PrepareConsume(); inputAt = Stamp();
             if (_coupled is not null)
@@ -390,6 +398,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
             });
             worldAt = Stamp();
             commit(); metadata!(); instances!(); receipts!(); consume(); render!(); installAt = Stamp();
+            _pendingUiInput = GameplayUiInput.Empty;
             _coupled?.Committed();
             if (_coupled is not null) _phase = "committed_observer";
             if (MeasureSteps) LastStepProfile = new(setupAt - started, callbacksAt - setupAt, inputAt - callbacksAt,
@@ -450,6 +459,7 @@ public sealed class PlaySession : IDisposable, IGameplayContext
     private void SetFault(Exception error)
     {
         State = PlayState.Faulted;
+        CancelUiInputCore();
         _coupled?.Faulted();
         string message = error.GetBaseException().Message;
         if (message.Length > 512) message = message[..512];

@@ -1,4 +1,5 @@
 using Ncma.Gameplay;
+using Ncma.Application.Runtime;
 using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Rendering;
@@ -17,6 +18,9 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     private Ncma.Scene.Rendering.PreparedSceneAssetLease? _assets;
     private Ncma.Animation.Native.PoseKernel? _poseKernel;
     private Ncma.Ui.Rendering.SceneUiPresentation? _ui;
+    private SceneUiActions? _uiActions;
+    private SceneUiInput? _uiInput;
+    private readonly Ncma.Ui.Rendering.UiWindowInput _uiWindowInput = new();
     private Guid _camera;
     private readonly WindowInputAccumulator _input = new();
     private WindowState _state;
@@ -39,14 +43,15 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
         _pipeline = new(_renderer);
         _cache = new(_renderer);
     }
-    public void PrepareBeforeGameplay(Ncma.Scene.SceneDocument document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets,Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage=null)
+    public void PrepareBeforeGameplay(Ncma.Scene.SceneDocument document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets,Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage=null,SceneUiActions? uiActions=null)
     {
         if(_environmentPreflight is not null)throw new InvalidOperationException("Startup already prepared.");
         Ncma.Rendering.Scene.ScenePostProcessPreflight.Prepare(_renderer!,document.World,document.CaptureSnapshot(),_postRuntime);
         Ncma.Rendering.Scene.ScenePipelineStartup.Prepare(_renderer!,document.World,document.CaptureSnapshot(),pipelineFactory,_postRuntime,()=>!_disposed);
         _environmentPreflight=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer!,_cache!,document.World,assets,document.CaptureSnapshot(),()=>!_disposed);
         if (uiPackage is not null) {
-            _ui = new(); _ui.Prepare(uiPackage, _renderer!, plugins, new(1280,720,1,default));
+            uiActions?.Validate(uiPackage.Capture());
+            _ui = new(); _ui.Prepare(uiPackage, _renderer!, plugins, new(1280,720,1,default), interactive:uiActions is not null); _uiActions=uiActions;
         }
     }
     public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera,Ncma.Animation.IRootMotionPresentation? rootMotion=null,Ncma.Scene.Rendering.SceneAnimatorRuntime? animators=null)
@@ -62,15 +67,41 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
             interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators,
             environmentPreparationAllowed:()=>!_disposed,postProcessing:_postRuntime); _camera = camera ?? Guid.Empty;_assets=assets;
         _environmentPreflight?.Dispose();_environmentPreflight=null;
+        if (_ui is not null && _uiActions is not null) _uiInput = new(_ui.Runtime,play,_uiActions);
     }
     public bool Pump(PlaySession play)
     {
         _state = _window!.Poll(); if (_state.CloseRequested != 0) return false;
-        _input.Update(_state, _window.Events); _input.CopyGameplayBits(false, false, _held, _pressed, _released);
-        double dx = _focused && _input.Focused ? _input.PointerX - _x : 0, dy = _focused && _input.Focused ? _input.PointerY - _y : 0;
-        _x = _input.PointerX; _y = _input.PointerY; _focused = _input.Focused;
+        ProcessInput(play, _state, _window.Events); return true;
+    }
+    // Same input boundary as Pump; internal access only for bounded actual-host regression probes.
+    internal void ProcessInput(PlaySession play, WindowState state, ReadOnlySpan<InputEvent> events)
+    {
+        _state=state; _input.Update(_state, events);
+        bool captureKeyboard=false,captureMouse=false;
+        if (_uiInput is not null) {
+            var previous=_ui!.Runtime.PreparedViewport;
+            bool resized=previous.Width!=_state.FramebufferWidth||previous.Height!=_state.FramebufferHeight||previous.Scale!=_state.ScaleX;
+            if (_state.Minimized!=0 || _state.FramebufferWidth==0 || _state.FramebufferHeight==0 || resized || !_uiInput.Observe()) {
+                _uiInput.Cancel(); captureKeyboard=captureMouse=true;
+            } else {
+                var view=new Ncma.Ui.UiViewport(_state.FramebufferWidth,_state.FramebufferHeight,_state.ScaleX,default);
+                _ui!.PrepareView(view);
+                var capture=_uiWindowInput.Pump(_ui.Runtime,_state,events,System.Numerics.Vector2.Zero);
+                captureKeyboard=capture.CaptureKeyboard;captureMouse=capture.CapturePointer;
+                if(capture.Cancelled)_uiInput.Cancel();
+                else {
+                    // Dynamic text/layout must prepare successfully before its proposals reach simulation.
+                    try { _ui.PrepareView(view); _uiInput.Submit(_uiWindowInput.Drain(_ui.Runtime)); }
+                    catch { _uiInput.Cancel(); throw; }
+                }
+            }
+        }
+        _input.CopyGameplayBits(captureKeyboard,captureMouse,_held,_pressed,_released);
+        bool focused=_input.Focused&&!captureMouse;
+        double dx = _focused && focused ? _input.PointerX - _x : 0, dy = _focused && focused ? _input.PointerY - _y : 0;
+        _x = _input.PointerX; _y = _input.PointerY; _focused = focused;
         play.SubmitInput(new(play.SessionId, _input.Sequence, _input.Focused, _held, _pressed, _released, dx, dy));
-        return true;
     }
     public void Present(PlaySession play,Action<byte[],uint,uint>? verificationCapture=null)
     {
@@ -86,7 +117,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
         if(environments.Length>1)throw new ArgumentException("ambiguous_environment_configuration");
         var environment=environments.Length==1?environments[0].Get<Ncma.Scene.Rendering.EnvironmentLightingData>():Ncma.Scene.Rendering.EnvironmentLightingData.Off;
         try {
-            _ui?.PrepareView(new(_state.FramebufferWidth,_state.FramebufferHeight,1,default));
+            _ui?.PrepareView(new(_state.FramebufferWidth,_state.FramebufferHeight,_state.ScaleX,default));
             if(_scene!.PreparedEnvironment!=environment)_scene.RefreshEnvironment(_assets!,()=>!_disposed);
             _scene.PrepareEnvironmentView(_state.FramebufferWidth,_state.FramebufferHeight,_camera,follow,config.Exposure,config.Ambient);
         } catch(Exception preparationFailure) {
@@ -113,6 +144,7 @@ internal sealed class PlayerPresentation(string plugins, bool visible, Func<floa
     {
         if (_disposed) return;
         // Stop at the first failed release: never unload dependencies while a live native lease remains.
+        _uiInput?.Dispose(); _uiInput=null;
         _ui?.Dispose(); _ui = null;
         _scene?.Dispose(); _scene = null;_environmentPreflight?.Dispose();_environmentPreflight=null;_assets=null; _cache?.Dispose(); _cache = null;
         _postRuntime?.Dispose();_postRuntime=null;

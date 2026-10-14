@@ -59,7 +59,7 @@ internal static class Program
 }
 internal sealed unsafe partial class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview,
     Func<Ncma.Assets.EnvironmentPresetLibrary>? environmentPresets = null, Ncma.Rendering.Scene.PostProcessModules? postProcessModules = null,
-    Func<float,float,bool,RenderPipeline>? pipelineFactory = null) : IApplicationService, IFramePipeline
+    Func<float,float,bool,RenderPipeline>? pipelineFactory = null, Ncma.Application.Runtime.SceneUiActions? uiActions = null) : IApplicationService, IFramePipeline
 {
     internal static void RequireComposition(Ncma.Scene.SceneDocumentSnapshot snapshot)
     {
@@ -90,6 +90,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     private EditorPresenter? _presenter;
     private EditorUiWorkspace? _uiWorkspace;
     private EditorUiPreview? _uiPreview;
+    private Ncma.Ui.Rendering.RuntimeUiPackage? _sceneHudPackage;
+    private Ncma.Ui.Rendering.SceneUiPresentation? _sceneHud;
     private EditorAnimationGraphWorkspace? _animationGraphs;
     private EditorAnimationGraphPreview? _graphPreview;
     private FbxPreviewSession? _fbxPreview;
@@ -114,10 +116,15 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     private string _lastPlatformDiagnostic = "";
     public void Start()
     {
-        // D3-B supplies the formal Player HUD; Editor viewport composition is the next D3-C gate.
-        // Reject an active selection instead of silently showing a scene without its HUD.
-        if (project?.Configuration.UiPackage is not null) throw new NotSupportedException("Editor scene HUD composition pending D3-C.");
+        _sceneHudSelection=project is null?null:Ncma.Scene.Rendering.SceneUiState.Resolve(Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath)),project.Configuration.UiPackage);
+        if (project is not null&&_sceneHudSelection is {} uiSelection) {
+            if (cpuOnly) throw new NotSupportedException("Scene HUD requires graphical presentation.");
+            _sceneHudPackage = Ncma.Ui.Rendering.RuntimeUiPackage.Open(project.Root,project.Configuration.ProjectId,uiSelection);
+            Ncma.Ui.Rendering.SceneUiPresentation.Validate(_sceneHudPackage,uiActions is not null);
+            uiActions?.Validate(_sceneHudPackage.Capture());
+        }
         if (!cpuOnly) _shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShaderPackages);
+        if (_sceneHudPackage is not null && _shaderFiles is not null) _ = _shaderFiles.Get(ShaderProfile.Flat2D,false,false);
         if(project is not null&&!cpuOnly)Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(_shaderFiles,
             Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath)));
         _log = new(Path.Combine(project?.Root ?? AppContext.BaseDirectory, "out/user/logs/editor-candidate.jsonl"));
@@ -146,7 +153,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
             validateComposition: RequireComposition,
             composePreparedPlay:ComposePreparedPlay,postProcessModules:_postModules,
-            beforePlayStop:()=>{_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
+            beforePlayStop:()=>{SuspendSceneHudInput();_playScene?.Dispose();_playScene=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         var graphRuntime=new AnimationRuntimeInspectionService(_editor,()=>_sceneRuntime,()=>_playScene);graphRuntime.Register();
         if (project is not null) {
@@ -156,12 +163,14 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             if (Directory.Exists(Path.Combine(project.Root, "assets")))
             {
                 _assetWorkflow=new(workspace,project.Root,project.Configuration.ProjectId,1);
-                _uiWorkspace=new(workspace,project.Root);
+                _uiWorkspace=new(workspace,project.Root,uiActions?.RegisteredActions);
                 _animationGraphs=new(workspace,project.Root,project.Configuration.ProjectId);
                 _editor.ConfigureAssets(project.Root, project.Configuration.ProjectId, 1,_assetWorkflow.Scope,_uiWorkspace.Scope,_animationGraphs.Scope); // Exact human approvals only; Agent cannot manufacture grants.
+                _uiPackagePreparation=new(_uiWorkspace,project.Root,project.Configuration.ProjectId,actions:uiActions);
+                _uiPublication=new(workspace,_uiWorkspace,_uiPackagePreparation,project.Root,project.Configuration.ProjectId,uiActions);
                 if(project.Configuration.AssetPackage is null)
                     _editor.ConfigureEnvironments(project.Root,project.Configuration.ProjectId,environmentPresets??(()=>Ncma.Assets.EnvironmentPresetLibrary.LoadDeployment(AppContext.BaseDirectory)));
-                if(_renderer is not null)_uiPreview=new(_renderer,plugins);
+                if(_renderer is not null)_uiPreview=new(_renderer,plugins,_uiTextResources);
                 if(_renderer is not null)_graphPreview=new(_renderer,()=>_poseKernel??=new(Path.Combine(plugins,"NcmaAnimationKernel.dll"),Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(plugins,"NcmaAnimationKernel.dll"))))));
                 if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName)))
                     _editor.ConfigureImportTools(ImportToolDeployment.FromValidatedEditorPackage(AppContext.BaseDirectory), _assetWorkflow.IsSourceApproved);
@@ -169,6 +178,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             _editor.PrepareRenderAssets(project.Root, project.Configuration.ProjectId,project.Configuration.AssetPackage);
             PreflightPost(_editor.Document.World,_editor.Document.CaptureSnapshot());
             if(_renderer is not null)_environmentStartup=Ncma.Rendering.Scene.SceneEnvironmentPreflight.Prepare(_renderer,_sceneCache!,_editor.Document.World,_editor.RenderAssets!,_editor.Document.CaptureSnapshot(),()=>!_closed);
+            if (_sceneHudPackage is not null) {
+                _sceneHud = new(_uiTextResources); _sceneHud.Prepare(_sceneHudPackage,_renderer!,plugins,new(1280,720,1,default),interactive:uiActions is not null);
+            }
             _editor.LoadGameplay(project.GameplayAssemblyPath);
             foreach (var diagnostic in _editor.RenderAssets!.Diagnostics.Take(64))
                 _log.Write("warning", "render.asset." + diagnostic.Code, diagnostic.AssetId.ToString("D"), _correlation);
@@ -184,6 +196,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             else if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
             if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));
             if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
+            if(_uiPackagePreparation is not null&&_uiPublication is not null)_presenter.AttachUiPublication(_uiPackagePreparation,_uiPublication);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
         }
         if (_renderer is not null) {
@@ -207,6 +220,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     }
     public bool PumpPlatform()
     {
+        _verificationWindowEvents=null;
         _state = _window!.Poll(); _input.Update(_state, _window.Events);
         if (_state.Minimized != 0 || _state.FramebufferWidth == 0 || _state.FramebufferHeight == 0) _window.Wait(0.02);
         if (_state.CloseRequested != 0) return false;
@@ -215,7 +229,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     public void ApplyEditorIntents(FrameContext frame) {
         if (_presenter is not null) {
             bool escape = false;
-            foreach (var input in _window!.Events) if (input.Kind == 1 && input.Key == 256 && input.Action == 1) escape = true;
+            foreach (var input in WindowEvents) if (input.Kind == 1 && input.Key == 256 && input.Action == 1) escape = true;
             if (_input.CancelInteraction || escape) _presenter.CancelInteraction();
             else _presenter.Apply(_gui!.Events, _gui.OutputText);
             return;
@@ -237,6 +251,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         SynchronizeSceneResourcesChecked();
         _presenter?.SynchronizeUi();
         _presenter?.SynchronizeGraph();
+        SynchronizeSceneHud();
     }
     private static RenderConfiguration ClearConfiguration(RenderConfiguration c) => c with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false};
     private void SynchronizeSceneResources() {
@@ -278,19 +293,20 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         if (_capture.CancelInteraction != 0) _presenter?.CancelInteraction();
     }
     public void SubmitInput(FrameContext frame) {
-        if(_presenter is not null && _input.Focused && !_input.CancelInteraction) {
+        var hudCapture=ProcessSceneHudInput(_state,WindowEvents);
+        if(_presenter is not null && _input.Focused && !_input.CancelInteraction && !hudCapture.CaptureKeyboard) {
             bool Held(int key) => (_state.Held[key/64]&(1UL<<(key%64)))!=0;
-            foreach(var input in _window!.Events){
+            foreach(var input in WindowEvents){
                 if(input.Kind==5)_presenter.UiKeyboard(0,char.ConvertFromUtf32((int)input.Codepoint),false,_capture.Keyboard!=0);
                 if(input.Kind==1 && input.Action==1&&!_presenter.UiKeyboard(input.Key,"",Held(340)||Held(344),_capture.Keyboard!=0))_presenter.Shortcut(input.Key,Held(341)||Held(345),Held(340)||Held(344),_capture.Keyboard!=0,_input.Focused);
             }
         }
-        bool focused = _input.Focused && _capture.Mouse == 0;
+        bool focused = _input.Focused && _capture.Mouse == 0 && !hudCapture.CapturePointer;
         double x = focused && _pointerWasFocused ? _input.PointerX - _previousPointerX : 0;
         double y = focused && _pointerWasFocused ? _input.PointerY - _previousPointerY : 0;
         _previousPointerX = _input.PointerX; _previousPointerY = _input.PointerY; _pointerWasFocused = focused;
         if (_editor!.Play is not { State: Ncma.Gameplay.PlayState.Running or Ncma.Gameplay.PlayState.Paused } play) return;
-        _input.CopyGameplayBits(_capture.Keyboard != 0, _capture.Mouse != 0, _held, _pressed, _released);
+        _input.CopyGameplayBits(_capture.Keyboard != 0 || hudCapture.CaptureKeyboard, _capture.Mouse != 0 || hudCapture.CapturePointer, _held, _pressed, _released);
         play.SubmitInput(new(play.SessionId,_input.Sequence,_input.Focused,_held,_pressed,_released,x,y));
     }
     public void AdvancePlay(FrameContext frame) {
@@ -328,7 +344,12 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                         try{_viewportTarget?.Dispose();}catch{candidate.Dispose();throw;}
                         _viewportTarget=candidate;
                     }
-                    description=_presenter.AttachViewport(_viewportTarget.ImageToken);
+                    GuiCachedImageToken? hud = null;
+                    if (ActiveSceneHud is { } activeHud) {
+                        activeHud.PrepareSurface(new(targetWidth,targetHeight,(float)_state.FramebufferWidth/Math.Max(_state.Width,1),default));
+                        hud = activeHud.AcquireSurface(frame.FrameId);
+                    }
+                    description=_presenter.AttachViewport(_viewportTarget.ImageToken,hud);
                 } else {_viewportTarget?.Dispose();_viewportTarget=null;}
             }
             stats = _gui!.Draw(description,_presenter.Items,_presenter.Text);
@@ -395,7 +416,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             }
             _renderService.Submit(frame.FrameId,x,y,hasModel ? model : default);
             }
-            CaptureVerificationViewport();_gui.RenderGpu(); _renderer.Present();
+            CaptureVerificationViewport();_gui.RenderGpu(); CaptureVerificationComposite(); _renderer.Present();
+            ActiveSceneHud?.ReleaseSurface();
             _uiPreview?.ReleasePresentation();
             var gpuStats=_renderer.Stats;
             if(gpuStats.ValidationErrors!=0 || gpuStats.ValidationWarnings!=0) throw new InvalidOperationException("DX11 validation failed.");
@@ -429,11 +451,18 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _graphPreview?.Dispose();_graphPreview=null;
         _poseKernel?.Dispose(); _poseKernel = null;
         _assetWorkflow?.Dispose(); _assetWorkflow = null;
+        _uiPublication?.Dispose();_uiPublication=null;
+        _uiPackagePreparation?.Dispose();_uiPackagePreparation=null;
         _uiWorkspace?.Dispose();_uiWorkspace=null;
         _animationGraphs?.Dispose();_animationGraphs=null;
         _editor?.Dispose(); _editor = null;
         _gui?.Dispose(); _gui = null;
+        ClosePlayHud();
+        _sceneHud?.Dispose(); _sceneHud = null;
+        _sceneHudPackage?.Dispose(); _sceneHudPackage = null;
+        while(_hudRetained.Count!=0){_hudRetained[0].Dispose();_hudRetained.RemoveAt(0);}
         _uiPreview?.Dispose();_uiPreview=null;
+        _uiTextResources.Dispose();
         _viewportTarget?.Dispose(); _viewportTarget = null;
         _renderService?.Dispose(); _renderService = null;
         _renderer?.Dispose(); _renderer = null;

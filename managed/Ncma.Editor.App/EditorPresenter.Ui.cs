@@ -119,6 +119,7 @@ internal sealed unsafe partial class EditorPresenter
             Add(GuiItemKind.Text,31,14,"输入文档 UUID 确认",new("ui_confirm_text",Operation:new UiIntent(ui.Stamp)),_uiConfirm);
             UiButton(15,"确认此文件","ui_confirm",review,Guid.TryParse(_uiConfirm,out var confirmed)&&confirmed==review.Document&&(!review.Create||_uiWrite));}
         UiButton(16,"撤销文件写权限","ui_revoke");Line();UiButton(17,"保存当前草稿 / 校验已保存文件","ui_save",enabled:ui.DocumentId!=Guid.Empty&&!_uiTest);
+        BuildUiPublication(ref label,writable);
         Add(GuiItemKind.Text,31,50,"字体 / 图像相对路径",new("ui_resource_path",Operation:new UiIntent(ui.Stamp)),_resourcePath);
         Add(GuiItemKind.Text,31,57,"资源 UUID（空白新建；重启时输入文档依赖 UUID）",new("ui_resource_id",Operation:new UiIntent(ui.Stamp)),_resourceId);
         Add(GuiItemKind.Text,31,51,"字体许可证声明",new("ui_resource_license",Operation:new UiIntent(ui.Stamp)),_resourceLicense);
@@ -191,6 +192,7 @@ internal sealed unsafe partial class EditorPresenter
             if(e.Phase==3){_uiPreview?.Prepare(ui,UiPreviewViewport);ui.Confirm();_uiActiveInput=null;}return true;
         }
         if(e.Phase!=3)return true;
+        if(ApplyUiPublication(action.Kind,intent,text)){_generation++;return true;}
         switch(action.Kind){
             case "ui_files":_uiOffset=0;break;
             case "ui_path":_uiPath=text;break;

@@ -23,7 +23,10 @@ typedef enum NcmaGuiItemKind { NCMA_GUI_PANEL_BEGIN = 1, NCMA_GUI_PANEL_END = 2,
    No graph IDs, connections, gestures or business policy are stored by native GUI. */
 /* ABI1.6 retains112-byte table; CachedImage reserved holds query7 presentation-lease token.
    This is not an old Image/target token. Native retains lease until render/discard; exact
-   current frame required. Same copied rectangle/click syntax; no change to old Image. */
+   current frame required. Cached target pixels have premultiplied RGB and are composed
+   with ONE / INV_SRC_ALPHA; ordinary ImGui draws restore straight-alpha immediately.
+   enabled=0 is display-only and does not create an input-capturing invisible widget.
+   Same copied rectangle/click syntax; no change to old Image or the ABI layout. */
 /* ABI1.6 SelectionButton emits phase3 with current modifier bits ctrl=1/shift=2;
    presentation only. The host determines selection policy. Old Button value is unchanged. */
 /* ABI1.5 uses the unchanged112-byte1.4 table. Adds single-row MenuButton/Brand inside

@@ -14,15 +14,15 @@ public static class PlayerRunner
     // Trusted local host only. No EditorEndpoint, hidden EditSession or Agent execution channel.
     public static PlayerReport Run(PlayerOptions options, Func<bool>? cancelled = null, string? pluginRoot = null,
         bool visible = true, Action<PlaySession, ulong>? trustedInput = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null,
-        Func<float,float,bool,RenderPipeline>? pipelineFactory = null)
-        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules,pipelineFactory);
+        Func<float,float,bool,RenderPipeline>? pipelineFactory = null, SceneUiActions? uiActions = null)
+        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules,pipelineFactory,uiActions);
     // Internal bounded diagnostic hook, not a production/Agent screenshot or execution capability.
     internal static PlayerReport RunForVerification(PlayerOptions options,string pluginRoot,Action<byte[],uint,uint> capture,
         Action<PlaySession,ulong>? trustedInput=null,Ncma.Rendering.Scene.PostProcessModules? postModules=null,
-        Func<float,float,bool,RenderPipeline>? pipelineFactory=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules,pipelineFactory);
+        Func<float,float,bool,RenderPipeline>? pipelineFactory=null, SceneUiActions? uiActions=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules,pipelineFactory,uiActions);
     private static PlayerReport RunCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
         Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture,Ncma.Rendering.Scene.PostProcessModules? postModules=null,
-        Func<float,float,bool,RenderPipeline>? pipelineFactory=null)
+        Func<float,float,bool,RenderPipeline>? pipelineFactory=null, SceneUiActions? uiActions=null)
     {
         ArgumentNullException.ThrowIfNull(options);
         var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
@@ -47,10 +47,11 @@ public static class PlayerRunner
                     Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
                     Ncma.Characters.CharacterComponents.RequireComposition);
                 SceneDocumentFiles.Load(document, project.StartupScenePath);
-                if (project.Configuration.UiPackage is { } uiSelection) {
+                if (Ncma.Scene.Rendering.SceneUiState.Resolve(document.CaptureSnapshot(),project.Configuration.UiPackage) is { } uiSelection) {
                     phase = "dependencies";
                     uiPackage = Ncma.Ui.Rendering.RuntimeUiPackage.Open(project.Root, project.Configuration.ProjectId, uiSelection);
-                    Ncma.Ui.Rendering.SceneUiPresentation.Validate(uiPackage);
+                    Ncma.Ui.Rendering.SceneUiPresentation.Validate(uiPackage, uiActions is not null);
+                    uiActions?.Validate(uiPackage.Capture());
                 }
                 Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(document.CaptureSnapshot(),postModules);
                 if(options.Headless&&project.Configuration.PostProcessLibrary is not null&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasSettings(document.CaptureSnapshot())&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasGeometry(document.CaptureSnapshot())) {
@@ -89,7 +90,7 @@ public static class PlayerRunner
                 if (!options.Headless)
                 {
                     presentation = new(plugins, visible, pipelineFactory); presentation.Start(shaderFiles,postLibrary,postModules);
-                    presentation.PrepareBeforeGameplay(document,renderAssets!,uiPackage);
+                    presentation.PrepareBeforeGameplay(document,renderAssets!,uiPackage,uiActions);
                     modules = modules.Concat(presentation.Modules).ToArray();
                 }
                 Ncma.Characters.ScenePlayRuntime? sceneRuntime=null;
@@ -97,7 +98,7 @@ public static class PlayerRunner
                 phase = "initialize"; var play = owner.StartPlay(factory: d => new PlaySession(d,
                     options.Headless ? FrameTimePolicy.Strict : FrameTimePolicy.Interactive, options.FixedDelta,
                     advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames),
-                    compose:p=>sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(p,physics,renderAssets));
+                    compose:p=>{ if (uiPackage is not null) uiActions?.Install(p); return sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(p,physics,renderAssets); });
                 if (presentation is not null) presentation.BindScene(play, renderAssets!, project.Configuration.SceneCamera,sceneRuntime?.Characters,sceneRuntime?.Animators);
                 running = true; double previous = clock.Elapsed.TotalSeconds;
                 while (options.Ticks is null || play.Tick < options.Ticks)

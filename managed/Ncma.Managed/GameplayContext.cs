@@ -25,6 +25,8 @@ public interface IGameplayContext
     Guid SessionId { get; }
     ulong Tick { get; }
     InputState Input { get; }
+    /// <summary>Read-only semantic UI observations during fixed update only; empty in other phases.</summary>
+    GameplayUiInput UiInput { get; }
     IRuntimeCommands Commands { get; }
 }
 

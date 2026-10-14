@@ -31,6 +31,8 @@ public sealed class EditorUiWorkspace : IDisposable
     public bool Writable=>Current()&&_path is not null&&_grants.GetValueOrDefault(_path)==DocumentId&&!_workspace.Owner.Edit!.State.Frozen&&!_workspace.Owner.Edit.State.HistoryInvalidated;
     public EditorUiStamp Stamp { get { Verify();return new(_workspace.Stamp,DocumentId,Revision,Resources.Revision); } }
     private AssetProjectAuthoring Assets=>_workspace.Owner.Assets??throw new InvalidOperationException("Configure project authoring before UI files.");
+    internal void RequireProject(string root,Guid project)
+    {Verify();if(!Current()||Assets.ProjectId!=project||!StringComparer.OrdinalIgnoreCase.Equals(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(root)),System.IO.Path.TrimEndingDirectorySeparator(_root)))throw new EditRejectedException("ui_project_scope_mismatch");}
     public EditorUiWorkspace(EditorWorkspace workspace,string root,IEnumerable<string>? registeredActions=null)
     {
         _actions=new(registeredActions??["preview.test"],StringComparer.Ordinal);

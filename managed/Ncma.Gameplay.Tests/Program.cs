@@ -496,6 +496,8 @@ foreach (var test in cases)
 Console.WriteLine($"Gameplay tests: {passed}/{cases.Length} passed.");
 try { MovementCases.Run(); }
 catch(Exception error){Console.Error.WriteLine(error);return 1;}
+try { GameplayUiCases.Run(); }
+catch(Exception error){Console.Error.WriteLine(error);return 1;}
 if (args.Contains("--benchmark"))
 {
     Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { environment = Environment.OSVersion.ToString(), architecture = RuntimeInformation.ProcessArchitecture.ToString(), runtime = RuntimeInformation.FrameworkDescription, cpuCount = Environment.ProcessorCount }));

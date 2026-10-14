@@ -19,6 +19,8 @@ public sealed class FontAsset
         Id = id; License = license; Redistributable = redistributable; _bytes = bytes.ToArray(); Hash = Convert.ToHexString(SHA256.HashData(_bytes));
     }
     internal ReadOnlySpan<byte> Bytes => _bytes;
+    // Trusted off-frame cook/export. The caller never receives the retained backing storage.
+    public byte[] CopyBytes() => (byte[])_bytes.Clone();
 }
 [StructLayout(LayoutKind.Sequential)] internal unsafe struct TextRequest
 { public uint Size, Bytes; public ulong Font; public byte* Text; public float FontSize, Width, Height, Scale; public uint Wrap, Rtl; }

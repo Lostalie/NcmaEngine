@@ -30,6 +30,8 @@ public sealed class UiRuntime
         foreach (var e in _elements.Values) if (e.Kind is UiKind.TextInput or UiKind.Slider or UiKind.ScrollView) _state.Add(e.Id, new(e.Text, e.Text.Length, "", 0, 0));
     }
     public UiStamp Stamp { get { _document.VerifyAccess(); return _stamp; } }
+    public UiDefinition CaptureDefinition() => _document.Capture();
+    public UiViewport PreparedViewport { get { _document.VerifyAccess(); if (_layoutRevision == ulong.MaxValue) throw new InvalidOperationException("Prepare UI layout before input."); return _viewport; } }
     public Guid Focus { get { _document.VerifyAccess(); return _focus; } }
     public Guid Capture { get { _document.VerifyAccess(); return _capture; } }
     public ulong PresentationRevision { get { _document.VerifyAccess(); return _presentation; } }
@@ -69,10 +71,21 @@ public sealed class UiRuntime
     {
         _document.VerifyAccess(); if ((playSession == Guid.Empty) != (world == Guid.Empty)) throw new ArgumentException("UI Play/World identity pair required.");
         if (playSession != _stamp.PlaySession || world != _stamp.World) {
-            _actions.Clear(); _capture = _focus = Guid.Empty; _lastSequence = 0;
-            _stamp = _stamp with { Generation = checked(_stamp.Generation + 1) };
+            CancelInput();
         } else if (committedTick < _stamp.Tick) throw new ArgumentException("UI committed tick cannot move backwards.");
         _stamp = _stamp with { PlaySession = playSession, World = world, Tick = committedTick };
+    }
+    // Host lifecycle cancellation also revokes queued proposals and their generation. Runtime
+    // text/value/scroll remain independent of authoring data and are not reset here.
+    public void CancelInput()
+    {
+        _document.VerifyAccess();
+        ulong generation = checked(_stamp.Generation + 1);
+        bool visual = _focus != Guid.Empty || _capture != Guid.Empty || _state.Values.Any(s => s.Composition.Length != 0);
+        ulong presentation = visual ? checked(_presentation + 1) : _presentation;
+        foreach (var id in _state.Keys.ToArray()) if (_state[id].Composition.Length != 0) _state[id] = _state[id] with { Composition = "" };
+        _actions.Clear(); _capture = _focus = Guid.Empty; _lastSequence = 0;
+        _stamp = _stamp with { Generation = generation }; _presentation = presentation;
     }
     public ReadOnlySpan<UiLayoutBox> Layout(UiViewport viewport)
     {

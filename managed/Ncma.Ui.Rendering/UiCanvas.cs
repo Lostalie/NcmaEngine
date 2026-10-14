@@ -14,6 +14,7 @@ public sealed class UiImageAsset
         Id = id; Width = width; Height = height; _rgba = rgba.ToArray();
     }
     internal ReadOnlySpan<byte> Rgba => _rgba;
+    public byte[] CopyRgba() => (byte[])_rgba.Clone();
 }
 
 // Shared Editor/Player UI composition. The host prepares it OUTSIDE simulation/render submission.

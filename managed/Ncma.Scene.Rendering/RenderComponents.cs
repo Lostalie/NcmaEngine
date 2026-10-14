@@ -66,6 +66,7 @@ public static class RenderComponentRegistry
     {
         ArgumentNullException.ThrowIfNull(registry);
         PostProcessData.Register(registry);
+        SceneUiData.Register(registry);
         Ncma.Animation.ClipPlaybackData.Register(registry);
         Ncma.Animation.RootMotionData.Register(registry);
         Ncma.Animation.ActionDefinitionData.Register(registry);

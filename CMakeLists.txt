@@ -479,6 +479,36 @@ if(NCMA_BUILD_TESTS)
                 --scene-ui-host-tests "${CMAKE_BINARY_DIR}/m2/plugins"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-host-$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaRenderingTests.SceneUiHosts PROPERTIES TIMEOUT 180)
+            add_test(NAME NcmaRenderingTests.SceneUiSurfaces COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-ui-surface-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-surface-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneUiSurfaces PROPERTIES TIMEOUT 60)
+            add_test(NAME NcmaRenderingTests.SceneUiInteraction COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-ui-interaction-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-interaction-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneUiInteraction PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.SceneUiRelocatedInteraction COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-ui-relocated-interaction-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-relocated-interaction-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneUiRelocatedInteraction PROPERTIES TIMEOUT 180)
+            add_test(NAME NcmaRenderingTests.SceneUiPublication COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-ui-publication-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-publication-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneUiPublication PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.SceneUiPublicationProducts COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-ui-publication-products-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-publication-products-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneUiPublicationProducts PROPERTIES TIMEOUT 180)
+            add_test(NAME NcmaRenderingTests.SceneUiJointProducts COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-ui-joint-products-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m2/scene-ui-joint-products-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneUiJointProducts PROPERTIES TIMEOUT 300)
             set_tests_properties(NcmaCandidateGraphicsSmoke PROPERTIES TIMEOUT 60)
             add_test(NAME NcmaPresentationTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Presentation.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Presentation.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")
@@ -501,6 +531,14 @@ if(NCMA_BUILD_TESTS)
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins")
         # Includes bounded real-worker import + normal Editor offscreen/restart workflow.
         set_tests_properties(NcmaEditorServiceTests PROPERTIES TIMEOUT 180)
+        add_test(NAME NcmaEditorServiceTests.UiPackagePreparation COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll"
+            "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ui-package-preparation-tests)
+        set_tests_properties(NcmaEditorServiceTests.UiPackagePreparation PROPERTIES TIMEOUT 60)
+        add_test(NAME NcmaEditorServiceTests.UiSelection COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll"
+            "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ui-selection-tests)
+        set_tests_properties(NcmaEditorServiceTests.UiSelection PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaPlayerTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Player.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Player.Tests.dll"
             "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins")

@@ -63,6 +63,16 @@ internal static unsafe class UiWorkspaceTests
         ui.Resources.AddFont(fid,source,hash,"Windows regression only; no redistribution",false,preview.Text);Reject(()=>ui.Resources.AddFont(fid,source,hash,"duplicate",false,preview.Text));
         var label=UiElement.Create(Guid.NewGuid(),"Label",UiKind.Text,ui.Capture()!.Root)with{Order=2,Font=fid,Text="生命值 100",Layout=UiLayout.Fixed(8,100,200,40)};
         ui.Edit(ui.Stamp,[new(UiEditKind.Add,label.Id,label)]);preview.Prepare(ui,presenter.UiPreviewViewport);ulong shapes=preview.Text.PrepareCalls;Check(shapes>0);for(int i=0;i<32;i++)preview.Prepare(ui,presenter.UiPreviewViewport);Check(preview.Text.PrepareCalls==shapes);
+        // Display approval is not redistribution approval. Cooking never leaks the private OS font.
+        Reject(()=>ui.Resources.CookPackage(owner.Assets!.ProjectId,1,ui.Capture()!));
+        string distributableSource="assets/proggy.ttf";byte[] distributable=File.ReadAllBytes(Path.Combine(root,"engine/sdk/imgui/misc/fonts/ProggyClean.ttf"));File.WriteAllBytes(Path.Combine(directory,distributableSource),distributable);Guid cookedFont=Guid.NewGuid();
+        ui.Resources.AddFont(cookedFont,distributableSource,Convert.ToHexString(SHA256.HashData(distributable)),"ProggyClean MIT local regression",true,preview.Text);
+        var cookDefinition=ui.Capture()! with{Elements=ui.Capture()!.Elements.Select(e=>e.Id==label.Id?e with{Font=cookedFont,Text="HUD"}:e).ToArray()};
+        using(var locked=new FileStream(Path.Combine(directory,distributableSource),FileMode.Open,FileAccess.Read,FileShare.None)){
+            byte[] cooked=ui.Resources.CookPackage(owner.Assets!.ProjectId,1,cookDefinition);
+            using var admitted=Ncma.Ui.Rendering.RuntimeUiPackage.Decode(cooked,owner.Assets.ProjectId,cookDefinition.AssetId,1,Convert.ToHexString(SHA256.HashData(cooked)));
+            Check(admitted.HasFonts&&admitted.Capture().Elements.Single(e=>e.Id==label.Id).Font==cookedFont,"source-free approved font snapshot");
+        }
         int beforeRejected=owner.Edit.State.UndoCount;ui.Begin(ui.Stamp);Reject(()=>ui.Update([new(UiEditKind.Replace,b.Id,b with{Action="unregistered.code"})]));Reject(ui.Confirm);Check(!ui.HasDraft&&!owner.Edit.State.EditBusy&&owner.Edit.State.UndoCount==beforeRejected&&ui.Capture()!.Elements.Single(e=>e.Id==b.Id).Action=="preview.test");
         // Approved UUIDs must be re-reviewed after restart; source paths never enter .ncmaui.
         string serialized=Encoding.UTF8.GetString(UiCodec.Encode(ui.Capture()!));Check(!serialized.Contains(source,StringComparison.Ordinal)&&!serialized.Contains("msyh.ttc",StringComparison.Ordinal));

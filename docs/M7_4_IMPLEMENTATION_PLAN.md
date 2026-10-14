@@ -34,9 +34,9 @@ C拆为C1受检程序库/产品闭包、C2正式配置/共享执行、C3编辑�
 
 Inspector presets/参数/Feature顺序通过现有可撤销事务和唯一历史；AI先读有界元数据，再提案及精确审批，同一Undo/Redo。未实现效果明确unsupported。更新受检发布闭包及NCP/项目选择；原默认资源不能无证据静默切换。Headless/纯UI仍无3D插件/后处理资产。
 
-### D：替换示例与产品联合验收（D1/D2/D3-A/D3-B自动候选完成，D3剩余待实现）
+### D：替换示例与产品联合验收（D1/D2/D3-A/D3-B/D3-C自动候选完成，人工门禁保留）
 
-按[D分片方案](M7_4_D_IMPLEMENTATION_PLAN.md)推进。D1公开C# Feature/stage/full graph示例已通过98项实际检查、独立标量/Half整图误差0、API0/0和完整顺序Debug/Release，见[示例与接入](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；D3-A正式宿主可信管线定制、599项源/搬移检查及完整顺序Debug/Release通过，见[D3-A合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[D3-A交付](M7_4_D3A_DELIVERY_REPORT.md)；D3-B正式Player被动HUD/受检NCU1闭包、336项检查及完整顺序Debug/Release通过，见[D3-B合同](M7_4_D3B_RUNTIME_CONTRACT.md)、[D3-B交付](M7_4_D3B_DELIVERY_REPORT.md)；下一片D3-C补齐Editor场景HUD、交互联动与完整FBX/后处理/UI搬移联合。整个D3/D/M7.4未关闭。独立参考分层验证，不声称完整CPU光栅/光照oracle，也不关闭完整D。
+按[D分片方案](M7_4_D_IMPLEMENTATION_PLAN.md)推进。D1公开C# Feature/stage/full graph示例已通过98项实际检查、独立标量/Half整图误差0、API0/0和完整顺序Debug/Release，见[示例与接入](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；D3-A正式宿主可信管线定制、599项源/搬移检查及完整顺序Debug/Release通过，见[D3-A合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[D3-A交付](M7_4_D3A_DELIVERY_REPORT.md)；D3-B正式Player被动HUD/受检NCU1闭包、336项检查及完整顺序Debug/Release通过，见[D3-B合同](M7_4_D3B_RUNTIME_CONTRACT.md)、[D3-B交付](M7_4_D3B_DELIVERY_REPORT.md)；D3-C已完成Editor场景HUD、可信交互路由、作者不可变准备与同一历史的选择发布，以及完整FBX/IBL/阴影/Bloom/UI搬移联合；64份冻结源码完整顺序Debug/Release各12原生/39联合组/Python44通过，正式Release受检部署完成，见[D3-C交付](M7_4_D3C_DELIVERY_REPORT.md)。D3/D/M7.4自动候选链闭合；人工、用户素材、目标环境及完整性能门禁保留，下一阶段M7.5软阴影档位。独立参考分层验证，不声称完整CPU光栅/光照oracle。
 
 公开Feature插入、stage replacement和full pipeline replacement实际示例；用户无需接触平台API。实际静态/FBX动画/PBR/IBL/shadow/HDR/Bloom/显示域UI联合图；独立数值而非同shader自证。搬移受检Editor/Player、源目录不可用、错误闭包pre-gameplay拒绝、Undo/Reload/resize/关闭；记录CPU/GPU/分配/上传/资源成本。
 

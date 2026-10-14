@@ -41,6 +41,7 @@ struct Gui {
     uint32_t imageCount=0;
     std::vector<uint8_t> toolbarPixels;
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> toolbarIcon;
+    Microsoft::WRL::ComPtr<ID3D11BlendState> cachedImageBlend;
     std::unordered_map<Id, std::array<char, 1024>, Hash> textDrafts;
     std::unordered_map<Id, double, Hash> numberDrafts;
     std::unordered_set<Id, Hash> textPending;
@@ -60,6 +61,14 @@ uint32_t ValidateGui(uint64_t context, uint64_t handle, NcmaErrorV1* error)
     ImGui::SetCurrentContext(gui->context); return NCMA_OK;
 }
 struct BusyScope { BusyScope() { busy = true; } ~BusyScope() { busy = false; } };
+// query7 UI targets already contain premultiplied RGB. Ordinary ImGui textures and
+// vertices remain straight-alpha; restore the backend state immediately after each image.
+void CachedImageBlend(const ImDrawList*,const ImDrawCmd* command) {
+    auto* state=static_cast<ImGui_ImplDX11_RenderState*>(ImGui::GetPlatformIO().Renderer_RenderState);
+    auto* blend=static_cast<ID3D11BlendState*>(command->UserCallbackData);
+    IM_ASSERT(state&&blend);
+    if(state&&blend)state->DeviceContext->OMSetBlendState(blend,nullptr,0xffffffff);
+}
 uint32_t ReleaseImages(Gui& g,NcmaErrorV1* error) {
     while(g.imageCount){const auto i=g.imageCount-1;auto result=g.cachedImages[i]?ncma_renderer_release_gui_cached_image_v1(g.rendererModule,g.rendererHandle,g.images[i],error):ncma_renderer_release_gui_image_v1(g.rendererModule,g.rendererHandle,g.images[i],error);if(result)return result;g.imageCount--;}
     return NCMA_OK;
@@ -443,7 +452,13 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
                 case NCMA_GUI_CANVAS_INPUT:
                 case NCMA_GUI_CACHED_IMAGE: {
                     ImGui::SetCursorScreenPos({item.rect[0],item.rect[1]});
-                    if(item.kind==NCMA_GUI_CACHED_IMAGE)ImGui::GetWindowDrawList()->AddImage(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(imageViews[i])),{item.rect[0],item.rect[1]},{item.rect[0]+item.rect[2],item.rect[1]+item.rect[3]});
+                    if(item.kind==NCMA_GUI_CACHED_IMAGE) {
+                        auto* draw=ImGui::GetWindowDrawList();
+                        draw->AddCallback(CachedImageBlend,gui->cachedImageBlend.Get());
+                        draw->AddImage(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(imageViews[i])),{item.rect[0],item.rect[1]},{item.rect[0]+item.rect[2],item.rect[1]+item.rect[3]});
+                        draw->AddCallback(ImDrawCallback_ResetRenderState,nullptr);
+                        if(!item.enabled)break; // Passive HUD must not steal viewport picking/camera input.
+                    }
                     ImGui::InvisibleButton("##ui_canvas",{item.rect[2],item.rect[3]},ImGuiButtonFlags_MouseButtonLeft|ImGuiButtonFlags_MouseButtonMiddle);
                     if(item.enabled) {
                         const auto& io=ImGui::GetIO();std::array<char,128> coordinates{};
@@ -536,10 +551,20 @@ uint32_t NCMA_CALL AttachRenderer(uint64_t context,uint64_t handle,uint64_t rend
         ID3D11Device* device=nullptr; ID3D11DeviceContext* dc=nullptr;
         valid=ncma_renderer_borrow_dx11_v1(rendererModule,rendererHandle,&device,&dc,error);if(valid)return valid;
         BusyScope scope;
+        Microsoft::WRL::ComPtr<ID3D11BlendState> cachedBlend;
+        D3D11_BLEND_DESC desc{};auto& rt=desc.RenderTarget[0];rt.BlendEnable=TRUE;
+        rt.SrcBlend=D3D11_BLEND_ONE;rt.DestBlend=D3D11_BLEND_INV_SRC_ALPHA;rt.BlendOp=D3D11_BLEND_OP_ADD;
+        rt.SrcBlendAlpha=D3D11_BLEND_ONE;rt.DestBlendAlpha=D3D11_BLEND_INV_SRC_ALPHA;rt.BlendOpAlpha=D3D11_BLEND_OP_ADD;
+        rt.RenderTargetWriteMask=D3D11_COLOR_WRITE_ENABLE_ALL;
+        if(FAILED(device->CreateBlendState(&desc,&cachedBlend))) {
+            NcmaErrorV1 ignored{};(void)ncma_renderer_release_dx11_v1(rendererModule,rendererHandle,&ignored);
+            return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"GUI cached image blend initialization failed.");
+        }
         if(!ImGui_ImplDX11_Init(device,dc)) {
             NcmaErrorV1 ignored{}; (void)ncma_renderer_release_dx11_v1(rendererModule,rendererHandle,&ignored);
             return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"GUI DX11 initialization failed.");
         }
+        gui->cachedImageBlend=std::move(cachedBlend);
         gui->rendererModule=rendererModule;gui->rendererHandle=rendererHandle;return NCMA_OK;
     });
 }
@@ -597,7 +622,7 @@ uint32_t NCMA_CALL Destroy(uint64_t context, uint64_t handle, NcmaErrorV1* error
         if (gui->frameActive) ImGui::EndFrame();
         if (gui->rendererHandle) {
             valid=ReleaseImages(*gui,error);if(valid)return valid;
-            gui->toolbarIcon.Reset();gui->toolbarPixels.clear();
+            gui->toolbarIcon.Reset();gui->toolbarPixels.clear();gui->cachedImageBlend.Reset();
             ImGui_ImplDX11_Shutdown(); NcmaErrorV1 releaseError{};
             auto released = ncma_renderer_release_dx11_v1(gui->rendererModule,gui->rendererHandle,&releaseError);
             if (released) { *error=releaseError; return released; }

@@ -47,6 +47,7 @@ cases.AddRange(LayoutTests.Cases());
 cases.AddRange(GraphicsTests.Cases(args));
 cases.AddRange(TextTests.Cases(args));
 cases.AddRange(RuntimeTests.Cases());
+cases.AddRange(WindowInputTests.Cases());
 cases.AddRange(CanvasTests.Cases(args));
 foreach (var test in cases) {
     try { test.Run(); Console.WriteLine("PASS " + test.Name); }

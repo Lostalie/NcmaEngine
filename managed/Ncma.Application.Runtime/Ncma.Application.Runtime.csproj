@@ -6,5 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="../Ncma.Application/Ncma.Application.csproj" />
     <ProjectReference Include="../Ncma.Scripting/Ncma.Scripting.csproj" />
+    <ProjectReference Include="../Ncma.Ui/Ncma.Ui.csproj" />
   </ItemGroup>
 </Project>

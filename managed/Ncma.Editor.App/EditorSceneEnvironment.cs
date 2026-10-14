@@ -28,6 +28,7 @@ internal sealed unsafe partial class CandidatePresentation
     private Action<byte[],uint,uint>? _verificationCapture;
     private IDisposable? ComposePreparedPlay(PlaySession play,PreparedSceneAssetLease? assets)
     {
+        PreparePlayHud(play);
         PreflightPost(play.Document.World,play.Document.CaptureSnapshot());
         using var preflight=_renderer is not null&&assets is not null?
             SceneEnvironmentPreflight.Prepare(_renderer,_sceneCache!,play.Document.World,assets,play.Document.CaptureSnapshot(),()=>!_closed):null;

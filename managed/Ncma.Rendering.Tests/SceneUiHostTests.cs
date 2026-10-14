@@ -124,8 +124,8 @@ internal static unsafe partial class Program
         sceneShaders=sceneShaders with{Packages=sceneShaders.Packages.Where(p=>p.Profile!="Flat2D").ToArray()};
         foreach(var shader in sceneShaders.Packages){string to=Path.Combine(runtime,shader.Path);Directory.CreateDirectory(Path.GetDirectoryName(to)!);File.Copy(Path.Combine(repo.FullName,"out/bin",shader.Path),to);}
         File.WriteAllBytes(Path.Combine(runtime,"missing-ui-shader.ncmaproject"),JsonSerializer.SerializeToUtf8Bytes(config with{ShaderPackages=sceneShaders},json));
-        using(var editor=new Ncma.Editor.App.CandidatePresentation("unavailable-plugins",ProjectContext.Load(Path.Combine(runtime,"project.ncmaproject")),true,false,false))
-            RejectUi(editor.Start,"Editor refuses pending HUD before loading plugins");
+        using(var editor=new Ncma.Editor.App.CandidatePresentation("unavailable-plugins",ProjectContext.Load(Path.Combine(runtime,"bad-generation.ncmaproject")),true,false,false))
+            RejectUi(editor.Start,"Editor refuses invalid HUD identity before loading plugins");
         Pass(!Directory.GetFiles(runtime,"*",SearchOption.AllDirectories).Any(p=>new[]{".ncmaui",".ttf",".png",".nca",".fbx",".cs"}.Contains(Path.GetExtension(p))),"runtime has no author UI/font/image/model sources");
         var locks=new List<FileStream>();
         try {
@@ -135,14 +135,15 @@ internal static unsafe partial class Program
                 string evidence=Path.Combine(output,name);Directory.CreateDirectory(evidence);string request=Path.Combine(evidence,"request.json");
                 File.WriteAllText(request,JsonSerializer.Serialize(new{probe="scene-ui",productRoot=root,plugins=native,project=Path.Combine(runtime,"project.ncmaproject"),output=evidence,kind,relocated},json));
                 if(relocated){var info=new ProcessStartInfo("dotnet"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(string arg in new[]{typeof(Program).Assembly.Location,"--environment-product-child",request})info.ArgumentList.Add(arg);using var process=Process.Start(info)!;var stdout=process.StandardOutput.ReadToEndAsync();var stderr=process.StandardError.ReadToEndAsync();if(!process.WaitForExit(90000)){process.Kill(entireProcessTree:true);process.WaitForExit();throw new Exception("Owned UI child timeout");}string log=stdout.GetAwaiter().GetResult()+stderr.GetAwaiter().GetResult();File.WriteAllText(Path.Combine(evidence,"child.log"),log);Pass(process.ExitCode==0,name+" "+log);}
-                else SceneUiHostProbe.Run(request);
+                else if(kind=="editor")SceneUiEditorProbe.Run(request);else SceneUiHostProbe.Run(request);
                 using var result=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"probe.json")));checks+=result.RootElement.GetProperty("checks").GetInt32();
             }
             Probe(Path.Combine(repo.FullName,"out/bin"),Path.GetFullPath(plugins),"player","source",false);
             Probe(Path.Combine(repo.FullName,"out/bin"),Path.GetFullPath(plugins),"null","source-null",false);
+            Probe(Path.Combine(repo.FullName,"out/bin"),Path.GetFullPath(plugins),"editor","source-editor",false);
             if(!sourceOnly){
                 string configuration=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;using var products=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repo.FullName,"out/verification/m2-7",configuration,"packages.json")));
-                foreach(var(key,kind)in new[]{("playerDx11","player"),("playerNull","null")}) {
+                foreach(var(key,kind)in new[]{("playerDx11","player"),("playerNull","null"),("editor","editor")}) {
                     string source=products.RootElement.GetProperty(key).GetString()!,dest=Path.Combine(output,"product-"+kind);DeploymentManifest.Validate(source);Directory.CreateDirectory(dest);
                     using var manifest=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(source,DeploymentManifest.FileName)));
                     foreach(var entry in manifest.RootElement.GetProperty("files").EnumerateArray()) {string relative=entry.GetProperty("path").GetString()!,to=Path.GetFullPath(Path.Combine(dest,relative));Pass(to.StartsWith(dest+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase),"checked copy path");Directory.CreateDirectory(Path.GetDirectoryName(to)!);File.Copy(Path.Combine(source,relative),to);}
@@ -152,6 +153,6 @@ internal static unsafe partial class Program
                 }
             }
         } finally {foreach(var pin in locks)pin.Dispose();}
-        File.WriteAllText(Path.Combine(output,"scene-ui-results.json"),JsonSerializer.Serialize(new{checks,labels,sourceOnly,wholeD3Accepted=false,manualAccepted=false},json));Console.WriteLine($"PASS M7.4-D3-B scene HUD: {checks} checks; {output}");return 0;
+        File.WriteAllText(Path.Combine(output,"scene-ui-results.json"),JsonSerializer.Serialize(new{checks,labels,sourceOnly,wholeD3Accepted=false,manualAccepted=false},json));Console.WriteLine($"PASS scene HUD hosts (D3-B retained + D3-C Editor): {checks} checks; {output}");return 0;
     }
 }

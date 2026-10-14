@@ -46,5 +46,17 @@ public sealed class UiAuthoringResourceCatalog(string root)
     {
         Verify();foreach(var e in definition.Elements){if(e.Font!=Guid.Empty&&!_fonts.ContainsKey(e.Font))throw new ArgumentException("Missing explicitly approved Font UUID: "+e.Font);if(e.Image!=Guid.Empty&&!_images.ContainsKey(e.Image))throw new ArgumentException("Missing explicitly approved Image UUID: "+e.Image);}
     }
+    // Only explicitly reviewed, copied resources participate. Never reopen author paths at cook.
+    public byte[] CookPackage(Guid project,ulong generation,UiDefinition definition)
+    {
+        Verify();definition=UiCodec.Copy(definition);Require(definition);
+        var fonts=definition.Elements.Select(e=>e.Font).Where(id=>id!=Guid.Empty).Distinct().Order().Select(id=>{
+            var f=_fonts[id];return new UiPackageFont(id,f.CopyBytes(),f.License,f.Redistributable);
+        }).ToArray();
+        var images=definition.Elements.Select(e=>e.Image).Where(id=>id!=Guid.Empty).Distinct().Order().Select(id=>{
+            var image=_images[id];return new UiPackageImage(id,image.Width,image.Height,image.CopyRgba());
+        }).ToArray();
+        return RuntimeUiPackage.Encode(project,generation,definition,fonts,images);
+    }
     public void Revoke() { Verify();_fonts.Clear();_images.Clear();_rows.Clear();_sizes.Clear();Revision=checked(Revision+1); }
 }

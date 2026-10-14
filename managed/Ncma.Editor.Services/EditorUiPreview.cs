@@ -8,9 +8,9 @@ using Ncma.Ui.Rendering;
 namespace Ncma.Editor.Services;
 
 // Derived presentation only. No World, Play, editor command or file IO in Produce/Acquire.
-public sealed class EditorUiPreview(RendererSession renderer,string plugins) : IDisposable
+public sealed class EditorUiPreview(RendererSession renderer,string plugins,UiTextResources? textResources=null) : IDisposable
 {
-    private readonly PluginLoader _loader=new(); private TextService? _text;
+    private readonly UiTextResources _textResources=textResources??new(); private TextService? _text;
     private UiCanvas? _canvas; private UiRenderTarget? _target; private UiPresentationLease? _lease;
     private readonly List<IDisposable> _retained=[];
     private EditorUiStamp _stamp; private UiViewport _viewport; private ulong _content,_produced, _runtimeRevision=ulong.MaxValue;
@@ -22,7 +22,7 @@ public sealed class EditorUiPreview(RendererSession renderer,string plugins) : I
     public bool Prepared {get;private set;}
     public TextService Text { get {
         ObjectDisposedException.ThrowIf(_disposed,this);
-        if(_text is null){_loader.Load(plugins,[new("ncma.text",ModuleKind.Text,"NcmaText.dll","NcmaText.dll",1,0,[])]);_text=new(_loader.Modules.Single());}
+        _text??=_textResources.Get(plugins);
         return _text;
     } }
     public void Prepare(EditorUiWorkspace workspace,UiViewport viewport)
@@ -59,5 +59,5 @@ public sealed class EditorUiPreview(RendererSession renderer,string plugins) : I
     public void ReleasePresentation(){_lease?.Dispose();_lease=null;}
     public void ResetRuntime(){if(_lease is not null)throw new InvalidOperationException("Release UI presentation before reset.");_stamp=default;Prepared=false;}
     private void CloseCanvas(){try{ReleasePresentation();_target?.Dispose();_target=null;_canvas?.Dispose();_canvas=null;Boxes=[];_dirty=false;_produced=0;Prepared=false;}catch{_recovery=true;Prepared=false;throw;}}
-    public void Dispose(){if(_disposed)return;CloseCanvas();while(_retained.Count>0){_retained[0].Dispose();_retained.RemoveAt(0);}_text?.Dispose();_text=null;_loader.Dispose();_disposed=true;}
+    public void Dispose(){if(_disposed)return;CloseCanvas();while(_retained.Count>0){_retained[0].Dispose();_retained.RemoveAt(0);}_text=null;if(textResources is null)_textResources.Dispose();_disposed=true;}
 }

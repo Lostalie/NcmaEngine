@@ -4,7 +4,7 @@
 
 ## 完整范围和顺序
 
-状态：D1的98项实际检查及完整顺序Debug/Release首轮通过，见[示例](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；D3-A正式宿主可信管线定制、599项源/搬移检查及完整顺序Debug/Release通过，见[D3-A合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[D3-A交付](M7_4_D3A_DELIVERY_REPORT.md)；D3-B正式Player被动HUD/受检NCU1闭包、336项检查及完整顺序Debug/Release通过，见[D3-B合同](M7_4_D3B_RUNTIME_CONTRACT.md)、[D3-B交付](M7_4_D3B_DELIVERY_REPORT.md)；下一片D3-C补齐Editor场景HUD、交互联动与完整FBX/后处理/UI搬移联合。整个D3/D/M7.4未关闭。D3尚未完成，整个D/M7.4不关闭。
+状态：D1的98项实际检查及完整顺序Debug/Release首轮通过，见[示例](M7_4_D1_CUSTOMIZATION_EXAMPLES.md)、[交付](M7_4_D1_DELIVERY_REPORT.md)。D2联合图像582次检查/120图、独立后处理整图最大误差1/API0/0及完整顺序Debug/Release通过，见[D2合同](M7_4_D2_IMAGE_CONTRACT.md)、[D2交付](M7_4_D2_DELIVERY_REPORT.md)；D3-A正式宿主可信管线定制、599项源/搬移检查及完整顺序Debug/Release通过，见[D3-A合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[D3-A交付](M7_4_D3A_DELIVERY_REPORT.md)；D3-B正式Player被动HUD/受检NCU1闭包、336项检查及完整顺序Debug/Release通过，见[D3-B合同](M7_4_D3B_RUNTIME_CONTRACT.md)、[D3-B交付](M7_4_D3B_DELIVERY_REPORT.md)；D3-C已完成Editor场景HUD、可信交互路由、作者不可变准备与同一历史的选择发布，以及完整FBX/IBL/阴影/Bloom/UI搬移联合；64份冻结源码完整顺序Debug/Release各12原生/39联合组/Python44通过，正式Release受检部署完成，见[D3-C交付](M7_4_D3C_DELIVERY_REPORT.md)。D3/D/M7.4自动候选链闭合；人工、用户素材、目标环境及完整性能门禁保留，下一阶段M7.5软阴影档位。
 
 - D1：可编译公开C#示例：线性HDR Feature插入、几何stage替换、直接构建完整scene graph的pipeline替换（不是转发默认pipeline）。使用已有版本化图/程序/资源合同，不接触D3D、不添加新native ABI或远程代码加载。验证CPU-only、真实像素、独立标量/Half oracle、共享场景工厂与环境/后处理结合、失败原子性/owner/非重入、resize/关闭及暖态成本。
 - D2：实际静态/ASCII和Binary FBX→NCA→动画skin/PBR/IBL/shadow/HDR/Bloom/显示域UI联合。复用已经验证的独立软件积分/材质/滤波数值参考，但以联合图像和消融证据证明组合，不用同Shader自证。包含默认与定制路径、曝光/颜色域、UI不重复Tone、奇数尺寸/资源代次、失败恢复和成本。
@@ -14,7 +14,7 @@
 
 ## 边界
 
-D3 执行切片：D3-A 正式宿主可信管线工厂及启动前/真实视口校验、599项检查和完整双配置已经通过，见[D3-A 合同](M7_4_D3A_RUNTIME_CONTRACT.md)、[交付](M7_4_D3A_DELIVERY_REPORT.md)。D3-B 已完成正式 Player 被动 HUD 加载/合成入口及受检闭包、336项检查和完整双配置，见[D3-B合同](M7_4_D3B_RUNTIME_CONTRACT.md)、[交付](M7_4_D3B_DELIVERY_REPORT.md)。交互控件/非空 action 明确拒绝；Editor 项目 scene UiPackage 在插件加载前明确拒绝。D3-C 必须实现实际 Editor 视口合成、原编辑/Undo/Play/Reload 联动及交互路由，再完成真实 FBX/环境/后处理/UI 搬移产品联合与闭包错误验收，不可仅删除 pending guard。D3-A 单独通过不关闭整个 D3；现有低层 UI 图像和环境产品测试不能代替缺失的正式 UI 入口。
+D3执行切片：A可信启动管线、B正式Player被动HUD、C正式Editor HUD/可信动作输入/作者发布与完整搬移联合均已通过自动门禁，见[D3-C合同](M7_4_D3C_RUNTIME_CONTRACT.md)、[交付](M7_4_D3C_DELIVERY_REPORT.md)。默认CLI仍不提供交互动作授权；交互UI必须有可信C#启动动作表，否则在gameplay前拒绝。Editor现支持经过闭包验证的场景UiPackage，而不是删除guard后直接放行。完整自动候选不等同人工OS输入和完整性能验收。
 
 整pipeline替换指当前已支持的scene图与公开HDR子图组合，不等于任意未实现GPU操作；未知操作依旧拒绝。stage配置与Shader程序替换分层，程序仍需显式UUID/文件hash/完整反射/审批。示例是可信C#启动代码，不是代码沙箱，也不授权Agent编译/执行/直接World或GPU写入。编辑器/AI只处理已注册模块的有界元数据和原可撤销命令。
 
