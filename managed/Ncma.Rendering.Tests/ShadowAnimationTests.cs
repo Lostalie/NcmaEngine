@@ -103,14 +103,35 @@ internal static unsafe partial class Program
                             Pass(preset.Enabled?dark>10:dark==0,$"{label}/{quality}/pose{pose} visible shadow count={dark}");
                             if(preset.Enabled)shadowedPoses++;minShadow=Math.Min(minShadow,dark);poseRows.Add(new{quality=quality.ToString(),pose,time,size,error,dark});
                         }
-                        void Warm(){renderer.UpdateSkins(frame,requests,palettes);pipeline.Submit(frame++,gpuDraws,gpuCasters,lighting,lightVp,preset.Settings,target);renderer.Present();}
-                        for(int warm=0;warm<8;warm++)Warm();
+                        bool Warm(){if(!renderer.TryUpdateSkins(frame,requests,palettes))return false;pipeline.Submit(frame++,gpuDraws,gpuCasters,lighting,lightVp,preset.Settings,target);renderer.Present();return true;}
+                        // This correctness fixture requires every draw. Present does not promise GPU
+                        // completion, and query 5 explicitly permits bounded palette backpressure.
+                        // Drain only after BUSY, outside the measured submission/allocation interval;
+                        // one retry must succeed or the test fails. Never add waits to production.
+                        int warmupDrains=0;
+                        for(int warm=0;warm<8;warm++)if(!Warm()){renderer.WaitIdle();warmupDrains++;Pass(Warm(),"warmup after bounded diagnostic drain");}
                         var sceneBefore=renderer.PipelineStats;var skinBefore=renderer.SkinStats;var resourceBefore=renderer.ResourceStats;
-                        long allocation=GC.GetAllocatedBytesForCurrentThread(),start=Stopwatch.GetTimestamp();for(int warm=0;warm<64;warm++)Warm();double ms=Stopwatch.GetElapsedTime(start).TotalMilliseconds;allocation=GC.GetAllocatedBytesForCurrentThread()-allocation;
+                        long allocation=0,submissionTicks=0,wallStart=Stopwatch.GetTimestamp();int busyAttempts=0,attempts=0;
+                        for(int warm=0;warm<64;warm++){
+                            bool submitted=false;
+                            for(int attempt=0;attempt<2;attempt++){
+                                var priorScene=renderer.PipelineStats;var priorSkin=renderer.SkinStats;ulong priorFrame=frame;
+                                long bytes=GC.GetAllocatedBytesForCurrentThread(),start=Stopwatch.GetTimestamp();
+                                submitted=Warm();
+                                submissionTicks+=Stopwatch.GetTimestamp()-start;allocation+=GC.GetAllocatedBytesForCurrentThread()-bytes;attempts++;
+                                if(submitted)break;
+                                busyAttempts++;
+                                Pass(frame==priorFrame&&renderer.SkinStats.Batches==priorSkin.Batches&&renderer.SkinStats.PaletteBytes==priorSkin.PaletteBytes&&renderer.PipelineStats.CopiedBytes==priorScene.CopiedBytes,"busy attempt does not advance frame or submit/upload work");
+                                if(attempt==0)renderer.WaitIdle();
+                            }
+                            Pass(submitted,"exact warm frame after at most one bounded diagnostic drain");
+                        }
+                        double ms=1000.0*submissionTicks/Stopwatch.Frequency,wallMillisecondsIncludingDiagnosticWait=Stopwatch.GetElapsedTime(wallStart).TotalMilliseconds;
                         var sceneAfter=renderer.PipelineStats;var skinAfter=renderer.SkinStats;
                         Pass(allocation==0&&sceneAfter.Creates==sceneBefore.Creates&&renderer.ResourceStats.UploadedBytes==resourceBefore.UploadedBytes,"warm64 no allocations/creation/static uploads");
                         Pass(sceneAfter.GeometryDraws-sceneBefore.GeometryDraws==64UL*(ulong)gpuDraws.Length&&sceneAfter.ShadowDraws-sceneBefore.ShadowDraws==64UL*(ulong)gpuCasters.Length,"exact geometry and caster count");
-                        rows.Add(new{label,quality=quality.ToString(),size,poses=32,qualityError,minShadow,allocation,cpuMilliseconds=ms,frames=64,depthBytes=preset.Budget.DepthTextureBytes,sceneCopiedBytes=sceneAfter.CopiedBytes-sceneBefore.CopiedBytes,sceneUploadBytes=sceneAfter.ConstantUploadBytes-sceneBefore.ConstantUploadBytes,skinBefore,skinAfter,gpuLastValidMilliseconds=renderer.Stats.GpuMilliseconds,gpuOriginFrameAvailable=false});
+                        Pass(skinAfter.Batches-skinBefore.Batches==64&&skinAfter.PaletteBytes-skinBefore.PaletteBytes==64UL*(ulong)palettes.Length*128,"exact64 successful palette batches and bytes");
+                        rows.Add(new{label,quality=quality.ToString(),size,poses=32,qualityError,minShadow,allocation,cpuMilliseconds=ms,wallMillisecondsIncludingDiagnosticWait,attempts,busyAttempts,warmupDrains,measurementScope="active submission attempts; bounded diagnostic waits excluded; not whole-frame performance",frames=64,depthBytes=preset.Budget.DepthTextureBytes,sceneCopiedBytes=sceneAfter.CopiedBytes-sceneBefore.CopiedBytes,sceneUploadBytes=sceneAfter.ConstantUploadBytes-sceneBefore.ConstantUploadBytes,skinBefore,skinAfter,gpuLastValidMilliseconds=renderer.Stats.GpuMilliseconds,gpuOriginFrameAvailable=false});
                     }
                     Pass(renderer.PipelineStats.ResidentBytes==before.ResidentBytes&&renderer.PipelineStats.Pipelines==before.Pipelines,"resize block releases exact resources");
                 }

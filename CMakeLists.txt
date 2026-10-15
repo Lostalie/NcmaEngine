@@ -315,6 +315,9 @@ if(NCMA_BUILD_MANAGED)
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Scene.Tests/Ncma.Scene.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Tests/Ncma.Modules.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/Ncma.Runtime.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release>
                     --nologo
@@ -699,6 +702,9 @@ if(NCMA_BUILD_TESTS)
                 -File "${CMAKE_SOURCE_DIR}/scripts/Test-EditorDeployment.ps1" -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaEditorDeploymentTests PROPERTIES TIMEOUT 120)
         endif()
+        add_test(NAME NcmaModuleTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Tests.dll")
+        set_tests_properties(NcmaModuleTests PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaManagedHeadlessTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Runtime.Tests.dll")
         set_tests_properties(NcmaManagedHeadlessTests PROPERTIES TIMEOUT 30)

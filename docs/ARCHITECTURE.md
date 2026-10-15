@@ -10,6 +10,7 @@ Editor.Core/Scene/Gameplay/Runtime；Platform/Gui/Renderer/Physics/FBX/动画通
 
 本文区分目标架构和实际实现。标记“已实现”只表示所述切片可运行，不代表整个系统完成。
 A 方案已确认，AI 深度参与场景、动画、UI、工具和引擎扩展。
+2026-10-16模块增量：独立纯BCL `Ncma.Modules` 已实现复制v1请求/提案、可信启动目录、有界异步owner inbox、身份/时限/撤销/背压与停止收敛，完整双配置自动门禁通过。结果仅为待领域验证的数据，不授予编辑权限；尚无正式宿主接线、RPC线协议、Python worker或推理。见[M8.1契约](M8_1_RUNTIME_CONTRACT.md)和[M8实施记录](M8_IMPLEMENTATION_PLAN.md)。
 Python 游戏脚本已移除；托管 World/固定步/事务基础已实现，C++ SceneWorld 和原生 World 导出已删除。
 编辑器及隔离 Play 已接入 C# World；统一 Editor.Core/EditSession 编辑链路已实现；正式默认入口已切换为 C# apphost，保留明确的部署恢复。Platform/GUI/DX11 Renderer 与独立 Physics 插件及 M2.5 A–F 业务迁移已落地，人工验收未完成，见 [H5 记录](M2_5_H5_DELIVERY_REPORT.md)。
 
@@ -132,6 +133,8 @@ spdlog（原生日志）、Box2D（2D 求解）、Jolt Physics（3D 求解）、
 
 目标：统一API无关资源与提交契约。本版本仅实现DX11；Vulkan/OpenGL保留扩展边界，实际后端延后下一版本。
 2026-10-09执行顺序：M6结束→M7（DX11）→M8→M9；任何顺序调整不改变已有人工/目标/性能/长稳验收状态。
+
+2026-10-15发布平台边界：M9本版本仅实现Windows发布，先沿用现有win-x64/DX11产品链；微信小游戏、Android、iOS属于后续版本，当前未实现。导出计划/资产依赖/诊断保持平台无关，Windows打包执行位于独立导出适配器；其他平台只保留扩展契约，不能注册虚假可用目标或静默回退。目标机、自包含、性能与长稳仍须真实验收，平台SDK/签名/上传另行配置授权。
 
 | 能力 | 当前状态 |
 |---|---|
