@@ -124,7 +124,7 @@ internal static unsafe partial class Program
         for(int cycle=0;cycle<8;cycle++) {
             var d=document.CreateIsolatedCopy();Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId,camera=d.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));play.Pause();
-            try{using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators))using(var target=renderer.CreateViewTarget(256,256)) {
+            try{using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,d.World))using(var target=renderer.CreateViewTarget(256,256)) {scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
                 var captured=new byte[4*48];
                 for(int step=0;step<120;step++) {
                     Check(play.Step().State==PlayState.Paused,"Actual graph/skin root quantum");
@@ -152,7 +152,7 @@ internal static unsafe partial class Program
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,prepared);
             play.Start(_=>throw new Exception("No behaviours"));try {
                 Check(play.AdvanceFixedStep().State==PlayState.Running,"0/8/32 graph GPU quantum");
-                using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World,prepared,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);using var target=renderer.CreateViewTarget(256,256);
+                using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(prepared,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);using var target=renderer.CreateViewTarget(256,256);
                 bool submitted=scene.Submit(frame++,256,256,camera.PersistentId,target:target);if(submitted)renderer.Present();
                 Check(submitted==(count>0)&&scene.Costs.GeometryDraws==count&&scene.Costs.ShadowDraws==count,"Actual 0/8/32 graph skin geometry/shadow count");
                 var stamp=scene.ReadAnimationPresentation();Check(count==0?stamp is null:stamp is {} p&&p.Tick==play.Tick&&p.PublicationId==prepared.Assets.Identity&&p.PoseGeneration>0,"Copied exact submission identity");
@@ -192,7 +192,7 @@ internal static unsafe partial class Program
             using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
             for(int cycle=0;cycle<8;cycle++) {
                 var play=editor.StartPlay();play.Pause();var camera=play.Document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
-                editorScene=new(renderer,cache,play.Document.World,editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:editorRuntime!.Characters,animators:editorRuntime.Animators);
+                editorScene=new(renderer,cache,play.Document.World);editorScene.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:editorRuntime!.Characters,animators:editorRuntime.Animators);
                 Check(play.Step().State==PlayState.Paused&&editorScene.Submit(frame++,256,256,camera,target:target),"Formal Editor graph root scene");renderer.Present();
                 if(cycle==0){failClose=true;Reject(editor.StopPlay);Check(editor.Play==play&&editor.PlayRenderAssets is not null&&kernel.Statistics.Rigs==1,"Close failure retains graph/pose/asset ownership");failClose=false;}
                 editor.StopPlay();Check(edit.SequenceEqual(editor.Document.CaptureBytes())&&editWorld==editor.Document.World.Identity,"Editor graph roots do not mutate Edit");
@@ -209,9 +209,11 @@ internal static unsafe partial class Program
         var configuration=new Ncma.Application.ProjectConfiguration(1,f.Project,"Graph root Player","start.ncmascene","gameplay.dll","Direct3D11",[],true,cameraId,AssetPackage:"assets/game.ncpak");
         string project=Path.Combine(packageDirectory,"root.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(configuration,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
         foreach(bool headless in new[]{true,false}) {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
             var flags=new List<string>{"--project",project,"--ticks","8","--report",Path.Combine(packageDirectory,headless?"headless.json":"dx11.json")};if(headless)flags.Add("--headless");
             Ncma.Player.App.PlayerReport report;
-            if(headless)report=Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(flags.ToArray()),pluginRoot:plugins,visible:false);
+            if(headless)report=playerRunOwner0.Run(Ncma.Player.App.PlayerOptions.Parse(flags.ToArray()),pluginRoot:plugins,visible:false);
             else {
                 // Platform/Renderer own one context per process. A formal Player must not borrow this test's live device.
                 var start=new System.Diagnostics.ProcessStartInfo("dotnet"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};

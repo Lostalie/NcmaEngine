@@ -92,10 +92,13 @@ internal static class EnvironmentPlayerProductProbe
 {
     internal static void Run(string requestPath)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         using var json=JsonDocument.Parse(File.ReadAllBytes(requestPath));var r=json.RootElement;string root=r.GetProperty("productRoot").GetString()!,project=r.GetProperty("project").GetString()!,output=r.GetProperty("output").GetString()!;
         bool headless=r.GetProperty("kind").GetString()=="null",skin=r.GetProperty("skin").GetBoolean();var evidence=new EnvironmentProductEvidence();DeploymentManifest.Validate(root);var oracle=headless||skin?null:EnvironmentProductEvidence.Oracle(r,"oracle");
         var options=new PlayerOptions(project,headless,null,8,1d/60,30,Path.Combine(output,"player-report.json"),false,false);int captures=0;string[] native=[];
-        var result=headless?PlayerRunner.Run(options,visible:false):PlayerRunner.RunForVerification(options,Path.Combine(root,"plugins"),(pixels,w,h)=>{if(captures++<8)evidence.Capture(pixels,w,h,"player "+captures,oracle);native=EnvironmentProductEvidence.NativePaths(root);});
+        var result=headless?playerRunOwner0.Run(options,visible:false):playerRunOwner1.RunForVerification(options,Path.Combine(root,"plugins"),(pixels,w,h)=>{if(captures++<8)evidence.Capture(pixels,w,h,"player "+captures,oracle);native=EnvironmentProductEvidence.NativePaths(root);});
         evidence.Check(result.ExitCode==0&&(headless?result.Tick==8:result.Tick>=8)&&result.ShutdownErrors.Length==0,"healthy fixed ticks/close; Null exact ticks");evidence.Check(result.ValidationErrors==0&&result.ValidationWarnings==0,"Player API0/0");
         if(headless)evidence.Check(result.Modules.Length==0&&result.RenderedFrames==0&&!Process.GetCurrentProcess().Modules.Cast<ProcessModule>().Any(m=>m.ModuleName is "NcmaRenderer.dll" or "NcmaPlatform.dll" or "NcmaAnimationKernel.dll"),"Null has no native 3D/pose module");
         else evidence.Check(captures>0&&result.RenderedFrames>0,"actual Player image");

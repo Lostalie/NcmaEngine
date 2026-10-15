@@ -11,7 +11,7 @@ uint32_t CreateScenePipelinePrepared(uint64_t context,uint64_t handle,const Ncma
   if(testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
 #endif
   Validation(*renderer); // All potentially allocating diagnostics BEFORE key/counter publication.
-  uint64_t id=0x5343000000000000ull|nextResource++;renderer->scenePipelines.emplace(id,std::move(candidate));renderer->sceneStats.creates++;renderer->sceneStats.resident_bytes+=bytes;*output={id,handle};return NCMA_OK;
+  uint64_t id=NcmaPlugin::NewWindowsHandle();renderer->scenePipelines.emplace(id,std::move(candidate));renderer->sceneStats.creates++;renderer->sceneStats.resident_bytes+=bytes;*output={id,handle};return NCMA_OK;
  });
 }
 uint32_t NCMA_CALL CreateScenePipeline(uint64_t context,uint64_t handle,const NcmaScenePipelineDescriptionV4* input,NcmaGpuResourceV3* output,NcmaErrorV1* error) noexcept {
@@ -21,7 +21,7 @@ uint32_t NCMA_CALL DestroyScenePipeline(uint64_t context,uint64_t handle,NcmaGpu
  return NcmaPlugin::Guard(error,[&]()->uint32_t{
   auto valid=Instance(context,handle,error);if(valid)return valid;if(key.generation!=handle||!renderer->scenePipelines.contains(key.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
   if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);BusyScope busyScope;std::string message;
-  if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+  if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
   renderer->backend->GetDeviceContext()->ClearState();const auto& p=*renderer->scenePipelines.at(key.value);
   Validation(*renderer);
   if(p.environmentKey.value)--renderer->environments.at(p.environmentKey.value)->scenePins;
@@ -75,7 +75,7 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
   };
   std::vector<NcmaSceneDrawV4> geo,caster;if(b.draw_count)geo.assign(geometry,geometry+b.draw_count);if(f.caster_count)caster.assign(casters,casters+f.caster_count);
   for(const auto& d:geo)if(!validateDraw(d))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Scene geometry batch.");for(const auto& d:caster)if(!validateDraw(d))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Scene shadow batch.");
-  BusyScope busyScope;ExecutionScope execution;std::string message;const auto started=std::chrono::steady_clock::now();ResolveTiming(*renderer);
+  BusyScope busyScope;ExecutionScope execution(b.frame);std::string message;const auto started=std::chrono::steady_clock::now();ResolveTiming(*renderer);
   if(!renderer->timingPending){auto* dc=renderer->backend->GetDeviceContext();dc->Begin(renderer->gpuDisjoint.Get());dc->End(renderer->gpuBegin.Get());renderer->measuring=true;}
   if(!renderer->backend->BeginFrame(message))return Failure(error,message);
   for(const auto& p:operations){

@@ -46,6 +46,7 @@ public sealed unsafe partial class RendererSession : IDisposable
     private readonly HashSet<RenderResources> _groups = [];
     private readonly RenderPass[] _passes = new RenderPass[64];
     private ulong _handle;
+    internal bool IsClosed=>_handle==0;
     internal PluginModule Module => _lease.Module;
     internal ulong Handle { get { Verify(); return _handle; } }
     public ulong SubmitCalls { get; private set; }
@@ -69,7 +70,19 @@ public sealed unsafe partial class RendererSession : IDisposable
             RendererDescription desc = new() { Size = 48, Backend = backend, Validation = validation ? 1u : 0, Vsync = vsync ? 1u : 0,
                 Platform = window.Module.Context, Window = window.Handle, Width = width, Height = height };
             PluginError error = default; ulong handle = 0;
-            PluginModule.Check(module.Id, "create_renderer", create(module.Context, &desc, &handle, &error), error);
+            NativeFailureDiagnostic? previousStartup=null;bool observedStartup=false;
+            try{previousStartup=ReadStartupFailure(module);observedStartup=true;}catch{ }
+            try { PluginModule.Check(module.Id, "create_renderer", create(module.Context, &desc, &handle, &error), error); }
+            catch(PluginException failure)
+            {
+                // Preserve the original exception/result even if optional diagnostic reading fails.
+                try
+                {
+                    var diagnostic=ReadStartupFailure(module);
+                    if(observedStartup&&diagnostic is {} current&&current.Generation!=previousStartup?.Generation)failure.NativeDiagnostic=current;
+                }catch{ }
+                throw;
+            }
             _handle = handle;
         } catch { _platformLease?.Dispose(); _lease.Dispose(); throw; }
     }

@@ -1,6 +1,9 @@
 namespace Ncma.Player.App;
 internal static class Program
 {
+    // The standalone process retains a failed shutdown until process exit. Embedded
+    // hosts own their own PlayerRunner and may explicitly retry; never force unload.
+    private static PlayerRunner? _execution;
     public static int Main(string[] args)
     {
         PlayerOptions options;
@@ -20,9 +23,17 @@ internal static class Program
                 try { Ncma.Application.DeploymentManifest.Validate(AppContext.BaseDirectory); }
                 catch { Console.Error.WriteLine("deployment_manifest_failed"); return 3; }
             }
-            var result = PlayerRunner.Run(options, () => Volatile.Read(ref cancelled) != 0);
+            if(_execution is not null){Console.Error.WriteLine("player_shutdown_retained");return 6;}
+            _execution=new PlayerRunner();
+            // Bounded/headless runs never prompt. Interactive standalone Player uses the
+            // same default-No, renderer-independent local confirmation as the Editor.
+            var confirmation=new Ncma.Platform.WindowsConfirmation();
+            var result = _execution.Run(options, () => Volatile.Read(ref cancelled) != 0,
+                confirmGraphicsRecovery:options.Headless||options.Ticks is not null?null:
+                    request=>Volatile.Read(ref cancelled)==0&&confirmation.Confirm(request.Message,"NcmaPlayer 图形恢复"));
             Console.WriteLine($"player_result exit={result.ExitCode} tick={result.Tick} state={result.State} reason={result.Reason}");
             if (result.ExitCode != 0) Console.Error.WriteLine(result.Reason);
+            if(_execution.Status.Phase==PlayerRunnerPhase.Idle){_execution.Dispose();_execution=null;}
             return result.ExitCode;
         }
         finally { Console.CancelKeyPress -= cancel; }

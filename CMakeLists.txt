@@ -170,12 +170,12 @@ if(WIN32)
     target_include_directories(NcmaText PRIVATE engine/source/plugins)
     target_compile_definitions(NcmaText PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_compile_options(NcmaText PRIVATE /W4 /WX /permissive- /utf-8)
-    target_link_libraries(NcmaText PRIVATE dwrite d2d1 windowscodecs ole32)
+    target_link_libraries(NcmaText PRIVATE dwrite d2d1 windowscodecs ole32 advapi32)
     set_target_properties(NcmaText PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_library(NcmaPlatform SHARED engine/source/plugins/platform/PlatformPlugin.cpp)
     target_include_directories(NcmaPlatform PRIVATE engine/source/plugins)
     target_compile_definitions(NcmaPlatform PRIVATE NCMA_PLATFORM_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN)
-    target_link_libraries(NcmaPlatform PRIVATE glfw user32)
+    target_link_libraries(NcmaPlatform PRIVATE glfw user32 advapi32)
     target_compile_options(NcmaPlatform PRIVATE /W4 /WX /permissive- /utf-8)
     set_target_properties(NcmaPlatform PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
 
@@ -193,7 +193,7 @@ if(WIN32)
         engine/source/runtime/renderer/rhi/RhiResources.cpp)
     target_include_directories(NcmaRenderer PRIVATE engine/source/plugins engine/source/runtime)
     target_compile_definitions(NcmaRenderer PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)
-    target_link_libraries(NcmaRenderer PRIVATE NcmaPlatform glfw Ncma::Eigen d3d11 dxgi d3dcompiler)
+    target_link_libraries(NcmaRenderer PRIVATE NcmaPlatform glfw Ncma::Eigen d3d11 dxgi d3dcompiler advapi32)
     target_compile_options(NcmaRenderer PRIVATE /W4 /WX /permissive- /utf-8)
     set_target_properties(NcmaRenderer PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
 
@@ -208,7 +208,7 @@ if(WIN32)
     add_library(NcmaGui SHARED engine/source/plugins/gui/GuiPlugin.cpp)
     target_include_directories(NcmaGui PRIVATE engine/source/plugins engine/sdk/imgui engine/sdk/imgui/backends)
     target_compile_definitions(NcmaGui PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)
-    target_link_libraries(NcmaGui PRIVATE NcmaGuiCore NcmaPlatform NcmaRenderer glfw dwmapi)
+    target_link_libraries(NcmaGui PRIVATE NcmaGuiCore NcmaPlatform NcmaRenderer glfw dwmapi advapi32)
     # Third-party ImGui sources keep their own warnings; strict /WX applies to our adapter.
     set_source_files_properties(engine/source/plugins/gui/GuiPlugin.cpp PROPERTIES COMPILE_OPTIONS "/W4;/WX;/permissive-;/utf-8")
     set_target_properties(NcmaGui PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
@@ -218,7 +218,7 @@ endif()
 
 if(WIN32 AND NCMA_BUILD_TESTS)
     add_executable(NcmaPresentationNativeTests tests/plugins/PresentationNativeTests.cpp)
-    target_link_libraries(NcmaPresentationNativeTests PRIVATE NcmaGuiCore NcmaPlatform NcmaRenderer glfw user32 dwmapi)
+    target_link_libraries(NcmaPresentationNativeTests PRIVATE NcmaGuiCore NcmaPlatform NcmaRenderer glfw user32 dwmapi advapi32)
     target_compile_definitions(NcmaPresentationNativeTests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
     target_compile_options(NcmaPresentationNativeTests PRIVATE /W4 /WX "/FI${CMAKE_CURRENT_SOURCE_DIR}/tests/TestAssertions.h" /permissive- /utf-8)
     set_target_properties(NcmaPresentationNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
@@ -242,10 +242,15 @@ if(WIN32 AND NCMA_BUILD_TESTS)
         engine/source/plugins/renderer/PostProcessKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp engine/source/runtime/renderer/rhi/RhiResources.cpp)
     target_include_directories(NcmaRendererNativeTests PRIVATE engine/source/runtime engine/source/plugins)
-    target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE)
+    target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE NCMA_PLUGIN_HANDLE_TEST)
     target_compile_options(NcmaRendererNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
-    target_link_libraries(NcmaRendererNativeTests PRIVATE NcmaPlatform glfw Ncma::Eigen d3d11 dxgi d3dcompiler)
+    target_link_libraries(NcmaRendererNativeTests PRIVATE NcmaPlatform glfw Ncma::Eigen d3d11 dxgi d3dcompiler advapi32)
     set_target_properties(NcmaRendererNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
+    add_executable(NcmaGraphicsReloadTests tests/plugins/GraphicsReloadTests.cpp)
+    target_include_directories(NcmaGraphicsReloadTests PRIVATE engine/source/plugins)
+    target_compile_definitions(NcmaGraphicsReloadTests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(NcmaGraphicsReloadTests PRIVATE /W4 /WX /permissive- /utf-8)
+    set_target_properties(NcmaGraphicsReloadTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
     add_executable(NcmaKernelReferenceCapture tests/plugins/KernelReferenceCapture.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp
         engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp
@@ -396,6 +401,8 @@ if(NCMA_BUILD_TESTS)
         set_tests_properties(NcmaKernelReferenceCapture PROPERTIES FIXTURES_SETUP kernel_reference_image TIMEOUT 30)
         add_test(NAME NcmaRendererNativeTests COMMAND NcmaRendererNativeTests $<TARGET_FILE:NcmaPlatform>)
         set_tests_properties(NcmaRendererNativeTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaGraphicsReloadTests COMMAND NcmaGraphicsReloadTests $<TARGET_FILE:NcmaPlatform> $<TARGET_FILE:NcmaRenderer> $<TARGET_FILE:NcmaGui> $<TARGET_FILE:NcmaText> "${CMAKE_SOURCE_DIR}/engine/sdk/imgui/misc/fonts/ProggyClean.ttf")
+        set_tests_properties(NcmaGraphicsReloadTests PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaPresentationNativeTests COMMAND NcmaPresentationNativeTests $<TARGET_FILE:NcmaPlatform> "${CMAKE_SOURCE_DIR}/engine/build/resources/NcmaEngine.ico")
         set_tests_properties(NcmaPresentationNativeTests PROPERTIES TIMEOUT 30)
         add_test(NAME NcmaPluginAbiTests COMMAND NcmaPluginAbiTests $<TARGET_FILE:NcmaFixtureGood> $<TARGET_FILE:NcmaFixtureWrongMajor>)
@@ -549,6 +556,83 @@ if(NCMA_BUILD_TESTS)
                 --shadow-joint-products-tests "${CMAKE_BINARY_DIR}/m2/plugins"
                 "${CMAKE_SOURCE_DIR}/out/verification/m2/shadow-joint-products-$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaRenderingTests.ShadowJointProducts PROPERTIES TIMEOUT 300)
+            add_test(NAME NcmaRenderingTests.ResourceUpdateSafety COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --resource-update-safety-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/resource-update-safety-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.ResourceUpdateSafety PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.SceneCandidateSafety COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-candidate-safety-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/scene-candidate-safety-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneCandidateSafety PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.SceneExchangeSafety COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-exchange-safety-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/scene-exchange-safety-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneExchangeSafety PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.SceneConstructionSafety COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --scene-construction-safety-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/scene-construction-safety-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.SceneConstructionSafety PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.PlayerRunnerLifetime COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --player-runner-lifetime-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/player-runner-lifetime-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.PlayerRunnerLifetime PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.WindowSurface COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --window-surface-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/window-surface-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.WindowSurface PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.GpuDiagnostics COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --renderer-diagnostic-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/gpu-diagnostics-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.GpuDiagnostics PROPERTIES TIMEOUT 60)
+            add_test(NAME NcmaRenderingTests.GraphicsRecoveryJoint COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --graphics-recovery-joint-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/graphics-recovery-joint-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.GraphicsRecoveryJoint PROPERTIES TIMEOUT 300)
+            foreach(shadow_quality IN ITEMS Off Low Medium)
+                add_test(NAME NcmaRenderingTests.GraphicsRecoveryJoint${shadow_quality} COMMAND "${DOTNET_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                    --graphics-recovery-joint-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                    "${CMAKE_SOURCE_DIR}/out/verification/m7-6/graphics-recovery-joint-${shadow_quality}-$<IF:$<CONFIG:Debug>,Debug,Release>" "${shadow_quality}")
+                set_tests_properties(NcmaRenderingTests.GraphicsRecoveryJoint${shadow_quality} PROPERTIES TIMEOUT 300)
+            endforeach()
+            add_test(NAME NcmaRenderingTests.EditorLifetime COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --editor-lifetime-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/editor-lifetime-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.EditorLifetime PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.EditorGraphicsRecovery COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --editor-graphics-recovery-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/editor-graphics-recovery-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.EditorGraphicsRecovery PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.EditorRecoveryLoop COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --editor-recovery-loop-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/editor-recovery-loop-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.EditorRecoveryLoop PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.PresentationState COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --presentation-state-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/presentation-state-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.PresentationState PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.PlayGraphicsRecovery COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --play-graphics-recovery-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/play-graphics-recovery-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.PlayGraphicsRecovery PROPERTIES TIMEOUT 120)
+            add_test(NAME NcmaRenderingTests.PlayerGraphicsRecovery COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --player-graphics-recovery-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-6/player-graphics-recovery-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.PlayerGraphicsRecovery PROPERTIES TIMEOUT 120)
             set_tests_properties(NcmaCandidateGraphicsSmoke PROPERTIES TIMEOUT 60)
             add_test(NAME NcmaPresentationTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Presentation.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Presentation.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")

@@ -79,7 +79,7 @@ uint32_t NCMA_CALL BindPostProcess(uint64_t context,uint64_t handle,NcmaGpuResou
         if(renderer->stats.validation_errors||renderer->stats.validation_warnings)return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"post_candidate_diagnostics; old_binding_retained");
         if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"post_device_failure");
         if(parametersOnly){NcmaPostDescriptionV1 d{};d.passes=parameterCandidate.data();scene.post->UpdateParameters(d);++renderer->postStats.publications;return NCMA_OK;}
-        if(!Wait(*renderer,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,"post_device_failure"):NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,"post_drain_old_retained");
+        if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
         if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"post_device_failure");
         Validation(*renderer);
         if(renderer->stats.validation_errors||renderer->stats.validation_warnings)return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"post_completion_diagnostics; old_binding_retained");

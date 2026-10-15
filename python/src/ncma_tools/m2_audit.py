@@ -258,7 +258,7 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
         raise ValueError("Resource-kernel metadata must be an array of records.")
     expected_pose = ("ncma.pose", 1, "plugins/NcmaAnimationKernel.dll")
     expected_text = ("ncma.text", 1, "plugins/NcmaText.dll")
-    if product == "NcmaPlayer-null-candidate" and any("ncmaanimationkernel" in p for p in seen):
+    if product in ("NcmaPlayer-null-candidate", "NcmaPlayer-null-physics-candidate") and any("ncmaanimationkernel" in p for p in seen):
         raise ValueError("Pose kernel deployed in Null Player.")
     kernel_ids = [(k["id"], k["abiVersion"], k["path"]) for k in kernels]
     if len(kernel_ids) != len(set(kernel_ids)):
@@ -293,12 +293,27 @@ def validate_package(root: Path, directory: str, product: str, configuration: st
         if modules != {"ncma.platform": (1, 0), "ncma.renderer": (1, 1), "ncma.gui": (1, previous_gui), "ncma.physics": (1, 1)}:
             raise ValueError("Editor module ABI metadata mismatch.")
     else:
-        allowed_kernels = {expected_pose} if product == "NcmaPlayer-dx11-candidate" else set()
+        graphical = product in ("NcmaPlayer-dx11-candidate", "NcmaPlayer-dx11-physics-candidate")
+        physics_variant = product in ("NcmaPlayer-null-physics-candidate", "NcmaPlayer-dx11-physics-candidate")
+        if physics_variant:
+            required_modules = {"ncma.physics": (1, 2, 255)}
+            if graphical:
+                required_modules.update({"ncma.platform": (1, 0, 0), "ncma.renderer": (1, 1, 15)})
+            modules = {m["id"]: (m["abiMajor"], m["abiMinor"], m["capabilities"]) for m in data["modules"]}
+            if len(modules) != len(data["modules"]) or modules != required_modules or "plugins/ncmaphysics.dll" not in seen:
+                raise ValueError("Physics Player requires exact declared solver.")
+            if not graphical and {p for p in seen if p.startswith("plugins/")} != {"plugins/ncmaphysics.dll"}:
+                raise ValueError("Physics Null must only deploy its solver.")
+            if any(not any(p.startswith("licenses/" + name + "-") for p in seen) for name in ("box2d", "joltphysics", "eigen", "spdlog")):
+                raise ValueError("Physics Player license closure is incomplete.")
+        elif "plugins/ncmaphysics.dll" in seen:
+            raise ValueError("Default Player must not silently deploy optional physics.")
+        allowed_kernels = {expected_pose} if graphical else set()
         # Text is a shared, optional HUD numerical resource, not the Editor/ImGui service.
         # Require its exact checked DLL and lazy declaration; Null may never deploy it.
         if any("ncmatext" in p for p in seen) or any(k["id"] == "ncma.text" for k in kernels):
             text_metadata = next((k for k in kernels if k["id"] == "ncma.text"), {})
-            if (product != "NcmaPlayer-dx11-candidate" or expected_text[2].casefold() not in seen or
+            if (not graphical or expected_text[2].casefold() not in seen or
                     any("ncmatext" in p and p != expected_text[2].casefold() for p in seen) or
                     type(text_metadata.get("abiVersion")) is not int or text_metadata.get("lazy") is not True):
                 raise ValueError("Player HUD text must be exact, versioned, lazy and graphical-only.")
@@ -365,7 +380,9 @@ def audit(root: Path, configuration: str) -> dict:
     index = read_json(safe_path(root, f"out/verification/m2-7/{configuration}/packages.json"))
     packages = []
     for key, product in (("editor", "NcmaEngine-editor-candidate"), ("playerNull", "NcmaPlayer-null-candidate"),
-                         ("playerDx11", "NcmaPlayer-dx11-candidate")):
+                         ("playerDx11", "NcmaPlayer-dx11-candidate"),
+                         ("playerNullPhysics", "NcmaPlayer-null-physics-candidate"),
+                         ("playerDx11Physics", "NcmaPlayer-dx11-physics-candidate")):
         selected = Path(index[key]).resolve(strict=True)
         if not selected.is_relative_to(root / "out/package/m2-7" / configuration):
             raise ValueError("Unexpected package index target.")

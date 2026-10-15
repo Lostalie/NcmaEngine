@@ -16,7 +16,8 @@ using Ncma.Rendering.Scene.Examples;
 
 using var post = new PostProcessRuntime(renderer, shaderFiles, postLibrary,
     SceneCustomizationExamples.Modules(), preparationAllowed);
-using var scene = new SceneRenderSession(renderer, cache, world, assets, startup,
+using var scene = new SceneRenderSession(renderer, cache, world);
+scene.Prepare(assets, startup,
     pipelineFactory: SceneCustomizationExamples.ReplacePipeline,
     environmentPreparationAllowed: preparationAllowed,
     postProcessing: post);
@@ -27,7 +28,19 @@ scene.PrepareEnvironmentView(width, height, camera, exposure: 1, ambient: .2f);
 scene.Submit(frame, width, height, camera, exposure: 1, ambient: .2f, target: target);
 ```
 
+M7.6起持有者必须先保存再Prepare，旧可失败构造入口已删除。上例是健康离帧路径；长期宿主将scene保存在字段中，Prepare失败或Dispose遇到Busy时不得清空/覆盖该字段，必须保留依赖，待安全边界显式关闭成功后再释放。不要将 `new(...).Prepare(...)` 包装成可丢失临时持有者的工厂。
+
 保留文件租约/renderer/cache/world/assets的拥有者，先结束scene，再结束post，再释放文件/GPU服务。带骨骼的场景还必须传现有pose kernel/animation绑定，不允许从示例跳过。编辑器原草稿/事务/唯一Undo仍是高层参数修改入口；模块目录只读审批不授予执行权。CPU构图通过和GpuValidated=false不是GPU准入，也不是可信代码安全沙箱。
+
+## Player 宿主持有者（M7.6）
+
+`PlayerRunner` 现在是由调用方持有的实例，旧静态 `Run` 已移除，无兼容转发。长期宿主先将实例保存到自己的字段，再调用 `Run(options, pipelineFactory: ...)`。正常结束会按依赖顺序关闭资源并进入 `Idle`；关闭失败会返回原失败报告，同时进入 `Retained`，不得覆盖该字段或重新 Run。
+
+通过 `Status` 读取复制的阶段、generation、关闭尝试次数、失败服务/原生结果和资源持有标记。可信宿主在相同线程显式调用 `RetryShutdown()`；它只重试关闭，不推进游戏、不 Present、不改写 `LastReport` 或原报告文件。成功排空后才能开始新的 World/session。`Dispose()` 遇到释放失败仍会抛出并保留资源；不能用丢失局部变量的异常路径代替长期持有。
+
+若关闭被一个未完成的图形帧阻塞，可显式调用 `AbandonFrameAndRetryShutdown()`。可选 renderer query17/v1 按精确 renderer/frame 身份放弃当前帧，该 renderer 随即只能关闭，不能继续提交/Present；仍遵守原资源租约和有界GPU退休等待，绝不强制卸载。旧模块没有 query17 时明确拒绝，不隐式回退。正常路径不查询该可选接口，Null 不引入渲染模块。此操作不是设备丢失恢复或游戏回滚，也不是新的 Agent 能力。
+
+独立 CLI 在自身进程字段中保留关闭失败的运行器直到退出，保持原失败退出码；不自动重试、不强制释放。进程退出后的操作系统回收不称为引擎故障恢复。
 
 ## 显式程序库闭包
 

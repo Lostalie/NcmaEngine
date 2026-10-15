@@ -29,28 +29,43 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         {Id=obj.PersistentId;Object=obj;Source=source;Rig=rig;Bindings=new(mesh,rig.BoneCount);Upload=SkinUploadData.Prepare(mesh);InfluenceBounds=new(mesh);BoneOffset=offset;BindRoot=skeleton.Bones[0].BindLocal.Position;}
     }
     private readonly int _owner=Environment.CurrentManagedThreadId;
+    private readonly ScenePreparationLifetime _lifetime = new();
+    public ScenePreparationPhase PreparationPhase => _lifetime.Phase;
     private readonly World _world;private readonly PoseKernel _kernel;private readonly List<IDisposable> _leases=new(192);
     private readonly Dictionary<Guid,(PoseRig Rig,SkeletonPayload Skeleton)> _rigs=new(64);
     private readonly Dictionary<Guid,PoseClip> _clips=new(128);
     private readonly List<Character> _characters=new(32);
     private readonly List<SceneRenderDiagnostic> _diagnostics=new(32);
     public IReadOnlyList<SceneRenderDiagnostic> Diagnostics { get; }
-    private readonly PoseSample[] _samples=new PoseSample[32];private readonly PoseTrs[] _locals;private readonly Matrix4x4[] _models;
-    private readonly Matrix4x4[] _bindingMatrices;private readonly GpuSkinPalette[] _palette;
+    private readonly PoseSample[] _samples=new PoseSample[32];private PoseTrs[] _locals=[];private Matrix4x4[] _models=[];
+    private Matrix4x4[] _bindingMatrices=[];private GpuSkinPalette[] _palette=[];
     private Ncma.Assets.Runtime.RuntimeAssetLease? _assets;private PlaySession? _play;private bool _disposed;
     private double _previewSeconds;
-    private readonly IRootMotionPresentation? _rootMotion;
-    private readonly SceneAnimatorRuntime? _animators;
-    private readonly bool _hasNonGraph;
+    private IRootMotionPresentation? _rootMotion;
+    private SceneAnimatorRuntime? _animators;
+    private bool _hasNonGraph;
+    private Guid _publication;
+    private int _presentationBorrowers;
     private double _previewDebt;
     public Guid WorldId {get;}
+    public Guid AssetPublication {get{_lifetime.VerifyOwner();ObjectDisposedException.ThrowIf(_disposed,this);return _publication;}}
     public AnimationSceneCosts Costs {get;private set;}
-    internal IReadOnlyList<Character> Characters=>_characters;
-    public SceneAnimationSession(World world,PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,PoseKernel kernel,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false)
+    internal IReadOnlyList<Character> Characters { get { Verify();return _characters; } }
+    public SceneAnimationSession(World world,PoseKernel kernel)
     {
-        _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();_rootMotion=rootMotion;_animators=animators;
-        try{
+        ArgumentNullException.ThrowIfNull(world);ArgumentNullException.ThrowIfNull(kernel);
+        _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();
+    }
+    public void Prepare(PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false)
+    {
+        _lifetime.Begin();
+        try {
+            ArgumentNullException.ThrowIfNull(prepared);ArgumentNullException.ThrowIfNull(startup);
+            var world=_world;var kernel=_kernel;
+            using var read=SceneEnvironmentState.BeginRead(world,WorldId);
+            _rootMotion=rootMotion;_animators=animators;
             animators?.VerifyPresentation(world,prepared.Assets);
+            _publication=prepared.Assets.Identity;
             _assets=prepared.Assets.AcquireLease();var registry=RenderComponentRegistry.CreateRegistry();int bones=0,palettes=0,previewScratch=0;
             var previewSources=new Dictionary<Guid,GraphPoseSnapshotSource>();
             foreach(var obj in startup.Objects){var component=obj.Components.SingleOrDefault(c=>c.TypeId==SkinnedMeshData.TypeId);if(component is null)continue;
@@ -90,7 +105,8 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
             if(bones>32768||palettes>32768)throw new ArgumentException("Scene pose/palette capacity.");
             _hasNonGraph=_characters.Any(c=>c.GraphPose is null);
             _locals=new PoseTrs[bones];_models=new Matrix4x4[bones];_bindingMatrices=new Matrix4x4[palettes];_palette=new GpuSkinPalette[palettes];
-        }catch{Dispose();throw;}
+            _lifetime.Complete();
+        }catch{_lifetime.Fail();throw;}
     }
     private PoseClip RequireClip(Character c,ClipPlaybackData settings)
     {if(!_clips.TryGetValue(settings.ClipId,out var clip)||clip.Rig!=c.Rig)throw new ArgumentException("Clip is not pinned to this prepared character generation; Stop/Refresh required.");return clip;}
@@ -190,14 +206,43 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     }
     public Vector3 RootDisplacement(Guid objectId)
     {Verify();foreach(var c in _characters)if(c.Id==objectId)return c.RootDisplacement;throw new ArgumentException("Unknown prepared character.");}
-    private void Verify(){ObjectDisposedException.ThrowIf(_disposed,this);if(_owner!=Environment.CurrentManagedThreadId||_world.Identity!=WorldId)throw new InvalidOperationException("Animation session owner/World identity invalidated; prepare a new session.");}
+    private void Verify(){ObjectDisposedException.ThrowIf(_disposed,this);if(_owner!=Environment.CurrentManagedThreadId||_world.Identity!=WorldId)throw new InvalidOperationException("Animation session owner/World identity invalidated; prepare a new session.");_lifetime.RequireReady();}
+    // Numerical state and committed clocks survive GPU replacement. The host owns the retained
+    // session; at most one scene presentation borrows it. A GPU owner never resets or serializes it.
+    internal IDisposable BorrowForRecovery()
+    {
+        Verify();if(_presentationBorrowers!=0)throw new InvalidOperationException("Animation already has a presentation borrower.");
+        var borrow=new PresentationBorrow(this);_presentationBorrowers=1;return borrow;
+    }
+    internal IDisposable BorrowForPresentation(World world,Guid publication,PoseKernel kernel,PlaySession? play,
+        IRootMotionPresentation? rootMotion,SceneAnimatorRuntime? animators)
+    {
+        Verify();
+        if(!ReferenceEquals(_world,world)||_publication!=publication||!ReferenceEquals(_kernel,kernel)||
+            !ReferenceEquals(_play,play)||!ReferenceEquals(_rootMotion,rootMotion)||!ReferenceEquals(_animators,animators))
+            throw new ArgumentException("Retained animation requires its exact World, assets, numerical kernel and gameplay owners.");
+        return BorrowForRecovery();
+    }
+    private sealed class PresentationBorrow(SceneAnimationSession owner):IDisposable
+    {
+        private bool _closed;
+        public void Dispose(){
+            // Undo/document replacement invalidates old World references, but cannot prevent
+            // releasing their retained numerical owners. Only ownership/thread matter here.
+            owner._lifetime.VerifyOwner();if(_closed)return;
+            if(owner._presentationBorrowers!=1)throw new InvalidOperationException("Invalid presentation borrower ownership.");
+            owner._presentationBorrowers=0;_closed=true;
+        }
+    }
     public void Dispose()
     {
-        if(_disposed)return;if(_owner!=Environment.CurrentManagedThreadId)throw new InvalidOperationException("Animation release requires owner thread.");
+        _lifetime.VerifyOwner();
+        if(_presentationBorrowers!=0)throw new InvalidOperationException("Close the scene presentation before its retained animation owner.");
+        if(!_lifetime.BeginClose())return;
         _play?.RemoveCommittedObserver(this);_play=null;
         // Clip dependencies first, then rigs. A failed release retains the rest and the asset pins.
         for(int i=_leases.Count-1;i>=0;i--)if(_leases[i] is PoseClip){_leases[i].Dispose();_leases.RemoveAt(i);}
         for(int i=_leases.Count-1;i>=0;i--){_leases[i].Dispose();_leases.RemoveAt(i);}
-        _assets?.Dispose();_assets=null;_disposed=true;
+        _assets?.Dispose();_assets=null;_disposed=true;_lifetime.Closed();
     }
 }

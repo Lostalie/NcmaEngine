@@ -24,14 +24,14 @@ uint32_t NCMA_CALL PublishEnvironmentGpu(uint64_t context,uint64_t handle,NcmaGp
  if(testEnvironmentGpuPublicationFault)throw std::runtime_error("Environment diagnostics prepublication fault");
 #endif
  Validation(*renderer);if(renderer->stats.validation_errors||renderer->stats.validation_warnings)return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"Environment GPU validation.");
- if(old.value&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+ if(old.value){if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;}
  Validation(*renderer);if(renderer->stats.validation_errors||renderer->stats.validation_warnings)return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"Environment completion validation.");
  if(old.value) {
      const uint64_t oldBytes=static_cast<uint64_t>(previous->second->layout.float_count)*4;
      renderer->backend->GetDeviceContext()->ClearState();previous->second.swap(candidate);
      renderer->environmentStats.resident_bytes-=oldBytes;renderer->environmentStats.retirements++;
  } else {
-     const uint64_t key=nextResource;renderer->environments.emplace(key,std::move(candidate));nextResource++;
+     const uint64_t key=NcmaPlugin::NewWindowsHandle();renderer->environments.emplace(key,std::move(candidate));
      old={key,handle};renderer->environmentStats.live++;
  }
  renderer->environmentStats.resident_bytes+=bytes;renderer->environmentStats.publications++;renderer->environmentStats.uploaded_bytes+=bytes;
@@ -43,7 +43,7 @@ uint32_t NCMA_CALL DestroyEnvironmentGpu(uint64_t context,uint64_t handle,NcmaGp
  if(found->second->scenePins)return NcmaPlugin::Error(error,NCMA_BUSY,"Environment is bound to a scene.");
  if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
  BusyScope scope;std::string message;Validation(*renderer);
- if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+ if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
  renderer->backend->GetDeviceContext()->ClearState();renderer->environmentStats.resident_bytes-=static_cast<uint64_t>(found->second->layout.float_count)*4;
  renderer->environments.erase(found);renderer->environmentStats.live--;renderer->environmentStats.retirements++;return NCMA_OK;});
 }
@@ -55,7 +55,7 @@ uint32_t NCMA_CALL CaptureEnvironmentGpu(uint64_t context,uint64_t handle,NcmaGp
  if(!output||capacity!=floats)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
  BusyScope scope;std::vector<float> candidate(floats);Rendering::EnvironmentGpuKernel::Capture capture;std::string message;
  if(!found->second->PrepareCapture(capture,message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
- if(!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+ if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
  if(!found->second->ReadCapture(capture,candidate,message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
 #ifdef NCMA_RENDERER_TEST_WAIT
  if(testEnvironmentGpuPublicationFault)throw std::runtime_error("Environment capture prepublication fault");

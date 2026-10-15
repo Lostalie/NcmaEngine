@@ -64,7 +64,7 @@ internal static class ActionJointChecks
             play.Start(_=>throw new Exception("No behaviours"));
             var values=new List<Sample>(Samples);int[] gc=[GC.CollectionCount(0),GC.CollectionCount(1),GC.CollectionCount(2)];
             try {
-                using var scene=new SceneRenderSession(renderer,cache,doc.World,assets,doc.CaptureSnapshot(),poseKernel:count==0?null:kernel,play:play,rootMotion:runtime);
+                using var scene=new SceneRenderSession(renderer,cache,doc.World);scene.Prepare(assets,doc.CaptureSnapshot(),poseKernel:count==0?null:kernel,play:play,rootMotion:runtime);
                 for(int i=0;i<Warmup+Samples;i++) {
                     if(i==Warmup) {
                         foreach(Guid actor in sample.Actors)runtime!.RequestAction(actor,ActionRequest.Attack);
@@ -111,7 +111,7 @@ internal static class ActionJointChecks
                 Check(identities.Add(play.SessionId)&&identities.Add(doc.World.Identity)&&identities.Add(runtime.NumericalEpoch),"Fresh coupled identities");
                 SceneRenderSession? scene=null;
                 try {
-                    scene=new(renderer,cache,doc.World,assets,doc.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime);
+                    scene=new(renderer,cache,doc.World);scene.Prepare(assets,doc.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime);
                     runtime.RequestAction(cycleSample.Actors[0],ActionRequest.Attack);
                     for(int i=0;i<12;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Cycle committed attack");if(!scene.Submit(++frame,320,240,cycleSample.Camera))renderer.Submit(clear,null,RenderFrame.Reference(frame,320,240));renderer.Present();}
                     Check(doc.World.FindObject(cycleSample.Targets[0]).Get<HealthData>().Current==75,"Cycle real damage");
@@ -132,7 +132,7 @@ internal static class ActionJointChecks
                         recovered.AdvanceFixedStep();Check(recoveredRuntime.ReadStepProfile().Tick==recovered.Tick,"Recovered committed profile");
                         recovered.Reload(_=>throw new Exception("No behaviours"));
                         Check(recovered.State==PlayState.Paused&&identities.Add(recovered.SessionId)&&identities.Add(recoveryDoc.World.Identity)&&identities.Add(recoveredRuntime.NumericalEpoch),"Active reload rotates identities");Reject(()=>recoveredRuntime.ReadStepProfile());
-                        recovered.Step();using var recoveryScene=new SceneRenderSession(renderer,cache,recoveryDoc.World,assets,recoveryDoc.CaptureSnapshot(),poseKernel:kernel,play:recovered,rootMotion:recoveredRuntime);if(!recoveryScene.Submit(++frame,320,240,cycleSample.Camera))renderer.Submit(clear,null,RenderFrame.Reference(frame,320,240));renderer.Present();
+                        recovered.Step();using var recoveryScene=new SceneRenderSession(renderer,cache,recoveryDoc.World);recoveryScene.Prepare(assets,recoveryDoc.CaptureSnapshot(),poseKernel:kernel,play:recovered,rootMotion:recoveredRuntime);if(!recoveryScene.Submit(++frame,320,240,cycleSample.Camera))renderer.Submit(clear,null,RenderFrame.Reference(frame,320,240));renderer.Present();
                     }finally{recovered.Stop();}
                 } finally{scene?.Dispose();play.Stop();}
                 Check(physics.Inspect().Worlds==0&&kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&cache.Count==0&&renderer.SkinStats.Meshes==0&&renderer.PipelineStats.Pipelines==0&&renderer.SceneStats.LiveMeshes==0&&renderer.ResourceStats.Textures==0&&renderer.ResourceStats.Materials==0&&renderer.ResourceStats.Targets==0,"Cycle resource baselines");

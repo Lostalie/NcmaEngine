@@ -52,6 +52,11 @@ internal static unsafe partial class Program
         using var fontLock=new FileStream(fontPath,FileMode.Open,FileAccess.Read,FileShare.None);
         var locks=Directory.GetFiles(fixture.Root,"*",SearchOption.AllDirectories).Select(f=>new FileStream(f,FileMode.Open,FileAccess.Read,FileShare.None)).ToArray();
         try {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+            using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
+
+            using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
             if(relocatedOnly) {
                 SceneUiRelocatedInteraction(repo.FullName,configuration,runtime,projectPath,output,Pass);
                 return 0;
@@ -60,11 +65,11 @@ internal static unsafe partial class Program
             using(var blocked=new CandidatePresentation("missing-plugins",context,true,false,false))Reject(blocked.Start,"default Editor requires trusted routes before plugins");
             using(var blocked=new CandidatePresentation("missing-plugins",context,true,false,false,uiActions:new()))Reject(blocked.Start,"unknown routes reject before plugins");
             var headless=new PlayerOptions(projectPath,true,"null",2,1d/60,30,Path.Combine(output,"null.json"),false,false);
-            var noRoutes=PlayerRunner.Run(headless,pluginRoot:"missing-plugins",visible:false);
+            var noRoutes=playerRunOwner0.Run(headless,pluginRoot:"missing-plugins",visible:false);
             Pass(noRoutes.ExitCode==7&&noRoutes.Modules.Length==0,"default Null denies interactive package");
-            var accepted=PlayerRunner.Run(headless with{Report=Path.Combine(output,"null-routes.json")},pluginRoot:"missing-plugins",visible:false,uiActions:routes);
+            var accepted=playerRunOwner1.Run(headless with{Report=Path.Combine(output,"null-routes.json")},pluginRoot:"missing-plugins",visible:false,uiActions:routes);
             Pass(accepted.ExitCode==0&&accepted.Modules.Length==0&&accepted.Tick==2,"Null CPU closure and exact routes no native modules");
-            var graphical=PlayerRunner.Run(headless with{Headless=false,Renderer="d3d11",Report=Path.Combine(output,"graphical-routes.json")},pluginRoot:plugins,visible:false,uiActions:routes);
+            var graphical=playerRunOwner2.Run(headless with{Headless=false,Renderer="d3d11",Report=Path.Combine(output,"graphical-routes.json")},pluginRoot:plugins,visible:false,uiActions:routes);
             Pass(graphical.ExitCode==0&&graphical.Tick>=2&&graphical.RenderedFrames>0&&graphical.ValidationErrors==0&&graphical.ValidationWarnings==0,"formal PlayerRunner graphical startup with exact routes");
 
             // Actual Player class: same input method used immediately after native Poll in production.
@@ -96,6 +101,19 @@ internal static unsafe partial class Program
                 Pass(Position()==new Vector3(2,.5f,1),"Player pause cancels pending click");
                 Input([Pointer(1,20,20),Pointer(0,20,20)],delta:0);state.Focused=0;Input([]);state.Focused=1;Input([]);
                 Pass(Position()==new Vector3(2,.5f,1),"Player focus loss cancels pending click");
+                Input([Pointer(1,20,20),Pointer(0,20,20)],delta:0);var visibleState=state;state.Minimized=1;Input([]);state=visibleState;Input([]);
+                Pass(Position()==new Vector3(2,.5f,1),"Player minimize cancels pending HUD input before resume");
+                Input([Pointer(1,20,20),Pointer(0,20,20)],delta:0);state.FramebufferWidth=0;Input([]);state=visibleState;Input([]);
+                Pass(Position()==new Vector3(2,.5f,1),"Player zero framebuffer cancels pending HUD input without minimized flag");
+                hud.Runtime.CancelInput();Input([],delta:0);byte[]? beforeRecovery=null;
+                player.Present(play,(p,_,_)=>beforeRecovery=p);var runtimeBefore=hud.Runtime;
+                Input([Pointer(1,20,20),Pointer(0,20,20)],delta:0);var recoveryStatus=play.Status;
+                player.RebuildGraphics(player.ReviewGraphicsRecovery());
+                Pass(play.Status==recoveryStatus&&ReferenceEquals(runtimeBefore,hud.Runtime)&&hud.Runtime.Widget(text.Id).Text=="A"&&hud.Runtime.Widget(slider.Id).Value==.5f,"Player GPU recovery retains exact gameplay and text/slider runtime");
+                byte[]? afterRecovery=null;player.Present(play,(p,_,_)=>afterRecovery=p);
+                Pass(beforeRecovery is not null&&afterRecovery is not null&&beforeRecovery.SequenceEqual(afterRecovery),"Player recovery restores exact scene and glyph/widget pixels");
+                Input([]);Pass(Position()==new Vector3(2,.5f,1),"Player recovery revokes pending pre-fault HUD proposal");
+                Input([Pointer(1,20,20),Pointer(0,20,20)]);Pass(Position()==new Vector3(3,.5f,1),"Player new HUD input reaches original script once after recovery");
                 Pass(player.Stats.ValidationErrors==0&&player.Stats.ValidationWarnings==0,"Player API0/0");
             }
 
@@ -128,10 +146,25 @@ internal static unsafe partial class Program
                     Pass(editHud.Runtime.Widget(text.Id).Text==""&&owner.Document.CaptureBytes().SequenceEqual(editBytes),"Edit UI/document remain isolated");
                     Pass(changed.Length==width*height*4&&!changed.SequenceEqual(baseline),"final Editor GUI composition displays changed text");
                     File.WriteAllBytes(Path.Combine(output,$"editor-interactive-{cycle}.rgba"),changed);
+                    playHud.Runtime.CancelInput();Draw();var recoveryPixels=Draw(capture:true);
+                    Draw([Pointer(1,20,20),Pointer(0,20,20)],0); // Queue a proposal without a fixed step.
+                    var recoveryStatus=play.Status;
+                    var recoveryRuntime=playHud.Runtime;var recoveryHistory=owner.Edit!.State;
+                    editor.RebuildGraphics(editor.ReviewGraphicsRecovery());
+                    Pass(ReferenceEquals(play,owner.Play)&&play.Status==recoveryStatus&&owner.Edit.State==recoveryHistory,"graphics recovery retains exact Play clocks/sole history");
+                    Draw();
+                    Pass(ReferenceEquals(playHud,EnvironmentProductEvidence.Field<SceneUiPresentation>(editor,"_playHud"))&&ReferenceEquals(recoveryRuntime,playHud.Runtime)&&playHud.Runtime.Widget(text.Id).Text=="A","graphics recovery retains original HUD text/runtime instance");
+                    Pass(Draw(capture:true).SequenceEqual(recoveryPixels),"recovered final HUD glyph and scene pixels identical");
+                    Draw(delta:1d/60);Pass(Position()==new Vector3(2,0,1),"recovery revokes pre-fault queued gameplay HUD proposal");
+                    Draw([Pointer(1,20,20),Pointer(0,20,20)],1d/60);Pass(Position()==new Vector3(3,0,1),"fresh post-recovery click reaches original script exactly once");
                     Draw([Pointer(1,20,20),Pointer(0,20,20)],0);play.Pause();Draw();play.Step();play.Resume();Draw(delta:1d/60);
-                    Pass(Position()==new Vector3(2,0,1),"Editor pause/single-step cancels pending input");
+                    Pass(Position()==new Vector3(3,0,1),"Editor pause/single-step cancels pending input");
+                    Draw([Pointer(1,20,20),Pointer(0,20,20)],0);var visibleState=state;state.Minimized=1;Draw(delta:1d/60);state=visibleState;Draw(delta:1d/60);
+                    Pass(Position()==new Vector3(3,0,1),"Editor minimize cancels pending HUD input before resume");
+                    Draw([Pointer(1,20,20),Pointer(0,20,20)],0);state.FramebufferWidth=0;Draw(delta:1d/60);state=visibleState;Draw(delta:1d/60);
+                    Pass(Position()==new Vector3(3,0,1),"Editor zero framebuffer cancels pending HUD input without minimized flag");
                     Draw([Pointer(1,20,20),Pointer(0,20,20)],0);owner.ReloadGameplay(context.GameplayAssemblyPath);Draw();play.Resume();Draw(delta:1d/60);
-                    Pass(Position()==new Vector3(2,0,1),"Editor reload revokes old proposal");
+                    Pass(Position()==new Vector3(3,0,1),"Editor reload revokes old proposal");
                     owner.StopPlay();Pass(Draw(capture:true).SequenceEqual(baseline),"Stop restores exact Edit HUD image");
                     var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
                     Pass(renderer.UiTargetStats.Targets==1&&renderer.UiTargetStats.Leases==0,"Stop releases Play target/leases");

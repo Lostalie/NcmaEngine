@@ -23,7 +23,7 @@ uint32_t CreateSkinPrepared(uint64_t context,uint64_t handle,const NcmaSkinMeshV
  #ifdef NCMA_RENDERER_TEST_WAIT
   if(registered&&testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
  #endif
-  Validation(*renderer);uint64_t id=0x534b000000000000ull|nextMesh++;uint64_t meshBytes=mesh->bytes;
+  Validation(*renderer);uint64_t id=NcmaPlugin::NewWindowsHandle();uint64_t meshBytes=mesh->bytes;
   renderer->meshes.emplace(id,std::move(mesh));try{renderer->skins.emplace(id,std::move(skin));}catch(...){renderer->meshes.erase(id);throw;}
   if(kernel)renderer->skinKernel=std::move(kernel);renderer->skinStats.resident_bytes+=bytes+extra;renderer->skinStats.creates++;
   renderer->meshStats.resident_bytes+=meshBytes;renderer->meshStats.uploaded_bytes+=m.vertex_bytes+m.index_bytes;renderer->meshStats.mesh_creates++;*output={id,handle};return NCMA_OK;
@@ -35,7 +35,7 @@ uint32_t NCMA_CALL CreateSkin(uint64_t context,uint64_t handle,const NcmaSkinMes
 uint32_t NCMA_CALL DestroySkin(uint64_t context,uint64_t handle,NcmaGpuMeshV1 key,NcmaErrorV1* error) noexcept {
  return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=Instance(context,handle,error);if(valid)return valid;
   if(key.generation!=handle||!renderer->skins.contains(key.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
-  BusyScope scope;std::string message;if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+  BusyScope scope;std::string message;if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
   renderer->backend->GetDeviceContext()->ClearState();renderer->skinStats.resident_bytes-=renderer->skins.at(key.value)->bytes;renderer->meshStats.resident_bytes-=renderer->meshes.at(key.value)->bytes;
   renderer->skins.erase(key.value);renderer->meshes.erase(key.value);if(renderer->meshes.empty())renderer->meshKernel.reset();if(renderer->skins.empty()){renderer->skinKernel.reset();renderer->skinStats.resident_bytes-=Rendering::SkinKernel::ResidentBytes;renderer->skinStats.gpu_sample_valid=0;renderer->skinStats.gpu_ms=0;}Validation(*renderer);return NCMA_OK;
  });
@@ -56,7 +56,7 @@ uint32_t NCMA_CALL UpdateSkin(uint64_t context,uint64_t handle,const NcmaSkinBat
    for(int row=0;row<3;row++)for(int col=0;col<3;col++){double value=0;for(int k=0;k<3;k++)value+=static_cast<double>(p.model[row*4+k])*p.normal[col*4+k];if(std::abs(value-(row==col?1.:0.))>.01)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Skin inverse-transpose mismatch.");}
   }
   std::string message;auto slot=renderer->skinKernel->SelectSlot(renderer->skinStats,message);if(slot)return slot==NCMA_DEVICE_LOST?Failure(error,message):NcmaPlugin::Error(error,slot,message);
-  BusyScope scope;ExecutionScope execution;auto started=std::chrono::steady_clock::now();renderer->skinKernel->Begin(data.data(),batch.palette_count);
+  BusyScope scope;ExecutionScope execution(batch.frame);auto started=std::chrono::steady_clock::now();renderer->skinKernel->Begin(data.data(),batch.palette_count);
   for(const auto& j:jobs)renderer->skinKernel->Dispatch(*renderer->skins.at(j.mesh.value),j.palette_offset);renderer->skinKernel->End();
   if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"Skin dispatch device lost.");Validation(*renderer);
   for(const auto& j:jobs)renderer->skins.at(j.mesh.value)->frame=batch.frame;renderer->lastSkinFrame=batch.frame;renderer->skinStats.batches++;renderer->skinStats.vertices+=vertices;renderer->skinStats.palette_bytes+=static_cast<uint64_t>(batch.palette_count)*128;
@@ -67,7 +67,7 @@ uint32_t NCMA_CALL CaptureSkin(uint64_t context,uint64_t handle,NcmaGpuMeshV1 ke
  return NcmaPlugin::Guard(error,[&]()->uint32_t{auto valid=Instance(context,handle,error);if(valid)return valid;if(key.generation!=handle||!renderer->skins.contains(key.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
   uint32_t required=renderer->skins.at(key.value)->vertices*48;if(!output||bytes<required){NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;}
   if(bytes!=required||!renderer->skins.at(key.value)->frame)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
-  BusyScope scope;std::string message;if(!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+  BusyScope scope;std::string message;if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
   if(!renderer->skinKernel->Capture(*renderer->meshes.at(key.value),output,bytes,message))return Failure(error,message);renderer->skinStats.captures++;Validation(*renderer);return NCMA_OK;
  });
 }

@@ -30,6 +30,8 @@ internal static unsafe partial class Program
     private sealed class GraphFailure(Action<World> action):IWorldSystem {public void FixedUpdate(World world,double delta)=>action(world);}
     private static void TestAnimatorScenes(RendererSession renderer,ref ulong frame,string native,string output)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
         TestGraphRootRecipes(output);
         TestMontageScenes(renderer,ref frame,native,output);
         native=Path.GetDirectoryName(native)!;
@@ -60,7 +62,7 @@ internal static unsafe partial class Program
         var configuration=new Ncma.Application.ProjectConfiguration(1,f.Project,"Packed Animator","start.ncmascene","gameplay.dll","Direct3D11",[],AssetPackage:"assets/game.ncpak");
         string project=Path.Combine(moved,"game.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(configuration,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
         var playerOptions=Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",Path.Combine(moved,"player-result.json")]);
-        var report=Ncma.Player.App.PlayerRunner.Run(playerOptions,pluginRoot:Path.Combine(moved,"no-native-plugins"),visible:false);
+        var report=playerRunOwner0.Run(playerOptions,pluginRoot:Path.Combine(moved,"no-native-plugins"),visible:false);
         Check(report.ExitCode==0 && report.Tick==8 && report.Modules.Length==0 && report.RenderedFrames==0 && report.ShutdownErrors.Length==0,"Formal source-free Headless Player graph: "+report.Reason);
         using(var owner=new RuntimeSessionOwner(document)) {
             SceneAnimatorRuntime? animator=null;
@@ -92,16 +94,17 @@ internal static unsafe partial class Program
         editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(f.Root,f.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         ulong editTick=editor.Document.World.Tick;
-        using(var preview=new SceneRenderSession(renderer,cache,editor.Document.World,editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel)) {
+        using(var preview=new SceneRenderSession(renderer,cache,editor.Document.World)) {preview.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
             preview.Animation!.AdvancePreview(.25);preview.Submit(frame++,256,256,camera,target:target);renderer.Present();
             Check(Math.Abs(preview.Animation.RootDisplacement(ids[0]).X-.125)<1e-5 && editor.Document.World.Tick==editTick,"Independent graph preview oracle: displacement="+preview.Animation.RootDisplacement(ids[0]).X+" tick="+editor.Document.World.Tick);
         }
         for(int cycle=0;cycle<32;cycle++) {
             var play=editor.StartPlay();play.Pause();live!.SetFloat(ids[0],graph.Parameters[0].Id,.75);
-            var before=live.ReadFrame(ids[0]);scene=new(renderer,cache,play.Document.World,editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,animators:live);
+            var before=live.ReadFrame(ids[0]);scene=new(renderer,cache,play.Document.World);scene.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,animators:live);
             if(cycle==0) {
                 ulong rigs=kernel.Statistics.Rigs;
-                Reject(()=>new SceneAnimationSession(play.Document.World,assets,play.Document.CaptureSnapshot(),kernel,animators:live));
+                using var deniedAnimation=new SceneAnimationSession(play.Document.World,kernel);
+                Reject(()=>deniedAnimation.Prepare(assets,play.Document.CaptureSnapshot(),animators:live));
                 Check(kernel.Statistics.Rigs==rigs,"Foreign prepared asset publication acquired numerical resources");
             }
             scene.Submit(frame++,256,256,camera,target:target);renderer.Present();

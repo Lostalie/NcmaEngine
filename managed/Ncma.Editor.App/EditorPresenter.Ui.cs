@@ -36,7 +36,7 @@ internal sealed unsafe partial class EditorPresenter
     private readonly record struct UiIntent(EditorUiStamp Stamp,object? Payload=null);
     public bool UiWorkspaceActive=>_uiMode;
     public UiViewport UiPreviewViewport=>new(_uiWidth,_uiHeight,_uiDpi,new(_uiSafe,_uiSafe,_uiSafe,_uiSafe));
-    public void AttachUi(EditorUiWorkspace ui,EditorUiPreview? preview){_ui=ui;_uiPreview=preview;}
+    public void AttachUi(EditorUiWorkspace ui,EditorUiPreview? preview){_ui=ui;_uiPreview=preview;_uiFailedPreparation=null;_uiControllerPreparation=ulong.MaxValue;}
     public void SynchronizeUi()
     {
         if(_ui is null)return;

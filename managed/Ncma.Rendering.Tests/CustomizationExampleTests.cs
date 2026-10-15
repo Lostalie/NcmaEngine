@@ -109,7 +109,7 @@ internal static unsafe partial class Program
                 if (invalidGraph) return new InvalidExamplePipeline();
                 return full ? SceneCustomizationExamples.ReplacePipeline(exposure, ambient, shadows) : SceneCustomizationExamples.ReplaceGeometryStage(exposure, ambient, shadows);
             }
-            using var scene = new SceneRenderSession(renderer, cache, document.World, assets, document.CaptureSnapshot(),
+            using var scene = new SceneRenderSession(renderer, cache, document.World);scene.Prepare(assets, document.CaptureSnapshot(),
                 pipelineFactory: Factory, environmentPreparationAllowed: () => approved, postProcessing: runtime);
             void Prepare(uint size = 64) => scene.PrepareEnvironmentView(size, size, camera, ambient: .2f);
             byte[] Draw(uint size = 64) {

@@ -11,6 +11,7 @@ namespace Ncma.Editor.App;
 internal sealed unsafe partial class CandidatePresentation
 {
     private SceneEnvironmentPreflight? _environmentStartup;
+    private SceneEnvironmentPreflight? _playEnvironmentStartup;
     private bool _sceneSynchronizationOk;
     private (Guid World,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld)? _failedSceneSync;
     private (SceneRenderSession Scene,EnvironmentLightingData Environment,Guid Assets,ulong Revision,uint Width,uint Height,float Exposure,float Ambient)? _failedEnvironment;
@@ -28,10 +29,21 @@ internal sealed unsafe partial class CandidatePresentation
     private Action<byte[],uint,uint>? _verificationCapture;
     private IDisposable? ComposePreparedPlay(PlaySession play,PreparedSceneAssetLease? assets)
     {
+        RequireGraphicsReady();
+        if(_playEnvironmentStartup is not null)throw new InvalidOperationException("A retained Play startup preflight must close before another Play attempt.");
         PreparePlayHud(play);
         PreflightPost(play.Document.World,play.Document.CaptureSnapshot());
-        using var preflight=_renderer is not null&&assets is not null?
-            SceneEnvironmentPreflight.Prepare(_renderer,_sceneCache!,play.Document.World,assets,play.Document.CaptureSnapshot(),()=>!_closed):null;
+        if(_renderer is not null&&assets is not null) {
+            _playEnvironmentStartup=new(_renderer,_sceneCache!);
+            try{_playEnvironmentStartup.Prepare(play.Document.World,assets,play.Document.CaptureSnapshot(),()=>!_closed);}
+            catch(Exception preparationFailure){
+                try{_playEnvironmentStartup.Dispose();_playEnvironmentStartup=null;}
+                catch(Exception closeFailure){throw new AggregateException("Play environment preparation and close failed; host retains preflight.",preparationFailure,closeFailure);}
+                throw;
+            }
+            // Complete and retire the GPU-only probe BEFORE creating gameplay/solver state.
+            _playEnvironmentStartup.Dispose();_playEnvironmentStartup=null;
+        }
         _sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics??throw new InvalidOperationException("Physics service not initialized."),assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;
     }
     private PreparedSceneAssetLease PrepareCurrentEnvironmentAssets(PreparedSceneAssetLease assets,SceneDocumentSnapshot snapshot)
@@ -55,7 +67,19 @@ internal sealed unsafe partial class CandidatePresentation
     {
         if(_renderer is null||_editor is null)return;
         var key=SceneSyncKey();if(!_sceneSynchronizationOk&&_failedSceneSync==key)return;
-        try{SynchronizeSceneResources();_sceneSynchronizationOk=true;_failedSceneSync=null;}
+        try{
+            // A new committed scene/resource request is the explicit recovery boundary.
+            // Never retry on an unchanged failing stamp or overwrite a retained owner.
+            if(_pendingScene is not null&&_failedSceneSync is {} failed&&failed!=key) {
+                using var read=SceneEnvironmentState.BeginRead(_editor.Document.World,key.World);
+                var frameState=_renderer.ReadFrameState();
+                if(frameState.Active||frameState.Failed||_closed||SceneSyncKey()!=key)
+                    throw new InvalidOperationException("Candidate retirement requires an unchanged request and a healthy off-frame renderer.");
+                _pendingScene.Dispose();_pendingScene=null;
+                if(SceneSyncKey()!=key)throw new InvalidOperationException("Scene changed during candidate retirement.");
+            }
+            SynchronizeSceneResources();_sceneSynchronizationOk=true;_failedSceneSync=null;
+        }
         catch(Exception error)when(PreparationError(error)){_failedSceneSync=SceneSyncKey();_sceneSynchronizationOk=false;ScenePreparationFailed(error);}
     }
     private bool PrepareSceneEnvironmentView(SceneRenderSession scene,uint width,uint height,Guid camera,SceneCameraView? browser,RenderConfiguration config)

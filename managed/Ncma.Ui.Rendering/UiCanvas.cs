@@ -35,16 +35,25 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
     private bool _disposed;
     public UiRuntime Runtime { get; }
     public ulong Preparations { get; private set; }
-    private UiCanvas(UiDocument document, RendererSession renderer, TextService? text)
+    private UiCanvas(UiDocument document, RendererSession renderer, TextService? text,UiRuntime? retainedRuntime=null)
     {
         ArgumentNullException.ThrowIfNull(document); _definition = document.Capture(); _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer)); _text = text;
         renderer.PrepareDefaultUiShaders();
-        Runtime = new(document, this); _white = renderer.CreateUiImage(1, 1, new byte[] { 255, 255, 255, 255 });
+        Runtime = retainedRuntime??new(document, this); _ = Runtime.Stamp;
+        _white = renderer.CreateUiImage(1, 1, new byte[] { 255, 255, 255, 255 });
     }
     public static UiCanvas Create(UiDocument document, RendererSession renderer, TextService? text,
         IReadOnlyDictionary<Guid, FontAsset>? fonts = null, IReadOnlyDictionary<Guid, UiImageAsset>? images = null)
+        =>CreateCore(document,renderer,text,fonts,images,null);
+    // Only the existing SceneUiPresentation owner may reattach its runtime after closing the
+    // old canvas. Ordinary callers cannot attach one mutable runtime to competing GPU canvases.
+    internal static UiCanvas Recreate(UiRuntime runtime,RendererSession renderer,TextService? text,
+        IReadOnlyDictionary<Guid,FontAsset> fonts,IReadOnlyDictionary<Guid,UiImageAsset> images)
+        =>CreateCore(new(runtime.CaptureDefinition()),renderer,text,fonts,images,runtime);
+    private static UiCanvas CreateCore(UiDocument document,RendererSession renderer,TextService? text,
+        IReadOnlyDictionary<Guid,FontAsset>? fonts,IReadOnlyDictionary<Guid,UiImageAsset>? images,UiRuntime? runtime)
     {
-        var canvas = new UiCanvas(document, renderer, text);
+        var canvas = new UiCanvas(document, renderer, text,runtime);
         try { canvas.LoadAssets(fonts, images); return canvas; }
         catch (Exception creation) when (creation is not OutOfMemoryException) {
             try { canvas.Dispose(); }

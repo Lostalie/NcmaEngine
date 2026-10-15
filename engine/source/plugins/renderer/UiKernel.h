@@ -1,6 +1,7 @@
 #pragma once
 #include "contracts/NcmaUiRender.h"
 #include "contracts/NcmaShaderPipeline.h"
+#include "renderer/rhi/d3d11/D3D11RenderBackend.h"
 #include <d3d11.h>
 #include <wrl/client.h>
 #include <vector>
@@ -13,6 +14,7 @@ namespace NcmaEngine::Rendering {
 class UiKernel final {
     template<typename T> using Ptr=Microsoft::WRL::ComPtr<T>;
     ID3D11Device* device;ID3D11DeviceContext* context;
+    Rhi::D3D11RenderBackend& backend;
     Ptr<ID3D11VertexShader> vs;Ptr<ID3D11PixelShader> ps;Ptr<ID3D11InputLayout> layout;
     Ptr<ID3D11Buffer> constants;Ptr<ID3D11RasterizerState> raster;Ptr<ID3D11BlendState> blend;
     Ptr<ID3D11DepthStencilState> depth;Ptr<ID3D11SamplerState> sampler;
@@ -20,9 +22,9 @@ class UiKernel final {
     struct List {Ptr<ID3D11Buffer> vertices;std::vector<NcmaUiBatchV1> batches;uint64_t bytes=0;};
     std::unordered_map<uint64_t,std::unique_ptr<Image>> images;
     std::unordered_map<uint64_t,std::unique_ptr<List>> lists;
-    uint64_t next=1,bytes=0,uploaded=0,draws=0,submits=0;
+    uint64_t bytes=0,uploaded=0,draws=0,submits=0;
 public:
-    UiKernel(ID3D11Device* d,ID3D11DeviceContext* c):device(d),context(c){}
+    explicit UiKernel(Rhi::D3D11RenderBackend& b):device(b.GetDevice()),context(b.GetDeviceContext()),backend(b){}
     struct Programs { Ptr<ID3D11VertexShader> vs; Ptr<ID3D11PixelShader> ps; Ptr<ID3D11InputLayout> layout; };
     static std::string_view ShaderSource() noexcept;
     bool PrepareShaders(const NcmaShaderPairV1&,Programs&,std::string&);

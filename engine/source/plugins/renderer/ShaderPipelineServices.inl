@@ -52,7 +52,7 @@ uint32_t NCMA_CALL ReplaceRegisteredTone(uint64_t context,uint64_t handle,NcmaGp
   if(testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
 #endif
   Validation(*renderer); // No fallible diagnostic allocation after atomic exchange.
-  if(!Wait(*renderer,message)){if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"tone_device_failure");return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,"tone_drain_failed; old_stage_retained");}
+  if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
   if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"tone_device_failure");
   renderer->backend->GetDeviceContext()->ClearState();scene.PublishTone(candidate);retained.handle={};return NCMA_OK;});
 }

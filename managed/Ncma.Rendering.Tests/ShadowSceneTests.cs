@@ -32,7 +32,7 @@ internal static unsafe partial class Program
         var doc=new SceneDocument("Shadow selection",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);doc.RestoreSnapshot(source.CaptureSnapshot());
         var setting=doc.World.CreateObject("Shadows");setting.Set(new SceneShadowData(1,SceneShadowQuality.Off));
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,doc.CaptureSnapshot(),true);using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(128,128);byte[] image=new byte[128*128*4];
-        using var session=new SceneRenderSession(renderer,cache,doc.World,assets,doc.CaptureSnapshot(),highShadows:high,environmentPreparationAllowed:Approval);
+        using var session=new SceneRenderSession(renderer,cache,doc.World);session.Prepare(assets,doc.CaptureSnapshot(),highShadows:high,environmentPreparationAllowed:Approval);
         void Prepare(uint size=128)=>session.PrepareEnvironmentView(size,size,camera);
         void Tick(uint size=128){Pass(session.Submit(frame++,size,size,camera,target:target),"ready submit");renderer.CaptureTarget(target,image);renderer.Present();}
         Bad(()=>session.Submit(frame++,128,128,camera,target:target));
@@ -55,19 +55,19 @@ internal static unsafe partial class Program
         for(int i=0;i<geometry.Length;i++)geometry[i].Set(original[i] with{Visible=false,CastShadow=false});setting.Set(new SceneShadowData(1,SceneShadowQuality.High));Prepare();
         Pass(!session.Submit(frame++,128,128,camera,target:target)&&session.PreparedShadowSelection?.Quality==SceneShadowQuality.Low,"culled view never stamps old graph as High");
         for(int i=0;i<geometry.Length;i++)geometry[i].Set(original[i]);Bad(()=>session.Submit(frame++,128,128,camera,target:target));Prepare();Tick();
-        var highSnapshot=doc.CaptureSnapshot();Bad(()=>new SceneRenderSession(renderer,cache,doc.World,assets,highSnapshot).Dispose());
+        var highSnapshot=doc.CaptureSnapshot();Bad(()=>{using var denied=new SceneRenderSession(renderer,cache,doc.World);denied.Prepare(assets,highSnapshot);});
         setting.Remove<SceneShadowData>();Bad(()=>session.Submit(frame++,128,128,camera,target:target));Prepare();Tick();Pass(session.PreparedShadowSelection is null&&session.Plan!.Resources.Single(r=>r.Role==RenderRole.SceneShadow).Width==1024,"remove explicit selection restores default Medium");
         for(int i=0;i<8;i++)Prepare();long defaultBefore=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<64;i++)Prepare();long defaultPreparationBytes=GC.GetAllocatedBytesForCurrentThread()-defaultBefore;
         Pass(defaultPreparationBytes==0,"unselected plain default keeps original no-extra-extraction/no-read-scope preparation path");
         session.Dispose();cache.Trim();
         // Explicit presets constrain public custom graphs; absence preserves user-owned policy.
         RenderPipeline Factory(float e,float a,bool s)=>new Scene3DPipeline(e,a,256,s);
-        using(var custom=new SceneRenderSession(renderer,cache,doc.World,assets,doc.CaptureSnapshot(),pipelineFactory:Factory,highShadows:high,environmentPreparationAllowed:Approval)){
+        using(var custom=new SceneRenderSession(renderer,cache,doc.World)){custom.Prepare(assets,doc.CaptureSnapshot(),pipelineFactory:Factory,highShadows:high,environmentPreparationAllowed:Approval);
             custom.PrepareEnvironmentView(128,128,camera);Pass(custom.Plan!.Resources.Single(r=>r.Role==RenderRole.SceneShadow).Width==256,"unselected custom graph retains explicit user policy, no claimed Medium budget");
             setting.Set(SceneShadowData.Default);Bad(()=>custom.PrepareEnvironmentView(128,128,camera));Pass(custom.PreparedShadowSelection is null&&custom.Plan.Resources.Single(r=>r.Role==RenderRole.SceneShadow).Width==256,"mismatched explicit preset cannot overwrite prior custom graph");
         }
         setting.Set(new SceneShadowData(1,SceneShadowQuality.High));var postObject=doc.World.CreateObject("Tone/Bloom");var postValue=PostProcessData.Off with{Enabled=true,ToneModule=PostProcessLibrarySelection.ReinhardModule,StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.5f))])};postObject.Set(postValue);
-        using(var joint=new SceneRenderSession(renderer,cache,doc.World,assets,doc.CaptureSnapshot(),postProcessing:post,highShadows:high,environmentPreparationAllowed:Approval)){
+        using(var joint=new SceneRenderSession(renderer,cache,doc.World)){joint.Prepare(assets,doc.CaptureSnapshot(),postProcessing:post,highShadows:high,environmentPreparationAllowed:Approval);
             void Joint(){joint.PrepareEnvironmentView(128,128,camera);Pass(joint.Submit(frame++,128,128,camera,target:target),"joint High ready");renderer.CaptureTarget(target,image);renderer.Present();}
             Joint();Pass(joint.PreparedShadowSelection?.Quality==SceneShadowQuality.High&&joint.PreparedPostProcess==postValue&&renderer.PostStats.Bindings==1,"High retains selected Tone/Bloom");
             using var presets=EnvironmentPresetLibrary.LoadDeployment(packageRoot);var environment=presets.Package.CloneForAsset(Guid.NewGuid(),1);var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,environment);

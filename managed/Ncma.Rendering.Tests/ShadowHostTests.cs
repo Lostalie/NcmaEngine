@@ -15,6 +15,15 @@ internal static unsafe partial class Program
 {
     private static int ShadowHostTests(string plugins,string output)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
+
+        using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
+
+        using var playerRunOwner4 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner5 = new Ncma.Player.App.PlayerRunner();
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);int cases=0;
         void Pass(bool ok,string label){Check(ok,"M7.5 shadow hosts: "+label);cases++;}
         var repo=new DirectoryInfo(Path.GetFullPath(plugins));while(!File.Exists(Path.Combine(repo.FullName,"Build.bat")))repo=repo.Parent??throw new Exception("Repo missing");string build=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
@@ -30,16 +39,16 @@ internal static unsafe partial class Program
         var config=new ProjectConfiguration(1,fixture.Project,"Shadow hosts","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera,ShaderPackages:shaders,ShadowLibrary:new(1,Convert.ToHexString(SHA256.HashData(highIndex))));
         void Project(ProjectConfiguration value)=>File.WriteAllBytes(projectPath,JsonSerializer.SerializeToUtf8Bytes(value,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));Project(config);
         PlayerOptions Options(bool cpu=false)=>new(projectPath,cpu,null,3,1d/60,30,Path.Combine(output,Guid.NewGuid()+".json"),false,false);
-        byte[]? highImage=null;var report=PlayerRunner.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>highImage??=image);
+        byte[]? highImage=null;var report=playerRunOwner0.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>highImage??=image);
         Pass(report.ExitCode==0&&report.Tick>=3&&highImage is not null&&report.ShutdownErrors.Length==0&&report.ValidationErrors==0&&report.ValidationWarnings==0,"formal Player High before gameplay preflight and actual render");
-        policy.Set(new SceneShadowData(1,SceneShadowQuality.Off));SceneDocumentFiles.Save(document,scenePath);byte[]? offImage=null;report=PlayerRunner.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>offImage??=image);
+        policy.Set(new SceneShadowData(1,SceneShadowQuality.Off));SceneDocumentFiles.Save(document,scenePath);byte[]? offImage=null;report=playerRunOwner1.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>offImage??=image);
         Pass(report.ExitCode==0&&offImage is not null&&!offImage.SequenceEqual(highImage!)&&report.ShutdownErrors.Length==0,"Player Off removes visible shadow");
         policy.Set(new SceneShadowData(1,SceneShadowQuality.High));SceneDocumentFiles.Save(document,scenePath);
-        Project(config with{ShadowLibrary=new(1,new string('0',64))});report=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false);
+        Project(config with{ShadowLibrary=new(1,new string('0',64))});report=playerRunOwner2.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false);
         Pass(report.ExitCode==3&&report.Tick==0&&report.SessionId==Guid.Empty&&report.Modules.Length==0&&report.ShutdownErrors.Length==0,"bad explicit high index rejected before native/gameplay, no fallback");
-        var cpu=PlayerRunner.Run(Options(true),pluginRoot:Path.GetFullPath(plugins),visible:false);Pass(cpu.ExitCode==0&&cpu.Tick==3&&cpu.Modules.Length==0&&cpu.RenderedFrames==0,"Null only validates scene values, no GPU package dependency");Project(config);
-        report=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false,pipelineFactory:(e,a,s)=>new Scene3DPipeline(e,a,256,s));Pass(report.ExitCode!=0&&report.Tick==0&&report.SessionId==Guid.Empty&&report.ShutdownErrors.Length==0,"custom graph mismatching explicit High rejected before gameplay");
-        report=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false,pipelineFactory:(e,a,s)=>new Scene3DPipeline(e,a,2048,s));Pass(report.ExitCode==0&&report.Tick>=3&&report.ShutdownErrors.Length==0,"matching public custom pipeline supports High");
+        var cpu=playerRunOwner3.Run(Options(true),pluginRoot:Path.GetFullPath(plugins),visible:false);Pass(cpu.ExitCode==0&&cpu.Tick==3&&cpu.Modules.Length==0&&cpu.RenderedFrames==0,"Null only validates scene values, no GPU package dependency");Project(config);
+        report=playerRunOwner4.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false,pipelineFactory:(e,a,s)=>new Scene3DPipeline(e,a,256,s));Pass(report.ExitCode!=0&&report.Tick==0&&report.SessionId==Guid.Empty&&report.ShutdownErrors.Length==0,"custom graph mismatching explicit High rejected before gameplay");
+        report=playerRunOwner5.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false,pipelineFactory:(e,a,s)=>new Scene3DPipeline(e,a,2048,s));Pass(report.ExitCode==0&&report.Tick>=3&&report.ShutdownErrors.Length==0,"matching public custom pipeline supports High");
         using(var editor=new CandidatePresentation(Path.GetFullPath(plugins),ProjectContext.Load(projectPath),true,false,false)){
             editor.Start();ulong frame=0;byte[] Draw(){byte[]? pixels=null;editor.CaptureNextViewportForVerification((p,w,h)=>pixels=p);Pass(editor.PumpPlatform(),"Editor pump");var f=new FrameContext(++frame,1d/60);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);return pixels??throw new Exception("No Editor capture");}
             var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);workspace.Select(workspace.Stamp,id);byte[] original=Draw();var edit=owner.Edit!;var view=editor.VerificationPresenter;

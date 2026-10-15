@@ -14,26 +14,30 @@ public sealed partial class SceneRenderSession : IDisposable
     private readonly RendererSession _renderer;
     private readonly RenderResourceCache _cache;
     private readonly RenderSceneExtractor _extractor;
-    private readonly SceneGpuResources _resources;
-    private readonly SceneAnimationSession? _animation;
-    private readonly Ncma.Gameplay.PlaySession? _play;
-    private readonly bool _interpolateTransforms;
-    private readonly SceneRuntimeShaders? _shaders;
+    private readonly SceneGpuResources _resources = new();
+    private readonly ScenePreparationLifetime _lifetime = new();
+    public ScenePreparationPhase PreparationPhase => _lifetime.Phase;
+    private SceneAnimationSession? _animation;
+    private IDisposable? _animationBorrow;
+    private bool _pendingAnimationBinding;
+    private Ncma.Gameplay.PlaySession? _play;
+    private bool _interpolateTransforms;
+    private SceneRuntimeShaders? _shaders;
     public SceneRuntimeShaders? PreparedShaders => _shaders;
     private readonly World _world;
     private ulong _submittedFrame,_submittedPose;
-    private readonly Guid _publication;
+    private Guid _publication;
     private AnimationPresentationStamp? _animationStamp;
     // Copied observation of a successful submission, not a native GPU-time sample or a new render operation.
     public AnimationPresentationStamp? ReadAnimationPresentation()
-    {Verify();return _animationStamp is {} stamp&&stamp.WorldId==_world.Identity&&stamp.Tick==_world.Tick&&_play is not {State:Ncma.Gameplay.PlayState.Faulted} ? stamp:null;}
+    {Verify();return !_resourceRecoveryRequired&&!_closing&&_animationStamp is {} stamp&&stamp.WorldId==_world.Identity&&stamp.Tick==_world.Tick&&_play is not {State:Ncma.Gameplay.PlayState.Faulted} ? stamp:null;}
     public Guid WorldId { get; }
-    public ulong PreparedRevision { get; }
-    public SceneAnimationSession? Animation => _animation;
+    public ulong PreparedRevision { get; private set; }
+    public SceneAnimationSession? Animation { get { Verify(); return _animation; } }
     public ulong SkinBackpressureFrames { get; private set; }
     public double SkinAbiMilliseconds { get; private set; }
-    private readonly Func<float, float, bool, RenderPipeline> _pipelineFactory;
-    private readonly bool _hasCustomPipeline;
+    private Func<float, float, bool, RenderPipeline> _pipelineFactory = (exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows);
+    private bool _hasCustomPipeline;
     private ScenePipelineSession? _pipeline;
     private readonly SceneGpuDraw[] _geometry = new SceneGpuDraw[4096], _casters = new SceneGpuDraw[4096];
     private readonly List<SceneRenderDiagnostic> _diagnostics = new(8192);
@@ -49,21 +53,33 @@ public sealed partial class SceneRenderSession : IDisposable
     // Trusted diagnostic only; no normal frame readback and no Agent capability grants this operation.
     public void CaptureCharacterVertices(Guid objectId,Span<byte> output)
     { Verify();_resources.CaptureCharacterVertices(_renderer,objectId,output); }
-    public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world, PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
+    public SceneRenderSession(RendererSession renderer, RenderResourceCache cache, World world)
+    {
+        ArgumentNullException.ThrowIfNull(renderer); ArgumentNullException.ThrowIfNull(cache); ArgumentNullException.ThrowIfNull(world);
+        cache.VerifyFor(renderer);
+        _renderer = renderer; _cache = cache; _world = world; _extractor = new(world);
+        _readDiagnostics = _diagnostics.AsReadOnly(); WorldId = world.Identity;
+    }
+    public void Prepare(PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false,
         Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false,SceneRuntimeShaders? shaders=null,
         SceneEnvironmentRuntimeShaders? environmentShaders=null,Func<bool>? environmentPreparationAllowed=null,PostProcessRuntime? postProcessing=null,
-        PreparedShadowLibrary? highShadows=null)
+        PreparedShadowLibrary? highShadows=null,SceneAnimationSession? retainedAnimation=null,bool deferPlayObserver=false)
     {
-        _renderer = renderer; _cache = cache; _world=world;_extractor = new(world); _readDiagnostics = _diagnostics.AsReadOnly();
+        _lifetime.Begin();
+        try {
+        ArgumentNullException.ThrowIfNull(assets); ArgumentNullException.ThrowIfNull(startup);
+        var renderer = _renderer; var cache = _cache; var world = _world;
+        cache.VerifyFor(renderer);
+        using var startupRead = SceneEnvironmentState.BeginRead(world, WorldId);
         _pipelineFactory = pipelineFactory ?? ((exposure, ambient, shadows) => new Scene3DPipeline(exposure, ambient, shadows: shadows));
         _hasCustomPipeline = pipelineFactory is not null;
         _environmentApproval = environmentPreparationAllowed ?? (()=>!_disposed);
-        WorldId = world.Identity; PreparedRevision = world.Revision; _play = play;
+        PreparedRevision = world.Revision; _play = play;
         _publication=assets.Assets.Identity;
         _interpolateTransforms=interpolateTransforms;
-        try {
             bool hasSkin=startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId));
+            if(!hasSkin&&retainedAnimation is not null)throw new ArgumentException("A scene without skin cannot adopt retained animation.");
             bool hasGeometry=hasSkin||startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==StaticMeshData.TypeId));
             _hasGeometry=hasGeometry;_hasSkin=hasSkin;
             InitializeShadows(startup,highShadows);
@@ -83,21 +99,30 @@ public sealed partial class SceneRenderSession : IDisposable
             } else if(shaders is not null||environmentShaders is not null)throw new ArgumentException("Empty scene must not prepare scene shaders.");
             if(startup.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId))) {
                 if(poseKernel is null)throw new ArgumentException("Skinned scenes require the trusted numerical pose plugin.");
-                _animation = new(world,assets,startup,poseKernel,rootMotion,animators,previewInterruptions);
+                if(retainedAnimation is null){
+                    _animation = new(world,poseKernel);
+                    _animation.Prepare(assets,startup,rootMotion,animators,previewInterruptions);
+                }else{
+                    _animationBorrow=retainedAnimation.BorrowForPresentation(world,assets.Assets.Identity,poseKernel,play,rootMotion,animators);
+                    _animation=retainedAnimation;
+                }
             }
             if(_environmentShaders is not null) {
                 using var read=SceneEnvironmentState.BeginRead(world,WorldId);_environmentPreparing=true;
                 try{_renderer.VerifyEnvironmentPreparation(EnvironmentApproved);
-                    _resources=SceneGpuResources.Prepare(cache,assets,startup,renderer,_animation,_environmentShaders.Unshadowed.Skin);
+                    _resources.Prepare(cache,assets,startup,renderer,_animation,_environmentShaders.Unshadowed.Skin);
                 }finally{_environmentPreparing=false;}
-            }else _resources = SceneGpuResources.Prepare(cache, assets, startup,renderer,_animation,_shaders?.Unshadowed.Skin);
-            if(play is not null)_animation?.Attach(play);
-        } catch { _resources?.Dispose(); _animation?.Dispose();ReleaseEnvironmentLeases(); cache.Trim(); throw; }
+            }else _resources.Prepare(cache, assets, startup,renderer,_animation,_shaders?.Unshadowed.Skin);
+            if(play is not null&&retainedAnimation is null&&_animation is not null){
+                if(deferPlayObserver)_pendingAnimationBinding=true;else _animation.Attach(play);
+            }
+            _lifetime.Complete();
+        } catch { _lifetime.Fail(); throw; }
     }
     public bool Submit(ulong frame, uint width, uint height, Guid sceneCamera, SceneCameraView? browserCamera = null,
         float exposure = 1, float ambient = .03f, SceneShadowSettings? shadow = null, GpuViewTarget? target = null, Vector2 origin = default, Vector4 clear = default)
     {
-        Verify();if(_environmentPreparing)throw new InvalidOperationException("Cannot submit during environment preparation.");VerifyPreparedEnvironment();VerifyPreparedPostProcess();ObserveShadowSelection(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
+        RequireExchangeReady();if(_environmentPreparing||_pendingAnimationBinding)throw new InvalidOperationException("Cannot submit before presentation preparation/binding completes.");VerifyPreparedEnvironment();VerifyPreparedPostProcess();ObserveShadowSelection(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
         IReadOnlyDictionary<Guid,TransformData>? transforms=null;
         if(_interpolateTransforms && _play is not null) {
             if(_play.Document.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
@@ -131,9 +156,12 @@ public sealed partial class SceneRenderSession : IDisposable
         else if (_pipeline is null || _width != w || _height != h || _shadows != shadows)
         {
             var programs=(shadows?_shaders?.Shadowed:_shaders?.Unshadowed)?.Scene??throw new InvalidOperationException("Scene shaders were not prepared.");
-            var candidate = new ScenePipelineSession(_renderer, CreateSelectedPipeline(exposure, ambient, shadows,_shadowPrepared,ShaderProfile.Scene3D), w, h,shaders:programs);
-            try { _pipeline?.Dispose(); } catch { candidate.Dispose(); throw; }
-            _pipeline = candidate; _width = w; _height = h; _exposure = exposure; _ambient = ambient; _shadows = shadows;
+            BeginCandidateBundle();
+            using var pipelineRead=SceneEnvironmentState.BeginRead(_world,WorldId);_environmentPreparing=true;
+            try { _pendingPipeline = new ScenePipelineSession(_renderer, CreateSelectedPipeline(exposure, ambient, shadows,_shadowPrepared,ShaderProfile.Scene3D), w, h,shaders:programs);InstallPendingPipeline(); }
+            catch(Exception failure){AbandonCandidate(failure);throw;}
+            finally{_environmentPreparing=false;}
+            _width = w; _height = h; _exposure = exposure; _ambient = ambient; _shadows = shadows;
             CommitShadowSelection(_shadowPrepared);
         }
         else if (_exposure != exposure || _ambient != ambient) {
@@ -149,7 +177,7 @@ public sealed partial class SceneRenderSession : IDisposable
                 SkinBackpressureFrames++; Costs = new(extraction,encoding,geo,casters,false);return false;
             }
         }
-        _pipeline.Submit(frame, _geometry.AsSpan(0, geo), _casters.AsSpan(0, casters), new(camera.Position, toLight, color), lightVP,
+        (_pipeline??throw new InvalidOperationException("Missing installed scene pipeline.")).Submit(frame, _geometry.AsSpan(0, geo), _casters.AsSpan(0, casters), new(camera.Position, toLight, color), lightVP,
             settings, target, new(origin.X + width * camera.Data.ViewportX, origin.Y + height * camera.Data.ViewportY, w, h), clear);
         _submittedFrame=frame;_submittedPose=_animation?.Costs.PoseGeneration??0;
         if(_animation is not null)_animationStamp=new(WorldId,_publication,_world.Tick,frame,_submittedPose,geo,casters);
@@ -159,7 +187,7 @@ public sealed partial class SceneRenderSession : IDisposable
     // exact submitted pose's conservative influence union, never stale bind-pose bounds.
     public Guid? Pick(ulong frame,Guid viewIdentity,float u,float v)
     {
-        Verify();var view=View??throw new InvalidOperationException("pick_view_missing");
+        RequireExchangeReady();var view=View??throw new InvalidOperationException("pick_view_missing");
         if(_submittedFrame!=frame||view.FrameIdentity!=viewIdentity||_world.Identity!=view.WorldId||_world.Revision!=view.Revision||!Costs.GpuSubmitted)throw new InvalidOperationException("stale_pick_frame");
         var camera=view.Camera??throw new InvalidOperationException("pick_camera_missing");
         if(!float.IsFinite(u)||!float.IsFinite(v)||u is <0 or >1||v is <0 or >1)throw new ArgumentException("Pick range.");
@@ -171,6 +199,39 @@ public sealed partial class SceneRenderSession : IDisposable
             if(BoundsPicking.Hit(bounds.Min,bounds.Max,model,ray.Origin,ray.Direction,out float distance)&&(distance<nearest||distance==nearest&&(best is null||item.ObjectId.CompareTo(best.Value)<0))){best=item.ObjectId;nearest=distance;}}
         return best;
     }
-    private void Verify() { ObjectDisposedException.ThrowIf(_disposed, this); if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Scene render session requires owner thread."); }
-    public void Dispose() { if (_disposed) return; Verify();if(_environmentPreparing)throw new InvalidOperationException("Cannot close during environment preparation."); _pipeline?.Dispose(); _pipeline = null;ReleaseEnvironmentLeases(); _resources.Dispose(); _animation?.Dispose(); _cache.Trim(); _disposed = true; }
+    private void Verify() { ObjectDisposedException.ThrowIf(_disposed, this); if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Scene render session requires owner thread."); _lifetime.RequireReady(); }
+    // Explicit ownership transfer before retiring a device. The old scene remains a borrower
+    // until successfully closed, so the host cannot release live numerical state prematurely.
+    public SceneAnimationSession? RetainAnimationForRecovery()
+    {
+        Verify();var frame=_renderer.ReadFrameState();
+        if(frame.Active||_closing||_environmentPreparing||_recovering||_pendingAnimationBinding||
+            _play is {State: not (Ncma.Gameplay.PlayState.Running or Ncma.Gameplay.PlayState.Paused)})
+            throw new InvalidOperationException("Retain animation only at a ready, stopped presentation boundary with healthy gameplay.");
+        if(_animation is null)return null;
+        if(_animationBorrow is not null)throw new InvalidOperationException("This scene does not own the retained animation.");
+        _animationBorrow=_animation.BorrowForRecovery();return _animation;
+    }
+    // For a first frame without an existing animation observer: preparation runs with Play
+    // control frozen; attach only after the host has validated and released that scope.
+    public void CompleteDeferredAnimationBinding()
+    {
+        Verify();if(!_pendingAnimationBinding)return;
+        if(_closing||_environmentPreparing||_renderer.ReadFrameState().Active)throw new InvalidOperationException("Animation binding requires an off-frame ready scene.");
+        _animation!.Attach(_play!);_pendingAnimationBinding=false;
+    }
+    public void Dispose()
+    {
+        _lifetime.VerifyOwner(); if(_disposed)return;
+        if(_lifetime.Phase==ScenePreparationPhase.Preparing)_lifetime.BeginClose();
+        if(_recovering){_recoveryRejected=true;throw new InvalidOperationException("Cannot close during resource recovery.");}
+        if(_environmentPreparing)throw new InvalidOperationException("Cannot close during environment preparation.");
+        if(!_lifetime.BeginClose())return;
+        _closing=true;
+        try{ReleasePendingResources();CloseInstalledPipeline();ReleaseEnvironmentLeases();_resources.Dispose();
+            if(_animationBorrow is not null)_animationBorrow.Dispose();else _animation?.Dispose();
+            _animationBorrow=null;_animation=null;
+            _cache.Trim();_disposed=true;_lifetime.Closed();}
+        catch{MarkExchangeFailure(SceneResourceExchangeFailure.Closing);throw;}
+    }
 }

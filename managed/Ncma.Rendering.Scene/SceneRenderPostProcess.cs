@@ -10,7 +10,7 @@ public sealed partial class SceneRenderSession
     private bool _postReady,_postViewEmpty;
     private float _postInputExposure;
     public PostProcessData PreparedPostProcess { get { Verify();return _postPrepared; } }
-    public bool IsPostProcessReady { get { Verify();return _postObservedRevision==_world.Revision&&(_postRuntime is null?!_postObserved.Enabled:
+    public bool IsPostProcessReady { get { Verify();return !_resourceRecoveryRequired&&!_closing&&_postObservedRevision==_world.Revision&&(_postRuntime is null?!_postObserved.Enabled:
         _postReady&&!_postViewEmpty&&_postPrepared==_postObserved&&_postEnvironment==_environment); } }
     private void InitializePostProcess(PostProcessRuntime? runtime,PostProcessData startup)
     {
@@ -45,26 +45,22 @@ public sealed partial class SceneRenderSession
             if(_pipeline is not null&&_postReady&&value==_postPrepared&&_postEnvironment==_environment&&_width==w&&_height==h&&_shadows==shadows&&_postInputExposure==exposure&&_ambient==ambient&&_shadowPrepared==selection){_postObserved=value;_postObservedRevision=_world.Revision;CommitShadowSelection(selection);return;}
             var high=shadows&&selection?.Quality==Ncma.Assets.SceneShadowQuality.High?(_highShadows??throw new InvalidOperationException("Checked High shadow library required.")):null;
             PreparedPostView? post=value.Enabled?runtime.Prepare(value,w,h,_environmentShaders is not null,shadows,_hasSkin,high):null;
-            ScenePipelineSession? candidate=null;
+            BeginCandidateBundle();
             try {
-                candidate=runtime.Install(()=>{
-                    ScenePipelineSession? created=null;
-                    try {
+                runtime.ApproveInstallation(()=>{
                         var pipeline=CreateSelectedPipeline(effective,ambient,shadows,selection,_environmentShaders is null?ShaderProfile.Scene3D:ShaderProfile.SceneEnvironment);
                         if(_environmentShaders is not null) {
-                            created=new(_renderer,pipeline,w,h,environmentShaders:post?.Environment??SelectShadowPrograms(null,shadows?_environmentShaders.Shadowed:_environmentShaders.Unshadowed,shadows,selection).Environment);
-                            created.ConfigureEnvironment(_environmentGpu?.Resource,_environment.ToConfiguration(),EnvironmentApproved);
-                        } else created=new(_renderer,pipeline,w,h,shaders:post?.Scene??SelectShadowPrograms(shadows?_shaders!.Shadowed:_shaders!.Unshadowed,null,shadows,selection).Scene);
-                        if(post?.Plan is not null)created.ConfigurePostProcess(post.Plan,post.Programs,runtime.BindingAllowed);
-                        var result=created;created=null;return result;
-                    }finally{created?.Dispose();}
+                            _pendingPipeline=new(_renderer,pipeline,w,h,environmentShaders:post?.Environment??SelectShadowPrograms(null,shadows?_environmentShaders.Shadowed:_environmentShaders.Unshadowed,shadows,selection).Environment);
+                            _pendingPipeline.ConfigureEnvironment(_environmentGpu?.Resource,_environment.ToConfiguration(),EnvironmentApproved);
+                        } else _pendingPipeline=new(_renderer,pipeline,w,h,shaders:post?.Scene??SelectShadowPrograms(shadows?_shaders!.Shadowed:_shaders!.Unshadowed,null,shadows,selection).Scene);
+                        if(post?.Plan is not null)_pendingPipeline.ConfigurePostProcess(post.Plan,post.Programs,runtime.BindingAllowed);
                 });
                 // Complete scene + environment + post candidate before releasing installed output.
-                _pipeline?.Dispose();_pipeline=candidate;candidate=null;
+                InstallPendingPipeline();
                 _width=w;_height=h;_shadows=shadows;_exposure=effective;_ambient=ambient;_postInputExposure=exposure;
                 _postPrepared=value;_postObserved=value;_postObservedRevision=_world.Revision;_postEnvironment=_environment;_postViewEmpty=false;_postReady=true;
                 CommitShadowSelection(selection);
-            }finally{candidate?.Dispose();}
+            }catch(Exception failure){AbandonCandidate(failure);throw;}
         }finally{_environmentPreparing=false;}
     }
 }

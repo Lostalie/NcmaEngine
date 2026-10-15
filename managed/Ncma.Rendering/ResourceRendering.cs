@@ -17,14 +17,18 @@ namespace Ncma.Rendering;
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal unsafe delegate uint CaptureTargetV3(ulong module,ulong renderer,GpuMeshKey target,byte* output,uint capacity,PluginError* error);
 public enum ResourceDrawMode:uint {Pbr,Unlit,NormalDiagnostic}
 public readonly record struct ResourceLighting(Vector3 Camera,Vector3 LightDirection,Vector4 LightColor,float Exposure=1,float Ambient=.03f);
-public abstract class GpuResource : IDisposable
+public abstract class GpuResource : IDisposable, ICacheOwnedGpuResource
 {
     internal RendererSession Owner {get;}
     private GpuMeshKey _key;
+    private GpuCacheOwnership _cacheOwnership;
     internal GpuMeshKey Key {get{_=Owner.Handle;ObjectDisposedException.ThrowIf(_key.Value==0,this);return _key;}}
     internal GpuResource(RendererSession owner){Owner=owner;}
     internal void Publish(GpuMeshKey key)=>_key=key;
-    public void Dispose(){if(_key.Value==0)return;Owner.ReleaseResource(this,_key);_key=default;}
+    void ICacheOwnedGpuResource.AttachCache(RenderResourceCache owner)=>_cacheOwnership.Attach(owner);
+    void ICacheOwnedGpuResource.RetireFromCache(RenderResourceCache owner){_cacheOwnership.VerifyRetirement(owner);Release();}
+    public void Dispose(){if(_key.Value==0)return;_cacheOwnership.VerifyDirectRelease();Release();}
+    private void Release(){if(_key.Value==0)return;Owner.ReleaseResource(this,_key);_key=default;}
 }
 public sealed class GpuTexture : GpuResource {public TextureSemantic Semantic {get;}public bool NormalYDown {get;}internal GpuTexture(RendererSession owner,TextureData data):base(owner){Semantic=data.Semantic;NormalYDown=data.NormalYDown;}}
 public sealed class GpuMaterial : GpuResource {public bool UsesNormalMap {get;}internal GpuMaterial(RendererSession owner,bool normal):base(owner){UsesNormalMap=normal;}}

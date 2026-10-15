@@ -67,7 +67,7 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
             @{ id = 'ncma.animation'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }
             @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
             @{ id = 'ncma.text'; abiVersion = 1; path = 'plugins/NcmaText.dll'; lazy = $true }
-        } elseif ($product -eq 'NcmaPlayer-dx11-candidate') {
+        } elseif ($product -in @('NcmaPlayer-dx11-candidate', 'NcmaPlayer-dx11-physics-candidate')) {
             @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
             @{ id = 'ncma.text'; abiVersion = 1; path = 'plugins/NcmaText.dll'; lazy = $true }
         }) }
@@ -76,6 +76,8 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
 $editor = Join-Path $packageBase 'editor'
 $playerNull = Join-Path $packageBase 'player-null'
 $playerDx11 = Join-Path $packageBase 'player-dx11'
+$playerNullPhysics = Join-Path $packageBase 'player-null-physics'
+$playerDx11Physics = Join-Path $packageBase 'player-dx11-physics'
 & dotnet build (Join-Path $packageWorkspace 'managed\Ncma.Shader.Cook\Ncma.Shader.Cook.csproj') --configuration $Configuration --nologo
 if ($LASTEXITCODE -ne 0) { throw 'Shader cooker build failed.' }
 $shaderCooker = Join-Path $packageWorkspace "managed\Ncma.Shader.Cook\bin\$Configuration\net8.0\Ncma.Shader.Cook.dll"
@@ -122,7 +124,7 @@ Copy-Exact $characterKernel (Join-Path $editor 'plugins\NcmaNative.dll')
 foreach ($target in @($editor, $playerDx11)) {
     Copy-Exact (Join-Path (Split-Path -Parent (Split-Path -Parent $NativePluginRoot)) 'NcmaAnimationKernel.dll') (Join-Path $target 'plugins\NcmaAnimationKernel.dll')
 }
-# Physics stays optional; neither Player variant contains it by default. Python and legacy bridges are absent.
+# Physics stays optional; original lightweight Players remain unchanged. Python/legacy bridges are absent.
 foreach ($target in @($editor, $playerDx11)) {
     foreach ($name in @('glfw', 'spdlog', 'eigen')) {
         $licenseCandidates = @(Get-ChildItem -LiteralPath (Join-Path $packageWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
@@ -135,6 +137,27 @@ foreach ($name in @('imgui', 'box2d', 'JoltPhysics', 'ufbx')) {
     if ($licenses.Count -eq 0) { throw "Missing license: $name" }
     foreach ($license in $licenses) { Copy-Exact $license.FullName (Join-Path $editor "licenses\$name-$($license.Name).txt") }
 }
+# Explicit solver variants use the exact freshly published base files. Never borrow a
+# source-tree plugin at runtime or put physics into the default Null/flat application.
+foreach ($pair in @(@($playerNull, $playerNullPhysics), @($playerDx11, $playerDx11Physics))) {
+    $variantSource = [IO.Path]::GetFullPath($pair[0]); $variantTarget = [IO.Path]::GetFullPath($pair[1])
+    if (-not $variantSource.StartsWith($packageBase + '\', [StringComparison]::OrdinalIgnoreCase) -or
+        -not $variantTarget.StartsWith($packageBase + '\', [StringComparison]::OrdinalIgnoreCase) -or
+        (Test-Path -LiteralPath $variantTarget)) { throw 'Invalid fresh physics variant paths.' }
+    Assert-PlainPath $variantSource; Assert-PlainPath $variantTarget
+    $variantFiles = @(Get-ChildItem -LiteralPath $variantSource -Recurse -File)
+    if ($variantFiles.Count -lt 1 -or $variantFiles.Count -gt 8192) { throw 'Physics variant file budget.' }
+    foreach ($file in $variantFiles) {
+        $relative = $file.FullName.Substring($variantSource.Length + 1)
+        Copy-Exact $file.FullName (Join-Path $variantTarget $relative)
+    }
+    Copy-Exact (Join-Path $NativePluginRoot 'NcmaPhysics.dll') (Join-Path $variantTarget 'plugins\NcmaPhysics.dll')
+    foreach ($name in @('box2d', 'JoltPhysics') + $(if ($variantTarget -eq $playerNullPhysics) { @('eigen', 'spdlog') } else { @() })) {
+        $licenses = @(Get-ChildItem -LiteralPath (Join-Path $packageWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
+        if ($licenses.Count -eq 0) { throw "Missing physics variant license: $name" }
+        foreach ($license in $licenses) { Copy-Exact $license.FullName (Join-Path $variantTarget "licenses\$name-$($license.Name).txt") }
+    }
+}
 $packageRevision = & git -C $packageWorkspace rev-parse --verify HEAD
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($packageRevision)) { throw 'Cannot identify package source revision.' }
 $packageRevision = $packageRevision.Trim()
@@ -146,9 +169,12 @@ $rendererModule = @{ id = 'ncma.renderer'; abiMajor = 1; abiMinor = 1; capabilit
 Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 7; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
 Manifest $playerNull 'NcmaPlayer-null-candidate' @()
 Manifest $playerDx11 'NcmaPlayer-dx11-candidate' @($platformModule, $rendererModule)
+$physicsModule = @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 2; capabilities = 255 }
+Manifest $playerNullPhysics 'NcmaPlayer-null-physics-candidate' @($physicsModule)
+Manifest $playerDx11Physics 'NcmaPlayer-dx11-physics-candidate' @($platformModule, $rendererModule, $physicsModule)
 $packageIndex = Join-Path $packageWorkspace "out\verification\m2-7\$Configuration\packages.json"
 Assert-PlainPath $packageIndex
 New-Item -ItemType Directory -Path (Split-Path -Parent $packageIndex) -Force | Out-Null
-$indexJson = [ordered]@{ schemaVersion = 1; editor = $editor; playerNull = $playerNull; playerDx11 = $playerDx11 } | ConvertTo-Json
+$indexJson = [ordered]@{ schemaVersion = 1; editor = $editor; playerNull = $playerNull; playerDx11 = $playerDx11; playerNullPhysics = $playerNullPhysics; playerDx11Physics = $playerDx11Physics } | ConvertTo-Json
 [IO.File]::WriteAllText($packageIndex, $indexJson, [Text.UTF8Encoding]::new($false))
 Write-Host "[Ncma] Framework-dependent candidates staged at $packageBase; production entry untouched."

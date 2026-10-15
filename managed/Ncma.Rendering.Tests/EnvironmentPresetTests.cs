@@ -90,7 +90,7 @@ internal static unsafe partial class Program
             var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,copied);string path=Path.Combine(fixture.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,copied.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/environment.ncenv"),descriptor.Encode());
             using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
             using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
-            using var scene=new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>true);
+            using var scene=new SceneRenderSession(renderer,cache,document.World);scene.Prepare(assets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>true);
             scene.PrepareEnvironmentView(256,256,camera,ambient:0);Pass(scene.Submit(1,256,256,camera,ambient:0,target:target),"actual preset scene submit");
             byte[] pixels=new byte[256*256*4];renderer.CaptureTarget(target,pixels);renderer.Present();
             var oracle=new IblImageOracle(copied);

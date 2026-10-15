@@ -10,6 +10,9 @@ using Ncma.Ui.Rendering;
 try {
     string Value(string name, string fallback) { int i = Array.IndexOf(args, name); return i < 0 ? fallback : i + 1 < args.Length ? args[i + 1] : throw new ArgumentException("Missing " + name); }
     bool smoke = args.Contains("--smoke"); string plugins = Path.GetFullPath(Value("--plugins", "out/build/windows-ninja-debug/m2/plugins"));
+    using var shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,null,null);
+    if (shaderFiles is not null && shaderFiles.Count != 1) throw new ArgumentException("Pure UI requires only one Flat2D package.");
+    if (args.Contains("--recovery-smoke")) { UiRecoverySmoke.Run(plugins,shaderFiles); return; }
     string fontPath = Path.GetFullPath(Value("--font", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "msyh.ttc")));
     // Local demo only. The Windows font is read explicitly and never copied or published.
     Guid fontId = Guid.Parse("af503c62-86f4-4af2-8d99-2eb3d797d284");
@@ -21,8 +24,6 @@ try {
     var field = UiElement.Create(Guid.NewGuid(), "Name", UiKind.TextInput, d.Root) with { Order = 3, Font = fontId, Text = "角色名称", Action = "name.changed", FontSize = 22, Layout = UiLayout.Fixed(32, 216, 400, 48), Style = UiStyle.Default with { Fill = new(.1f, .16f, .24f, 1), Clip = true } };
     var slider = UiElement.Create(Guid.NewGuid(), "Slider", UiKind.Slider, d.Root) with { Order = 4, Action = "volume", Layout = UiLayout.Fixed(32, 292, 400, 24), Style = UiStyle.Default with { Fill = new(.08f, .15f, .23f, 1), Foreground = new(.08f, .6f, .98f, 1), CornerRadius = 5 } };
     d = d with { Elements = [d.Elements[0] with { Style = UiStyle.Default with { Fill = new(.025f, .045f, .075f, 1), Clip = true } }, title, health, button, field, slider] };
-    using var shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,null,null);
-    if (shaderFiles is not null && shaderFiles.Count != 1) throw new ArgumentException("Pure UI requires only one Flat2D package.");
     using var loader = new PluginLoader(); loader.Load(plugins, [
         new("platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
         new("renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["platform"]),

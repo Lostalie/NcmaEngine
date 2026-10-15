@@ -9,7 +9,8 @@ internal static unsafe partial class Program
     {
         string configuration=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         using var products=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repo,"out/verification/m2-7",configuration,"packages.json")));
-        foreach(var(key,kind)in new[]{("editor","editor"),("playerDx11","player"),("playerNull","null")}){
+        var variants=probeName=="graphics-recovery-joint"?new[]{("editor","editor"),("playerDx11Physics","player"),("playerNullPhysics","nullPhysics"),("playerNull","null")}:new[]{("editor","editor"),("playerDx11","player"),("playerNull","null")};
+        foreach(var(key,kind)in variants){
             string source=products.RootElement.GetProperty(key).GetString()!,dest=Path.Combine(output,"product-"+kind);DeploymentManifest.Validate(source);Directory.CreateDirectory(dest);
             using var manifest=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(source,DeploymentManifest.FileName)));
             foreach(var entry in manifest.RootElement.GetProperty("files").EnumerateArray()){
@@ -25,7 +26,7 @@ internal static unsafe partial class Program
                 pass(SHA256.HashData(File.ReadAllBytes(path)).SequenceEqual(SHA256.HashData(File.ReadAllBytes(to))),"exact runtime copy "+relative);
             }
             pass(!Directory.GetFiles(game,"*.ncmaui",SearchOption.AllDirectories).Any(),"no author UI deployed");
-            string evidence=Path.Combine(output,"relocated-"+kind);Directory.CreateDirectory(evidence);string request=Path.Combine(evidence,"request.json"),project=Path.Combine(game,"project.ncmaproject");
+            string evidence=Path.Combine(output,"relocated-"+kind);Directory.CreateDirectory(evidence);string request=Path.Combine(evidence,"request.json"),project=Path.Combine(game,probeName=="graphics-recovery-joint"&&kind=="null"?"null.ncmaproject":"project.ncmaproject");
             File.WriteAllText(request,JsonSerializer.Serialize(new{probe=probeName,productRoot=dest,plugins=Path.Combine(dest,"plugins"),project,output=evidence,kind,relocated=true}));
             var pins=paths.Select(p=>new FileStream(p,FileMode.Open,FileAccess.Read,FileShare.None)).ToArray();
             try{
@@ -35,15 +36,22 @@ internal static unsafe partial class Program
                 var cli=new ProcessStartInfo(Path.Combine(dest,kind=="editor"?"NcmaEngine.exe":"NcmaPlayer.exe")){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
                 foreach(string arg in new[]{"--project",project})cli.ArgumentList.Add(arg);
                 foreach(string arg in kind=="editor"?new[]{"--smoke-test","--frames","2"}:new[]{"--ticks","2","--report",Path.Combine(evidence,"apphost.json")})cli.ArgumentList.Add(arg);
-                if(kind=="null")cli.ArgumentList.Add("--headless");Run(cli,Path.Combine(evidence,"apphost.log"),0);
-                if(kind!="editor"){using var report=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost.json")));ulong tick=report.RootElement.GetProperty("tick").GetUInt64();pass(kind=="null"?tick==2:tick>=2,"actual Player apphost committed ticks");}
+                if(kind is "null" or "nullPhysics")cli.ArgumentList.Add("--headless");Run(cli,Path.Combine(evidence,"apphost.log"),0);
+                if(kind!="editor"){using var report=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost.json")));ulong tick=report.RootElement.GetProperty("tick").GetUInt64();pass(kind is "null" or "nullPhysics"?tick==2:tick>=2,"actual Player apphost committed ticks");}
+                if(probeName=="graphics-recovery-joint"){
+                    var denied=new ProcessStartInfo(cli.FileName){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
+                    foreach(string arg in new[]{"--project",Path.Combine(game,"interactive.ncmaproject")})denied.ArgumentList.Add(arg);
+                    foreach(string arg in kind=="editor"?new[]{"--smoke-test","--frames","2"}:new[]{"--ticks","2","--report",Path.Combine(evidence,"unregistered-ui.json")})denied.ArgumentList.Add(arg);
+                    if(kind is "null" or "nullPhysics")denied.ArgumentList.Add("--headless");Run(denied,Path.Combine(evidence,"unregistered-ui.log"),kind=="editor"?4:7);
+                    if(kind!="editor"){using var refused=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"unregistered-ui.json")));pass(refused.RootElement.GetProperty("tick").GetUInt64()==0&&refused.RootElement.GetProperty("modules").GetArrayLength()==0,"unregistered HUD refused before solver/native/gameplay; no automatic route authority");}
+                }
             }finally{foreach(var pin in pins)pin.Dispose();}
             using var loaded=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"loaded-product-assemblies.json")));
             if(kind!="editor")pass(!loaded.RootElement.EnumerateArray().Any(a=>a.GetProperty("name").GetString() is {} n&&(n.StartsWith("Ncma.Editor",StringComparison.Ordinal)||n.Contains("Mcp",StringComparison.Ordinal)||n=="Ncma.Gui")),"Player stays independent of Editor/MCP/GUI");
             using var result=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"probe.json")));pass(result.RootElement.GetProperty("checks").GetInt32()>=3,"product publication probe assertions");
         }
         void Run(ProcessStartInfo info,string logPath,int expected){using var child=Process.Start(info)!;var stdout=child.StandardOutput.ReadToEndAsync();var stderr=child.StandardError.ReadToEndAsync();
-            if(!child.WaitForExit(probeName=="scene-ui-joint"?120000:45000)){child.Kill(entireProcessTree:true);child.WaitForExit();throw new Exception("Owned publication product process timeout");}
+            if(!child.WaitForExit(probeName is "scene-ui-joint" or "graphics-recovery-joint"?120000:45000)){child.Kill(entireProcessTree:true);child.WaitForExit();throw new Exception("Owned publication product process timeout");}
             string log=stdout.GetAwaiter().GetResult()+stderr.GetAwaiter().GetResult();File.WriteAllText(logPath,log);pass(child.ExitCode==expected,"publication product process "+log);
         }
     }

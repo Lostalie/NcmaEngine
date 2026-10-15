@@ -105,7 +105,7 @@ public sealed unsafe partial class RendererSession
     }
     private void CreateRegisteredSceneCore(ScenePipelineSession session, uint resolution, RegisteredSceneTone tone)
     {
-        EnsureShaderPipeline(); tone.Verify(this);
+        EnsureShaderPipeline(); tone.Verify(this);session.VerifyPreparedCandidate();
         if (session.Owner != this || session.Key.Value != 0) throw new ArgumentException("Foreign/already installed scene.");
         byte[] vertex = tone.Vertex.CopyBytecode(), pixel = tone.Pixel.CopyBytecode(); PluginError error = default; GpuMeshKey key = default;
         SceneDescriptionV4 scene = new() { Size = 16, Width = session.Plan.Width, Height = session.Plan.Height, Resolution = resolution };
@@ -122,7 +122,7 @@ public sealed unsafe partial class RendererSession
     }
     private void ReplaceToneCore(ScenePipelineSession session, RegisteredSceneTone tone)
     {
-        EnsureShaderPipeline(); ArgumentNullException.ThrowIfNull(tone); tone.Verify(this);
+        EnsureShaderPipeline(); ArgumentNullException.ThrowIfNull(tone); tone.Verify(this);session.VerifyPreparedCandidate();
         if (session.Owner != this || !_scenePipelines.Contains(session) || session.Key.Value == 0) throw new ArgumentException("Foreign/closed scene Tone installation.");
         byte[] vertex = tone.Vertex.CopyBytecode(), pixel = tone.Pixel.CopyBytecode(); PluginError error = default;
         fixed (byte* v = vertex) fixed (byte* p = pixel) { ShaderPairNative pair = new() { Size = 32, Version = 1, VertexBytes = (uint)vertex.Length, PixelBytes = (uint)pixel.Length, Vertex = v, Pixel = p };

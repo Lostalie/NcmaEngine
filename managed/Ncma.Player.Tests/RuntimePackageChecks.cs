@@ -15,6 +15,11 @@ internal static class RuntimePackageChecks
     // not a merge into an installation and not a release/public distribution of private user assets.
     internal static void Run(string repository, string source, string output, string configuration, ProjectConfiguration config, SceneDocumentSnapshot scene)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
+
+        using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
         byte[] bytes = SceneAssetPreparation.CreateRuntimePackage(source, config.ProjectId, scene, []);
         Check(bytes.SequenceEqual(SceneAssetPreparation.CreateRuntimePackage(source, config.ProjectId, scene, [])), "Repeated package changed bytes");
         string package = Path.Combine(repository, "out/package/m3-9", configuration, Guid.NewGuid().ToString("N"));
@@ -54,13 +59,15 @@ internal static class RuntimePackageChecks
         foreach (var file in files) foreach (string marker in forbidden) Check(!file.path.Contains(marker, StringComparison.OrdinalIgnoreCase), "Authoring dependency in runtime package: " + file.path);
         string deps = File.ReadAllText(Path.Combine(package, "NcmaPlayer.deps.json")); foreach (string marker in forbidden.Where(m => m.StartsWith("Ncma"))) Check(!deps.Contains(marker), "Forbidden managed runtime dependency");
         var options = PlayerOptions.Parse(["--project", project, "--ticks", "6", "--max-runtime-seconds", "20", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-packed-player.json")]);
-        var report = PlayerRunner.Run(options, pluginRoot: Path.Combine(package, "plugins"), visible: false);
+        var report = playerRunOwner0.Run(options, pluginRoot: Path.Combine(package, "plugins"), visible: false);
         Check(report.ExitCode == 0 && report.Tick >= 6 && report.RenderedFrames > 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0 && report.ShutdownErrors.Length == 0,
             "Packed graphical scene failed: " + report.Reason);
         byte[] savedScene = File.ReadAllBytes(Path.Combine(package, "sample/start.ncmascene"));
         for (int cycle = 0; cycle < 32; cycle++) {
+
+            using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
             var restart = PlayerOptions.Parse(["--project", project, "--ticks", "2", "--max-runtime-seconds", "20", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-packed-cycle.json")]);
-            var result = PlayerRunner.Run(restart, pluginRoot: Path.Combine(package, "plugins"), visible: false);
+            var result = playerRunOwner1.Run(restart, pluginRoot: Path.Combine(package, "plugins"), visible: false);
             Check(result.ExitCode == 0 && result.Tick >= 2 && result.RenderedFrames > 0 && result.ValidationErrors == 0 && result.ValidationWarnings == 0 && result.ShutdownErrors.Length == 0, "Packed create/Play/Stop cycle failed");
             // Successful renderer/pose shutdown rejects outstanding resource leases. Independently
             // verify that the final RuntimeAssetLease released the entire immutable package pin.
@@ -92,9 +99,9 @@ internal static class RuntimePackageChecks
         File.WriteAllBytes(Path.Combine(output, Guid.NewGuid().ToString("N") + "-valid-package.ncpak"), bytes);
         byte[] bad = (byte[])bytes.Clone(); bad[^1] ^= 1; File.WriteAllBytes(packed, bad);
         var rejectedOptions = PlayerOptions.Parse(["--project", project, "--ticks", "6", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-corrupt-packed-player.json")]);
-        var rejected = PlayerRunner.Run(rejectedOptions, pluginRoot: Path.Combine(package, "plugins"), visible: false);
+        var rejected = playerRunOwner2.Run(rejectedOptions, pluginRoot: Path.Combine(package, "plugins"), visible: false);
         Check(rejected.ExitCode == 3 && rejected.Tick == 0 && rejected.Modules.Length == 0 && rejected.RenderedFrames == 0, "Corrupt package started gameplay/GPU or fell back");
-        var rejectedNull = PlayerRunner.Run(PlayerOptions.Parse(["--project", project, "--headless", "--ticks", "2", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-corrupt-packed-null.json")]), visible: false);
+        var rejectedNull = playerRunOwner3.Run(PlayerOptions.Parse(["--project", project, "--headless", "--ticks", "2", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-corrupt-packed-null.json")]), visible: false);
         Check(rejectedNull.ExitCode == 3 && rejectedNull.Tick == 0 && rejectedNull.Modules.Length == 0 && rejectedNull.ShutdownErrors.Length == 0, "Corrupt Null package started gameplay or leaked pins");
         bool manifestRejected = false; try { DeploymentManifest.Validate(package); } catch (ArgumentException) { manifestRejected = true; }
         Check(manifestRejected, "Manifest accepted changed asset bytes");

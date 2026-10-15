@@ -140,7 +140,7 @@ public sealed unsafe partial class RendererSession
     }
     internal void InstallSceneShaders(ScenePipelineSession session,uint resolution,RegisteredSceneShaders shaders,bool create){
         ArgumentNullException.ThrowIfNull(shaders);BeginToneOperation();try{
-            EnsureScenePipeline();EnsureShaderStages();shaders.Verify(this);
+            EnsureScenePipeline();EnsureShaderStages();shaders.Verify(this);session.VerifyPreparedCandidate();
             if(session.Owner!=this||shaders.Shadows!=(resolution!=0)|| (create?session.Key.Value!=0:session.Key.Value==0||!_scenePipelines.Contains(session)))throw new ArgumentException("Exact scene ownership/shadow group required.");
             var codes=shaders.CopyCodes();PluginError error=default;GpuMeshKey key=default;
             if(create)_scenePipelines.Add(session);

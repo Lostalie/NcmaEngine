@@ -18,19 +18,21 @@ public sealed class SceneGpuResources : IDisposable
     private readonly GpuSkinRequest[] _skinRequests = new GpuSkinRequest[32];
     private readonly Dictionary<(Guid Mesh, Guid Set), GpuMaterial[]> _sets = [];
     private readonly Dictionary<(Guid Mesh, Guid Material), GpuMaterial> _overrides = [];
-    private readonly int _owner = Environment.CurrentManagedThreadId;
-    private bool _disposed;
+    private readonly ScenePreparationLifetime _lifetime = new();
+    public ScenePreparationPhase PreparationPhase => _lifetime.Phase;
     public PreparedSceneAssets Metadata => Assets.Metadata;
     private PreparedSceneAssetLease Assets { get { Verify(); return _assets!; } }
     public IReadOnlyList<SceneRenderDiagnostic> Diagnostics { get; private set; } = [];
-    private void Verify() { if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("GPU resources require owner thread."); ObjectDisposedException.ThrowIf(_disposed, this); }
-    public static SceneGpuResources Prepare(RenderResourceCache cache, PreparedSceneAssetLease prepared, SceneDocumentSnapshot scene,
+    private void Verify() => _lifetime.RequireReady();
+    public void Prepare(RenderResourceCache cache, PreparedSceneAssetLease prepared, SceneDocumentSnapshot scene,
         RendererSession? renderer = null, SceneAnimationSession? animation = null,RegisteredSkinShader? skinShader=null)
     {
-        ArgumentNullException.ThrowIfNull(cache); ArgumentNullException.ThrowIfNull(prepared); ArgumentNullException.ThrowIfNull(scene);
-        var result = new SceneGpuResources(); var diagnostics = new List<SceneRenderDiagnostic>();
+        _lifetime.Begin();
+        var result = this; var diagnostics = new List<SceneRenderDiagnostic>();
         try
         {
+            ArgumentNullException.ThrowIfNull(cache); ArgumentNullException.ThrowIfNull(prepared); ArgumentNullException.ThrowIfNull(scene);
+            if (renderer is not null) cache.VerifyFor(renderer);
             result._assets = prepared.AcquireLease(); var cpu = result._assets.Assets;
             var registry = RenderComponentRegistry.CreateRegistry();
             var uploads = new Dictionary<Guid, MeshUploadData>();
@@ -55,6 +57,7 @@ public sealed class SceneGpuResources : IDisposable
                 } else if (!uploads.TryGetValue(source.Id, out upload!)) { upload = MeshUploadData.PrepareStatic(source.CopyPayload()); uploads.Add(source.Id, upload); }
                 if (skin is null && !result._meshes.ContainsKey(source.Id))
                 {
+                    result._leases.EnsureCapacity(result._leases.Count+1);
                     var lease = cache.AcquireMesh(Version(source), upload); result._leases.Add(lease); result._meshes.Add(source.Id, (lease.Resource, upload.Ranges.ToArray()));
                 }
                 if (!result._sets.ContainsKey((source.Id, data.MaterialSetId)))
@@ -74,18 +77,19 @@ public sealed class SceneGpuResources : IDisposable
                     if (!result._overrides.ContainsKey((source.Id, material.Id))) result._overrides.Add((source.Id, material.Id), Acquire(material, upload.CanUseNormalMap));
                 foreach (var diagnostic in upload.Diagnostics) diagnostics.Add(new(obj.Id, diagnostic.Code, source.Id));
             }
-            result.Diagnostics = diagnostics.AsReadOnly(); return result;
+            result.Diagnostics = diagnostics.AsReadOnly(); _lifetime.Complete();
 
             GpuMaterial Acquire(RuntimeMaterialAsset? asset, bool normal)
             {
                 // Explicit ephemeral default, NOT a persistent source-material identity or authoring conversion.
                 var definition = asset?.Definition ?? MaterialDefinition.Default(Guid.Parse("ffffffff-ffff-4fff-8fff-ffffffffffff"));
                 var version = asset is null ? new RenderAssetVersion(definition.AssetId, 1, Convert.ToHexString(SHA256.HashData(MaterialCodec.Encode(definition)))) : Version(asset);
+                result._leases.EnsureCapacity(result._leases.Count+1);
                 var lease = cache.AcquireMaterial(version, definition, id => cpu.TryResolve(id, AssetKind.Texture, out var texture) ? new ResolvedTexture(Version(texture!), ((RuntimeTextureAsset)texture!).Data) : null, true, normal, out var losses);
                 result._leases.Add(lease); foreach (var loss in losses) diagnostics.Add(new(Guid.Empty, loss.Code, definition.AssetId)); return lease.Resource;
             }
         }
-        catch { result.Dispose(); cache.Trim(); throw; }
+        catch { _lifetime.Fail(); throw; }
     }
     private static RenderAssetVersion Version(RuntimeAsset asset) => new(asset.Id, asset.Generation, asset.ContentHash);
     private static StaticMeshData ToStatic(SkinnedMeshData s) => new(s.MeshId,s.MaterialSetId,s.Visible,s.CastShadow,s.LayerMask);
@@ -123,7 +127,11 @@ public sealed class SceneGpuResources : IDisposable
         return count;
     }
     public void Dispose()
-    { if (_disposed) return; Verify(); for (int i = _leases.Count - 1; i >= 0; i--) _leases[i].Dispose(); _leases.Clear(); _assets?.Dispose(); _assets = null; _disposed = true; }
+    {
+        if (!_lifetime.BeginClose()) return;
+        for (int i = _leases.Count - 1; i >= 0; i--) { _leases[i].Dispose(); _leases.RemoveAt(i); }
+        _assets?.Dispose(); _assets = null; _lifetime.Closed();
+    }
 }
 public static class ShadowVolume
 {

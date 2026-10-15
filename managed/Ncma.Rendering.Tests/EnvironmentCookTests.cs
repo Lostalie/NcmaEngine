@@ -119,6 +119,11 @@ internal static unsafe partial class Program
             }
         }
         var original=constant.CopyBytes();
+        // Frozen algorithm-v1 numerical payloads from the pre-optimization Debug
+        // and Release kernels (both configurations were byte-identical). UUIDs
+        // and source identity are intentionally excluded; all output floats remain.
+        Pass(Hash(original.AsSpan(160).ToArray())=="E97020FAAE5F378D87A703C62C72735CF60D626EEA5800B5CFB7923555FB0D92","algorithm-v1 constant payload unchanged");
+        Pass(Hash(directional.CopyBytes().AsSpan(160).ToArray())=="0572D9906F61ACE1FA4FF4BC2D9802293059A0920ABC43903057DD279AC093C4","algorithm-v1 directional payload unchanged");
         Pass(EnvironmentPackage.Decode(original,constant.ContentHash).ContentHash==constant.ContentHash,"after plugin shutdown pure roundtrip");
         Pass(Task.WhenAll(Enumerable.Range(0,8).Select(_=>Task.Run(()=>EnvironmentPackage.Decode(constant.CopyBytes(),constant.ContentHash).CopyBrdfLut().SequenceEqual(constant.CopyBrdfLut())))).GetAwaiter().GetResult().All(x=>x),"immutable concurrent reads after plugin shutdown");
         byte[] plausible=(byte[])original.Clone();plausible[88]^=1;

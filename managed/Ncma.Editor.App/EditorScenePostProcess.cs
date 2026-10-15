@@ -10,6 +10,7 @@ internal sealed unsafe partial class CandidatePresentation
     private readonly PostProcessModules _postModules=postProcessModules??PostProcessModules.Official();
     private RuntimePostProcessLibrary? _postLibrary;
     private PostProcessRuntime? _postRuntime;
+    private ScenePipelineStartup? _pipelineStartup;
     private PostProcessRuntime? PreparePostRuntime(World world,SceneDocumentSnapshot snapshot)
     {
         using var read=SceneEnvironmentState.BeginRead(world,world.Identity);
@@ -18,17 +19,19 @@ internal sealed unsafe partial class CandidatePresentation
         if(_renderer is null){if(ScenePostProcessState.Read(snapshot).Enabled)throw new NotSupportedException("Post processing requires graphical scene rendering.");return null;}
         if(_postRuntime is not null){ScenePostProcessPreflight.ValidateFiles(snapshot,_postLibrary!);return _postRuntime;}
         var files=_shaderFiles??throw new ArgumentException("Post processing requires checked scene shader files.");
-        var library=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.PostProcessLibrary);
+        var library=_postLibrary??RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.PostProcessLibrary);
         try{ScenePostProcessPreflight.ValidateFiles(snapshot,library);_postRuntime=new(_renderer,files,library,_postModules,()=>!_closed);_postLibrary=library;return _postRuntime;}
-        catch{library.Dispose();throw;}
+        catch{if(!ReferenceEquals(library,_postLibrary))library.Dispose();throw;}
     }
     private void PreflightPost(World world,SceneDocumentSnapshot scene)
     {
+        if(_pipelineStartup?.HasRetainedProbe==true)throw new InvalidOperationException("Retained pipeline startup probe requires host close before new preparation.");
         var runtime=PreparePostRuntime(world,scene);
         var high=PrepareShadowRuntime(world,scene);
         if(_renderer is not null){
-            ScenePostProcessPreflight.Prepare(_renderer,world,scene,runtime);
-            ScenePipelineStartup.Prepare(_renderer,world,scene,pipelineFactory,runtime,()=>!_closed,high);
+            _pipelineStartup??=new(_renderer);
+            _pipelineStartup.PreparePost(world,scene,runtime);
+            _pipelineStartup.Prepare(world,scene,pipelineFactory,runtime,()=>!_closed,high);
         }
     }
 }

@@ -50,6 +50,7 @@ SessionService 明确 Edit/Play/Scripting 的创建、冻结、Stop、释放责�
 ### D. 应用生命周期与错误/日志
 
 ApplicationLifetime：Created → Starting → Running → Stopping → Stopped，初始化失败进入 Failed 并逆序释放。
+2026-10-15 M7.6收紧关闭合同：服务列表按依赖顺序启动，逆序关闭遇首个失败即停止，保留失败服务和前置依赖；成功释放才移除持有者。同线程显式关闭重试只继续关闭，未恢复的失败生命周期不能直接Run/Start；原initialize/frame首因与独立shutdown首因分别保存。唯一恢复例外是关闭尚未开始、精确持有的呈现失败：由可信宿主经明确批准重建并验证就绪后恢复Running，不重启服务、不回放帧；启动、游戏逻辑和关闭故障仍不可据此恢复。已成功释放的服务不重复关闭，详见[M7实施记录](M7_IMPLEMENTATION_PLAN.md)。
 要求所有应用/窗口相关调用在同步 Main 的 owner thread，后台 callback 只入有界队列。
 IFrameClock 提供单调时间；测试 FakeClock；真实 dt 只计算一次，再传 PlaySession，不能 GUI 与游戏各算一套时间。
 IApplicationLog 是统一托管结构化日志入口，使用有界环形 Console 视图和文件轮转。

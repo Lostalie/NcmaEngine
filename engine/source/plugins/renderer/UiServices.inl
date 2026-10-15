@@ -2,7 +2,7 @@
 uint32_t EnsureUi(NcmaErrorV1* error) {
     if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
     if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
-    if(!renderer->ui){auto kernel=std::make_unique<Rendering::UiKernel>(renderer->backend->GetDevice(),renderer->backend->GetDeviceContext());std::string message;
+    if(!renderer->ui){auto kernel=std::make_unique<Rendering::UiKernel>(*renderer->backend);std::string message;
         if(!kernel->Initialize(message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);renderer->ui=std::move(kernel);}
     return NCMA_OK;
 }
@@ -29,7 +29,7 @@ uint32_t NCMA_CALL DestroyUi(uint64_t context,uint64_t handle,NcmaUiKeyV1 key,Nc
         if(!renderer->ui||key.generation!=handle||!renderer->ui->Contains(key.value))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
         if(renderer->active||renderer->ui->Pinned(key.value))return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
-        if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         renderer->backend->GetDeviceContext()->ClearState();renderer->ui->Destroy(key.value);return NCMA_OK;});
 }
 uint32_t NCMA_CALL SubmitUi(uint64_t context,uint64_t handle,const NcmaUiFrameV1* input,NcmaErrorV1* error) noexcept {
@@ -39,7 +39,7 @@ uint32_t NCMA_CALL SubmitUi(uint64_t context,uint64_t handle,const NcmaUiFrameV1
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
         if(f.frame<=renderer->lastUiFrame)return NcmaPlugin::Error(error,NCMA_BUSY,"UI frame already submitted.");
         if(f.overlay?(!renderer->active||f.frame!=renderer->lastFrame):(renderer->active||f.frame<=renderer->lastFrame))return NcmaPlugin::Error(error,NCMA_BUSY);
-        BusyScope scope;ExecutionScope execution;std::string message;
+        BusyScope scope;ExecutionScope execution(f.frame);std::string message;
         if(!f.overlay){Rhi::RenderPassDescription pass{};pass.ClearColor=true;std::copy_n(f.clear,4,pass.ClearColorValue);
             if(!renderer->backend->BeginRenderPass(pass,message))return Failure(error,message);}
         renderer->ui->Draw(f.list.value,renderer->stats.width,renderer->stats.height);

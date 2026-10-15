@@ -64,9 +64,9 @@ Write-Host 'PASS redeployment preserves previous journal and recoverable apphost
 foreach ($toolFile in @('Ncma.Asset.ImportWorker.dll','Ncma.Asset.ImportWorker.deps.json','Ncma.Asset.ImportWorker.runtimeconfig.json','Ncma.Asset.Import.dll','Ncma.Assets.dll','NcmaImportKernel.dll')) {
     if (-not (Test-Path -LiteralPath (Join-Path $fresh "tools\import-worker\$toolFile") -PathType Leaf)) { throw "Missing Editor import tool: $toolFile" }
 }
-foreach ($player in @($deploymentTestIndex.playerNull, $deploymentTestIndex.playerDx11)) {
+foreach ($player in @($deploymentTestIndex.playerNull, $deploymentTestIndex.playerDx11, $deploymentTestIndex.playerNullPhysics, $deploymentTestIndex.playerDx11Physics)) {
     $files = @(Get-DeploymentFiles $deploymentTestWorkspace $player)
     if (@($files | Where-Object { $_.path -match 'NcmaImportKernel|Ncma.Asset.Import|^tools/import-worker/' }).Count) { throw 'Import authoring leaked into Player.' }
 }
-Write-Host 'PASS Editor-only hashed import tools; both Players exclude authoring/parser'
+Write-Host 'PASS Editor-only hashed import tools; all four Players exclude authoring/parser'
 Write-Host '[Ncma] Deployment regression: 8/8 passed.'

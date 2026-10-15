@@ -1,5 +1,8 @@
 #include "../contracts/NcmaRenderer.h"
+#include "../contracts/NcmaRendererFrame.h"
+#include "../contracts/NcmaRendererFault.h"
 #include "../PluginSupport.h"
+#include "../WindowsHandle.h"
 #include "../platform/PlatformPrivate.h"
 #include "RendererPrivate.h"
 #include "ReferenceKernel.h"
@@ -39,14 +42,13 @@ using namespace NcmaEngine;
 using Microsoft::WRL::ComPtr;
 namespace {
 const auto loadingThread=std::this_thread::get_id();
-uint64_t module=0,nextModule=1,nextRenderer=1,nextGroup=1,nextMesh=1;
+uint64_t module=0;
 bool busy=false;
 struct TextureGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle texture;uint32_t format=0;uint64_t bytes=0;
     explicit TextureGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TextureGpu(){backend.DestroyTexture(texture);}};
 struct MaterialGpu {NcmaMaterialDescriptionV3 description{};std::array<Rhi::TextureHandle,6> textures{};};
 struct TargetGpu {Rhi::D3D11RenderBackend& backend;Rhi::TextureHandle color,depth;uint32_t width=0,height=0;uint64_t guiPins=0,lastFrame=0;
     explicit TargetGpu(Rhi::D3D11RenderBackend& b):backend(b){}~TargetGpu(){backend.DestroyTexture(color);backend.DestroyTexture(depth);}};
-uint64_t nextResource=1;
 struct Renderer {
     // Fixed closed reference contracts, renderer lifetime; no user shader/source cache.
     struct ShaderReference { std::string source,entry,target; ComPtr<ID3D11ShaderReflection> reflection; };
@@ -62,9 +64,12 @@ struct Renderer {
     bool pureUi=false;
     uint64_t lastUiFrame=0;
     std::unique_ptr<Rendering::UiKernel> ui;
-    uint64_t handle=0,platform=0,window=0,borrows=0,lastFrame=0;
+    uint64_t handle=0,platform=0,window=0,borrows=0,lastFrame=0,diagnosticFrame=0;
     bool active=false,failed=false,vsync=false;
+    uint64_t abandonedFrames=0;
     uint32_t faultResult=NCMA_INTERNAL_ERROR;
+    NcmaRendererFaultV1 firstFault{sizeof(NcmaRendererFaultV1),1};
+    uint32_t diagnosticOperation=NCMA_GPU_FAULT_STARTUP;
     std::unique_ptr<Rhi::D3D11RenderBackend> backend;
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::ReferenceKernel>> groups;
     std::unique_ptr<Rendering::StaticMeshKernel> meshKernel;
@@ -90,7 +95,25 @@ struct Renderer {
     NcmaRendererStatsV1 stats{sizeof(NcmaRendererStatsV1)};
 };
 std::unique_ptr<Renderer> renderer;
+NcmaRendererFaultV1 startupFault{sizeof(NcmaRendererFaultV1),1};
+uint32_t CompletionError(HRESULT operation,HRESULT removed) noexcept;
+void RecordFault(Renderer& r,uint32_t operation,uint32_t result,HRESULT code=S_OK,bool hasCode=false) noexcept {
+    if(r.firstFault.flags)return;
+    auto* device=r.backend?r.backend->GetDevice():nullptr;
+    const HRESULT removed=device?device->GetDeviceRemovedReason():S_OK;
+    r.firstFault={sizeof(r.firstFault),1,1u|(hasCode?2u:0u)|(device?4u:0u),result,r.handle,r.diagnosticFrame?r.diagnosticFrame:r.lastFrame,operation,
+        hasCode?static_cast<int32_t>(code):0,device?static_cast<int32_t>(removed):0,1};
+}
+void BackendFault(void* owner,HRESULT result) noexcept {
+    auto& r=*static_cast<Renderer*>(owner);auto* device=r.backend->GetDevice();
+    RecordFault(r,r.diagnosticOperation,CompletionError(result,device?device->GetDeviceRemovedReason():S_OK),result,true);
+}
 struct BusyScope { BusyScope(){busy=true;} ~BusyScope(){busy=false;} };
+struct DiagnosticScope {
+    uint32_t previous;
+    explicit DiagnosticScope(uint32_t operation):previous(renderer->diagnosticOperation){renderer->diagnosticOperation=operation;}
+    ~DiagnosticScope(){renderer->diagnosticOperation=previous;}
+};
 uint32_t Validate(uint64_t context,NcmaErrorV1* error) {
     if(std::this_thread::get_id()!=loadingThread) return NcmaPlugin::Error(error,NCMA_WRONG_THREAD);
     if(!module||context!=module) return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
@@ -102,62 +125,110 @@ uint32_t Instance(uint64_t context,uint64_t handle,NcmaErrorV1* error) {
     if(!renderer||renderer->handle!=handle) return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
     return NCMA_OK;
 }
-uint32_t Failure(NcmaErrorV1* error,const std::string& message) {
+void StopRenderer(uint32_t result) noexcept {
+    RecordFault(*renderer,NCMA_GPU_FAULT_EXECUTION,result);
+    if(!renderer->failed)renderer->faultResult=result;
     renderer->failed=true; renderer->stats.state=2;renderer->active=false;
     // A capture/present/device failure can occur after submit, outside ExecutionScope.
     // Abort that frame so fail-stop still permits deterministic lease draining and shutdown.
     auto* dc=renderer->backend->GetDeviceContext();
     if(renderer->measuring) {
         dc->End(renderer->gpuEnd.Get());dc->End(renderer->gpuDisjoint.Get());
-        renderer->measuring=false;renderer->timingPending=true;
+        renderer->measuring=false;
     }
     dc->ClearState();
+    renderer->timingPending=false;renderer->stats.gpu_sample_valid=0;renderer->stats.gpu_ms=0;
+}
+uint32_t Failure(NcmaErrorV1* error,const std::string& message,uint32_t operation=NCMA_GPU_FAULT_EXECUTION,HRESULT code=S_OK,bool hasCode=false) {
     const bool lost=FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason());
-    renderer->faultResult=lost?NCMA_DEVICE_LOST:NCMA_INTERNAL_ERROR;
+    const uint32_t result=lost||(hasCode&&CompletionError(code,S_OK)==NCMA_DEVICE_LOST)?NCMA_DEVICE_LOST:NCMA_INTERNAL_ERROR;
+    RecordFault(*renderer,operation,result,code,hasCode);
+    StopRenderer(result);
     return NcmaPlugin::Error(error,renderer->faultResult,message);
 }
 #ifdef NCMA_RENDERER_TEST_WAIT
 bool testWaitTimeout=false; // Only the white-box test TU; absent from shipped module/API.
+bool testWaitQueryFailure=false;
+bool testWaitPollFailure=false;
+bool testWaitRemovedBefore=false,testWaitRemovedDuring=false;
 bool testTonePreparationThrow=false;
+HRESULT testPresentResult=S_OK;
+bool testStartupValidationFailure=false;
 #endif
-bool Wait(Renderer& r,std::string& error) {
+// Typed results are shared by resize, updates, readback and retirement. Never infer
+// the cause from diagnostic text or label every failed completion as a timeout.
+uint32_t CompletionError(HRESULT operation,HRESULT removed) noexcept {
+    return FAILED(removed)||operation==DXGI_ERROR_DEVICE_REMOVED||operation==DXGI_ERROR_DEVICE_RESET||
+        operation==DXGI_ERROR_DEVICE_HUNG||operation==DXGI_ERROR_DRIVER_INTERNAL_ERROR?NCMA_DEVICE_LOST:NCMA_INTERNAL_ERROR;
+}
+uint32_t Wait(Renderer& r,std::string& error) {
 #ifdef NCMA_RENDERER_TEST_WAIT
-    if(testWaitTimeout){error="Injected completion timeout; resources retained.";return false;}
+    if(testWaitTimeout){RecordFault(r,NCMA_GPU_FAULT_WAIT_TIMEOUT,NCMA_SHUTDOWN_TIMEOUT);error="Injected completion timeout; resources retained.";return NCMA_SHUTDOWN_TIMEOUT;}
 #endif
     auto* device=r.backend->GetDevice(); auto* context=r.backend->GetDeviceContext();
-    if(FAILED(device->GetDeviceRemovedReason())) { error="Device lost."; return false; }
+    HRESULT removed=device->GetDeviceRemovedReason();
+#ifdef NCMA_RENDERER_TEST_WAIT
+    if(testWaitRemovedBefore)removed=DXGI_ERROR_DEVICE_REMOVED;
+#endif
+    if(FAILED(removed)) { RecordFault(r,NCMA_GPU_FAULT_DEVICE_REMOVED,NCMA_DEVICE_LOST,removed,true);error="Device lost before GPU completion."; return NCMA_DEVICE_LOST; }
     D3D11_QUERY_DESC desc{D3D11_QUERY_EVENT,0}; ComPtr<ID3D11Query> query;
-    if(FAILED(device->CreateQuery(&desc,&query))) {error="GPU completion query failed.";return false;}
+    HRESULT created;
+#ifdef NCMA_RENDERER_TEST_WAIT
+    created=testWaitQueryFailure?E_OUTOFMEMORY:device->CreateQuery(&desc,&query);
+#else
+    created=device->CreateQuery(&desc,&query);
+#endif
+    if(FAILED(created)) {const auto result=CompletionError(created,device->GetDeviceRemovedReason());RecordFault(r,NCMA_GPU_FAULT_WAIT_CREATE,result,created,true);error="GPU completion query creation failed; resources retained.";return result;}
     context->End(query.Get()); context->Flush();
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
     for(;;) {
-        const HRESULT result=context->GetData(query.Get(),nullptr,0,0);
-        if(result==S_OK) return true;
-        if(FAILED(result)) {error="GPU completion failed.";return false;}
-        if(std::chrono::steady_clock::now()>=deadline) {error="GPU completion timed out; resources retained.";return false;}
+        HRESULT result;
+#ifdef NCMA_RENDERER_TEST_WAIT
+        result=testWaitRemovedDuring?DXGI_ERROR_DEVICE_REMOVED:testWaitPollFailure?E_FAIL:context->GetData(query.Get(),nullptr,0,0);
+#else
+        result=context->GetData(query.Get(),nullptr,0,0);
+#endif
+        if(result==S_OK) return NCMA_OK;
+        if(FAILED(result)) {const auto failure=CompletionError(result,device->GetDeviceRemovedReason());RecordFault(r,NCMA_GPU_FAULT_WAIT_POLL,failure,result,true);error="GPU completion query polling failed; resources retained.";return failure;}
+        if(std::chrono::steady_clock::now()>=deadline) {
+            error="GPU completion timed out; resources retained.";
+            const auto failure=FAILED(device->GetDeviceRemovedReason())?NCMA_DEVICE_LOST:NCMA_SHUTDOWN_TIMEOUT;
+            RecordFault(r,NCMA_GPU_FAULT_WAIT_TIMEOUT,failure);return failure;
+        }
         std::this_thread::yield();
     }
 }
+uint32_t CompleteGpu(NcmaErrorV1* error,bool retirement=false) {
+    // Preserve the existing removed-device retirement policy: only an actually
+    // removed device needs no completion fence. It does not bypass leases/pins.
+    if(retirement&&FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())) {RecordFault(*renderer,NCMA_GPU_FAULT_DEVICE_REMOVED,NCMA_DEVICE_LOST,renderer->backend->GetDevice()->GetDeviceRemovedReason(),true);StopRenderer(NCMA_DEVICE_LOST);return NCMA_OK;}
+    std::string message;const auto result=Wait(*renderer,message);
+    if(result==NCMA_DEVICE_LOST)StopRenderer(result);
+    return result==NCMA_OK?NCMA_OK:NcmaPlugin::Error(error,result,message);
+}
 struct ExecutionScope {
     bool success=false;
+    explicit ExecutionScope(uint64_t frame){renderer->diagnosticFrame=frame;}
     ~ExecutionScope() noexcept {
-        if(success || !renderer)return;
-        renderer->failed=true;renderer->stats.state=2;renderer->active=false;
-        auto* dc=renderer->backend->GetDeviceContext();
-        if(renderer->measuring) {
-            dc->End(renderer->gpuEnd.Get());dc->End(renderer->gpuDisjoint.Get());
-            renderer->measuring=false;renderer->timingPending=true;
-        }
-        dc->ClearState();
+        if(!renderer)return;
+        if(success){renderer->diagnosticFrame=0;return;}
+        const auto result=renderer->failed?renderer->faultResult:
+            FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?NCMA_DEVICE_LOST:NCMA_INTERNAL_ERROR;
+        StopRenderer(result);
+        renderer->diagnosticFrame=0;
     }
 };
 void ResolveTiming(Renderer& r) {
     if(!r.timingPending)return;
     D3D11_QUERY_DATA_TIMESTAMP_DISJOINT data{};UINT64 begin=0,end=0;
     auto* dc=r.backend->GetDeviceContext();
-    if(dc->GetData(r.gpuDisjoint.Get(),&data,sizeof(data),D3D11_ASYNC_GETDATA_DONOTFLUSH)!=S_OK ||
-       dc->GetData(r.gpuBegin.Get(),&begin,sizeof(begin),D3D11_ASYNC_GETDATA_DONOTFLUSH)!=S_OK ||
-       dc->GetData(r.gpuEnd.Get(),&end,sizeof(end),D3D11_ASYNC_GETDATA_DONOTFLUSH)!=S_OK)return;
+    auto read=[&](ID3D11Query* query,void* output,UINT bytes) {
+        const HRESULT result=dc->GetData(query,output,bytes,D3D11_ASYNC_GETDATA_DONOTFLUSH);
+        if(FAILED(result))RecordFault(r,NCMA_GPU_FAULT_TIMING,CompletionError(result,r.backend->GetDevice()->GetDeviceRemovedReason()),result,true);
+        return result;
+    };
+    if(read(r.gpuDisjoint.Get(),&data,sizeof(data))!=S_OK ||
+       read(r.gpuBegin.Get(),&begin,sizeof(begin))!=S_OK ||read(r.gpuEnd.Get(),&end,sizeof(end))!=S_OK)return;
     r.stats.gpu_sample_valid=!data.Disjoint&&data.Frequency&&end>=begin?1u:0u;
     if(r.stats.gpu_sample_valid)r.stats.gpu_ms=static_cast<double>(end-begin)*1000.0/static_cast<double>(data.Frequency);
     r.timingPending=false;
@@ -183,7 +254,7 @@ uint32_t NCMA_CALL Initialize(const uint8_t* input,uint32_t length,uint64_t* out
         if(std::this_thread::get_id()!=loadingThread) return NcmaPlugin::Error(error,NCMA_WRONG_THREAD);
         if(!output||input||length) return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         if(module) return NcmaPlugin::Error(error,NCMA_BUSY);
-        module=0x524D000000000000ull|nextModule++; *output=module;return NCMA_OK;
+        module=NcmaPlugin::NewWindowsHandle();startupFault={sizeof(startupFault),1}; *output=module;return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL Shutdown(uint64_t context,NcmaErrorV1* error) noexcept {
@@ -213,17 +284,25 @@ uint32_t CreateImpl(uint64_t context,const NcmaRendererDescriptionV1* desc,uint6
         if(desc->backend!=1)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"Only DX11 reference operation set is implemented.");
         if(renderer)return NcmaPlugin::Error(error,NCMA_BUSY);
         auto candidate=std::make_unique<Renderer>();
+        candidate->handle=NcmaPlugin::NewWindowsHandle();
         GLFWwindow* window=nullptr;
         valid=ncma_platform_borrow_window_v1(desc->platform_module,desc->window,&window,error);if(valid)return valid;
         BusyScope scope;
+        startupFault={sizeof(startupFault),1};
         try {
             candidate->backend=std::make_unique<Rhi::D3D11RenderBackend>();
+            candidate->backend->SetFailureObserver(candidate.get(),BackendFault);
             Rhi::BackendCreateInfo info{glfwGetWin32Window(window),desc->width,desc->height,desc->validation!=0,desc->vsync!=0};
             info.EnableDefaultDepth=!pureUi;candidate->pureUi=pureUi;
             std::string message;
             if(!candidate->backend->Initialize(info,message)) throw std::runtime_error(message);
-            if(desc->validation && FAILED(candidate->backend->GetDevice()->QueryInterface(IID_PPV_ARGS(&candidate->validation))))
-                throw std::runtime_error("Requested DX11 validation unavailable; no fallback.");
+            if(desc->validation) {
+                HRESULT validation=candidate->backend->GetDevice()->QueryInterface(IID_PPV_ARGS(&candidate->validation));
+#ifdef NCMA_RENDERER_TEST_WAIT
+                if(testStartupValidationFailure)validation=E_NOINTERFACE;
+#endif
+                if(FAILED(validation)){RecordFault(*candidate,NCMA_GPU_FAULT_STARTUP,NCMA_INTERNAL_ERROR,validation,true);throw std::runtime_error("Requested DX11 validation unavailable; no fallback.");}
+            }
             ComPtr<IDXGIDevice> dxgiDevice; ComPtr<IDXGIAdapter> adapter; DXGI_ADAPTER_DESC adapterDesc{};
             LARGE_INTEGER driver{};
             if(SUCCEEDED(candidate->backend->GetDevice()->QueryInterface(IID_PPV_ARGS(&dxgiDevice))) &&
@@ -236,14 +315,18 @@ uint32_t CreateImpl(uint64_t context,const NcmaRendererDescriptionV1* desc,uint6
                     "; validation=" + std::to_string(desc->validation) + "; vsync=" + std::to_string(desc->vsync) + "\n";
             }
             D3D11_QUERY_DESC queryDesc{D3D11_QUERY_TIMESTAMP_DISJOINT,0};
-            if(FAILED(candidate->backend->GetDevice()->CreateQuery(&queryDesc,&candidate->gpuDisjoint))) throw std::runtime_error("Timestamp disjoint query failed.");
+            auto prepareQuery=[&](ID3D11Query** output) {
+                const HRESULT result=candidate->backend->GetDevice()->CreateQuery(&queryDesc,output);
+                if(FAILED(result)){RecordFault(*candidate,NCMA_GPU_FAULT_STARTUP,CompletionError(result,candidate->backend->GetDevice()->GetDeviceRemovedReason()),result,true);throw std::runtime_error("Timestamp query failed.");}
+            };
+            prepareQuery(candidate->gpuDisjoint.GetAddressOf());
             queryDesc.Query=D3D11_QUERY_TIMESTAMP;
-            if(FAILED(candidate->backend->GetDevice()->CreateQuery(&queryDesc,&candidate->gpuBegin)) || FAILED(candidate->backend->GetDevice()->CreateQuery(&queryDesc,&candidate->gpuEnd))) throw std::runtime_error("Timestamp query failed.");
+            prepareQuery(candidate->gpuBegin.GetAddressOf());prepareQuery(candidate->gpuEnd.GetAddressOf());
             candidate->platform=desc->platform_module;candidate->window=desc->window;candidate->vsync=desc->vsync!=0;
             candidate->stats.width=desc->width;candidate->stats.height=desc->height;candidate->stats.state=1;
-            candidate->handle=0x5244000000000000ull|nextRenderer++;
+            candidate->diagnosticOperation=NCMA_GPU_FAULT_NATIVE_API;
             *output=candidate->handle;renderer=std::move(candidate);return NCMA_OK;
-        } catch(...) { NcmaErrorV1 ignored{}; (void)ncma_platform_release_window_v1(desc->platform_module,desc->window,&ignored); throw; }
+        } catch(...) {RecordFault(*candidate,NCMA_GPU_FAULT_STARTUP,NCMA_INTERNAL_ERROR);startupFault=candidate->firstFault;NcmaErrorV1 ignored{}; (void)ncma_platform_release_window_v1(desc->platform_module,desc->window,&ignored); throw; }
     });
 }
 uint32_t NCMA_CALL Create(uint64_t context,const NcmaRendererDescriptionV1* desc,uint64_t* output,NcmaErrorV1* error) noexcept {return CreateImpl(context,desc,output,error,false);}
@@ -256,7 +339,7 @@ uint32_t NCMA_CALL CreateResources(uint64_t context,uint64_t handle,uint64_t* ou
         if(renderer->active||renderer->groups.size()>=8)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;auto group=std::make_unique<Rendering::ReferenceKernel>(*renderer->backend);std::string message;
         if(!group->Initialize(message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
-        const auto id=0x5253000000000000ull|nextGroup++;
+        const auto id=NcmaPlugin::NewWindowsHandle();
         renderer->groups.emplace(id,std::move(group));*output=id;return NCMA_OK;});
 }
 uint32_t NCMA_CALL DestroyResources(uint64_t context,uint64_t handle,uint64_t group,NcmaErrorV1* error) noexcept {
@@ -265,7 +348,7 @@ uint32_t NCMA_CALL DestroyResources(uint64_t context,uint64_t handle,uint64_t gr
         if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
         // Device loss permits releasing resources only after unbinding, no recovery promised.
-        if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         renderer->backend->GetDeviceContext()->ClearState(); renderer->groups.erase(group);return NCMA_OK;});
 }
 uint32_t NCMA_CALL ConfigureReference(uint64_t context,uint64_t handle,uint64_t group,const NcmaReferenceSettingsV1* input,NcmaErrorV1* error) noexcept {
@@ -322,7 +405,7 @@ uint32_t NCMA_CALL Submit(uint64_t context,uint64_t handle,const NcmaRenderFrame
         }
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Missing output.");
         BusyScope scope;std::string message;const auto started=std::chrono::steady_clock::now();
-        ExecutionScope execution;
+        ExecutionScope execution(frame->frame);
         // Prepare resource groups once, never a per-object managed/native call.
         for(const auto& [id,state]:initialized) {
             (void)state;
@@ -360,11 +443,44 @@ uint32_t NCMA_CALL Present(uint64_t context,uint64_t handle,NcmaErrorV1* error) 
             auto* dc=renderer->backend->GetDeviceContext();dc->End(renderer->gpuEnd.Get());dc->End(renderer->gpuDisjoint.Get());
             renderer->measuring=false;renderer->timingPending=true;
         }
-        const HRESULT result=renderer->backend->GetSwapChain()->Present(renderer->vsync?1:0,0);
+        HRESULT result;
+#ifdef NCMA_RENDERER_TEST_WAIT
+        result=FAILED(testPresentResult)?testPresentResult:renderer->backend->GetSwapChain()->Present(renderer->vsync?1:0,0);
+#else
+        result=renderer->backend->GetSwapChain()->Present(renderer->vsync?1:0,0);
+#endif
         renderer->active=false;
-        if(FAILED(result))return Failure(error,"Present failed.");
+        if(FAILED(result))return Failure(error,"Present failed.",NCMA_GPU_FAULT_PRESENT,result,true);
         renderer->stats.presents++;renderer->stats.present_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
         Validation(*renderer);return NCMA_OK;});
+}
+uint32_t NCMA_CALL ReadRendererFrame(uint64_t context,uint64_t handle,NcmaRendererFrameStateV1* output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        const auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        *output={sizeof(*output),1,(renderer->active?1u:0u)|(renderer->failed?2u:0u),0,handle,renderer->lastFrame,renderer->abandonedFrames};return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL ReadRendererFault(uint64_t context,uint64_t handle,NcmaRendererFaultV1* output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]()->uint32_t {
+        const auto valid=handle?Instance(context,handle,error):Validate(context,error);if(valid)return valid;
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        *output=handle?renderer->firstFault:startupFault;
+        if(handle&&!output->flags){output->generation=handle;output->backend=1;}
+        return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL AbandonRendererFrame(uint64_t context,uint64_t handle,uint64_t frame,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        const auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
+        if(!renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
+        if(!frame||frame!=renderer->lastFrame)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        BusyScope scope;
+        if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"Device lost before explicit frame abandonment.");
+        RecordFault(*renderer,NCMA_GPU_FAULT_ABANDON,NCMA_INTERNAL_ERROR);StopRenderer(NCMA_INTERNAL_ERROR);
+        ++renderer->abandonedFrames;Validation(*renderer);return NCMA_OK;
+    });
 }
 uint32_t NCMA_CALL Resize(uint64_t context,uint64_t handle,uint32_t width,uint32_t height,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
@@ -373,8 +489,9 @@ uint32_t NCMA_CALL Resize(uint64_t context,uint64_t handle,uint32_t width,uint32
         if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
         if(width==renderer->stats.width&&height==renderer->stats.height)return NCMA_OK;
         BusyScope scope;std::string message;
-        if(!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
-        if(!renderer->backend->ResizeChecked(width,height,message))return Failure(error,message);
+        if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
+        DiagnosticScope diagnostic(NCMA_GPU_FAULT_RESIZE);
+        if(!renderer->backend->ResizeChecked(width,height,message))return Failure(error,message,NCMA_GPU_FAULT_RESIZE);
         renderer->stats.width=width;renderer->stats.height=height;Validation(*renderer);return NCMA_OK;});
 }
 uint32_t NCMA_CALL Stats(uint64_t context,uint64_t handle,NcmaRendererStatsV1* output,NcmaErrorV1* error) noexcept {
@@ -385,7 +502,7 @@ uint32_t NCMA_CALL Stats(uint64_t context,uint64_t handle,NcmaRendererStatsV1* o
 uint32_t NCMA_CALL WaitIdle(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=Instance(context,handle,error);if(valid)return valid;
         BusyScope scope;std::string message;
-        if(!Wait(*renderer,message))return NcmaPlugin::Error(error,FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?NCMA_DEVICE_LOST:NCMA_SHUTDOWN_TIMEOUT,message);
+        if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
         return NCMA_OK;});
 }
 uint32_t NCMA_CALL Destroy(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
@@ -393,7 +510,7 @@ uint32_t NCMA_CALL Destroy(uint64_t context,uint64_t handle,NcmaErrorV1* error) 
         const auto ui=renderer->ui?renderer->ui->Stats(handle,renderer->pureUi):NcmaUiStatsV1{};
         if(renderer->borrows||!renderer->groups.empty()||!renderer->meshes.empty()||!renderer->uiTargets.empty()||!renderer->uiLeases.empty()||renderer->backend->GetLiveResourceCount()!=0||ui.images||ui.lists)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
-        if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         NcmaErrorV1 platformError{};
         valid=ncma_platform_release_window_v1(renderer->platform,renderer->window,&platformError);if(valid){*error=platformError;return valid;}
         renderer->ui.reset();renderer->backend->Shutdown();renderer.reset();return NCMA_OK;});
@@ -406,11 +523,14 @@ uint32_t NCMA_CALL Capture(uint64_t context,uint64_t handle,uint8_t* output,uint
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
         if(!renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;ComPtr<ID3D11Texture2D> source,target;auto* device=renderer->backend->GetDevice();auto* dc=renderer->backend->GetDeviceContext();
-        if(FAILED(renderer->backend->GetSwapChain()->GetBuffer(0,IID_PPV_ARGS(&source))))return Failure(error,"Readback source failed.");
+        HRESULT result=renderer->backend->GetSwapChain()->GetBuffer(0,IID_PPV_ARGS(&source));
+        if(FAILED(result))return Failure(error,"Readback source failed.",NCMA_GPU_FAULT_READBACK,result,true);
         D3D11_TEXTURE2D_DESC desc{};source->GetDesc(&desc);desc.BindFlags=0;desc.MiscFlags=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
-        if(FAILED(device->CreateTexture2D(&desc,nullptr,&target)))return Failure(error,"Readback allocation failed.");
+        result=device->CreateTexture2D(&desc,nullptr,&target);
+        if(FAILED(result))return Failure(error,"Readback allocation failed.",NCMA_GPU_FAULT_READBACK,result,true);
         dc->CopyResource(target.Get(),source.Get());D3D11_MAPPED_SUBRESOURCE mapped{};
-        if(FAILED(dc->Map(target.Get(),0,D3D11_MAP_READ,0,&mapped)))return Failure(error,"Readback map failed.");
+        result=dc->Map(target.Get(),0,D3D11_MAP_READ,0,&mapped);
+        if(FAILED(result))return Failure(error,"Readback map failed.",NCMA_GPU_FAULT_READBACK,result,true);
         for(uint32_t y=0;y<desc.Height;++y)std::memcpy(output+y*desc.Width*4,static_cast<const uint8_t*>(mapped.pData)+y*mapped.RowPitch,desc.Width*4);
         dc->Unmap(target.Get(),0);Validation(*renderer);return NCMA_OK;});
 }
@@ -449,7 +569,7 @@ uint32_t CreateMeshImpl(uint64_t context,uint64_t handle,const NcmaMeshDescripti
         if(!mesh->Initialize(d,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
         // Diagnostics may allocate: do this while candidate resources are still private/RAII-owned.
         Validation(*renderer);
-        const uint64_t id=0x4D53000000000000ull|nextMesh++;
+        const uint64_t id=NcmaPlugin::NewWindowsHandle();
         renderer->meshes.emplace(id,std::move(mesh));
         if(kernel)renderer->meshKernel=std::move(kernel);
         renderer->meshStats.resident_bytes+=bytes;renderer->meshStats.uploaded_bytes+=bytes;renderer->meshStats.mesh_creates++;
@@ -498,7 +618,7 @@ uint32_t NCMA_CALL DestroyMesh(uint64_t context,uint64_t handle,NcmaGpuMeshV1 me
         if(renderer->skins.contains(mesh.value))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"GPU skin requires query-5 release.");
         if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
-        if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         renderer->backend->GetDeviceContext()->ClearState();
         renderer->meshStats.resident_bytes-=renderer->meshes.at(mesh.value)->bytes;
         renderer->meshes.erase(mesh.value);if(renderer->meshes.empty())renderer->meshKernel.reset();
@@ -529,7 +649,7 @@ uint32_t NCMA_CALL SubmitMeshes(uint64_t context,uint64_t handle,const NcmaMeshF
             for(float x:d.model_view_projection)if(!std::isfinite(x))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
             for(float x:d.color)if(!std::isfinite(x)||x<0||x>1)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
         }
-        BusyScope scope;ExecutionScope execution;std::string message;const auto started=std::chrono::steady_clock::now();
+        BusyScope scope;ExecutionScope execution(f.frame);std::string message;const auto started=std::chrono::steady_clock::now();
         ResolveTiming(*renderer);
         if(!renderer->timingPending) {
             auto* dc=renderer->backend->GetDeviceContext();dc->Begin(renderer->gpuDisjoint.Get());dc->End(renderer->gpuBegin.Get());renderer->measuring=true;
@@ -569,9 +689,9 @@ uint32_t NCMA_CALL MeshStats(uint64_t context,uint64_t handle,NcmaSceneRenderSta
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>16)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>18)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):version==10?sizeof(NcmaShaderStagesApiV1):version==11?sizeof(NcmaUiShadersApiV1):version==12?sizeof(NcmaRuntimeShadersApiV1):version==13?sizeof(NcmaEnvironmentCookApiV1):version==16?sizeof(NcmaPostApiV1):sizeof(NcmaEnvironmentGpuApiV1);
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):version==10?sizeof(NcmaShaderStagesApiV1):version==11?sizeof(NcmaUiShadersApiV1):version==12?sizeof(NcmaRuntimeShadersApiV1):version==13?sizeof(NcmaEnvironmentCookApiV1):version==16?sizeof(NcmaPostApiV1):version==17?sizeof(NcmaRendererFrameApiV1):version==18?sizeof(NcmaRendererFaultApiV1):sizeof(NcmaEnvironmentGpuApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -592,7 +712,9 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==13) {const NcmaEnvironmentCookApiV1 cook{sizeof(cook),1,1,CookEnvironment,ValidateEnvironmentCook};std::memcpy(output,&cook,sizeof(cook));}
         else if(version==14) {const NcmaEnvironmentGpuApiV1 gpu{sizeof(gpu),1,3,PublishEnvironmentGpu,DestroyEnvironmentGpu,CaptureEnvironmentGpu,EnvironmentGpuStats,ValidateEnvironmentGpu};std::memcpy(output,&gpu,sizeof(gpu));}
         else if(version==15) {const NcmaEnvironmentSceneApiV1 env{sizeof(env),1,3,CopyEnvironmentSceneSource,ValidateEnvironmentShaders,CreateEnvironmentScene,ReplaceEnvironmentScene,BindEnvironmentScene};std::memcpy(output,&env,sizeof(env));}
-        else {const NcmaPostApiV1 post{sizeof(post),1,3,ValidatePostPrograms,BindPostProcess,PostProcessStats};std::memcpy(output,&post,sizeof(post));}
+        else if(version==16) {const NcmaPostApiV1 post{sizeof(post),1,3,ValidatePostPrograms,BindPostProcess,PostProcessStats};std::memcpy(output,&post,sizeof(post));}
+        else if(version==17) {const NcmaRendererFrameApiV1 frame{sizeof(frame),1,1,ReadRendererFrame,AbandonRendererFrame};std::memcpy(output,&frame,sizeof(frame));}
+        else {const NcmaRendererFaultApiV1 fault{sizeof(fault),1,1,ReadRendererFault};std::memcpy(output,&fault,sizeof(fault));}
         return NCMA_OK;
     });
 }

@@ -1,5 +1,6 @@
 #include "../contracts/NcmaText.h"
 #include "../PluginSupport.h"
+#include "../WindowsHandle.h"
 #include <Windows.h>
 #include <dwrite_3.h>
 #include <d2d1.h>
@@ -14,7 +15,7 @@
 
 using Microsoft::WRL::ComPtr;
 namespace {
-const auto owner=std::this_thread::get_id();uint64_t context=0,nextContext=1,nextResource=1,resident=0;bool comOwned=false;
+const auto owner=std::this_thread::get_id();uint64_t context=0,resident=0;bool comOwned=false;
 ComPtr<IDWriteFactory5> factory;ComPtr<IDWriteInMemoryFontFileLoader> loader;ComPtr<ID2D1Factory> d2d;ComPtr<IWICImagingFactory> wic;
 struct Font {ComPtr<IDWriteFontCollection1> collection;ComPtr<IDWriteFontFace> face;ComPtr<IDWriteFontFallback> fallback;std::wstring name;uint32_t bytes=0;uint64_t pins=0;};
 struct Run {uint64_t font=0;std::vector<uint8_t> rgba;NcmaTextMetricsV1 metrics{};};
@@ -40,10 +41,11 @@ void Check(HRESULT hr){if(FAILED(hr))throw std::runtime_error("Text numerical AP
 uint32_t Validate(uint64_t handle,NcmaErrorV1* error) {if(owner!=std::this_thread::get_id())return NcmaPlugin::Error(error,NCMA_WRONG_THREAD);if(!context||handle!=context)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);return NCMA_OK;}
 uint32_t NCMA_CALL Initialize(const uint8_t* input,uint32_t count,uint64_t* output,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]()->uint32_t{if(owner!=std::this_thread::get_id())return NcmaPlugin::Error(error,NCMA_WRONG_THREAD);if(count||input||!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);if(context)return NcmaPlugin::Error(error,NCMA_BUSY);
+        const uint64_t identity=NcmaPlugin::NewWindowsHandle();
         const HRESULT initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);if(FAILED(initialized)&&initialized!=RPC_E_CHANGED_MODE)Check(initialized);comOwned=SUCCEEDED(initialized);
         try{Check(DWriteCreateFactory(DWRITE_FACTORY_TYPE_ISOLATED,__uuidof(IDWriteFactory5),reinterpret_cast<IUnknown**>(factory.GetAddressOf())));
             Check(factory->CreateInMemoryFontFileLoader(&loader));Check(factory->RegisterFontFileLoader(loader.Get()));Check(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,d2d.GetAddressOf()));
-            Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&wic)));context=0x5458000000000000ull|nextContext++;*output=context;return NCMA_OK;
+            Check(CoCreateInstance(CLSID_WICImagingFactory,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&wic)));context=identity;*output=context;return NCMA_OK;
         }catch(...){if(factory&&loader)(void)factory->UnregisterFontFileLoader(loader.Get());wic.Reset();d2d.Reset();loader.Reset();factory.Reset();if(comOwned)CoUninitialize();comOwned=false;throw;}});
 }
 uint32_t NCMA_CALL Shutdown(uint64_t handle,NcmaErrorV1* error) noexcept {return NcmaPlugin::Guard(error,[&]()->uint32_t{auto result=Validate(handle,error);if(result)return result;if(!fonts.empty()||!runs.empty())return NcmaPlugin::Error(error,NCMA_BUSY);
@@ -62,7 +64,7 @@ uint32_t NCMA_CALL CreateFont(uint64_t handle,const uint8_t* bytes,uint32_t coun
         // Explicit fallback stays inside the supplied collection; no invisible OS/download fallback.
         ComPtr<IDWriteFontFallbackBuilder> fallback;Check(factory->CreateFontFallbackBuilder(&fallback));DWRITE_UNICODE_RANGE range{0,0x10ffff};const wchar_t* selected=font->name.c_str();
         Check(fallback->AddMapping(&range,1,&selected,1,font->collection.Get(),nullptr,nullptr,1));Check(fallback->CreateFontFallback(&font->fallback));
-        font->bytes=count;uint64_t key=0x5446000000000000ull|nextResource++;fonts.emplace(key,std::move(font));resident+=count;*output=key;return NCMA_OK;});
+        font->bytes=count;uint64_t key=NcmaPlugin::NewWindowsHandle();fonts.emplace(key,std::move(font));resident+=count;*output=key;return NCMA_OK;});
 }
 uint32_t NCMA_CALL Prepare(uint64_t handle,const NcmaTextRequestV1* input,uint64_t* output,NcmaTextMetricsV1* metrics,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]()->uint32_t{auto result=Validate(handle,error);if(result)return result;
@@ -86,7 +88,7 @@ uint32_t NCMA_CALL Prepare(uint64_t handle,const NcmaTextRequestV1* input,uint64
         target->BeginDraw();target->Clear(D2D1::ColorF(0,0,0,0));target->DrawTextLayout(D2D1::Point2F(0,0),layout.Get(),brush.Get(),D2D1_DRAW_TEXT_OPTIONS_CLIP);Check(target->EndDraw());
         run->rgba.resize(m.byte_count);Check(bitmap->CopyPixels(nullptr,m.width*4,m.byte_count,run->rgba.data()));
         for(size_t i=0;i<run->rgba.size();i+=4){run->rgba[i]=run->rgba[i+1]=run->rgba[i+2]=255;}
-        uint64_t key=0x5452000000000000ull|nextResource++;*metrics=m;runs.emplace(key,std::move(run));font.pins++;resident+=bytes;*output=key;return NCMA_OK;});
+        uint64_t key=NcmaPlugin::NewWindowsHandle();runs.emplace(key,std::move(run));font.pins++;resident+=bytes;*metrics=m;*output=key;return NCMA_OK;});
 }
 uint32_t NCMA_CALL Copy(uint64_t handle,uint64_t key,uint8_t* output,uint32_t capacity,NcmaErrorV1* error) noexcept {return NcmaPlugin::Guard(error,[&]()->uint32_t{auto result=Validate(handle,error);if(result)return result;if(!runs.contains(key))return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);const auto& bytes=runs.at(key)->rgba;
     if(!output||capacity<bytes.size()){NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=static_cast<uint32_t>(bytes.size());return NCMA_BUFFER_TOO_SMALL;}std::memcpy(output,bytes.data(),bytes.size());return NCMA_OK;});}

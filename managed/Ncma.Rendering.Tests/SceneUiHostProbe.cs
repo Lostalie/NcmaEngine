@@ -15,8 +15,11 @@ internal static class SceneUiHostProbe
         PlayerOptions Options(string name)=>new(Path.Combine(Path.GetDirectoryName(project)!,name+".ncmaproject"),headless,null,4,1d/60,30,Path.Combine(output,Guid.NewGuid()+"-report.json"),false,false);
         byte[]? baseline=null;uint width=0;var images=new List<object>();
         foreach(string name in new[]{"no-ui","project","no-font"}) {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+            using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
             byte[]? image=null;uint w=0;
-            var report=headless?PlayerRunner.Run(Options(name),pluginRoot:plugins,visible:false):PlayerRunner.RunForVerification(Options(name),plugins,(p,x,_)=>{image=p;w=x;});
+            var report=headless?playerRunOwner0.Run(Options(name),pluginRoot:plugins,visible:false):playerRunOwner1.RunForVerification(Options(name),plugins,(p,x,_)=>{image=p;w=x;});
             // Graphical AdvanceFrame can complete several fixed steps; only Null promises exact ticks.
             Pass(report.ExitCode==0&&report.Tick>=4&&(!headless||report.Tick==4)&&report.ShutdownErrors.Length==0,name+" runs/closes");
             Pass(report.ValidationErrors==0&&report.ValidationWarnings==0,name+" API0/0");
@@ -29,11 +32,16 @@ internal static class SceneUiHostProbe
             File.WriteAllBytes(Path.Combine(output,name+".rgba"),image);images.Add(new{name,w,changed,outside});
         }
         foreach(string bad in new[]{"bad-hash","bad-generation","missing","interactive"}.Concat(headless?[]:new[]{"bad-font","missing-ui-shader"})) {
-            int captured=0;var report=headless?PlayerRunner.Run(Options(bad),pluginRoot:plugins,visible:false):PlayerRunner.RunForVerification(Options(bad),plugins,(_,_,_)=>captured++);
+
+            using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
+            using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
+            int captured=0;var report=headless?playerRunOwner2.Run(Options(bad),pluginRoot:plugins,visible:false):playerRunOwner3.RunForVerification(Options(bad),plugins,(_,_,_)=>captured++);
             Pass(report.ExitCode!=0&&report.SessionId==Guid.Empty&&report.Tick==0&&captured==0&&report.ShutdownErrors.Length==0,bad+" rejects before gameplay and closes");
         }
         if(!headless){
-            byte[]? image=null;uint w=0;var custom=PlayerRunner.RunForVerification(Options("project"),plugins,(p,x,_)=>{image=p;w=x;},pipelineFactory:(e,a,s)=>SceneCustomizationExamples.ReplacePipeline(e*.5f,a,s));
+
+            using var playerRunOwner4 = new Ncma.Player.App.PlayerRunner();
+            byte[]? image=null;uint w=0;var custom=playerRunOwner4.RunForVerification(Options("project"),plugins,(p,x,_)=>{image=p;w=x;},pipelineFactory:(e,a,s)=>SceneCustomizationExamples.ReplacePipeline(e*.5f,a,s));
             int at=checked((int)((20*w+20)*4));Pass(custom.ExitCode==0&&image is not null&&Math.Abs(image[at+2]-204)<=1,"custom scene pipeline preserves display HUD");
         }
         if(relocated){

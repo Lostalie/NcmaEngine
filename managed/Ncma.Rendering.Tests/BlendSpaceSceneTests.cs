@@ -18,6 +18,8 @@ internal static unsafe partial class Program
 {
     private static void TestBlendSpaceScenes(RendererSession renderer,ref ulong frame,string native,string output)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
         var model=SyntheticModel();var left=model.Clips[1];model=model with{Clips=[model.Clips[0],left with{Duration=2,Tracks=left.Tracks.Select(t=>t with{Keys=t.Keys.Select(k=>k with{Time=k.Time*2,Value=k.Time==0?k.Value:k.Value with{Position=k.Value.Position*2}}).ToArray()}).ToArray()}]};
         var f=new SkinFixture(output,model);var m=f.Manifest;var x=new AnimationParameter(Guid.NewGuid(),"Speed",AnimationParameterKind.Float,.2,0,false);var y=x with{Id=Guid.NewGuid(),Name="Turn",FloatDefault=.3};
         var samples=new[]{new BlendSpaceSample(Guid.Parse("00000000-0000-4000-8000-000000000001"),m.Clips[0],0,0),new BlendSpaceSample(Guid.Parse("00000000-0000-4000-8000-000000000002"),m.Clips[1],1,0),new BlendSpaceSample(Guid.Parse("00000000-0000-4000-8000-000000000003"),m.Clips[0],0,1)};
@@ -31,7 +33,7 @@ internal static unsafe partial class Program
         foreach(bool root in new[]{false,true}) {
             var d=Document(1,root);Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId,camera=d.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.125,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));play.Pause();
-            try {using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);using var target=renderer.CreateViewTarget(256,256);var bytes=new byte[4*48];
+            try {using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);using var target=renderer.CreateViewTarget(256,256);var bytes=new byte[4*48];
                 for(int step=0;step<128;step++){bool right=step%2==0;runtime.Animators!.SetFloat(id,x.Id,right?.2:.8);runtime.Animators.SetFloat(id,y.Id,right?.3:.1);Check(play.Step().State==PlayState.Paused,"Actual space committed quantum: "+play.Fault?.Code);var debug=runtime.Animators.ReadDebug(id);Check(debug.Instructions.Count==6&&debug.Instructions[^1].Operation==AnimationPoseOperation.RootSource,"Bounded three-sample recipe");
                     var primary=debug.Instructions[debug.Instructions[^1].SourceB];Check(primary.ClipId==m.Clips[right?0:1],"Maximum weight/UUID primary resource");foreach(var row in debug.Instructions.Where(r=>r.Operation==AnimationPoseOperation.Clip))Check(Math.Abs(row.Current/row.Duration-(step+1)*.125)<1e-10,"Same committed normalized phase");
                     int expectedEvents=step%8 is 0 or 7?1:0;Check(debug.Events.Count==expectedEvents&&debug.Events.All(e=>e.ClipId==primary.ClipId&&e.Context.Tick==play.Tick),"Single primary target receipt, no catch-up/repeated source");
@@ -51,7 +53,7 @@ internal static unsafe partial class Program
         using(var packed=SceneAssetPreparation.Prepare(moved,f.Project,packedDocument.CaptureSnapshot(),true,"assets/game.ncpak"))Check(((RuntimeAnimationGraphAsset)packed.Assets.Require(graph.AssetId,AssetKind.AnimationGraph)).CopyData().SequenceEqual(AnimationGraphCodec.Encode(graph)),"NCP1 explicit route retains exact strict v3 space and sample UUIDs");
         SceneDocumentFiles.Save(packedDocument,Path.Combine(moved,"start.ncmascene"));string repository=Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(native)))!;File.Copy(Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),Path.Combine(moved,"gameplay.dll"));
         var config=new Ncma.Application.ProjectConfiguration(1,f.Project,"Packed BlendSpace","start.ncmascene","gameplay.dll","Direct3D11",[],AssetPackage:"assets/game.ncpak");string project=Path.Combine(moved,"game.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(config,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
-        var report=Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",Path.Combine(moved,"result.json")]),pluginRoot:Path.Combine(moved,"no-native-plugins"),visible:false);
+        var report=playerRunOwner0.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",Path.Combine(moved,"result.json")]),pluginRoot:Path.Combine(moved,"no-native-plugins"),visible:false);
         Check(report.ExitCode==0&&report.Tick==8&&report.Modules.Length==0&&report.ShutdownErrors.Length==0,"Formal source-free strict v3 BlendSpace Headless Player: "+report.Reason);
         TestBlendSpaceSchedulesAndFaults(f,graph,Document,physics,kernel,output);
         var interrupted=TestBlendSpaceInterruptionSource(f,graph,node,end);

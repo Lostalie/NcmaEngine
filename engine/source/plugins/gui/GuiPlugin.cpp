@@ -1,5 +1,6 @@
 #include "../contracts/NcmaGui.h"
 #include "../PluginSupport.h"
+#include "../WindowsHandle.h"
 #include "../Utf8.h"
 #include "../platform/PlatformPrivate.h"
 #include <imgui.h>
@@ -22,7 +23,7 @@
 #include "WindowChrome.h"
 namespace {
 const auto loadingThread = std::this_thread::get_id();
-uint64_t module = 0, nextModule = 1, nextGui = 1;
+uint64_t module = 0;
 bool busy = false;
 struct Id { uint64_t high, low; bool operator==(const Id&) const = default; };
 struct Hash { size_t operator()(const Id& key) const noexcept { return static_cast<size_t>(key.high ^ key.low); } };
@@ -82,7 +83,7 @@ uint32_t NCMA_CALL Initialize(const uint8_t* input, uint32_t length, uint64_t* o
         if (std::this_thread::get_id() != loadingThread) return NcmaPlugin::Error(error, NCMA_WRONG_THREAD);
         if (!output || input || length) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
         if (module || busy) return NcmaPlugin::Error(error, NCMA_BUSY);
-        module = 0x4755000000000000ull | nextModule++; *output = module; return NCMA_OK;
+        module = NcmaPlugin::NewWindowsHandle(); *output = module; return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL Shutdown(uint64_t context, NcmaErrorV1* error) noexcept
@@ -119,6 +120,7 @@ uint32_t NCMA_CALL Create(uint64_t context, const NcmaGuiDescriptionV1* desc, ui
             !NcmaPlugin::CopyUtf8(desc->ini_path, desc->ini_path_length, 4096, candidate->iniPath))
             return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
         if (gui) return NcmaPlugin::Error(error, NCMA_BUSY);
+        candidate->handle = NcmaPlugin::NewWindowsHandle();
         GLFWwindow* pointer = nullptr;
         valid = ncma_platform_borrow_window_v1(desc->platform_module, desc->window, &pointer, error); if (valid) return valid;
         BusyScope scope; bool backend = false;
@@ -146,7 +148,6 @@ uint32_t NCMA_CALL Create(uint64_t context, const NcmaGuiDescriptionV1* desc, ui
             ImGui::StyleColorsDark();
             if (!ImGui_ImplGlfw_InitForOther(pointer, true)) throw std::runtime_error("GLFW GUI backend initialization failed.");
             backend = true;
-            candidate->handle = 0x4947000000000000ull | nextGui++;
             *output = candidate->handle; gui = std::move(candidate); return NCMA_OK;
         } catch (...) {
             if (backend) ImGui_ImplGlfw_Shutdown();

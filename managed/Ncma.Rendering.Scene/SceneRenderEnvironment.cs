@@ -14,7 +14,8 @@ public sealed partial class SceneRenderSession
     private ulong _environmentObservedRevision;
     public EnvironmentLightingData PreparedEnvironment { get { Verify();return _environment; } }
     public SceneEnvironmentRuntimeShaders? PreparedEnvironmentShaders { get { Verify();return _environmentShaders; } }
-    private bool EnvironmentApproved()=>_environmentPreparing&&!_disposed&&_environmentApproval!();
+    private bool EnvironmentApproved()
+    { bool result=_environmentPreparing&&!_disposed&&_environmentApproval!();_lifetime.CheckCallback();return result; }
     private void VerifyPreparedEnvironment()
     {
         SceneEnvironmentState.VerifyBoundary(_world,WorldId);
@@ -48,13 +49,12 @@ public sealed partial class SceneRenderSession
     // simulation and renderer frame. No file reads, Cook, World mutation or Agent grants here.
     public void RefreshEnvironment(PreparedSceneAssetLease assets,Func<bool> preparationAllowed)
     {
-        Verify();ArgumentNullException.ThrowIfNull(assets);ArgumentNullException.ThrowIfNull(preparationAllowed);
+        RequireExchangeReady();ArgumentNullException.ThrowIfNull(assets);ArgumentNullException.ThrowIfNull(preparationAllowed);
         if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
         using var read=SceneEnvironmentState.BeginRead(_world,WorldId);
         var value=SceneEnvironmentState.Read(_world,WorldId);
         if(!_hasGeometry){_environmentObserved=value;_environmentObservedRevision=_world.Revision;return;}
-        var previousApproval=_environmentApproval;_environmentApproval=preparationAllowed;_environmentPreparing=true;
-        RenderAssetLease<GpuEnvironmentResource>? gpu=null;PreparedSceneAssetLease? cpu=null;ScenePipelineSession? pipeline=null;
+        BeginCandidateBundle();var previousApproval=_environmentApproval;_environmentApproval=preparationAllowed;_environmentPreparing=true;bool committed=false;
         try {
             _renderer.VerifyEnvironmentPreparation(EnvironmentApproved);
             if(value==_environment && (!value.Enabled||_environmentAssets?.Assets.Identity==assets.Assets.Identity)) {
@@ -67,37 +67,37 @@ public sealed partial class SceneRenderSession
                 if(_hasSkin&&_shaders is not null&&!_shaders.Unshadowed.Package.CopyBytecode(RuntimeShaderRole.SkinCompute)
                     .SequenceEqual(shaders.Unshadowed.Package.CopyBytecode(RuntimeShaderRole.SkinCompute)))
                     throw new ArgumentException("Environment promotion must retain the existing shared skin kernel.");
-                shaders.VerifyFor(_renderer);cpu=assets.AcquireLease();gpu=_cache.AcquireEnvironment(package,EnvironmentApproved);
+                shaders.VerifyFor(_renderer);_pendingEnvironmentAssets=assets.AcquireLease();_pendingEnvironmentGpu=_cache.AcquireEnvironment(package,EnvironmentApproved);
             }
             if(_pipeline is not null&&_postRuntime is null) {
                 if(_environmentShaders is null&&shaders is not null) {
-                    pipeline=CreateEnvironmentPipeline(shaders,gpu,value,_width,_height,_exposure,_ambient,_shadows,_shadowPrepared);
-                    _pipeline.Dispose();
-                } else if(_environmentShaders is not null) _pipeline.ConfigureEnvironment(gpu?.Resource,value.ToConfiguration(),EnvironmentApproved);
+                    CreateEnvironmentPipeline(shaders,_pendingEnvironmentGpu,value,_width,_height,_exposure,_ambient,_shadows,_shadowPrepared);
+                    InstallPendingPipeline();
+                } else if(_environmentShaders is not null) _pipeline.ConfigureEnvironment(_pendingEnvironmentGpu?.Resource,value.ToConfiguration(),EnvironmentApproved);
             }
             // All fallible GPU publication/binding happens above. Lease releases below are managed
             // reference decrements/owned file closes; native retirement remains in explicit cache Trim.
             var oldGpu=_environmentGpu;var oldCpu=_environmentAssets;
-            if(pipeline is not null){_pipeline=pipeline;pipeline=null;}
-            _environmentGpu=gpu;gpu=null;_environmentAssets=cpu;cpu=null;
+            _environmentGpu=_pendingEnvironmentGpu;_pendingEnvironmentGpu=oldGpu;
+            _environmentAssets=_pendingEnvironmentAssets;_pendingEnvironmentAssets=oldCpu;
             _environmentShaders=shaders;_environment=value;_environmentObserved=value;_environmentObservedRevision=_world.Revision;
-            oldGpu?.Dispose();oldCpu?.Dispose();
-        } catch { _environmentApproval=previousApproval;pipeline?.Dispose();gpu?.Dispose();cpu?.Dispose();throw; }
+            committed=true;ReleasePendingResources();
+        } catch(Exception failure) { if(!committed)_environmentApproval=previousApproval;AbandonCandidate(failure);throw; }
         finally{_environmentPreparing=false;}
     }
-    private ScenePipelineSession CreateEnvironmentPipeline(SceneEnvironmentRuntimeShaders shaders,RenderAssetLease<GpuEnvironmentResource>? gpu,
+    private void CreateEnvironmentPipeline(SceneEnvironmentRuntimeShaders shaders,RenderAssetLease<GpuEnvironmentResource>? gpu,
         EnvironmentLightingData value,uint width,uint height,float exposure,float ambient,bool shadows,SceneShadowData? selection)
     {
         shaders.VerifyFor(_renderer);
         var programs=SelectShadowPrograms(null,shadows?shaders.Shadowed:shaders.Unshadowed,shadows,selection);
-        var candidate=new ScenePipelineSession(_renderer,CreateSelectedPipeline(exposure,ambient,shadows,selection,ShaderProfile.SceneEnvironment),width,height,
+        if(_pendingPipeline is not null)throw new InvalidOperationException("A pipeline candidate is already retained.");
+        _pendingPipeline=new ScenePipelineSession(_renderer,CreateSelectedPipeline(exposure,ambient,shadows,selection,ShaderProfile.SceneEnvironment),width,height,
             environmentShaders:programs.Environment);
-        try{candidate.ConfigureEnvironment(gpu?.Resource,value.ToConfiguration(),EnvironmentApproved);return candidate;}
-        catch{candidate.Dispose();throw;}
+        _pendingPipeline.ConfigureEnvironment(gpu?.Resource,value.ToConfiguration(),EnvironmentApproved);
     }
     public void PrepareEnvironmentView(uint width,uint height,Guid sceneCamera,SceneCameraView? browserCamera=null,float exposure=1,float ambient=.03f)
     {
-        Verify();if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
+        RequireExchangeReady();if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
         VerifyPreparedEnvironment();var selection=ObserveShadowSelection();if(_postRuntime is not null){PreparePostView(width,height,sceneCamera,browserCamera,exposure,ambient);return;}
         if(_environmentShaders is null&&_shaders is null)return;
         // Preserve the original lazy default path when no scene policy is selected.
@@ -112,12 +112,14 @@ public sealed partial class SceneRenderSession
             bool shadows=SceneShadowPipelinePolicy.EffectiveShadows(selection,view.PrimaryLight is {Data.CastShadow:true});
             uint w=Math.Max(1,(uint)(width*camera.Data.ViewportWidth)),h=Math.Max(1,(uint)(height*camera.Data.ViewportHeight));
             if(_pipeline is null||_width!=w||_height!=h||_shadows!=shadows||_shadowPrepared!=selection) {
-                var candidate=_environmentShaders is not null?
-                    CreateEnvironmentPipeline(_environmentShaders,_environmentGpu,_environment,w,h,exposure,ambient,shadows,selection):
-                    new ScenePipelineSession(_renderer,CreateSelectedPipeline(exposure,ambient,shadows,selection,ShaderProfile.Scene3D),w,h,
+                BeginCandidateBundle();
+                try {
+                    if(_environmentShaders is not null)CreateEnvironmentPipeline(_environmentShaders,_environmentGpu,_environment,w,h,exposure,ambient,shadows,selection);
+                    else _pendingPipeline=new ScenePipelineSession(_renderer,CreateSelectedPipeline(exposure,ambient,shadows,selection,ShaderProfile.Scene3D),w,h,
                         shaders:SelectShadowPrograms(shadows?_shaders!.Shadowed:_shaders!.Unshadowed,null,shadows,selection).Scene);
-                try{_renderer.VerifyEnvironmentPreparation(EnvironmentApproved);_pipeline?.Dispose();}catch{candidate.Dispose();throw;}
-                _pipeline=candidate;_width=w;_height=h;_shadows=shadows;_exposure=exposure;_ambient=ambient;
+                    _renderer.VerifyEnvironmentPreparation(EnvironmentApproved);InstallPendingPipeline();
+                }catch(Exception failure){AbandonCandidate(failure);throw;}
+                _width=w;_height=h;_shadows=shadows;_exposure=exposure;_ambient=ambient;
             } else if(_exposure!=exposure||_ambient!=ambient){
                 _pipeline.Configure(CreateSelectedPipeline(exposure,ambient,shadows,selection,_environmentShaders is null?ShaderProfile.Scene3D:ShaderProfile.SceneEnvironment));_exposure=exposure;_ambient=ambient;
             }

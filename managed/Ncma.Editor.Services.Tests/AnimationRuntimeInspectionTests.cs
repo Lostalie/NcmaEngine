@@ -73,7 +73,7 @@ internal static class AnimationRuntimeInspectionTests
                 using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"M6.3-D current pose observation",320,240,false);
                 using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,320,240);using var cache=new RenderResourceCache(renderer);
                 string kernelPath=Path.Combine(plugins,"NcmaAnimationKernel.dll");using var kernel=new Ncma.Animation.Native.PoseKernel(kernelPath,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(kernelPath))),blendSupport:true);
-                using var scene=new SceneRenderSession(renderer,cache,play.Document.World,owner.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime!.Characters,animators:runtime.Animators);
+                using var scene=new SceneRenderSession(renderer,cache,play.Document.World);scene.Prepare(owner.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime!.Characters,animators:runtime.Animators);
                 presentation=scene;Guid camera=play.Document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
                 Check(scene.Submit(1,320,240,camera),"Runtime observation requires actual successful skin/shadow submission");renderer.Present();
                 var pose=Call(Input(sample.Actors[0])).GetProperty("data").GetProperty("observation").GetProperty("pose");Check(pose.GetProperty("rendererFrame").GetUInt64()==1&&pose.GetProperty("geometryDraws").GetInt32()==2,"Current exact publication/tick pose evidence");

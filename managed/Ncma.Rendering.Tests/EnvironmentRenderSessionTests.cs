@@ -36,11 +36,11 @@ internal static unsafe partial class Program
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         byte[] image=new byte[256*256*4];
-        Bad(()=>new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot()).Dispose());
-        Bad(()=>new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>false).Dispose());
+        Bad(()=>{using var denied=new SceneRenderSession(renderer,cache,document.World);denied.Prepare(assets,document.CaptureSnapshot());});
+        Bad(()=>{using var denied=new SceneRenderSession(renderer,cache,document.World);denied.Prepare(assets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>false);});
         Pass(renderer.EnvironmentStats.Live==0,"constructor failures publish no environment");
         bool allowed=true;
-        using var session=new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>allowed);
+        using var session=new SceneRenderSession(renderer,cache,document.World);session.Prepare(assets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>allowed);
         void Prepare()=>session.PrepareEnvironmentView(256,256,camera,ambient:0);
         void Tick(){Pass(session.Submit(frame++,256,256,camera,ambient:0,target:target),"prepared actual submit");renderer.CaptureTarget(target,image);renderer.Present();}
         Bad(()=>session.Submit(frame,256,256,camera,ambient:0,target:target));Prepare();Tick();
@@ -79,7 +79,7 @@ internal static unsafe partial class Program
         // Source-free asset closure is distinct from author metadata; both sessions share immutable GPU generations.
         string packed="assets/scene.ncpak";File.WriteAllBytes(Path.Combine(fixture.Root,packed),SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]));
         using(var packedAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true,packed))
-        using(var second=new SceneRenderSession(renderer,cache,document.World,packedAssets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>true)){
+        using(var second=new SceneRenderSession(renderer,cache,document.World)){second.Prepare(packedAssets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>true);
             second.PrepareEnvironmentView(256,256,camera,ambient:0);Pass(second.Submit(frame++,256,256,camera,ambient:0,target:target),"source-free NCP shared scene");renderer.CaptureTarget(target,image);renderer.Present();
             Pass(image.SequenceEqual(baseline)&&renderer.EnvironmentStats.Publications==before.Publications&&renderer.EnvironmentStats.Live==1,"source-free pixels and GPU generation sharing");
         }
@@ -99,11 +99,13 @@ internal static unsafe partial class Program
         // An empty scene never requests an environment GPU or shader, even if metadata selects one.
         var empty=new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry());empty.World.CreateObject("Environment").Set(nextConfig);
         using(var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true))
-        using(var flat=new SceneRenderSession(renderer,cache,empty.World,emptyAssets,empty.CaptureSnapshot()))
+        using(var flat=new SceneRenderSession(renderer,cache,empty.World))
+        {flat.Prepare(emptyAssets,empty.CaptureSnapshot());
             Pass(!flat.Submit(frame,256,256,Guid.Empty)&&renderer.EnvironmentStats.Live==0&&flat.PreparedEnvironmentShaders is null,"empty avoids unused 3D initialization");
+        }
         // Promotion of an already submitted old-profile scene is explicit and preserves resources.
         env.Set(EnvironmentLightingData.Off);
-        using(var old=new SceneRenderSession(renderer,cache,document.World,nextAssets,document.CaptureSnapshot())){
+        using(var old=new SceneRenderSession(renderer,cache,document.World)){old.Prepare(nextAssets,document.CaptureSnapshot());
             old.Submit(frame++,256,256,camera,ambient:0,target:target);renderer.Present();env.Set(nextConfig);
             old.RefreshEnvironment(nextAssets,()=>true);old.PrepareEnvironmentView(256,256,camera,ambient:0);
             Pass(old.Submit(frame++,256,256,camera,ambient:0,target:target),"old profile explicit promotion");renderer.CaptureTarget(target,image);renderer.Present();Pass(image.SequenceEqual(baseline),"promotion actual image parity");
@@ -117,7 +119,7 @@ internal static unsafe partial class Program
             SkinFixture skinFixture;if(f=="synthetic")skinFixture=new(output);else{using var importer=new ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath))));skinFixture=new(output,importer.LoadAndCopy(Path.Combine(repo.FullName,"tests/assets/fbx",f),30));}
             var (skinDocument,skinCamera,objects)=skinFixture.Scene();skinDocument.World.CreateObject("Environment").Set(config);Publish(skinFixture.Root,skinFixture.Project,package);
             using var skinAssets=SceneAssetPreparation.Prepare(skinFixture.Root,skinFixture.Project,skinDocument.CaptureSnapshot(),true);
-            using var skinSession=new SceneRenderSession(renderer,cache,skinDocument.World,skinAssets,skinDocument.CaptureSnapshot(),poseKernel:kernel,environmentPreparationAllowed:()=>true);
+            using var skinSession=new SceneRenderSession(renderer,cache,skinDocument.World);skinSession.Prepare(skinAssets,skinDocument.CaptureSnapshot(),poseKernel:kernel,environmentPreparationAllowed:()=>true);
             skinSession.PrepareEnvironmentView(256,256,skinCamera,ambient:0);
             foreach(double t in new[]{0,.5,.999999}){skinSession.Animation!.SetPreviewTime(t);Pass(skinSession.Submit(frame++,256,256,skinCamera,ambient:0,target:target),"shared skin actual submit "+f+"/"+t);renderer.CaptureTarget(target,image);renderer.Present();Pass(skinSession.Costs.GeometryDraws==1&&skinSession.Costs.ShadowDraws==1&&skinSession.ReadAnimationPresentation() is not null,"same animated geometry/shadow publication");}
             File.WriteAllBytes(Path.Combine(output,"shared-ibl-"+f+".png"),Png(256,256,image));
@@ -143,7 +145,7 @@ internal static unsafe partial class Program
         using(var fileTarget=fileRenderer.CreateViewTarget(256,256)){
             files.InstallSelection(fileRenderer,()=>true);
             Bad(()=>fileRenderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Scene3D,false,false,()=>true));
-            using(var fileSession=new SceneRenderSession(fileRenderer,fileCache,document.World,nextAssets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>true)){
+            using(var fileSession=new SceneRenderSession(fileRenderer,fileCache,document.World)){fileSession.Prepare(nextAssets,document.CaptureSnapshot(),environmentPreparationAllowed:()=>true);
                 fileSession.PrepareEnvironmentView(256,256,camera,ambient:0);Pass(fileSession.Submit(1,256,256,camera,ambient:0,target:fileTarget),"source-free custom file shared submit");fileRenderer.CaptureTarget(fileTarget,image);fileRenderer.Present();
                 Pass(image.SequenceEqual(halfImage),"custom file bytecode equals independent half-strength shared image");
             }

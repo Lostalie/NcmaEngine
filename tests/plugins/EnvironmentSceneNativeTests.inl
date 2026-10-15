@@ -24,6 +24,8 @@ static void EnvironmentSceneNativeTests(uint64_t context,uint64_t handle){
  Check(api.create(context,handle,&desc,&shaders,&key,&error)==NCMA_OK,"Environment whole create");auto& scene=*renderer->scenePipelines.at(key.value);const auto oldProgram=scene.CopyPrograms().geometry;const auto count=renderer->backend->GetLiveResourceCount();
  testTonePreparationThrow=true;Check(api.replace(context,handle,key,&shaders,&error)==NCMA_INTERNAL_ERROR&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Environment replace exception releases candidates retains old group");testTonePreparationThrow=false;
  testWaitTimeout=true;Check(api.replace(context,handle,key,&shaders,&error)==NCMA_SHUTDOWN_TIMEOUT&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Environment replace timeout retains old group");testWaitTimeout=false;
+ testWaitQueryFailure=true;Check(api.replace(context,handle,key,&shaders,&error)==NCMA_INTERNAL_ERROR&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Environment replace query-creation failure retains old group");testWaitQueryFailure=false;
+ testWaitPollFailure=true;Check(api.replace(context,handle,key,&shaders,&error)==NCMA_INTERNAL_ERROR&&scene.CopyPrograms().geometry==oldProgram&&renderer->backend->GetLiveResourceCount()==count,"Environment replace poll failure retains old group");testWaitPollFailure=false;
  Check(api.replace(context,handle,key,&bad,&error)==NCMA_INVALID_ARGUMENT&&scene.CopyPrograms().geometry==oldProgram,"Wrong actual late stage retains old");
  for(const auto& mutation:std::array<std::pair<std::string,std::string>,2>{{{"Channels,ShadowParameters,EnvironmentSettings","Channels,EnvironmentSettings,ShadowParameters"},{"SpecularTex:register(t8)","SpecularTex:register(t10)"}}}){
      std::string wrong=environment;const auto at=wrong.find(mutation.first);Check(at!=std::string::npos,"Environment actual mutation fixture");wrong.replace(at,mutation.first.size(),mutation.second);
@@ -37,6 +39,8 @@ static void EnvironmentSceneNativeTests(uint64_t context,uint64_t handle){
  auto retained=[&](){return scene.environmentKey.value==0&&resource.scenePins==0;};
  testEnvironmentGpuPublicationFault=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INTERNAL_ERROR&&retained(),"Bind diagnostic before publication atomic");testEnvironmentGpuPublicationFault=false;
  testWaitTimeout=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_SHUTDOWN_TIMEOUT&&retained(),"Bind timeout no pin or settings publication");testWaitTimeout=false;
+ testWaitQueryFailure=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INTERNAL_ERROR&&retained(),"Bind query-creation failure no pin or settings publication");testWaitQueryFailure=false;
+ testWaitPollFailure=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INTERNAL_ERROR&&retained(),"Bind poll failure no pin or settings publication");testWaitPollFailure=false;
  binding.reserved2=1;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INVALID_ARGUMENT&&retained(),"Late bind reserved rejects");binding.reserved2=0;
  binding.environment.generation++;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INVALID_HANDLE&&retained(),"Bind exact renderer generation");binding.environment=env;
  renderer->active=true;Check(api.bind(context,handle,key,&binding,&error)==NCMA_BUSY&&retained(),"Bind active frame rejected");renderer->active=false;
@@ -46,6 +50,8 @@ static void EnvironmentSceneNativeTests(uint64_t context,uint64_t handle){
  Check(api.replace(context,handle,key,&shaders,&error)==NCMA_OK&&scene.environmentKey.value==env.value&&resource.scenePins==1,"Shader swap preserves binding pin");
  binding.environment={};binding.strength=0;binding.rotation=1;Check(api.bind(context,handle,key,&binding,&error)==NCMA_INVALID_ARGUMENT&&resource.scenePins==1,"Off controls exact zero");binding.rotation=0;
  testWaitTimeout=true;Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_SHUTDOWN_TIMEOUT&&resource.scenePins==1&&renderer->scenePipelines.contains(key.value),"Scene close timeout retains binding pin");testWaitTimeout=false;
+ testWaitQueryFailure=true;Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_INTERNAL_ERROR&&resource.scenePins==1&&renderer->scenePipelines.contains(key.value),"Scene close query-creation failure retains binding pin");testWaitQueryFailure=false;
+ testWaitPollFailure=true;Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_INTERNAL_ERROR&&resource.scenePins==1&&renderer->scenePipelines.contains(key.value),"Scene close poll failure retains binding pin");testWaitPollFailure=false;
  Check(api.bind(context,handle,key,&binding,&error)==NCMA_OK&&resource.scenePins==0&&!scene.environmentKey.value,"Off releases pin without allocation");
  binding.environment=env;binding.strength=1;Check(api.bind(context,handle,key,&binding,&error)==NCMA_OK,"Rebind before close");
  Check(DestroyScenePipeline(context,handle,key,&error)==NCMA_OK&&resource.scenePins==0,"Scene close releases pin");

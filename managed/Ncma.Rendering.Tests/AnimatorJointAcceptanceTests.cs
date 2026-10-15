@@ -36,7 +36,7 @@ internal static unsafe partial class Program
             byte[] unchanged=editor.Document.CaptureBytes();Guid editWorld=editor.Document.World.Identity;
             for(int cycle=0;cycle<2;cycle++) {
                 var play=editor.StartPlay();play.Pause();var actors=play.Document.World.GetObjects().Where(o=>o.Has<AnimatorData>()).Select(o=>o.PersistentId).ToArray();Guid camera=play.Document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
-                scene=new(renderer,cache,play.Document.World,editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime!.Animators,rootMotion:runtime.Characters);
+                scene=new(renderer,cache,play.Document.World);scene.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime!.Animators,rootMotion:runtime.Characters);
                 for(int step=0;step<8;step++) {
                     Check(play.Step().State==PlayState.Paused,"Joint Editor quantum: "+play.Fault?.Code);
                     var instances=new HashSet<Guid>();
@@ -71,8 +71,10 @@ internal static unsafe partial class Program
             var configuration=new Ncma.Application.ProjectConfiguration(1,fixture.Project,"Joint Player","start.ncmascene","gameplay.dll","Direct3D11",[],root,camera,AssetPackage:"assets/game.ncpak");
             string project=Path.Combine(moved,"joint.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(configuration,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
             foreach(bool headless in new[]{true,false}) {
+
+                using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
                 string reportPath=Path.Combine(moved,headless?"headless.json":"dx11.json");Ncma.Player.App.PlayerReport report;
-                if(headless)report=Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",reportPath]),pluginRoot:root?plugins:Path.Combine(moved,"no-native"),visible:false);
+                if(headless)report=playerRunOwner0.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",reportPath]),pluginRoot:root?plugins:Path.Combine(moved,"no-native"),visible:false);
                 else {var start=new System.Diagnostics.ProcessStartInfo("dotnet"){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};foreach(string arg in new[]{typeof(Program).Assembly.Location,"--graph-root-player-child",plugins,project,reportPath})start.ArgumentList.Add(arg);
                     using var child=System.Diagnostics.Process.Start(start)!;var stdout=child.StandardOutput.ReadToEndAsync();var stderr=child.StandardError.ReadToEndAsync();Check(child.WaitForExit(30000),"Joint Player bounded process timeout");Check(child.ExitCode==0,"Joint Player: "+stdout.GetAwaiter().GetResult()+stderr.GetAwaiter().GetResult());
                     var json=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase};json.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());report=JsonSerializer.Deserialize<Ncma.Player.App.PlayerReport>(File.ReadAllBytes(reportPath),json)!;}

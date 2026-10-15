@@ -40,7 +40,7 @@ uint32_t NCMA_CALL ReplaceEnvironmentScene(uint64_t context,uint64_t handle,Ncma
 #ifdef NCMA_RENDERER_TEST_WAIT
  if(testTonePreparationThrow)throw std::runtime_error("Environment shader prepublication fault");
 #endif
- Validation(*renderer);if(!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,"environment_scene_drain; old_group_retained");
+ Validation(*renderer);if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
  if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"environment_scene_device");Validation(*renderer);
  renderer->backend->GetDeviceContext()->ClearState();scene.PublishShaders(candidate);return NCMA_OK;});
 }
@@ -59,7 +59,7 @@ uint32_t NCMA_CALL BindEnvironmentScene(uint64_t context,uint64_t handle,NcmaGpu
 #ifdef NCMA_RENDERER_TEST_WAIT
  if(testEnvironmentGpuPublicationFault)throw std::runtime_error("Environment bind prepublication fault");
 #endif
- Validation(*renderer);if(!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,"environment_bind_drain; old_binding_retained");
+ Validation(*renderer);if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
  if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"environment_bind_device");Validation(*renderer);
  renderer->backend->GetDeviceContext()->ClearState();
  if(scene.environmentKey.value)--renderer->environments.at(scene.environmentKey.value)->scenePins;

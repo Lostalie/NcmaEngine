@@ -44,11 +44,14 @@ internal static unsafe class SceneUiInteractionPlayerProbe
 {
     internal static void Run(string requestPath)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         var e=new SceneUiInteractionEvidence(requestPath);var context=ProjectContext.Load(e.Project);var routes=SceneUiInteractionEvidence.Routes();
         bool headless=e.Kind=="null";var options=new PlayerOptions(e.Project,headless,headless?"null":"d3d11",2,1d/60,30,Path.Combine(e.Output,"report.json"),false,false);
-        var denied=PlayerRunner.Run(options,pluginRoot:e.Plugins,visible:false);
+        var denied=playerRunOwner0.Run(options,pluginRoot:e.Plugins,visible:false);
         e.Pass(denied.ExitCode==7&&denied.Tick==0&&denied.SessionId==Guid.Empty&&denied.Modules.Length==0,"default startup has no route authority");
-        var accepted=PlayerRunner.Run(options with{Report=Path.Combine(e.Output,"accepted-report.json")},pluginRoot:e.Plugins,visible:false,uiActions:routes);
+        var accepted=playerRunOwner1.Run(options with{Report=Path.Combine(e.Output,"accepted-report.json")},pluginRoot:e.Plugins,visible:false,uiActions:routes);
         e.Pass(accepted.ExitCode==0&&accepted.Tick>=2&&accepted.ShutdownErrors.Length==0&&accepted.ValidationErrors==0&&accepted.ValidationWarnings==0,"trusted formal PlayerRunner runs and closes: "+JsonSerializer.Serialize(accepted));
         if(headless){e.Pass(accepted.Tick==2&&accepted.Modules.Length==0&&accepted.RenderedFrames==0&&!Directory.Exists(e.Plugins),"Null exact ticks no plugins");e.Finish([]);return;}
         var document=new SceneDocument(context.Configuration.Name,Ncma.Characters.CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),Ncma.Characters.CharacterComponents.RequireComposition);

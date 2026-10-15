@@ -30,9 +30,9 @@ internal static unsafe partial class Program
         var settings=document.World.CreateObject("Post settings");settings.Set(PostProcessData.Off);
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(128,128);byte[] image=new byte[128*128*4];
-        using(var baseline=new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot())){Pass(baseline.Submit(frame++,128,128,camera,target:target),"old path baseline");renderer.CaptureTarget(target,image);renderer.Present();}
+        using(var baseline=new SceneRenderSession(renderer,cache,document.World)){baseline.Prepare(assets,document.CaptureSnapshot());Pass(baseline.Submit(frame++,128,128,camera,target:target),"old path baseline");renderer.CaptureTarget(target,image);renderer.Present();}
         byte[] original=image.ToArray();
-        using var session=new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot(),postProcessing:runtime,environmentPreparationAllowed:()=>approved);
+        using var session=new SceneRenderSession(renderer,cache,document.World);session.Prepare(assets,document.CaptureSnapshot(),postProcessing:runtime,environmentPreparationAllowed:()=>approved);
         void Prepare(uint size=128,float exposure=1)=>session.PrepareEnvironmentView(size,size,camera,exposure:exposure);
         void Tick(uint size=128,float exposure=1){Pass(session.Submit(frame++,size,size,camera,target:target,exposure:exposure),"ready scene submit");renderer.CaptureTarget(target,image);renderer.Present();}
         Bad(()=>session.Submit(frame++,128,128,camera,target:target));Prepare();Tick();Pass(image.SequenceEqual(original)&&renderer.PostStats.Bindings==0,"Off uses original image without post targets");
@@ -61,7 +61,7 @@ internal static unsafe partial class Program
         light.Set(light.Get<DirectionalLightData>() with{CastShadow=true});Bad(()=>session.Submit(frame++,128,128,camera,target:target));Prepare();Tick();Pass(session.Plan!.Resources.Any(r=>r.Role==RenderRole.SceneShadow),"shadow variant paired");
         settings.Set(active with{ExposureEv=4});Bad(()=>Prepare(exposure:16));Pass(session.PreparedPostProcess==active,"combined exposure refuses overflow without clamping");
         settings.Set(PostProcessData.Off);light.Set(light.Get<DirectionalLightData>() with{CastShadow=false});Prepare();Tick();Pass(image.SequenceEqual(original)&&renderer.PostStats.Bindings==0&&renderer.PostStats.ResidentBytes==0,"Off releases post and restores original shaders");
-        settings.Set(active);Bad(()=>new SceneRenderSession(renderer,cache,document.World,assets,document.CaptureSnapshot()).Dispose());
+        settings.Set(active);Bad(()=>{using var denied=new SceneRenderSession(renderer,cache,document.World);denied.Prepare(assets,document.CaptureSnapshot());});
         using(var presets=EnvironmentPresetLibrary.LoadDeployment(Path.Combine(repo.FullName,"out/bin"))) {
             var environment=presets.Package.CloneForAsset(Guid.NewGuid(),1);var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,environment);
             string path=Path.Combine(fixture.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,environment.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/post-environment.ncenv"),descriptor.Encode());

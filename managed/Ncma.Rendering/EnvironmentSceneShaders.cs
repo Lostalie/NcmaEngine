@@ -102,7 +102,7 @@ public sealed unsafe partial class RendererSession
         if(count is 0 or >ShaderContractCodec.MaxSourceBytes)throw new InvalidOperationException("Environment source bound.");return new UTF8Encoding(false,true).GetString(bytes,0,(int)count);}
     internal void InstallEnvironmentSceneShaders(ScenePipelineSession session,uint resolution,RegisteredEnvironmentSceneShaders shaders,bool create){
         ArgumentNullException.ThrowIfNull(shaders);BeginToneOperation();try{
-            EnsureScenePipeline();EnsureEnvironmentSceneApi();shaders.Verify(this);
+            EnsureScenePipeline();EnsureEnvironmentSceneApi();shaders.Verify(this);session.VerifyPreparedCandidate();
             if(session.Owner!=this||shaders.Shadows!=(resolution!=0)||(create?session.Key.Value!=0:session.Key.Value==0||!_scenePipelines.Contains(session)||session.RegisteredEnvironmentShaders is null))throw new ArgumentException("Exact environment scene ownership/group required.");
             byte[][] codes=shaders.CopyCodes();GpuMeshKey key=default;PluginError error=default;if(create)_scenePipelines.Add(session);
             try{fixed(byte* gv=codes[0])fixed(byte* gp=codes[1])fixed(byte* tv=codes[2])fixed(byte* tp=codes[3])fixed(byte* sv=codes[4])fixed(byte* sp=codes[5]){

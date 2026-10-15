@@ -86,7 +86,7 @@ uint32_t NCMA_CALL ReplaceRegisteredStages(uint64_t context,uint64_t handle,Ncma
  #ifdef NCMA_RENDERER_TEST_WAIT
   if(testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
  #endif
-  Validation(*renderer);if(!Wait(*renderer,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,"registered_scene_device"):NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,"registered_scene_drain; old_group_retained");
+  Validation(*renderer);if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
   if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"registered_scene_device");
   renderer->backend->GetDeviceContext()->ClearState();scene.PublishShaders(candidate);return NCMA_OK;});
 }
@@ -100,7 +100,7 @@ uint32_t NCMA_CALL ReplaceRegisteredSkin(uint64_t context,uint64_t handle,const 
  #ifdef NCMA_RENDERER_TEST_WAIT
   if(testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");
  #endif
-  Validation(*renderer);if(!Wait(*renderer,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,"registered_skin_device"):NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,"registered_skin_drain; old_program_retained");
+  Validation(*renderer);if(const auto completion=CompleteGpu(error);completion!=NCMA_OK)return completion;
   if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"registered_skin_device");
   renderer->backend->GetDeviceContext()->ClearState();renderer->skinKernel->PublishShader(candidate,code);return NCMA_OK;});
 }

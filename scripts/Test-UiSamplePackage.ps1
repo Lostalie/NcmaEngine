@@ -46,7 +46,14 @@ $uiSummary = ($uiResult | Select-Object -Last 1) | ConvertFrom-Json
 if ($uiSummary.environmentLive -ne 0 -or $uiSummary.environmentResidentBytes -ne 0 -or $uiSummary.environmentPublications -ne 0 -or $uiSummary.environmentUploadedBytes -ne 0) { throw 'Pure UI unexpectedly initialized environment GPU resources.' }
 if ($uiSummary.postBindings -ne 0 -or $uiSummary.postResidentBytes -ne 0 -or $uiSummary.postTargets -ne 0 -or $uiSummary.postPrograms -ne 0 -or $uiSummary.postDraws -ne 0 -or $uiSummary.postPublications -ne 0) { throw 'Pure UI unexpectedly initialized HDR post processing.' }
 if (-not $uiSummary.runtimeShaderPackage -or -not $uiSummary.registeredUi -or $uiSummary.frames -ne 4 -or $uiSummary.shaderGeneration -ne 1 -or $uiSummary.validationErrors -ne 0 -or $uiSummary.validationWarnings -ne 0) { throw 'UI apphost validation evidence mismatch.' }
+Push-Location $uiPackage
+try {
+    $uiRecoveryResult = & (Join-Path $uiPackage 'NcmaUiSample.exe') --recovery-smoke --plugins $uiPlugins
+    if ($LASTEXITCODE -ne 0) { throw 'Independent UI apphost recovery failed.' }
+} finally { Pop-Location }
+$uiRecovery = ($uiRecoveryResult | Select-Object -Last 1) | ConvertFrom-Json
+if (-not $uiRecovery.runtimeShaderPackage -or -not $uiRecovery.exactPixels -or -not $uiRecovery.no3D -or $uiRecovery.cycles -ne 3 -or $uiRecovery.checks -lt 30 -or $uiRecovery.physicalDeviceLoss) { throw 'Pure UI recovery evidence mismatch.' }
 $uiAfter = @(Get-DeploymentFiles $uiWorkspace $uiPackage)
 if (($uiAfter | ConvertTo-Json -Depth 8 -Compress) -cne ($uiFiles | ConvertTo-Json -Depth 8 -Compress)) { throw 'UI apphost modified its package.' }
-[IO.File]::WriteAllText((Join-Path $uiRoot 'result.json'), ([ordered]@{ schema=1; configuration=$Configuration; files=$uiFiles; apphost=$uiSummary; frameworkDependent=$true; runtimeShaderPackage=$true; targetEnvironmentAcceptance=$false } | ConvertTo-Json -Depth 8))
+[IO.File]::WriteAllText((Join-Path $uiRoot 'result.json'), ([ordered]@{ schema=1; configuration=$Configuration; files=$uiFiles; apphost=$uiSummary; recovery=$uiRecovery; frameworkDependent=$true; runtimeShaderPackage=$true; targetEnvironmentAcceptance=$false } | ConvertTo-Json -Depth 8))
 Write-Host "PASS registered pure UI source-free apphost; 18 exact package files (UI shader + selection); API0/0; $uiRoot"

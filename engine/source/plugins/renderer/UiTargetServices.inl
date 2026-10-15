@@ -9,9 +9,9 @@ uint32_t NCMA_CALL CreateUiTarget(uint64_t context,uint64_t handle,const NcmaUiT
         if(renderer->uiTargets.size()>=4||bytes+renderer->uiTargetBytes+renderer->ui->Stats(handle,renderer->pureUi).resident_bytes>128ull*1024*1024)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"UI target resident budget.");
         BusyScope scope;std::string message;Rhi::TextureDescription desc{};desc.Width=d->width;desc.Height=d->height;
         desc.Usage=Rhi::TextureUsage::RenderTarget|Rhi::TextureUsage::Sampled;
+        const uint64_t id=NcmaPlugin::NewWindowsHandle();
         auto texture=renderer->backend->CreateTexture(desc,message);
         if(!texture)return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
-        const uint64_t id=0x5554000000000000ull|nextResource++;
         try {renderer->uiTargets.emplace(id,Renderer::UiTarget{texture,d->width,d->height});}
         catch(...) {renderer->backend->DestroyTexture(texture);throw;}
         renderer->uiTargetBytes+=bytes;*output={id,handle};Validation(*renderer);return NCMA_OK;
@@ -24,7 +24,7 @@ uint32_t NCMA_CALL DestroyUiTarget(uint64_t context,uint64_t handle,NcmaUiKeyV1 
         if(key.generation!=handle||it==renderer->uiTargets.end())return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
         if(renderer->active||it->second.leases)return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;std::string message;
-        if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         renderer->backend->GetDeviceContext()->ClearState();renderer->backend->DestroyTexture(it->second.color);
         renderer->uiTargetBytes-=static_cast<uint64_t>(it->second.width)*it->second.height*4;renderer->uiTargets.erase(it);Validation(*renderer);return NCMA_OK;
     });
@@ -38,7 +38,7 @@ uint32_t NCMA_CALL SubmitUiTarget(uint64_t context,uint64_t handle,const NcmaUiT
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
         auto& target=it->second;
         if(renderer->active||target.leases||input->frame<=renderer->lastFrame||input->frame<=target.produced||input->content_revision<=target.content)return NcmaPlugin::Error(error,NCMA_BUSY,"Stale/pinned UI production.");
-        BusyScope scope;ExecutionScope execution;std::string message;Rhi::RenderPassDescription pass{};
+        BusyScope scope;ExecutionScope execution(input->frame);std::string message;Rhi::RenderPassDescription pass{};
         pass.ColorTarget=target.color;pass.ClearColor=true;std::copy_n(input->clear,4,pass.ClearColorValue);
         if(!renderer->backend->BeginRenderPass(pass,message))return Failure(error,message);
         renderer->ui->Draw(input->list.value,target.width,target.height);renderer->backend->EndRenderPass();
@@ -63,7 +63,7 @@ uint32_t NCMA_CALL AcquireUiTarget(uint64_t context,uint64_t handle,NcmaUiKeyV1 
         if(!output||key.generation!=handle||it==renderer->uiTargets.end())return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
         if(renderer->failed)return NcmaPlugin::Error(error,renderer->faultResult);
         if(renderer->active||!content||it->second.content!=content||!frame||frame<=renderer->lastFrame||it->second.produced>frame||renderer->uiLeases.size()>=64)return NcmaPlugin::Error(error,NCMA_BUSY,"Stale UI presentation lease.");
-        const uint64_t id=0x554c000000000000ull|nextResource++;
+        const uint64_t id=NcmaPlugin::NewWindowsHandle();
         renderer->uiLeases.emplace(id,Renderer::UiLease{key.value,content,it->second.produced,frame});it->second.leases++;renderer->uiPresentations++;*output={id,handle};return NCMA_OK;
     });
 }

@@ -50,7 +50,7 @@ internal static unsafe partial class Program
             using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
             play.Start(_=>throw new Exception("No behaviours"));play.Pause();
             try {
-                using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
+                using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
                 using var target=renderer.CreateViewTarget(256,256);var captured=new byte[4*48];var frozen=new AnimationLocalTransform[2];
                 float expectedX=0,expectedYaw=.2f;
                 for(int step=0;step<128;step++) {
@@ -102,7 +102,7 @@ internal static unsafe partial class Program
             Check(untouched.All(v=>v.Position==new Vector3(7,8,9)),"Rejected complete pose must not copy partial outputs");
             Reject(()=>source.Evaluate(rows,instance.Frame.Output,locals,instance.Frame.FrozenPoseGeneration+1,untouched));
             byte[] original=previewDocument.CaptureBytes();
-            using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,previewDocument.World,assets,previewDocument.CaptureSnapshot(),poseKernel:kernel))using(var target=renderer.CreateViewTarget(256,256)) {
+            using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,previewDocument.World))using(var target=renderer.CreateViewTarget(256,256)) {scene.Prepare(assets,previewDocument.CaptureSnapshot(),poseKernel:kernel);
                 scene.Animation!.ControlPreview(previewId,parameter.Id,AnimationParameterKind.Bool,1);scene.Animation.AdvancePreview(1d/60);
                 scene.Animation.ControlPreview(previewId,parameter.Id,AnimationParameterKind.Bool,0);scene.Animation.AdvancePreview(1d/60);
                 Check(scene.Animation.PreviewFrame(previewId).FrozenPoseGeneration==1&&previewDocument.World.Tick==0,"Independent preview interruption uses no Play/World tick");

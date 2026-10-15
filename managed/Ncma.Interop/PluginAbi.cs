@@ -2,11 +2,15 @@ using System.Runtime.InteropServices;
 namespace Ncma.Interop;
 public enum ModuleKind : uint { Platform = 1, Gui = 2, Renderer = 3, Physics = 4, Text = 5, Fixture = 127 }
 public enum PluginResult : uint { Ok, AbiMismatch, InvalidArgument, WrongThread, InvalidHandle, BufferTooSmall, UnsupportedFeature, Busy, DeviceLost, ShutdownTimeout, InternalError }
+// Bounded numeric native evidence only. No exception/owner pointers, text or private paths.
+public readonly record struct NativeFailureDiagnostic(uint Backend, ulong Generation, ulong Frame,
+    uint Operation, PluginResult Result, int? NativeCode, int? DeviceReason);
 public sealed class PluginException(string pluginId, string phase, PluginResult result, string message) : InvalidOperationException(message)
 {
     public string PluginId { get; } = pluginId;
     public string Phase { get; } = phase;
     public PluginResult Result { get; } = result;
+    public NativeFailureDiagnostic? NativeDiagnostic { get; internal set; }
 }
 [StructLayout(LayoutKind.Sequential)]
 public struct ModuleStatus { public uint StructSize, State; public ulong LiveResources, LiveJobs, Sequence; }

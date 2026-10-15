@@ -1,4 +1,5 @@
 #include "UiKernel.h"
+#include "../WindowsHandle.h"
 #include <d3dcompiler.h>
 #include <cmath>
 #include <cstring>
@@ -17,7 +18,7 @@ float4 PSMain(O v):SV_TARGET {float2 q=abs(v.local-v.extent*.5)-(v.extent*.5-v.r
 )";
 }
 bool UiKernel::PrepareShaders(const NcmaShaderPairV1& code,Programs& candidate,std::string& error) {
-    auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){error=operation;return false;}return true;};
+    auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){backend.ReportApiFailure(hr);error=operation;return false;}return true;};
     if(!check(device->CreateVertexShader(code.vertex,code.vertex_bytes,nullptr,&candidate.vs),"UI VS")||!check(device->CreatePixelShader(code.pixel,code.pixel_bytes,nullptr,&candidate.ps),"UI PS"))return false;
     const D3D11_INPUT_ELEMENT_DESC attributes[]={{"POSITION",0,DXGI_FORMAT_R32G32_FLOAT,0,0,D3D11_INPUT_PER_VERTEX_DATA,0},{"TEXCOORD",0,DXGI_FORMAT_R32G32_FLOAT,0,8,D3D11_INPUT_PER_VERTEX_DATA,0},
         {"COLOR",0,DXGI_FORMAT_R32G32B32A32_FLOAT,0,16,D3D11_INPUT_PER_VERTEX_DATA,0},{"TEXCOORD",1,DXGI_FORMAT_R32G32_FLOAT,0,32,D3D11_INPUT_PER_VERTEX_DATA,0},
@@ -29,7 +30,7 @@ void UiKernel::PublishShaders(Programs& candidate) noexcept {
 }
 bool UiKernel::Initialize(std::string& error,const NcmaShaderPairV1* registered) {
     ComPtr<ID3DBlob> vb,pb,messages;
-    auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){error=operation;return false;}return true;};
+    auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){backend.ReportApiFailure(hr);error=operation;return false;}return true;};
     NcmaShaderPairV1 defaults{};
     if(!registered){auto source=ShaderSource();constexpr auto flags=D3DCOMPILE_ENABLE_STRICTNESS|D3DCOMPILE_WARNINGS_ARE_ERRORS|D3DCOMPILE_OPTIMIZATION_LEVEL3;
         if(!check(D3DCompile(source.data(),source.size(),nullptr,nullptr,nullptr,"VSMain","vs_5_0",flags,0,&vb,&messages),"UI vertex shader")||
@@ -71,15 +72,18 @@ bool UiKernel::CreateImage(const NcmaUiImageV1& d,uint64_t& key,std::string& err
     auto image=std::make_unique<Image>();ComPtr<ID3D11Texture2D> texture;
     D3D11_TEXTURE2D_DESC desc{};desc.Width=d.width;desc.Height=d.height;desc.MipLevels=1;desc.ArraySize=1;desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_IMMUTABLE;desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;
     D3D11_SUBRESOURCE_DATA data{d.pixels,d.width*4,0};
-    if(FAILED(device->CreateTexture2D(&desc,&data,&texture))||FAILED(device->CreateShaderResourceView(texture.Get(),nullptr,&image->srv))){error="UI image allocation";return false;}
-    image->bytes=d.byte_count;key=0x5549000000000000ull|next++;
+    HRESULT result=device->CreateTexture2D(&desc,&data,&texture);
+    if(SUCCEEDED(result))result=device->CreateShaderResourceView(texture.Get(),nullptr,&image->srv);
+    if(FAILED(result)){backend.ReportApiFailure(result);error="UI image allocation";return false;}
+    image->bytes=d.byte_count;key=NcmaPlugin::NewWindowsHandle();
     images.emplace(key,std::move(image));bytes+=d.byte_count;uploaded+=d.byte_count;return true;
 }
 bool UiKernel::CreateList(const NcmaUiListV1& d,uint64_t& key,std::string& error) {
     auto list=std::make_unique<List>();list->batches.assign(d.batches,d.batches+d.batch_count);list->bytes=static_cast<uint64_t>(d.vertex_count)*sizeof(NcmaUiVertexV1);
     D3D11_BUFFER_DESC desc{};desc.ByteWidth=static_cast<UINT>(list->bytes);desc.Usage=D3D11_USAGE_IMMUTABLE;desc.BindFlags=D3D11_BIND_VERTEX_BUFFER;D3D11_SUBRESOURCE_DATA initial{d.vertices,0,0};
-    if(FAILED(device->CreateBuffer(&desc,&initial,&list->vertices))){error="UI display list allocation";return false;}
-    key=0x554c000000000000ull|next++;lists.emplace(key,std::move(list));
+    const HRESULT result=device->CreateBuffer(&desc,&initial,&list->vertices);
+    if(FAILED(result)){backend.ReportApiFailure(result);error="UI display list allocation";return false;}
+    key=NcmaPlugin::NewWindowsHandle();lists.emplace(key,std::move(list));
     for(const auto& b:lists.at(key)->batches)images.at(b.image.value)->pins++;
     bytes+=desc.ByteWidth;uploaded+=desc.ByteWidth;return true;
 }

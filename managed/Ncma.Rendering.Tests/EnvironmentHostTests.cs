@@ -17,6 +17,17 @@ internal static unsafe partial class Program
 {
     private static int EnvironmentHostTests(string root,string output)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
+
+        using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner4 = new Ncma.Player.App.PlayerRunner();
+
+        using var playerRunOwner5 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner6 = new Ncma.Player.App.PlayerRunner();
+
+        using var playerRunOwner8 = new Ncma.Player.App.PlayerRunner();
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);
         int cases=0,maxError=0;void Pass(bool value,string label){Check(value,"M7.3-C2-C "+label);cases++;}
         var repository=new DirectoryInfo(Path.GetFullPath(root));while(!File.Exists(Path.Combine(repository.FullName,"Build.bat")))repository=repository.Parent??throw new Exception("Repository missing");
@@ -66,31 +77,33 @@ internal static unsafe partial class Program
             int error=0;for(int c=0;c<3;c++)error=Math.Max(error,Math.Abs(image[(y*(int)w+x)*4+c]-(int)MathF.Round(expected[c]*255)));
             maxError=Math.Max(maxError,error);Check(error<=3,"M7.3-C2-C formal host independent pixel error="+error);
         }
-        int playerCaptures=0;var player=PlayerRunner.RunForVerification(Options(),Path.GetFullPath(root),(image,w,h)=>{Pixel(image,w,h,.5f);if(playerCaptures++==0)File.WriteAllBytes(Path.Combine(output,"formal-player.png"),Png(w,h,image));});
+        int playerCaptures=0;var player=playerRunOwner0.RunForVerification(Options(),Path.GetFullPath(root),(image,w,h)=>{Pixel(image,w,h,.5f);if(playerCaptures++==0)File.WriteAllBytes(Path.Combine(output,"formal-player.png"),Png(w,h,image));});
         Pass(player.ExitCode==0&&player.Tick>=4&&player.RenderedFrames>0&&playerCaptures>0&&player.ValidationErrors==0&&player.ValidationWarnings==0&&player.ShutdownErrors.Length==0,"formal Player actual user shader/IBL/API0/0");
         var badSelection=selection with{Packages=files.Select(f=>f.Shadows==false&&!f.Skinning?wrongFile:f).ToArray()};
         foreach(var choice in new[]{new ShaderPackageSelection(1,[oldFile]),badSelection}){
-            Project(projectConfig with{ShaderPackages=choice});var rejected=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
+
+            using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
+            Project(projectConfig with{ShaderPackages=choice});var rejected=playerRunOwner1.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
             Pass(rejected.ExitCode==3&&rejected.Tick==0&&rejected.SessionId==Guid.Empty&&rejected.RenderedFrames==0&&rejected.ShutdownErrors.Length==0,"missing profile/actual wrong output before gameplay initialization");
         }
         Project(projectConfig);byte[] sourceScene=File.ReadAllBytes(scenePath);
         env.Set(envValue with{Generation=99});SceneDocumentFiles.Save(document,Path.Combine(fixture.Root,"wrong-generation.ncmascene"));
-        Project(projectConfig with{StartupScene="wrong-generation.ncmascene"});var wrongGeneration=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
+        Project(projectConfig with{StartupScene="wrong-generation.ncmascene"});var wrongGeneration=playerRunOwner2.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
         Pass(wrongGeneration.ExitCode==3&&wrongGeneration.SessionId==Guid.Empty&&wrongGeneration.Tick==0&&wrongGeneration.ShutdownErrors.Length==0,"wrong startup environment generation pre-gameplay");env.Set(envValue);Project(projectConfig);
         int inputs=0;bool black=false,lit=false;
-        var dynamic=PlayerRunner.RunForVerification(Options() with{Ticks=8},Path.GetFullPath(root),(image,w,h)=>{int at=((int)h/2*(int)w+(int)w/2)*4;black|=image[at]==0&&image[at+1]==0&&image[at+2]==0;lit|=image[at]>0;},(play,_)=>{
+        var dynamic=playerRunOwner3.RunForVerification(Options() with{Ticks=8},Path.GetFullPath(root),(image,w,h)=>{int at=((int)h/2*(int)w+(int)w/2)*4;black|=image[at]==0&&image[at+1]==0&&image[at+2]==0;lit|=image[at]>0;},(play,_)=>{
             play.Document.World.FindObject(environmentId).Set(++inputs==1?EnvironmentLightingData.Off:envValue);
         });
         Pass(dynamic.ExitCode==0&&black&&lit&&dynamic.ValidationErrors==0&&dynamic.ValidationWarnings==0,"formal Player committed Off/on switches affect pixels");
-        var invalidDynamic=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false,trustedInput:(play,_)=>play.Document.World.FindObject(environmentId).Set(envValue with{Generation=99}));
+        var invalidDynamic=playerRunOwner4.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false,trustedInput:(play,_)=>play.Document.World.FindObject(environmentId).Set(envValue with{Generation=99}));
         Pass(invalidDynamic.ExitCode==5&&invalidDynamic.SessionId!=Guid.Empty&&invalidDynamic.ShutdownErrors.Length==0,"unprepared dynamic generation fails explicitly after initialization");
         Pass(sourceScene.SequenceEqual(File.ReadAllBytes(scenePath)),"Player never modifies author document");
         // Explicit runtime package; author-source closure remains only in fixture, not runtime reads.
         string packagePath="assets/game.ncpak";File.WriteAllBytes(Path.Combine(fixture.Root,packagePath),SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]));
         projectConfig=projectConfig with{AssetPackage=packagePath};Project(projectConfig);
-        var packaged=PlayerRunner.RunForVerification(Options(),Path.GetFullPath(root),(image,w,h)=>Pixel(image,w,h,.5f));
+        var packaged=playerRunOwner5.RunForVerification(Options(),Path.GetFullPath(root),(image,w,h)=>Pixel(image,w,h,.5f));
         Pass(packaged.ExitCode==0&&packaged.ValidationErrors==0&&packaged.ValidationWarnings==0,"formal source-free NCP Player image");
-        var headless=PlayerRunner.Run(Options(true),pluginRoot:Path.GetFullPath(root),visible:false);
+        var headless=playerRunOwner6.Run(Options(true),pluginRoot:Path.GetFullPath(root),visible:false);
         Pass(headless.ExitCode==0&&headless.Tick==4&&headless.RenderedFrames==0&&headless.Modules.Length==0,"Headless keeps CPU asset contract without renderer/environment GPU");
         using(var editor=new CandidatePresentation(Path.GetFullPath(root),ProjectContext.Load(projectPath),true,false,false)){
             editor.Start();ulong frame=0;
@@ -123,11 +136,13 @@ internal static unsafe partial class Program
         // Original actual ASCII/binary imported animation, now through the formal Player.
         string build=Directory.GetParent(root)!.Parent!.FullName;string importPath=Path.Combine(build,"NcmaImportKernel.dll");
         foreach(string file in new[]{"blender_279_sausage_6100_ascii.fbx","blender_279_sausage_7400_binary.fbx"}){
+
+            using var playerRunOwner7 = new Ncma.Player.App.PlayerRunner();
             using var importer=new Ncma.Asset.Import.ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath))));
             var skinFixture=new SkinFixture(output,importer.LoadAndCopy(Path.Combine(repository.FullName,"tests/assets/fbx",file),30));var (skinDocument,skinCamera,_)=skinFixture.Scene();skinDocument.World.CreateObject("Environment").Set(envValue);Publish(skinFixture.Root,skinFixture.Project);Gameplay(skinFixture.Root);
             Directory.CreateDirectory(Path.Combine(skinFixture.Root,"assets/shaders"));foreach(var entry in files)File.Copy(Path.Combine(fixture.Root,entry.Path),Path.Combine(skinFixture.Root,entry.Path));
             string sp=Path.Combine(skinFixture.Root,"start.ncmascene"),pp=Path.Combine(skinFixture.Root,"project.ncmaproject");SceneDocumentFiles.Save(skinDocument,sp);File.WriteAllBytes(pp,JsonSerializer.SerializeToUtf8Bytes(projectConfig with{ProjectId=skinFixture.Project,SceneCamera=skinCamera,AssetPackage=null},json));
-            int captures=0;bool drawn=false;var report=PlayerRunner.RunForVerification(Options() with{Project=pp},Path.GetFullPath(root),(image,w,h)=>{captures++;drawn|=image.Where((_,i)=>i%4!=3).Any(b=>b>0);});
+            int captures=0;bool drawn=false;var report=playerRunOwner7.RunForVerification(Options() with{Project=pp},Path.GetFullPath(root),(image,w,h)=>{captures++;drawn|=image.Where((_,i)=>i%4!=3).Any(b=>b>0);});
             Pass(report.ExitCode==0&&captures>0&&drawn&&report.ValidationErrors==0&&report.ValidationWarnings==0&&report.ShutdownErrors.Length==0,"formal FBX/NCA skin-shadow-IBL "+file);
         }
         string configuration=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
@@ -148,7 +163,7 @@ internal static unsafe partial class Program
         }
         var empty=new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry());SceneDocumentFiles.Save(empty,Path.Combine(fixture.Root,"empty.ncmascene"));
         Project(projectConfig with{StartupScene="empty.ncmascene",SceneCamera=null,AssetPackage=null,ShaderPackages=new(1,[oldFile])});
-        var emptyReport=PlayerRunner.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
+        var emptyReport=playerRunOwner8.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
         Pass(emptyReport.ExitCode==0&&emptyReport.ObjectCount==0&&emptyReport.ValidationErrors==0&&emptyReport.ValidationWarnings==0,"graphical empty with Flat2D-only closure requires no environment profile");Project(projectConfig);
         File.WriteAllText(Path.Combine(output,"host-results.json"),JsonSerializer.Serialize(new{cases,maxError,formalPlayer=true,formalEditor=true,defaultEnvironmentDeployment=false},new JsonSerializerOptions{WriteIndented=true}));
         Console.WriteLine($"PASS M7.3-C2-C formal environment hosts cases={cases} maxPixelError={maxError}; C3 defaults/manual gates remain");return 0;

@@ -168,9 +168,11 @@ internal static class ActionCombatChecks
         string assembly=Assembly.GetExecutingAssembly().Location;File.Copy(assembly,Path.Combine(root,"gameplay.dll"));File.Copy(Path.ChangeExtension(assembly,".deps.json"),Path.Combine(root,"gameplay.deps.json"));SceneDocumentFiles.Save(startup,Path.Combine(root,"start.ncmascene"));
         var config=new ProjectConfiguration(1,project,"Action Player","start.ncmascene","gameplay.dll","Direct3D11",[],true,startup.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId);
         foreach(bool packed in new[]{false,true})foreach(bool headless in new[]{false,true}) {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
             string file=Path.Combine(root,"action.ncmaproject");File.WriteAllBytes(file,JsonSerializer.SerializeToUtf8Bytes(config with{AssetPackage=packed?"assets/game.ncpak":null},new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
             var flags=new List<string>{"--project",file,"--ticks","20","--report",Path.Combine(root,$"{packed}-{headless}.json")};if(headless)flags.Add("--headless");
-            var report=PlayerRunner.Run(PlayerOptions.Parse(flags.ToArray()),pluginRoot:plugins,visible:false,trustedInput:headless?(p,_)=>{if(p.Tick==0){CharacterHostChecks.Input(p,1,key:-1);CharacterHostChecks.Input(p,2,key:74,pressed:true);}}:null);
+            var report=playerRunOwner0.Run(PlayerOptions.Parse(flags.ToArray()),pluginRoot:plugins,visible:false,trustedInput:headless?(p,_)=>{if(p.Tick==0){CharacterHostChecks.Input(p,1,key:-1);CharacterHostChecks.Input(p,2,key:74,pressed:true);}}:null);
             Check(report.ExitCode==0&&report.Tick>=20&&report.ShutdownErrors.Length==0&&report.ValidationErrors==0&&report.ValidationWarnings==0,"formal action Player: "+report.Reason);
             Check(!headless||report.Modules.All(m=>m.Id is not ("ncma.renderer" or "ncma.platform")),"Headless action path no graphics");
         }

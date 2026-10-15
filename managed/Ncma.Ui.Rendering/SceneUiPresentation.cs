@@ -5,6 +5,14 @@ using Ncma.Text;
 
 namespace Ncma.Ui.Rendering;
 
+// Typed, fixed safe diagnostic; a host may explain this admission refusal without
+// forwarding arbitrary trusted callback exception messages to its public output.
+public sealed class SceneUiRoutesRequiredException : NotSupportedException
+{
+    public const string Diagnostic="Scene HUD interaction requires trusted application startup routes; use passive elements by default.";
+    public SceneUiRoutesRequiredException():base(Diagnostic){}
+}
+
 // HUD presentation only. No World, Editor, gameplay callback, author file or AI execution owner.
 public sealed class SceneUiPresentation : IDisposable
 {
@@ -14,6 +22,8 @@ public sealed class SceneUiPresentation : IDisposable
     { _textResources=textResources??new(); _ownsTextResources=textResources is null; }
     private TextService? _text;
     private UiCanvas? _canvas;
+    private UiRuntime? _runtime;
+    private RuntimeUiPackage? _package;
     private RendererSession? _renderer;
     private UiRenderTarget? _surface;
     private UiPresentationLease? _surfaceLease;
@@ -25,24 +35,27 @@ public sealed class SceneUiPresentation : IDisposable
     public ulong TextPreparations => _text?.PrepareCalls ?? 0;
     public bool TextLoaded => _text is not null;
     public IReadOnlyList<PluginModule> Modules => _textResources.Modules;
-    public UiRuntime Runtime { get { ObjectDisposedException.ThrowIf(_disposed, this); var value = _canvas?.Runtime ?? throw new InvalidOperationException("Prepare HUD first."); _ = value.Stamp; return value; } }
+    public UiRuntime Runtime { get { ObjectDisposedException.ThrowIf(_disposed, this); var value = _runtime ?? _canvas?.Runtime ?? throw new InvalidOperationException("Prepare HUD first."); _ = value.Stamp; return value; } }
     public static void Validate(RuntimeUiPackage package, bool interactive = false)
     {
         // Do not accept apparently interactive UI that this formal entry cannot dispatch yet.
         if (!interactive && package.Capture().Elements.Any(e => e.Action.Length != 0 || e.Kind is UiKind.Button or UiKind.Slider or UiKind.TextInput or UiKind.ScrollView))
-            throw new NotSupportedException("Scene HUD interaction requires trusted application startup routes; use passive elements by default.");
+            throw new SceneUiRoutesRequiredException();
     }
     public void Prepare(RuntimeUiPackage package, RendererSession renderer, string plugins, UiViewport viewport, bool interactive = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_canvas is not null || _text is not null) throw new InvalidOperationException("HUD startup already prepared.");
+        if(_package is not null&&!ReferenceEquals(_package,package))throw new ArgumentException("HUD graphics recovery requires the original pinned package.");
         Validate(package, interactive);
+        _package=package;
         _renderer = renderer;
         if (package.HasFonts) {
             _text = _textResources.Get(plugins);
         }
-        try { _canvas = UiCanvas.Create(new(package.Capture()), renderer, _text, package.Fonts, package.Images); }
+        try { _canvas = _runtime is null?UiCanvas.Create(new(package.Capture()), renderer, _text, package.Fonts, package.Images):UiCanvas.Recreate(_runtime,renderer,_text,package.Fonts,package.Images); }
         catch (UiCanvasRecoveryException failure) { _canvas = failure.Owner; throw; }
+        _runtime=_canvas.Runtime;
         _canvas.Prepare(viewport); // Includes native font/shaping validation before gameplay.
     }
     public void PrepareView(UiViewport viewport)
@@ -108,11 +121,22 @@ public sealed class SceneUiPresentation : IDisposable
             throw new InvalidOperationException("Produce current HUD surface before capture.");
         return _renderer!.CaptureUiTarget(_surface);
     }
+    // Explicit GPU-only retirement. Preserve the same CPU widget values and original package;
+    // stale input is revoked, and no old surface remains presentable after a failed close.
+    public void RetireGraphics()
+    {
+        ObjectDisposedException.ThrowIf(_disposed,this);
+        if(_canvas is not null)_runtime??=_canvas.Runtime;
+        _runtime?.CancelInput();_surfaceReady=false;
+        ReleaseSurface(); _surface?.Dispose(); _surface = null;
+        while (_retained.Count != 0) { _retained[0].Dispose(); _retained.RemoveAt(0); }
+        _canvas?.Dispose(); _canvas = null; _text = null; _renderer=null;
+        _surfacePreparation=_surfaceContent=_surfaceRuntimeRevision=0;
+        _surfaceDirty=_surfaceRecovery=false;
+    }
     public void Dispose()
     {
         if (_disposed) return;
-        ReleaseSurface(); _surface?.Dispose(); _surface = null;
-        while (_retained.Count != 0) { _retained[0].Dispose(); _retained.RemoveAt(0); }
-        _canvas?.Dispose(); _canvas = null; _text = null; if(_ownsTextResources)_textResources.Dispose(); _disposed = true;
+        RetireGraphics();if(_ownsTextResources)_textResources.Dispose();_runtime=null;_package=null;_disposed=true;
     }
 }

@@ -477,6 +477,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     private void Control()
     {
         Verify();
+        if(_presentationRecovery is {} recovery){recovery.Reject();throw new InvalidOperationException("Play control is frozen during presentation recovery.");}
         if (_busy || _document.World.IsUpdating) throw new InvalidOperationException("Reentrant Play control is forbidden.");
     }
     public void Dispose()

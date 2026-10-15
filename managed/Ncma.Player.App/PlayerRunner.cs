@@ -9,29 +9,33 @@ using Ncma.Rendering;
 using Ncma.Scene;
 namespace Ncma.Player.App;
 
-public static class PlayerRunner
+public sealed partial class PlayerRunner
 {
     // Trusted local host only. No EditorEndpoint, hidden EditSession or Agent execution channel.
-    public static PlayerReport Run(PlayerOptions options, Func<bool>? cancelled = null, string? pluginRoot = null,
+    public PlayerReport Run(PlayerOptions options, Func<bool>? cancelled = null, string? pluginRoot = null,
         bool visible = true, Action<PlaySession, ulong>? trustedInput = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null,
-        Func<float,float,bool,RenderPipeline>? pipelineFactory = null, SceneUiActions? uiActions = null)
-        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules,pipelineFactory,uiActions);
+        Func<float,float,bool,RenderPipeline>? pipelineFactory = null, SceneUiActions? uiActions = null,
+        Func<PlayerGraphicsRecoveryRequest,bool>? confirmGraphicsRecovery=null)
+        =>RunCore(options,cancelled,pluginRoot,visible,trustedInput,null,postModules,pipelineFactory,uiActions,confirmGraphicsRecovery);
     // Internal bounded diagnostic hook, not a production/Agent screenshot or execution capability.
-    internal static PlayerReport RunForVerification(PlayerOptions options,string pluginRoot,Action<byte[],uint,uint> capture,
+    internal PlayerReport RunForVerification(PlayerOptions options,string pluginRoot,Action<byte[],uint,uint> capture,
         Action<PlaySession,ulong>? trustedInput=null,Ncma.Rendering.Scene.PostProcessModules? postModules=null,
-        Func<float,float,bool,RenderPipeline>? pipelineFactory=null, SceneUiActions? uiActions=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules,pipelineFactory,uiActions);
-    private static PlayerReport RunCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
+        Func<float,float,bool,RenderPipeline>? pipelineFactory=null, SceneUiActions? uiActions=null,
+        Func<PlayerGraphicsRecoveryRequest,bool>? confirmGraphicsRecovery=null)=>RunCore(options,null,pluginRoot,false,trustedInput,capture,postModules,pipelineFactory,uiActions,confirmGraphicsRecovery);
+    private PlayerReport RunCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
         Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture,Ncma.Rendering.Scene.PostProcessModules? postModules=null,
-        Func<float,float,bool,RenderPipeline>? pipelineFactory=null, SceneUiActions? uiActions=null)
+        Func<float,float,bool,RenderPipeline>? pipelineFactory=null, SceneUiActions? uiActions=null,Func<PlayerGraphicsRecoveryRequest,bool>? confirmGraphicsRecovery=null)
     {
-        ArgumentNullException.ThrowIfNull(options);
-        var clock = Stopwatch.StartNew(); ProjectContext? project = null; RuntimeSessionOwner? owner = null;
-        PhysicsService? physics = null; PlayerPresentation? presentation = null; PlayStatus? status = null;
-        Ncma.Scene.Rendering.PreparedSceneAssetLease? renderAssets = null;
-        RuntimeShaderFileSet? shaderFiles = null;
-        RuntimeShadowLibrary? shadowLibrary=null;
-        Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage = null;
-        RuntimePostProcessLibrary? postLibrary=null;postModules??=Ncma.Rendering.Scene.PostProcessModules.Official();
+        ArgumentNullException.ThrowIfNull(options);BeginRun();
+        try { return ExecuteCore(options,cancelled,pluginRoot,visible,trustedInput,capture,postModules,pipelineFactory,uiActions,confirmGraphicsRecovery); }
+        finally { try{if(_phase==PlayerRunnerPhase.Running)TryShutdown();}finally{_runActive=false;} }
+    }
+    private PlayerReport ExecuteCore(PlayerOptions options,Func<bool>? cancelled,string? pluginRoot,bool visible,
+        Action<PlaySession,ulong>? trustedInput,Action<byte[],uint,uint>? capture,Ncma.Rendering.Scene.PostProcessModules? postModules,
+        Func<float,float,bool,RenderPipeline>? pipelineFactory,SceneUiActions? uiActions,Func<PlayerGraphicsRecoveryRequest,bool>? confirmGraphicsRecovery)
+    {
+        var clock=Stopwatch.StartNew();ProjectContext? project=null;PlayStatus? status=null;
+        postModules??=Ncma.Rendering.Scene.PostProcessModules.Official();
         int exit = 0, count = 0; string reason = "completed", renderer = options.Headless ? "null" : "unknown";
         string? digest = null; string phase = "configuration"; var errors = new List<string>(); PlayerModule[] modules = [];
         ulong rendered = 0, validationErrors = 0, validationWarnings = 0; bool running = false;
@@ -94,7 +98,7 @@ public static class PlayerRunner
                 {
                     presentation = new(plugins, visible, pipelineFactory); presentation.Start(shaderFiles,postLibrary,postModules,shadowLibrary);
                     presentation.PrepareBeforeGameplay(document,renderAssets!,uiPackage,uiActions);
-                    modules = modules.Concat(presentation.Modules).ToArray();
+                    CheckRun();modules = modules.Concat(presentation.Modules).ToArray();
                 }
                 Ncma.Characters.ScenePlayRuntime? sceneRuntime=null;
                 owner = new(document); owner.LoadGameplay(project.GameplayAssemblyPath);
@@ -103,19 +107,34 @@ public static class PlayerRunner
                     advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames),
                     compose:p=>{ if (uiPackage is not null) uiActions?.Install(p); return sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(p,physics,renderAssets); });
                 if (presentation is not null) presentation.BindScene(play, renderAssets!, project.Configuration.SceneCamera,sceneRuntime?.Characters,sceneRuntime?.Animators);
-                running = true; double previous = clock.Elapsed.TotalSeconds;
+                CheckRun();running = true; double previous = clock.Elapsed.TotalSeconds;
                 while (options.Ticks is null || play.Tick < options.Ticks)
                 {
-                    if (cancelled?.Invoke() == true) { exit = 130; reason = "cancelled"; break; }
+                    bool stop=cancelled?.Invoke()==true;CheckRun();
+                    if (stop) { exit = 130; reason = "cancelled"; break; }
                     if (clock.Elapsed.TotalSeconds >= options.MaxRuntimeSeconds) { exit = 8; reason = "time_budget"; break; }
                     if (presentation is not null && !presentation.Pump(play)) { reason = "window_closed"; break; }
-                    trustedInput?.Invoke(play, play.Tick + 1);
+                    trustedInput?.Invoke(play, play.Tick + 1);CheckRun();
                     if (options.Headless) status = play.AdvanceFixedStep();
                     else
                     {
                         double now = clock.Elapsed.TotalSeconds;
                         status = play.AdvanceFrame(now - previous); previous = now;
-                        presentation!.Present(play,capture);
+                        try{presentation!.Present(play,capture);}
+                        catch when(confirmGraphicsRecovery is not null&&play.State is PlayState.Running or PlayState.Paused){
+                            // Only presentation failures enter this path. Never replay input or the
+                            // already committed gameplay frame, and never recover a faulted script.
+                            for(int attempt=0;;attempt++){
+                                if(attempt==16||clock.Elapsed.TotalSeconds>=options.MaxRuntimeSeconds)throw;
+                                var review=presentation!.ReviewGraphicsRecovery(true);
+                                bool approved=confirmGraphicsRecovery(new(review,attempt!=0,presentation.FirstGraphicsFailure,presentation.FirstNativeFailure));CheckRun();
+                                if(!approved)throw;
+                                try{presentation.RebuildGraphics(review);}
+                                catch{CheckRun();continue;}
+                                CheckRun();previous=clock.Elapsed.TotalSeconds;break;
+                            }
+                        }
+                        CheckRun();
                     }
                     if (status.State == PlayState.Faulted) { exit = 5; reason = "gameplay_fault"; break; }
                 }
@@ -123,14 +142,18 @@ public static class PlayerRunner
                 digest = Convert.ToHexString(SHA256.HashData(document.CaptureBytes()));
                 if (presentation is not null)
                 {
-                    var stats = presentation.Stats; rendered = stats.SubmittedFrames;
-                    validationErrors = stats.ValidationErrors; validationWarnings = stats.ValidationWarnings;
+                    rendered = presentation.TotalSubmittedFrames;
+                    validationErrors = presentation.TotalValidationErrors; validationWarnings = presentation.TotalValidationWarnings;
                     if (validationErrors != 0 || validationWarnings != 0) { exit = 5; reason = "graphics_validation_failed"; }
                 }
             }
         }
         catch (Exception e)
         {
+            Exception? diagnosticError=e;
+            for(int diagnosticDepth=0;diagnosticError is not null&&diagnosticDepth<8;diagnosticDepth++,diagnosticError=diagnosticError.InnerException){
+                if(diagnosticError is PluginException{NativeDiagnostic:{} diagnostic}){LastNativeFailureDiagnostic??=diagnostic;break;}
+            }
             status = owner?.Play?.Status ?? owner?.LastStartFailure ?? status;
             exit = status?.State == PlayState.Faulted || running ? 5 : e switch
             { FileNotFoundException or BadImageFormatException or DllNotFoundException or PluginException => 3,
@@ -140,16 +163,11 @@ public static class PlayerRunner
         }
         finally
         {
-            bool Close(IDisposable? service, string id) { if (service is null) return true; try { service.Dispose(); return true; } catch { errors.Add(id); return false; } }
-            // Derived animation/GPU resources close before coupled solver and its module.
-            if(Close(presentation, "presentation_shutdown_failed")) {
-                Close(shaderFiles,"shader_files_shutdown_failed");
-                Close(postLibrary,"post_library_shutdown_failed");
-                Close(shadowLibrary,"shadow_library_shutdown_failed");
-                Close(uiPackage,"ui_package_shutdown_failed");
-                if(Close(owner, "runtime_shutdown_failed")) { Close(physics, "physics_shutdown_failed"); Close(renderAssets, "render_asset_shutdown_failed"); }
-            }
+            LastPresentationFailure=presentation?.FirstGraphicsFailure??presentation?.SurfaceStatus?.Failure;
+            LastNativeFailureDiagnostic??=presentation?.FirstNativeFailure;
+            if(!TryShutdown())errors.Add(_failedService!);
         }
+        if(_runRejected){if(exit==0)exit=running?5:4;if(errors.Count==0)reason="host_callback_reentry";}
         if (exit == 0 && errors.Count != 0) { exit = 6; reason = "shutdown_failed"; }
         var fault = status?.Fault is { } f ? f with { Message = "Gameplay callback failed." } : null;
         var report = new PlayerReport(1, options.Headless ? "headless" : "graphical", renderer, project?.Configuration.ProjectId ?? Guid.Empty,
@@ -159,6 +177,6 @@ public static class PlayerRunner
         try { PlayerReports.Write(options.Report, report); }
         catch { report = report with { ReportError = "report_write_failed", ExitCode = exit == 0 ? 9 : exit,
             Reason = exit == 0 ? "report_write_failed" : reason }; }
-        return report;
+        LastReport=report;return report;
     }
 }

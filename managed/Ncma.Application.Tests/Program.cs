@@ -16,6 +16,12 @@ static void Reject(Action action)
 string root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 string configuration = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)).Parent!.Name;
 string assembly = Path.Combine(root, "managed/Ncma.Gameplay.Sample/bin", configuration, "net8.0/Ncma.Gameplay.Sample.dll");
+try { ApplicationLifetimeRecoveryTests.Run(); }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+try { ApplicationPresentationRecoveryTests.Run(); }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+try { PlayPresentationRecoveryTests.Run(); }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
 var cases = new (string, Action)[]
 {
     ("Catalogs are independent and descriptors are copied", () => {
@@ -100,10 +106,11 @@ var cases = new (string, Action)[]
             Check(calls.Last() == "0.stop");
         }
     }),
-    ("Shutdown failure still releases all services", () => {
+    ("Shutdown failure preserves failed service and dependency order", () => {
         var calls = new List<string>(); var app = new ApplicationLifetime();
         app.Start([new Service("a", calls), new Service("b", calls, stopFail: true)]);
-        Reject(app.Dispose); Check(calls.Last() == "a.stop" && app.State == ApplicationState.Failed); app.Dispose();
+        Reject(app.Dispose); Check(calls.Last() == "b.stop" && !calls.Contains("a.stop") && app.State == ApplicationState.Failed);
+        Reject(app.Dispose); Check(calls.Count(c=>c=="b.stop")==2 && app.RetainedServiceCount==2);
     }),
     ("Callbacks cannot reenter lifetime", () => {
         var app = new ApplicationLifetime();
@@ -175,6 +182,7 @@ var cases = new (string, Action)[]
 foreach (var (name, run) in cases) { run(); Console.WriteLine("PASS " + name); }
 Console.WriteLine($"M2.1 application/services: {cases.Length} cases passed.");
 SceneUiRoutingTests.Run();
+return 0;
 
 [MethodImpl(MethodImplOptions.NoInlining)]
 static WeakReference Probe(string path)

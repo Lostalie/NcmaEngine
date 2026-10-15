@@ -18,8 +18,8 @@ internal sealed unsafe partial class CandidatePresentation
         if(value?.Quality!=SceneShadowQuality.High||!ScenePostProcessPreflight.HasGeometry(snapshot)||_renderer is null)return null;
         if(_highShadows is not null)return _highShadows;
         var files=_shaderFiles??throw new ArgumentException("High shadows require checked scene shader files.");
-        var library=RuntimeShadowLibrary.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShadowLibrary);
+        var library=_shadowLibrary??RuntimeShadowLibrary.ForHost(AppContext.BaseDirectory,project?.Root,project?.Configuration.ShadowLibrary);
         try{var prepared=library.Prepare(_renderer,files,()=>!_closed);_shadowLibrary=library;_highShadows=prepared;return prepared;}
-        catch{library.Dispose();throw;}
+        catch{if(!ReferenceEquals(library,_shadowLibrary))library.Dispose();throw;}
     }
 }

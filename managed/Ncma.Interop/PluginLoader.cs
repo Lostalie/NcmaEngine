@@ -8,6 +8,7 @@ public sealed record PluginSpecification(string Id, ModuleKind Kind, string Path
     uint Major, uint Minor, string[] Dependencies, string? Sha256 = null);
 public sealed class PluginLoader : IDisposable
 {
+    public const string InvalidRootDiagnostic="Invalid plugin root or count.";
     private readonly int _owner = Environment.CurrentManagedThreadId;
     private readonly List<PluginModule> _modules = [];
     private bool _disposed, _busy;
@@ -27,7 +28,7 @@ public sealed class PluginLoader : IDisposable
         for (var ancestor = new DirectoryInfo(root); ancestor is not null; ancestor = ancestor.Parent)
             if (ancestor.Exists && (ancestor.Attributes & FileAttributes.ReparsePoint) != 0) throw new ArgumentException("Plugin root traverses a reparse point.");
         if (!Directory.Exists(root) || (File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0 || allowlist.Count > 64)
-            throw new ArgumentException("Invalid plugin root or count.");
+            throw new ArgumentException(InvalidRootDiagnostic);
         var specs = new Dictionary<string, PluginSpecification>(StringComparer.Ordinal);
         var paths = new Dictionary<string, string>(StringComparer.Ordinal);
         var uniquePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

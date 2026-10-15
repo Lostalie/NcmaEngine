@@ -106,8 +106,10 @@ internal static unsafe partial class Program
         string project=Path.Combine(moved,"game.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(configuration,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
         foreach(var negative in negatives){File.WriteAllBytes(Path.Combine(evidence,negative.Name+".ncpak"),negative.Bytes);
             Reject(()=>RuntimeAssetPackage.Inspect(negative.Bytes,fixture.Project));File.WriteAllBytes(packPath,negative.Bytes);
-            foreach(bool headless in new[]{true,false}){var args=new List<string>{"--project",project,"--ticks","2","--report",Path.Combine(evidence,negative.Name+(headless?"-null":"-dx11")+".json")};if(headless)args.Add("--headless");
-                var rejected=Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(args.ToArray()),pluginRoot:plugins,visible:false);
+            foreach(bool headless in new[]{true,false}){
+                using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+                var args=new List<string>{"--project",project,"--ticks","2","--report",Path.Combine(evidence,negative.Name+(headless?"-null":"-dx11")+".json")};if(headless)args.Add("--headless");
+                var rejected=playerRunOwner0.Run(Ncma.Player.App.PlayerOptions.Parse(args.ToArray()),pluginRoot:plugins,visible:false);
                 Check(rejected.ExitCode==3&&rejected.Tick==0&&rejected.Modules.Length==0&&rejected.RenderedFrames==0&&rejected.ShutdownErrors.Length==0,"M6 package rejects before gameplay/native without fallback: "+negative.Name+" "+rejected.Reason);}
             using var unlocked=new FileStream(packPath,FileMode.Open,FileAccess.ReadWrite,FileShare.None);
         }
@@ -160,7 +162,7 @@ internal static unsafe partial class Program
                 play.Start(_=>throw new Exception("Injected unavailable behaviour"));Check(identities.Add(play.SessionId)&&identities.Add(d.World.Identity)&&identities.Add(runtime.Animators!.ReadFrame(actor).InstanceId),"Fresh M6 coupled identities");
                 SceneRenderSession? scene=null;
                 try{
-                    scene=new(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
+                    scene=new(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
                     for(int step=0;step<8;step++){
                         int[] gc=[GC.CollectionCount(0),GC.CollectionCount(1),GC.CollectionCount(2)];long bytes=GC.GetAllocatedBytesForCurrentThread(),started=Stopwatch.GetTimestamp();
                         var status=play.AdvanceFixedStep();
@@ -199,7 +201,7 @@ internal static unsafe partial class Program
             Check(count!=0||assets.Assets.List().Count==0,"Empty workload packages no unused animation closure");
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);using var cache=new RenderResourceCache(renderer);
             play.Start(_=>throw new Exception("No behaviours"));var measured=new List<M6Cost>();
-            try{using var scene=new SceneRenderSession(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:count==0?null:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
+            try{using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:count==0?null:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
                 for(int step=0;step<24;step++){
                     int[] gc=[GC.CollectionCount(0),GC.CollectionCount(1),GC.CollectionCount(2)];long before=GC.GetAllocatedBytesForCurrentThread(),started=Stopwatch.GetTimestamp();
                     var status=play.AdvanceFixedStep();double simulation=Stopwatch.GetElapsedTime(started).TotalMilliseconds;long allocated=GC.GetAllocatedBytesForCurrentThread()-before;

@@ -13,6 +13,8 @@ internal static class SceneHostChecks
 {
     internal static string[] Run(string output,string plugins)
     {
+
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         static void Check(bool value,string diagnostic){if(!value)throw new Exception(diagnostic);}
         string root=Path.Combine(output,"Static Scene Player");Directory.CreateDirectory(Path.Combine(root,"assets"));
         Guid project=Guid.NewGuid(),model=Guid.NewGuid(),mesh=Guid.NewGuid(),slots=Guid.NewGuid();var settings=new ImportSettings(1,30,true);string sourceHash=new('C',64);
@@ -33,15 +35,17 @@ internal static class SceneHostChecks
         var config=new ProjectConfiguration(1,project,"Actual scene","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera.PersistentId);
         var json=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase};File.WriteAllBytes(projectFile,JsonSerializer.SerializeToUtf8Bytes(config,json));
         for(int i=0;i<3;i++) {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
             var options=PlayerOptions.Parse(["--project",projectFile,"--ticks","3","--report",Path.Combine(output,"scene-player-"+i+".json")]);
-            var report=PlayerRunner.Run(options,pluginRoot:plugins,visible:false);
+            var report=playerRunOwner0.Run(options,pluginRoot:plugins,visible:false);
             Check(report.ExitCode==0&&report.Tick>=3&&report.RenderedFrames>0&&report.ObjectCount==3&&report.ValidationErrors==0&&report.ValidationWarnings==0&&report.ShutdownErrors.Length==0,
                 "Actual scene Player failed: "+report.Reason+" "+report.ExitCode);
             Check(saved.SequenceEqual(File.ReadAllBytes(scene)),"Player modified authoring scene");
             using var unlocked=new FileStream(generation,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite|FileShare.Delete);
         }
         File.WriteAllBytes(projectFile,JsonSerializer.SerializeToUtf8Bytes(config with{SceneCamera=Guid.NewGuid()},json));
-        var bad=PlayerRunner.Run(PlayerOptions.Parse(["--project",projectFile,"--ticks","1","--report",Path.Combine(output,"scene-camera-missing.json")]),pluginRoot:plugins,visible:false);
+        var bad=playerRunOwner1.Run(PlayerOptions.Parse(["--project",projectFile,"--ticks","1","--report",Path.Combine(output,"scene-camera-missing.json")]),pluginRoot:plugins,visible:false);
         Check(bad.ExitCode==2&&bad.RenderedFrames==0&&bad.Modules.Length==0,"Invalid scene camera did not reject before GPU");
         return ["Real static-scene Player/explicit camera/3 restart cycles/validation 0/0", "Missing scene camera rejected before GPU/no reference fallback"];
     }

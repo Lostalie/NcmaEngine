@@ -49,8 +49,10 @@ internal static class SkinnedHostChecks
             File.WriteAllBytes(projectFile, JsonSerializer.SerializeToUtf8Bytes(config, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             for (int i = 0; i < 3; i++)
             {
+
+                using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
                 var options = PlayerOptions.Parse(["--project", projectFile, "--ticks", "6", "--max-runtime-seconds", "20", "--report", Path.Combine(output, fixture + "-player-" + i + ".json")]);
-                var report = PlayerRunner.Run(options, pluginRoot: plugins, visible: false);
+                var report = playerRunOwner0.Run(options, pluginRoot: plugins, visible: false);
                 Check(report.ExitCode == 0 && report.Tick >= 6 && report.RenderedFrames > 0 && report.ObjectCount == characters + 2 && report.ValidationErrors == 0 && report.ValidationWarnings == 0 && report.ShutdownErrors.Length == 0,
                     "FBX runtime scene Player failed: " + report.Reason + " / " + report.ExitCode + " / " + string.Join(',', report.ShutdownErrors));
                 Check(saved.SequenceEqual(File.ReadAllBytes(scene)), "Player changed animation authoring data");
@@ -69,8 +71,10 @@ internal static class SkinnedHostChecks
             File.WriteAllBytes(coupledProject, JsonSerializer.SerializeToUtf8Bytes(config with { StartupScene = "coupled.ncmascene", PhysicsEnabled = true }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             foreach (bool headless in new[] { true, false })
             {
+
+                using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
                 var flags = new List<string> { "--project", coupledProject, "--ticks", "30", "--report", Path.Combine(root, headless ? "coupled-null.json" : "coupled-dx11.json") }; if (headless) flags.Add("--headless");
-                var report = PlayerRunner.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false, trustedInput: headless ? (p, t) => CharacterHostChecks.Input(p, t) : null);
+                var report = playerRunOwner1.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false, trustedInput: headless ? (p, t) => CharacterHostChecks.Input(p, t) : null);
                 Check(report.ExitCode == 0 && report.Tick >= 30 && report.ShutdownErrors.Length == 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0 && (headless || report.RenderedFrames > 0), "Actual animated FBX coupled Player: " + report.Reason);
                 Check(coupledSaved.SequenceEqual(File.ReadAllBytes(coupledScene)), "Coupled Player edited authoring scene");
                 Check(report.StateSha256 != Convert.ToHexString(SHA256.HashData(coupledSaved)), "Actual coupled Player must publish movement, not clear/reference fallback");
@@ -81,8 +85,10 @@ internal static class SkinnedHostChecks
             foreach (string file in new[] { "gameplay.dll", "gameplay.deps.json" }) File.Copy(Path.Combine(root, file), Path.Combine(packedRoot, file));
             string packedProject = Path.Combine(packedRoot, "game.ncmaproject"); File.WriteAllBytes(packedProject, JsonSerializer.SerializeToUtf8Bytes(config with { PhysicsEnabled = true, AssetPackage = "assets/game.ncpak" }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             foreach (bool headless in new[] { true, false }) {
+
+                using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
                 var flags = new List<string> { "--project", packedProject, "--ticks", "6", "--report", Path.Combine(packedRoot, headless ? "null.json" : "dx11.json") }; if (headless) flags.Add("--headless");
-                var report = PlayerRunner.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false);
+                var report = playerRunOwner2.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false);
                 Check(report.ExitCode == 0 && report.Tick >= 6 && report.ShutdownErrors.Length == 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0, "NCP1 retains typed character/collider/follow values without authoring source: " + report.Reason);
                 using var unlocked = new FileStream(packed, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
             }

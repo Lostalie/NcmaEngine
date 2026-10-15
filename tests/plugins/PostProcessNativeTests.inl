@@ -25,6 +25,8 @@ static void PostProcessNativeTests(uint64_t context,uint64_t handle){
     d.pass_count=33;Check(api.bind(context,handle,key,&d,&error)==NCMA_INVALID_ARGUMENT&&unchanged(),"Post pass budget before reads");d.pass_count=1;
     PostProcess::testThrow=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_INTERNAL_ERROR&&unchanged(),"Post prepublication exception releases candidate");PostProcess::testThrow=false;
     testWaitTimeout=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_SHUTDOWN_TIMEOUT&&unchanged(),"Post drain timeout retains old null binding");testWaitTimeout=false;
+    testWaitQueryFailure=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_INTERNAL_ERROR&&unchanged(),"Post drain query-creation failure retains old null binding");testWaitQueryFailure=false;
+    testWaitPollFailure=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_INTERNAL_ERROR&&unchanged(),"Post drain poll failure retains old null binding");testWaitPollFailure=false;
     Check(api.bind(context,handle,key,&d,&error)==NCMA_OK&&scene.post&&renderer->postStats.resident_bytes==16*16*8+16,"Post publishes complete candidate");
     auto* prior=scene.post.get();const auto count=renderer->backend->GetLiveResourceCount();const auto publications=renderer->postStats.publications;
     pass.parameters[0]=.5f;testWaitTimeout=true;Check(api.bind(context,handle,key,&d,&error)==NCMA_OK&&scene.post.get()==prior&&renderer->backend->GetLiveResourceCount()==count&&renderer->postStats.publications==publications+1,"Post scalar update same resources/programs and no GPU drain");testWaitTimeout=false;
@@ -35,6 +37,8 @@ static void PostProcessNativeTests(uint64_t context,uint64_t handle){
     auto priorRetained=[&](){return scene.post.get()==prior&&renderer->backend->GetLiveResourceCount()==count&&renderer->postStats.publications==publications+1&&renderer->postStats.bindings==1&&renderer->postStats.targets==1&&renderer->postStats.resident_bytes==2064;};
     PostProcess::testThrow=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INTERNAL_ERROR&&priorRetained(),"Post complete different-layout candidate exception retains live graph");PostProcess::testThrow=false;
     testWaitTimeout=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_SHUTDOWN_TIMEOUT&&priorRetained(),"Post complete replacement timeout retains live graph and retires candidate");testWaitTimeout=false;
+    testWaitQueryFailure=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INTERNAL_ERROR&&priorRetained(),"Post complete replacement query-creation failure retains live graph and retires candidate");testWaitQueryFailure=false;
+    testWaitPollFailure=true;Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INTERNAL_ERROR&&priorRetained(),"Post complete replacement poll failure retains live graph and retires candidate");testWaitPollFailure=false;
     replacementTargets[0]={4096,4096,1,1};Check(api.bind(context,handle,key,&replacement,&error)==NCMA_INVALID_ARGUMENT&&priorRetained(),"Post oversized candidate refuses before GPU allocation");replacementTargets[0]={8,8,1,1};
     Check(renderer->validation!=nullptr,"Post diagnostic fixture requires real DX11 InfoQueue");
     const auto warnings=renderer->stats.validation_warnings;const auto diagnostics=renderer->diagnostics;
@@ -46,6 +50,8 @@ static void PostProcessNativeTests(uint64_t context,uint64_t handle){
     renderer->active=true;Check(api.bind(context,handle,key,nullptr,&error)==NCMA_BUSY&&scene.post.get()==prior,"Post frame Off rejected");renderer->active=false;
     uint32_t foreign=0;std::thread worker([&]{NcmaErrorV1 e{};foreign=api.bind(context,handle,key,nullptr,&e);});worker.join();Check(foreign==NCMA_WRONG_THREAD&&scene.post.get()==prior,"Post owner thread");
     testWaitTimeout=true;Check(api.bind(context,handle,key,nullptr,&error)==NCMA_SHUTDOWN_TIMEOUT&&scene.post.get()==prior,"Post Off timeout retains resources");testWaitTimeout=false;
+    testWaitQueryFailure=true;Check(api.bind(context,handle,key,nullptr,&error)==NCMA_INTERNAL_ERROR&&scene.post.get()==prior,"Post Off query-creation failure retains resources");testWaitQueryFailure=false;
+    testWaitPollFailure=true;Check(api.bind(context,handle,key,nullptr,&error)==NCMA_INTERNAL_ERROR&&scene.post.get()==prior,"Post Off poll failure retains resources");testWaitPollFailure=false;
     Check(api.bind(context,handle,key,nullptr,&error)==NCMA_OK&&unchanged(),"Post Off releases all effect resources");
     renderer->pureUi=true;Check(api.validate(context,handle,&program,1,&error)==NCMA_UNSUPPORTED_FEATURE&&unchanged(),"Post pureUI guard before allocation");renderer->pureUi=false;
     Check(api.bind(context,handle,key,&d,&error)==NCMA_OK,"Post rebind before close");

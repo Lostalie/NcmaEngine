@@ -35,7 +35,7 @@ public sealed class EditorAnimationGraphPreview(RendererSession renderer, Func<P
             var camera=_document.World.CreateObject("Preview camera");_camera=camera.PersistentId;camera.Set(TransformData.Identity with{Position=center+new Vector3(0,0,radius*3)});camera.Set(CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=radius*1.4f});
             var light=_document.World.CreateObject("Preview light");light.Set(TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.35f,-.35f,0)});light.Set(DirectionalLightData.Default);
             var scene=_document.CaptureSnapshot();_ = SceneRenderValidation.Inspect(scene,_assets.Metadata,true);
-            _cache=new(renderer);_scene=new(renderer,_cache,_document.World,_assets,scene,poseKernel:kernel());
+            _cache=new(renderer);_scene=new(renderer,_cache,_document.World);_scene.Prepare(_assets,scene,poseKernel:kernel());
         }catch{Close();throw;}
     }
     public void Advance(double delta) { ObjectDisposedException.ThrowIf(_disposed,this);_scene?.Animation?.AdvancePreview(delta); }

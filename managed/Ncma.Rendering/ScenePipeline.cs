@@ -60,18 +60,35 @@ public sealed class ScenePipelineSession : IDisposable
     public RegisteredSceneTone? RegisteredTone { get; private set; }
     public RegisteredSceneShaders? RegisteredShaders { get; private set; }
     public PostProcessPlan? PostProcess { get; private set; }
-    private bool _postPreparing;
+    private bool _preparing, _preparationRejected;
     private string? _geometryPixelHash;
     private static void VerifyRequiredPixel(CompiledRenderGraph plan, string? installedHash)
     {
         if (plan.RequiredSceneGeometryPixelHash is { } required && required != installedHash)
             throw new ArgumentException("Scene graph requires its exact registered geometry pixel program.");
     }
-    private void RequirePostIdle(){if(_postPreparing)throw new InvalidOperationException("Post preparation cannot mutate or submit its scene.");}
+    private void RequireIdle()
+    {
+        _ = Owner.Handle; // Preserve the plugin owner-thread diagnostic before touching guard state.
+        if (_preparing) { _preparationRejected = true; throw new InvalidOperationException("Candidate preparation cannot mutate, submit or close its scene."); }
+    }
+    private void BeginPreparation()
+    {
+        RequireIdle(); ObjectDisposedException.ThrowIf(Key.Value == 0, this);
+        Owner.VerifyShaderPreparation(); _preparing = true; _preparationRejected = false;
+    }
+    private void EndPreparation() { _preparing = false; _preparationRejected = false; }
+    // Called after ALL trusted callbacks and before native publication. A callback
+    // catching its own refusal must not make the surrounding candidate admissible.
+    internal void VerifyPreparedCandidate()
+    {
+        _ = Owner.Handle;
+        if (_preparationRejected) throw new InvalidOperationException("Scene candidate callback violated preparation ownership.");
+    }
     public void ConfigurePostProcess(PostProcessPlan? plan,PreparedPostProcessPrograms? programs,Func<bool> preparationAllowed)
     {
-        Owner.VerifyShaderPreparation();RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value==0,this);_postPreparing=true;
-        try{Owner.BindPost(this,plan,programs,preparationAllowed);PostProcess=plan;}finally{_postPreparing=false;}
+        ArgumentNullException.ThrowIfNull(preparationAllowed);BeginPreparation();
+        try{bool Approved(){bool allowed=preparationAllowed();VerifyPreparedCandidate();return allowed;}Owner.BindPost(this,plan,programs,Approved);PostProcess=plan;}finally{EndPreparation();}
     }
     public RegisteredEnvironmentSceneShaders? RegisteredEnvironmentShaders { get; private set; }
     public Ncma.Assets.EnvironmentLightingConfiguration EnvironmentLighting { get; private set; } = Ncma.Assets.EnvironmentLightingConfiguration.Off;
@@ -79,7 +96,10 @@ public sealed class ScenePipelineSession : IDisposable
     public ScenePipelineSession(RendererSession renderer, RenderPipeline pipeline, uint width, uint height, RegisteredSceneTone? tone = null, RegisteredSceneShaders? shaders = null, RegisteredEnvironmentSceneShaders? environmentShaders = null)
     {
         Owner = renderer ?? throw new ArgumentNullException(nameof(renderer)); ArgumentNullException.ThrowIfNull(pipeline);
-        Plan = pipeline.Build(width, height).Compile(RenderCapabilities.SceneDx11); if (!Plan.RequiresSceneService) throw new ArgumentException("Scene graph required.");
+        Owner.VerifyShaderPreparation();_preparing=true;
+        try {
+        Plan = pipeline.Build(width, height).Compile(RenderCapabilities.SceneDx11);VerifyPreparedCandidate();
+        if (!Plan.RequiresSceneService || Plan.Width!=width || Plan.Height!=height) throw new ArgumentException("Scene graph with exact requested dimensions required.");
         if((tone is not null?1:0)+(shaders is not null?1:0)+(environmentShaders is not null?1:0)>1)throw new ArgumentException("Choose one exact shader contract.");
         _geometryPixelHash = shaders?.GeometryPixelHash ?? environmentShaders?.GeometryPixelHash;
         VerifyRequiredPixel(Plan, _geometryPixelHash);
@@ -87,28 +107,35 @@ public sealed class ScenePipelineSession : IDisposable
         if(environmentShaders is not null)renderer.InstallEnvironmentSceneShaders(this,resolution,environmentShaders,true);
         else if(shaders is not null)renderer.InstallSceneShaders(this,resolution,shaders,true);else renderer.CreateScene(this,resolution,tone);
         RegisteredTone = tone;RegisteredShaders=shaders;RegisteredEnvironmentShaders=environmentShaders;
+        } finally { EndPreparation(); }
     }
     public void ReplaceTone(RegisteredSceneTone tone)
-    { RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.ReplaceTone(this, tone); RegisteredTone = tone;RegisteredShaders=null; }
+    { BeginPreparation();try{Owner.ReplaceTone(this, tone); RegisteredTone = tone;RegisteredShaders=null;}finally{EndPreparation();} }
     public void ReplaceShaders(RegisteredSceneShaders shaders)
-    { RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value == 0, this);ArgumentNullException.ThrowIfNull(shaders);VerifyRequiredPixel(Plan,shaders.GeometryPixelHash);Owner.InstallSceneShaders(this,Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0,shaders,false);RegisteredShaders=shaders;RegisteredTone=null;_geometryPixelHash=shaders.GeometryPixelHash; }
+    { BeginPreparation();try{ArgumentNullException.ThrowIfNull(shaders);VerifyRequiredPixel(Plan,shaders.GeometryPixelHash);Owner.InstallSceneShaders(this,Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0,shaders,false);RegisteredShaders=shaders;RegisteredTone=null;_geometryPixelHash=shaders.GeometryPixelHash;}finally{EndPreparation();} }
     public void Submit(ulong frame, ReadOnlySpan<SceneGpuDraw> geometry, ReadOnlySpan<SceneGpuDraw> casters, ResourceLighting lighting, Matrix4x4 lightViewProjection,
         SceneShadowSettings shadow, GpuViewTarget? target = null, Vector4 viewport = default, Vector4 clear = default)
-    { RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.SubmitScene(this, frame, geometry, casters, lighting, lightViewProjection, shadow, target, viewport, clear); }
+    { RequireIdle();ObjectDisposedException.ThrowIf(Key.Value == 0, this); Owner.SubmitScene(this, frame, geometry, casters, lighting, lightViewProjection, shadow, target, viewport, clear); }
     public void ReplaceEnvironmentShaders(RegisteredEnvironmentSceneShaders shaders)
-    { RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value==0,this);ArgumentNullException.ThrowIfNull(shaders);VerifyRequiredPixel(Plan,shaders.GeometryPixelHash);Owner.InstallEnvironmentSceneShaders(this,Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0,shaders,false);RegisteredEnvironmentShaders=shaders;_geometryPixelHash=shaders.GeometryPixelHash; }
+    { BeginPreparation();try{ArgumentNullException.ThrowIfNull(shaders);VerifyRequiredPixel(Plan,shaders.GeometryPixelHash);Owner.InstallEnvironmentSceneShaders(this,Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0,shaders,false);RegisteredEnvironmentShaders=shaders;_geometryPixelHash=shaders.GeometryPixelHash;}finally{EndPreparation();} }
     public void ConfigureEnvironment(GpuEnvironmentResource? resource,Ncma.Assets.EnvironmentLightingConfiguration configuration,Func<bool> preparationAllowed)
-    { RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value==0,this);Owner.BindEnvironment(this,resource,configuration,preparationAllowed);EnvironmentLighting=configuration; }
+    {
+        ArgumentNullException.ThrowIfNull(preparationAllowed);BeginPreparation();
+        try{bool Approved(){bool allowed=preparationAllowed();VerifyPreparedCandidate();return allowed;}Owner.BindEnvironment(this,resource,configuration,Approved);EnvironmentLighting=configuration;}finally{EndPreparation();}
+    }
     public void Configure(RenderPipeline pipeline)
     {
-        RequirePostIdle();ObjectDisposedException.ThrowIf(Key.Value == 0, this); _ = Owner.Handle; ArgumentNullException.ThrowIfNull(pipeline);
+        BeginPreparation();try {
+        ArgumentNullException.ThrowIfNull(pipeline);
         var candidate=pipeline.Build(Plan.Width,Plan.Height).Compile(RenderCapabilities.SceneDx11);
+        VerifyPreparedCandidate();Owner.VerifyShaderPreparation();
         VerifyRequiredPixel(candidate,_geometryPixelHash);
-        if(!candidate.RequiresSceneService || (candidate.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0)!=(Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0))
+        if(!candidate.RequiresSceneService || candidate.Width!=Plan.Width || candidate.Height!=Plan.Height || (candidate.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0)!=(Plan.Resources.SingleOrDefault(r=>r.Role==RenderRole.SceneShadow)?.Width??0))
             throw new ArgumentException("Changing target/shadow allocation requires a new scene lease.");
         var operations=candidate.SceneOperations;if(PostProcess is not null&&operations.Count(p=>p.Operation==8)!=1)throw new ArgumentException("Post requires one final Tone.");Plan=candidate;Operations=operations;
+        }finally{EndPreparation();}
     }
-    public void Dispose() { RequirePostIdle();if (Key.Value == 0) return; Owner.DestroyScene(this); Key = default;PostProcess=null;EnvironmentLighting=Ncma.Assets.EnvironmentLightingConfiguration.Off; }
+    public void Dispose() { if (Key.Value == 0) return;RequireIdle(); Owner.DestroyScene(this); Key = default;PostProcess=null;EnvironmentLighting=Ncma.Assets.EnvironmentLightingConfiguration.Off; }
 }
 public sealed unsafe partial class RendererSession
 {

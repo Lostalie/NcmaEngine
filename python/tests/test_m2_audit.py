@@ -224,6 +224,38 @@ class M2AuditTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate()
 
+    def test_explicit_physics_player_closure_and_default_exclusion(self):
+        base, data = self.package()
+        for relative in ("plugins/NcmaPhysics.dll", "licenses/box2d-LICENSE.txt", "licenses/JoltPhysics-LICENSE.txt",
+                         "licenses/eigen-COPYING.txt", "licenses/spdlog-LICENSE.txt"):
+            path = base / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"test-owned solver/notice fixture")
+            data["files"].append({"path": relative, "size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+        def validate():
+            (base / "deployment-manifest.json").write_text(json.dumps(data), encoding="utf-8")
+            return validate_package(self.root, "package", data["product"], "Debug")
+        with self.assertRaises(ValueError):
+            validate()  # Default Null must remain lightweight, even with a consistent hash.
+        data["product"] = "NcmaPlayer-null-physics-candidate"
+        with self.assertRaises(ValueError):
+            validate()  # Plugin bytes alone do not declare the required ABI.
+        solver = {"id": "ncma.physics", "abiMajor": 1, "abiMinor": 2, "capabilities": 255}
+        data["modules"] = [solver]
+        self.assertEqual(validate()["files_verified"], 7)
+        data["modules"] = [solver, dict(solver)]
+        with self.assertRaises(ValueError):
+            validate()
+        data["modules"] = [dict(solver, abiMajor=2)]
+        with self.assertRaises(ValueError):
+            validate()
+        data["modules"] = [solver]
+        extra = base / "plugins/NcmaRenderer.dll"
+        extra.write_bytes(b"test-owned forbidden renderer")
+        data["files"].append({"path": "plugins/NcmaRenderer.dll", "size": extra.stat().st_size, "sha256": hashlib.sha256(extra.read_bytes()).hexdigest()})
+        with self.assertRaises(ValueError):
+            validate()  # Solver-enabled Null is still not a graphics package.
+
     def test_kernel_reference_evidence_rejects_wrong_scope_or_pixel_budget(self):
         directory = self.root / "out/verification/m2-8/kernel-Debug"
         directory.mkdir(parents=True)

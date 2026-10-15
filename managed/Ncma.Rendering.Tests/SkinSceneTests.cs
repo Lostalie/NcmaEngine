@@ -121,7 +121,7 @@ internal static unsafe partial class Program
         SceneDocumentFiles.Load(editor.Document,saved);editor.PrepareRenderAssets(fixture.Root,fixture.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         var original=new byte[256*256*4];var moved=new byte[original.Length];var vertices=new byte[4*48];
-        var edit=new SceneRenderSession(renderer,cache,editor.Document.World,editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
+        var edit=new SceneRenderSession(renderer,cache,editor.Document.World);edit.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
         try {
             Check(edit.Submit(frame++,256,256,camera,target:target),"Skinned production scene not rendered");renderer.CaptureTarget(target,original);renderer.Present();
             Check(edit.Costs.GeometryDraws==1&&edit.Costs.ShadowDraws==1&&edit.Animation!.Costs.Characters==1,"Shared animated geometry/shadow set");
@@ -133,7 +133,7 @@ internal static unsafe partial class Program
             edit.Animation.SetPreviewTime(0);
             for(int cycle=0;cycle<8;cycle++) {
                 var play=editor.StartPlay();
-                using(var session=new SceneRenderSession(renderer,cache,play.Document.World,editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play)) {
+                using(var session=new SceneRenderSession(renderer,cache,play.Document.World)) {session.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play);
                     play.Pause();play.Step();Check(play.Tick==1,"Paused step");session.Submit(frame++,256,256,camera,target:target);renderer.Present();
                     Check(Math.Abs(session.Animation!.RootDisplacement(objects[0]).X-1f/60)<1e-5,"Paused Step pose not current");
                     play.Resume();play.AdvanceFrame(1.0/60);session.Submit(frame++,256,256,camera,target:target);renderer.Present();
@@ -147,15 +147,16 @@ internal static unsafe partial class Program
             }
             // Successful reimport retains persistent IDs only with exact unchanged evidence; Play pins old generation.
             var pinned=editor.StartPlay();
-            using(var session=new SceneRenderSession(renderer,cache,pinned.Document.World,editor.PlayRenderAssets!,pinned.Document.CaptureSnapshot(),poseKernel:kernel,play:pinned)) {
+            using(var session=new SceneRenderSession(renderer,cache,pinned.Document.World)) {session.Prepare(editor.PlayRenderAssets!,pinned.Document.CaptureSnapshot(),poseKernel:kernel,play:pinned);
                 string old=fixture.GenerationPath;fixture.Plan=ModelImportPlanner.Build(fixture.Source,fixture.Plan.Record,fixture.Project,false,fixture.Plan.Record);fixture.Publish();editor.RefreshRenderAssets();
-                using(var candidate=new SceneRenderSession(renderer,cache,editor.Document.World,editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel)) {
+                using(var candidate=new SceneRenderSession(renderer,cache,editor.Document.World)) {candidate.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
                     pinned.Pause();pinned.Step();session.Submit(frame++,256,256,camera,target:target);renderer.Present();Check(PinLocked(old),"Active Play lost old-generation pin");
                     candidate.Submit(frame++,256,256,camera,target:target);renderer.Present();
                 }
                 // Bad candidate retains installed resources and document.
                 byte[] prior=editor.Document.CaptureBytes();var obj=editor.Document.World.FindObject(objects[0]);var data=obj.Get<ClipPlaybackData>();obj.Set(data with{StartTime=2});
-                Reject(()=>new SceneAnimationSession(editor.Document.World,editor.RenderAssets!,editor.Document.CaptureSnapshot(),kernel));obj.Set(data);
+                using var deniedAnimation=new SceneAnimationSession(editor.Document.World,kernel);
+                Reject(()=>deniedAnimation.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot()));obj.Set(data);
                 Check(editor.Document.CaptureBytes().SequenceEqual(prior)&&renderer.SkinStats.Meshes==2,"Failed animation candidate changed live resources/document");editor.StopPlay();
             }
         } finally {edit.Dispose();}
@@ -164,7 +165,7 @@ internal static unsafe partial class Program
         var (missingDoc,missingCamera,missingObjects)=fixture.Scene();var missingId=Guid.NewGuid();
         var missingObj=missingDoc.World.FindObject(missingObjects[0]);missingObj.Set(missingObj.Get<ClipPlaybackData>() with{ClipId=missingId});byte[] missingBytes=missingDoc.CaptureBytes();
         using(var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,missingDoc.CaptureSnapshot(),false))
-        using(var scene=new SceneRenderSession(renderer,cache,missingDoc.World,prepared,missingDoc.CaptureSnapshot(),poseKernel:kernel)) {
+        using(var scene=new SceneRenderSession(renderer,cache,missingDoc.World)) {scene.Prepare(prepared,missingDoc.CaptureSnapshot(),poseKernel:kernel);
             Check(!scene.Submit(frame,256,256,missingCamera,target:target)&&scene.Diagnostics.Any(d=>d.Code=="animation_clip_missing"&&d.AssetId==missingId),"Missing clip silently fell back to bind pose");
             Check(missingBytes.SequenceEqual(missingDoc.CaptureBytes())&&renderer.SkinStats.Meshes==0,"Missing clip changed UUID or allocated GPU skin resources");
         }
@@ -181,7 +182,7 @@ internal static unsafe partial class Program
                 for(int i=1;i<count;i++){var other=fixtures[i-1];var manifest=other.Manifest;d.World.FindObject(ids[i]).Set(new SkinnedMeshData(other.Model,manifest.Meshes[0].Mesh,manifest.Skeleton!.Value,manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.World.FindObject(ids[i]).Set(new ClipPlaybackData(manifest.Clips[0],true,true,1,0));}
             }
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
-            using var scene=new SceneRenderSession(renderer,cache,d.World,prepared,d.CaptureSnapshot(),poseKernel:kernel);
+            using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(prepared,d.CaptureSnapshot(),poseKernel:kernel);
             const int warmFrames=32;
             // Warm the same advancing-preview path that is measured, not the distinct seek API.
             // Cold lazy/runtime initialization is not cached-frame cost; the measured gate stays exactly zero.
@@ -190,6 +191,20 @@ internal static unsafe partial class Program
             long bytes=GC.GetAllocatedBytesForCurrentThread();long start=System.Diagnostics.Stopwatch.GetTimestamp();
             for(int i=0;i<8;i++){scene.Animation?.AdvancePreview(1.0/60);if(scene.Submit(frame++,256,256,cam,target:target))renderer.Present();renderer.WaitIdle();}
             double elapsed=System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;bytes=GC.GetAllocatedBytesForCurrentThread()-bytes;renderer.WaitIdle();var after=renderer.SkinStats;
+            if(bytes!=0) {
+                // Failure-only diagnostics, never a retry that replaces the original zero-allocation verdict.
+                // Keep the original warmup/measurement/limit; partition a later sample to locate recurrence.
+                var diagnostic=new List<object>();
+                for(int sample=0;sample<8;sample++) {
+                    var oldView=scene.View;long begin=GC.GetAllocatedBytesForCurrentThread();
+                    scene.Animation?.AdvancePreview(1.0/60);long advanced=GC.GetAllocatedBytesForCurrentThread();
+                    bool submitted=scene.Submit(frame++,256,256,cam,target:target);long extracted=GC.GetAllocatedBytesForCurrentThread();
+                    if(submitted)renderer.Present();long presented=GC.GetAllocatedBytesForCurrentThread();
+                    renderer.WaitIdle();long drained=GC.GetAllocatedBytesForCurrentThread();
+                    diagnostic.Add(new{sample,advanceBytes=advanced-begin,submitBytes=extracted-advanced,presentBytes=presented-extracted,waitBytes=drained-presented,cachedView=ReferenceEquals(oldView,scene.View),submitted});
+                }
+                File.WriteAllText(Path.Combine(output,$"skin-allocation-failure-{different}-{count}.json"),JsonSerializer.Serialize(new{originalBytes=bytes,count,different,warmFrames,diagnostic}));
+            }
             Check(bytes==0,$"Animation cached frame allocated {bytes}; count={count}, differentMesh={different}, warmFrames={warmFrames}");Check(uploads==renderer.SceneStats.UploadedBytes&&creates==renderer.SceneStats.MeshCreates,"Animation frame uploaded CPU vertices");
             Check(after.Batches-before.Batches==(count==0?0ul:8ul)&&after.PaletteBytes-before.PaletteBytes==(ulong)count*2*128*8,"Bounded palette upload counters");
             rows.Add(new{count,differentMesh=different,warmFrames,frames=8,forcedGpuDrain=true,allocatedBytes=bytes,totalMilliseconds=elapsed,pose=scene.Animation?.Costs,skinAbiMilliseconds=scene.SkinAbiMilliseconds,skinBackpressureFrames=scene.SkinBackpressureFrames,

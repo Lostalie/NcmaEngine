@@ -110,7 +110,10 @@ var cases = new (string Name, Action Run)[] {
         owner.StopPlay(); owner.StopPlay(); owner.Catalog.Clear();
     }),
     ("Headless runs without native/Python/Gui and writes bounded reproducible reports", () => {
-        Scene(updatesFail: true); var one = PlayerRunner.Run(Options(), pluginRoot: Path.Combine(output, "no-native")); var two = PlayerRunner.Run(Options(), pluginRoot: Path.Combine(output, "no-native"));
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
+        Scene(updatesFail: true); var one = playerRunOwner0.Run(Options(), pluginRoot: Path.Combine(output, "no-native")); var two = playerRunOwner1.Run(Options(), pluginRoot: Path.Combine(output, "no-native"));
         Check(one.ExitCode == 0 && one.Tick == 120 && one.Modules.Length == 0 && one.StateSha256 == two.StateSha256);
         Check(two.ExitCode == 0 && two.RenderedFrames == 0); Scene();
     }),
@@ -140,51 +143,74 @@ var cases = new (string Name, Action Run)[] {
         }
     }),
     ("Fault evidence captured before Stop and private exception message redacted", () => {
-        Scene(3); var options = Options(); var report = PlayerRunner.Run(options);
+
+        using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
+        Scene(3); var options = Options(); var report = playerRunOwner2.Run(options);
         Check(report.ExitCode == 5 && report.Tick == 2 && report.Fault!.AttemptTick == 3 && report.State == PlayState.Faulted);
         Check(!File.ReadAllText(options.Report).Contains("private-secret")); Scene();
     }),
     ("Startup lifecycle fault evidence and shutdown failure have explicit exits", () => {
-        SaveScene(Fixture(createFails: true)); var startup = PlayerRunner.Run(Options());
+
+        using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner4 = new Ncma.Player.App.PlayerRunner();
+        SaveScene(Fixture(createFails: true)); var startup = playerRunOwner3.Run(Options());
         Check(startup.ExitCode == 5 && startup.Tick == 0 && startup.Fault is not null && startup.State == PlayState.Faulted);
-        SaveScene(Fixture(closeFails: true)); var close = PlayerRunner.Run(Options(1));
+        SaveScene(Fixture(closeFails: true)); var close = playerRunOwner4.Run(Options(1));
         Check(close.ExitCode == 6 && close.Tick == 1 && close.ShutdownErrors.SequenceEqual(new[] { "runtime_shutdown_failed" })); Scene();
     }),
     ("Wall-clock budget stops at safe boundary, not by changing simulated delta", () => {
-        var report = PlayerRunner.Run(Options(2) with { MaxRuntimeSeconds = 1 }, trustedInput: (_, _) => Thread.Sleep(1100));
+
+        using var playerRunOwner5 = new Ncma.Player.App.PlayerRunner();
+        var report = playerRunOwner5.Run(Options(2) with { MaxRuntimeSeconds = 1 }, trustedInput: (_, _) => Thread.Sleep(1100));
         Check(report.ExitCode == 8 && report.Tick == 1 && report.FixedDeltaSeconds == 1d / 60);
     }),
     ("Cancellation and exact 32 lifecycle cycles release catalog/resources", () => {
-        var cancel = PlayerRunner.Run(Options(), () => true); Check(cancel.ExitCode == 130 && cancel.Tick == 0);
-        for (int i = 0; i < 32; i++) { var report = PlayerRunner.Run(Options(1)); Check(report.ExitCode == 0 && report.Tick == 1 && report.ShutdownErrors.Length == 0); }
+
+        using var playerRunOwner6 = new Ncma.Player.App.PlayerRunner();
+        var cancel = playerRunOwner6.Run(Options(), () => true); Check(cancel.ExitCode == 130 && cancel.Tick == 0);
+        for (int i = 0; i < 32; i++) {
+            using var playerRunOwner7 = new Ncma.Player.App.PlayerRunner();
+            var report = playerRunOwner7.Run(Options(1)); Check(report.ExitCode == 0 && report.Tick == 1 && report.ShutdownErrors.Length == 0); }
     }),
     ("Missing native dependency is explicit, disabled physics succeeds", () => {
-        Project(true); var enabled = PlayerRunner.Run(Options(), pluginRoot: Path.Combine(output, "missing-plugins")); Check(enabled.ExitCode == 3);
-        Project(); Check(PlayerRunner.Run(Options()).ExitCode == 0);
+
+        using var playerRunOwner8 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner9 = new Ncma.Player.App.PlayerRunner();
+        Project(true); var enabled = playerRunOwner8.Run(Options(), pluginRoot: Path.Combine(output, "missing-plugins")); Check(enabled.ExitCode == 3);
+        Project(); Check(playerRunOwner9.Run(Options()).ExitCode == 0);
     }),
     ("Unknown bindings/schema reject without losing source assets", () => {
+
+        using var playerRunOwner10 = new Ncma.Player.App.PlayerRunner();
         var doc = Fixture(); var item = doc.World.GetObjects()[0]; doc.SetBindings(item.PersistentId, [new(Guid.NewGuid(), "Missing.Behaviour", true, [])]);
         SaveScene(doc); byte[] source = File.ReadAllBytes(scenePath);
-        Check(PlayerRunner.Run(Options()).ExitCode != 0 && source.SequenceEqual(File.ReadAllBytes(scenePath))); Scene();
+        Check(playerRunOwner10.Run(Options()).ExitCode != 0 && source.SequenceEqual(File.ReadAllBytes(scenePath))); Scene();
         Reject(() => { using var owner = new RuntimeSessionOwner(Fixture()); owner.LoadGameplay(Path.Combine(output, "missing.dll")); });
     }),
     ("Vulkan refuses instead of silently falling back", () => {
+
+        using var playerRunOwner11 = new Ncma.Player.App.PlayerRunner();
         var options = PlayerOptions.Parse(["--project", projectPath, "--renderer", "vulkan", "--ticks", "1", "--report", Path.Combine(output, "vulkan.json")]);
-        var report = PlayerRunner.Run(options); Check(report.ExitCode == 7 && report.Modules.Length == 0 && report.Tick == 0);
+        var report = playerRunOwner11.Run(options); Check(report.ExitCode == 7 && report.Modules.Length == 0 && report.Tick == 0);
     }),
     ("Headless scene accepts render metadata without resolving or loading 3D assets", () => {
+
+        using var playerRunOwner12 = new Ncma.Player.App.PlayerRunner();
         var doc = new SceneDocument("Null scene", Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(), Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
         var obj = doc.World.CreateObject("Missing mesh"); obj.Set(TransformData.Identity);
         obj.Set(new Ncma.Scene.Rendering.StaticMeshData(Guid.NewGuid(), Guid.NewGuid(), true, true, uint.MaxValue));
-        SaveScene(doc); var report = PlayerRunner.Run(Options(1), pluginRoot: Path.Combine(output, "no-native"));
+        SaveScene(doc); var report = playerRunOwner12.Run(Options(1), pluginRoot: Path.Combine(output, "no-native"));
         Check(report.ExitCode == 0 && report.Tick == 1 && report.Modules.Length == 0 && report.RenderedFrames == 0);
         Scene();
     }),
     ("Existing report never overwritten and report failure is non-success", () => {
-        var options = Options(); File.WriteAllText(options.Report, "keep"); var report = PlayerRunner.Run(options);
+
+        using var playerRunOwner13 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner14 = new Ncma.Player.App.PlayerRunner();
+        var options = Options(); File.WriteAllText(options.Report, "keep"); var report = playerRunOwner13.Run(options);
         Check(report.ExitCode != 0 && File.ReadAllText(options.Report) == "keep" && report.ReportError is not null);
         var blocked = Path.Combine(output, "not-a-directory"); File.WriteAllText(blocked, "keep");
-        Check(PlayerRunner.Run(Options(1) with { Report = Path.Combine(blocked, "report.json") }).ExitCode == 9);
+        Check(playerRunOwner14.Run(Options(1) with { Report = Path.Combine(blocked, "report.json") }).ExitCode == 9);
     }),
     ("Actual apphost runs from unrelated cwd and has no editor/legacy bridge dependency", () => {
         var options = Options(2); string app = Path.Combine(root, "managed/Ncma.Player.App/bin", args[1], "net8.0/NcmaPlayer.exe");

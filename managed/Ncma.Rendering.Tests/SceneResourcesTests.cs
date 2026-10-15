@@ -50,7 +50,7 @@ internal static unsafe partial class Program
         editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(fixture.Root,fixture.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         byte[] original=new byte[256*256*4],changed=new byte[original.Length];
-        var edit=new SceneRenderSession(renderer,cache,editor.Document.World,editor.RenderAssets!,editor.Document.CaptureSnapshot());
+        var edit=new SceneRenderSession(renderer,cache,editor.Document.World);edit.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot());
         try {
             Check(edit.Submit(frame++,256,256,camera,target:target),"Production scene submitted no GPU geometry");renderer.CaptureTarget(target,original);renderer.Present();
             Check(edit.Costs.GeometryDraws==1&&edit.Costs.ShadowDraws==2&&edit.View!.Geometry.All(d=>d.ObjectId!=caster),"Camera culling incorrectly removed off-camera shadow caster");
@@ -66,7 +66,7 @@ internal static unsafe partial class Program
             editor.Document.World.FindObject(camera).Set(cameraData);edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
             for(int i=0;i<8;i++) {
                 var play=editor.StartPlay();
-                using(var session=new SceneRenderSession(renderer,cache,play.Document.World,editor.PlayRenderAssets!,play.Document.CaptureSnapshot())) {
+                using(var session=new SceneRenderSession(renderer,cache,play.Document.World)) {session.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot());
                     Check(renderer.ResourceStats.Creates==resources,"Edit/Play failed to share immutable GPU resources");
                     session.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original),"Play/Editor source parity");
                     var objectTransform=play.Document.World.FindObject(ground).Get<TransformData>();
@@ -82,9 +82,9 @@ internal static unsafe partial class Program
             Check(!changed.SequenceEqual(original)&&renderer.PipelineStats.Creates==plans,"Exposure update recreated GPU allocation");
             edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
             var playPinned=editor.StartPlay();
-            using(var play=new SceneRenderSession(renderer,cache,playPinned.Document.World,editor.PlayRenderAssets!,playPinned.Document.CaptureSnapshot())) {
+            using(var play=new SceneRenderSession(renderer,cache,playPinned.Document.World)) {play.Prepare(editor.PlayRenderAssets!,playPinned.Document.CaptureSnapshot());
                 string oldPath=fixture.GenerationPath;fixture.WriteModel(2,.5f);editor.RefreshRenderAssets();
-                using(var candidate=new SceneRenderSession(renderer,cache,editor.Document.World,editor.RenderAssets!,editor.Document.CaptureSnapshot())) {
+                using(var candidate=new SceneRenderSession(renderer,cache,editor.Document.World)) {candidate.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot());
                     candidate.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(!changed.SequenceEqual(original),"Reimport did not install new GPU generation");
                     play.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original)&&PinLocked(oldPath),"Play failed to pin old CPU/GPU generation");
                 }
@@ -94,8 +94,10 @@ internal static unsafe partial class Program
             var empty=new SceneDocument("Pure flat",RenderComponentRegistry.CreateRegistry());
             using var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true);
             ulong groups=renderer.PipelineStats.Creates;
-            using(var flat=new SceneRenderSession(renderer,cache,empty.World,emptyAssets,empty.CaptureSnapshot()))
+            using(var flat=new SceneRenderSession(renderer,cache,empty.World))
+            {flat.Prepare(emptyAssets,empty.CaptureSnapshot());
                 Check(!flat.Submit(frame,256,256,Guid.Empty)&&renderer.PipelineStats.Creates==groups,"Empty/pure-2D initialized 3D pipeline");
+            }
             Check(renderer.PipelineStats.ResidentBytes==0,"Scene framebuffer memory leaked");
             File.WriteAllBytes(Path.Combine(output,"scene-production.png"),Png(256,256,original));
             File.WriteAllText(Path.Combine(output,"scene-resources.json"),JsonSerializer.Serialize(new{playCycles=8,reimport=true,explicitCamera=camera,sceneValidation=renderer.Stats.ValidationErrors,warning=renderer.Stats.ValidationWarnings}));
@@ -115,7 +117,7 @@ internal static unsafe partial class Program
                 obj.Set(new StaticMeshData(fixture.Mesh,fixture.Set,true,true,uint.MaxValue));
             }
             using var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
-            using var session=new SceneRenderSession(renderer,cache,document.World,prepared,document.CaptureSnapshot());
+            using var session=new SceneRenderSession(renderer,cache,document.World);session.Prepare(prepared,document.CaptureSnapshot());
             ulong plans=renderer.PipelineStats.Creates;
             for(int i=0;i<4;i++){if(session.Submit(frame++,256,256,Guid.Empty,cam,target:target))renderer.Present();}
             ulong creates=renderer.ResourceStats.Creates,upload=renderer.ResourceStats.UploadedBytes,calls=renderer.SubmitCalls;

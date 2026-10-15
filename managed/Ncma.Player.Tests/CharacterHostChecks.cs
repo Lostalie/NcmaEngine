@@ -31,6 +31,8 @@ internal static class CharacterHostChecks
     }
     internal static string[] Run(string output, string plugins)
     {
+
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         var passed = new List<string>();
         static void Reject(Action action) { try { action(); } catch (ArgumentException) { return; } throw new Exception("Expected invalid composition"); }
         {
@@ -177,13 +179,15 @@ internal static class CharacterHostChecks
         var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }; string projectFile = Path.Combine(projectRoot, "character.ncmaproject"); File.WriteAllBytes(projectFile, JsonSerializer.SerializeToUtf8Bytes(config, json));
         foreach (bool headless in new[] { true, false })
         {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
             var flags = new List<string> { "--project", projectFile, "--ticks", "30", "--report", Path.Combine(projectRoot, headless ? "headless.json" : "graphical.json") }; if (headless) flags.Add("--headless");
-            var report = PlayerRunner.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false, trustedInput: (p, t) => { if (t > p.Input.FrameSequence) Input(p, t); });
+            var report = playerRunOwner0.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false, trustedInput: (p, t) => { if (t > p.Input.FrameSequence) Input(p, t); });
             Check(report.ExitCode == 0 && report.Tick >= 30 && report.ShutdownErrors.Length == 0 && report.Modules.Any(m => m.Id == "ncma.physics" && m.AbiMinor == 2), "actual Player coupled entry: " + report.Reason);
             Check(saved.SequenceEqual(File.ReadAllBytes(scene)), "Player did not write scene");
         }
         File.WriteAllBytes(projectFile, JsonSerializer.SerializeToUtf8Bytes(config with { PhysicsEnabled = false }, json));
-        var rejected = PlayerRunner.Run(PlayerOptions.Parse(["--project", projectFile, "--headless", "--ticks", "1", "--report", Path.Combine(projectRoot, "disabled.json")]), pluginRoot: plugins);
+        var rejected = playerRunOwner1.Run(PlayerOptions.Parse(["--project", projectFile, "--headless", "--ticks", "1", "--report", Path.Combine(projectRoot, "disabled.json")]), pluginRoot: plugins);
         Check(rejected.ExitCode == 2 && rejected.Modules.Length == 0 && rejected.Tick == 0, "disabled physics binding preflight before native initialization");
         passed.Add("Actual headless/graphical Player Physics1.2 composition, scene isolation and disabled binding rejection"); return passed.ToArray();
     }

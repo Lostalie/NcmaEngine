@@ -117,6 +117,12 @@ namespace NcmaEngine::Rhi
         }
     }
 
+    std::string D3D11RenderBackend::ApiError(const char* operation,HRESULT result)
+    {
+        ReportApiFailure(result); // Preserve raw bits before formatting can allocate/throw.
+        return HResultError(operation,result);
+    }
+
     bool D3D11RenderBackend::Initialize(const BackendCreateInfo& createInfo, std::string& error)
     {
         if (m_Initialized)
@@ -167,7 +173,7 @@ namespace NcmaEngine::Rhi
 
         if (FAILED(result))
         {
-            error = HResultError("D3D11CreateDeviceAndSwapChain", result);
+            error = ApiError("D3D11CreateDeviceAndSwapChain", result);
             Shutdown();
             return false;
         }
@@ -216,7 +222,7 @@ namespace NcmaEngine::Rhi
     void D3D11RenderBackend::EndFrame()
     {
         if (m_SwapChain)
-            (void)m_SwapChain->Present(m_CreateInfo.EnableVSync ? 1U : 0U, 0);
+            ReportApiFailure(m_SwapChain->Present(m_CreateInfo.EnableVSync ? 1U : 0U, 0));
     }
 
     bool D3D11RenderBackend::BeginRenderPass(
@@ -289,7 +295,7 @@ namespace NcmaEngine::Rhi
         m_DeviceContext->OMSetRenderTargets(0,nullptr,nullptr);
         ReleaseRenderTarget();
         const HRESULT result=m_SwapChain->ResizeBuffers(0,width,height,DXGI_FORMAT_UNKNOWN,0);
-        if (FAILED(result)) { error=HResultError("ResizeBuffers",result); return false; }
+        if (FAILED(result)) { error=ApiError("ResizeBuffers",result); return false; }
         m_CreateInfo.Width=width; m_CreateInfo.Height=height;
         return CreateRenderTarget(error);
     }
@@ -367,7 +373,7 @@ namespace NcmaEngine::Rhi
             &nativeDescription, initialData != nullptr ? &data : nullptr, &nativeBuffer);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateBuffer", result);
+            error = ApiError("ID3D11Device::CreateBuffer", result);
             return {};
         }
         const BufferHandle handle{m_NextBuffer++};
@@ -413,7 +419,7 @@ namespace NcmaEngine::Rhi
             resource->second.Buffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11DeviceContext::Map", result);
+            error = ApiError("ID3D11DeviceContext::Map", result);
             return false;
         }
         std::memcpy(mapped.pData, data, size);
@@ -429,9 +435,11 @@ namespace NcmaEngine::Rhi
         if(d.Format!=DXGI_FORMAT_R8G8B8A8_UNORM||capacity!=static_cast<uint64_t>(d.Width)*d.Height*4){error="Capture dimensions/format";return false;}
         d.BindFlags=0;d.MiscFlags=0;d.Usage=D3D11_USAGE_STAGING;d.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
         Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
-        if(FAILED(m_Device->CreateTexture2D(&d,nullptr,&staging))){error="Capture staging allocation";return false;}
+        HRESULT result=m_Device->CreateTexture2D(&d,nullptr,&staging);
+        if(FAILED(result)){ReportApiFailure(result);error="Capture staging allocation";return false;}
         m_DeviceContext->CopyResource(staging.Get(),it->second.Texture.Get());D3D11_MAPPED_SUBRESOURCE mapped{};
-        if(FAILED(m_DeviceContext->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped))){error="Capture map";return false;}
+        result=m_DeviceContext->Map(staging.Get(),0,D3D11_MAP_READ,0,&mapped);
+        if(FAILED(result)){ReportApiFailure(result);error="Capture map";return false;}
         for(uint32_t y=0;y<d.Height;++y)std::memcpy(static_cast<uint8_t*>(output)+static_cast<size_t>(y)*d.Width*4,static_cast<const uint8_t*>(mapped.pData)+static_cast<size_t>(y)*mapped.RowPitch,d.Width*4);
         m_DeviceContext->Unmap(staging.Get(),0);return true;
     }
@@ -482,7 +490,7 @@ namespace NcmaEngine::Rhi
         HRESULT result = m_Device->CreateTexture2D(&nativeDescription, initial.empty()?nullptr:initial.data(), &resource.Texture);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateTexture2D", result);
+            error = ApiError("ID3D11Device::CreateTexture2D", result);
             return {};
         }
 
@@ -510,7 +518,7 @@ namespace NcmaEngine::Rhi
             result = m_Device->CreateShaderResourceView(resource.Texture.Get(), &view, &resource.ShaderResourceView);
             if (FAILED(result))
             {
-                error = HResultError("ID3D11Device::CreateShaderResourceView", result);
+                error = ApiError("ID3D11Device::CreateShaderResourceView", result);
                 return {};
             }
         }
@@ -539,7 +547,7 @@ namespace NcmaEngine::Rhi
                     resource.Texture.Get(), &layerView, &layerDepthView);
                 if (FAILED(result))
                 {
-                    error = HResultError("ID3D11Device::CreateDepthStencilView(layer)", result);
+                    error = ApiError("ID3D11Device::CreateDepthStencilView(layer)", result);
                     return {};
                 }
                 resource.DepthStencilLayerViews.push_back(std::move(layerDepthView));
@@ -551,7 +559,7 @@ namespace NcmaEngine::Rhi
             result = m_Device->CreateRenderTargetView(resource.Texture.Get(), nullptr, &resource.RenderTargetView);
             if (FAILED(result))
             {
-                error = HResultError("ID3D11Device::CreateRenderTargetView", result);
+                error = ApiError("ID3D11Device::CreateRenderTargetView", result);
                 return {};
             }
         }
@@ -560,7 +568,7 @@ namespace NcmaEngine::Rhi
             result = m_Device->CreateUnorderedAccessView(resource.Texture.Get(), nullptr, &resource.UnorderedAccessView);
             if (FAILED(result))
             {
-                error = HResultError("ID3D11Device::CreateUnorderedAccessView", result);
+                error = ApiError("ID3D11Device::CreateUnorderedAccessView", result);
                 return {};
             }
         }
@@ -604,7 +612,7 @@ namespace NcmaEngine::Rhi
         const HRESULT result = m_Device->CreateSamplerState(&nativeDescription, &sampler);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateSamplerState", result);
+            error = ApiError("ID3D11Device::CreateSamplerState", result);
             return {};
         }
         const SamplerHandle handle{m_NextSampler++};
@@ -634,7 +642,7 @@ namespace NcmaEngine::Rhi
         if (!description.VertexBytecode.empty()) {
             HRESULT copied = D3DCreateBlob(description.VertexBytecode.size(), &vertexBytecode);
             if (SUCCEEDED(copied)) copied = D3DCreateBlob(description.PixelBytecode.size(), &pixelBytecode);
-            if (FAILED(copied)) { error = HResultError("Shader preparation bytecode copy", copied); return {}; }
+            if (FAILED(copied)) { error = ApiError("Shader preparation bytecode copy", copied); return {}; }
             std::memcpy(vertexBytecode->GetBufferPointer(), description.VertexBytecode.data(), description.VertexBytecode.size());
             std::memcpy(pixelBytecode->GetBufferPointer(), description.PixelBytecode.data(), description.PixelBytecode.size());
         } else if (!CompileShader(description.VertexShaderSource, description.VertexEntryPoint, "vs_5_0", vertexBytecode, error) ||
@@ -646,14 +654,14 @@ namespace NcmaEngine::Rhi
             vertexBytecode->GetBufferPointer(), vertexBytecode->GetBufferSize(), nullptr, &resource.VertexShader);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateVertexShader", result);
+            error = ApiError("ID3D11Device::CreateVertexShader", result);
             return {};
         }
         result = m_Device->CreatePixelShader(
             pixelBytecode->GetBufferPointer(), pixelBytecode->GetBufferSize(), nullptr, &resource.PixelShader);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreatePixelShader", result);
+            error = ApiError("ID3D11Device::CreatePixelShader", result);
             return {};
         }
 
@@ -681,7 +689,7 @@ namespace NcmaEngine::Rhi
         }
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateInputLayout", result);
+            error = ApiError("ID3D11Device::CreateInputLayout", result);
             return {};
         }
 
@@ -693,7 +701,7 @@ namespace NcmaEngine::Rhi
         result = m_Device->CreateRasterizerState(&rasterizer, &resource.RasterizerState);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateRasterizerState", result);
+            error = ApiError("ID3D11Device::CreateRasterizerState", result);
             return {};
         }
 
@@ -704,7 +712,7 @@ namespace NcmaEngine::Rhi
         result = m_Device->CreateDepthStencilState(&depthStencil, &resource.DepthStencilState);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateDepthStencilState", result);
+            error = ApiError("ID3D11Device::CreateDepthStencilState", result);
             return {};
         }
 
@@ -720,7 +728,7 @@ namespace NcmaEngine::Rhi
         result = m_Device->CreateBlendState(&blend, &resource.BlendState);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateBlendState", result);
+            error = ApiError("ID3D11Device::CreateBlendState", result);
             return {};
         }
         resource.Topology = description.Topology == PrimitiveTopology::TriangleList
@@ -844,13 +852,13 @@ namespace NcmaEngine::Rhi
         HRESULT result = m_SwapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
         if (FAILED(result))
         {
-            error = HResultError("IDXGISwapChain::GetBuffer", result);
+            error = ApiError("IDXGISwapChain::GetBuffer", result);
             return false;
         }
         result = m_Device->CreateRenderTargetView(backBuffer.Get(), nullptr, &m_RenderTargetView);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateRenderTargetView", result);
+            error = ApiError("ID3D11Device::CreateRenderTargetView", result);
             return false;
         }
         if (!m_CreateInfo.EnableDefaultDepth) return true;
@@ -866,13 +874,13 @@ namespace NcmaEngine::Rhi
         result = m_Device->CreateTexture2D(&depthDescription, nullptr, &m_DepthStencilTexture);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateTexture2D(back-buffer depth)", result);
+            error = ApiError("ID3D11Device::CreateTexture2D(back-buffer depth)", result);
             return false;
         }
         result = m_Device->CreateDepthStencilView(m_DepthStencilTexture.Get(), nullptr, &m_DepthStencilView);
         if (FAILED(result))
         {
-            error = HResultError("ID3D11Device::CreateDepthStencilView(back-buffer depth)", result);
+            error = ApiError("ID3D11Device::CreateDepthStencilView(back-buffer depth)", result);
             return false;
         }
         return true;

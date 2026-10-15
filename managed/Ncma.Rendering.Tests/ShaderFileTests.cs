@@ -16,6 +16,8 @@ internal static unsafe partial class Program
     [return:MarshalAs(UnmanagedType.Bool)] private static extern bool CreateHardLinkW(string name,string existing,nint security);
     private static int ShaderFileTests(string nativeRoot,string output)
     {
+
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(output,"assets/shaders"));
         int cases=0;
         void Pass(bool value,string name){Check(value,"C4-C "+name);cases++;}
@@ -111,14 +113,16 @@ internal static unsafe partial class Program
         var config=new ProjectConfiguration(1,Guid.NewGuid(),"Shader project","start.ncmascene","gameplay.dll","Direct3D11",[],ShaderPackages:wrongSelection);
         string project=Path.Combine(output,"test.ncmaproject");var json=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
         foreach(var invalid in new[]{wrongSelection,new ShaderPackageSelection(1,[entries[0] with{Sha256=new string('0',64)}]),new ShaderPackageSelection(1,[entries[0] with{Path=corruptPath}])}) {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
             File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(config with{ShaderPackages=invalid},json));
-            var result=PlayerRunner.Run(PlayerOptions.Parse(["--project",project,"--ticks","1","--report",Path.Combine(output,Guid.NewGuid()+".json")]),pluginRoot:nativeRoot,visible:false);
+            var result=playerRunOwner0.Run(PlayerOptions.Parse(["--project",project,"--ticks","1","--report",Path.Combine(output,Guid.NewGuid()+".json")]),pluginRoot:nativeRoot,visible:false);
             Pass(result.ExitCode==3&&result.Tick==0&&result.SessionId==Guid.Empty,"bad shader Player pre-start rejection");
         }
         File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(config with{ShaderPackages=uiSelection},json));
         var context=ProjectContext.Load(project);var configuration=context.Configuration;configuration.ShaderPackages!.Packages[0]=badEntry;
         Pass(context.Configuration.ShaderPackages!.Packages[0]==entries[0],"project configuration owns array");
-        var headless=PlayerRunner.Run(PlayerOptions.Parse(["--project",project,"--headless","--ticks","1","--report",Path.Combine(output,"headless.json")]),pluginRoot:Path.Combine(output,"no-native"),visible:false);
+        var headless=playerRunOwner1.Run(PlayerOptions.Parse(["--project",project,"--headless","--ticks","1","--report",Path.Combine(output,"headless.json")]),pluginRoot:Path.Combine(output,"no-native"),visible:false);
         Pass(headless.ExitCode==0&&headless.Tick==1&&headless.Modules.Length==0,"Headless needs no shader/GPU deployment");
         File.WriteAllText(Path.Combine(output,"shader-files.json"),JsonSerializer.Serialize(new{cases,pinned=true,playerPreStart=true,sourceFree=true,agentAuthority=false,manualAcceptance=false}));
         Console.WriteLine($"PASS C4-C shader files/project/whole admission/Player pre-start: {cases} cases; API0/0");return 0;

@@ -74,10 +74,10 @@ public:
             auto* view=backend.BorrowTextureView(textures[i]);if(!view){error="Environment texture lifetime";return false;}
             Microsoft::WRL::ComPtr<ID3D11Resource> resource;view->GetResource(&resource);
             Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-            if(FAILED(resource.As(&texture))){error="Environment resource type";return false;}
+            HRESULT result=resource.As(&texture);if(FAILED(result)){backend.ReportApiFailure(result);error="Environment resource type";return false;}
             D3D11_TEXTURE2D_DESC desc{};texture->GetDesc(&desc);
             desc.BindFlags=desc.MiscFlags=0;desc.Usage=D3D11_USAGE_STAGING;desc.CPUAccessFlags=D3D11_CPU_ACCESS_READ;
-            if(FAILED(backend.GetDevice()->CreateTexture2D(&desc,nullptr,&capture.staging[i]))){error="Environment staging allocation";return false;}
+            result=backend.GetDevice()->CreateTexture2D(&desc,nullptr,&capture.staging[i]);if(FAILED(result)){backend.ReportApiFailure(result);error="Environment staging allocation";return false;}
             backend.GetDeviceContext()->CopyResource(capture.staging[i].Get(),texture.Get());
         }
         return true;
@@ -91,7 +91,7 @@ public:
             const uint32_t levels=kind==1?d.levels:1u,components=kind==2?2u:4u;
             for(uint32_t level=0;level<levels;level++) {
                 const UINT sub=D3D11CalcSubresource(level,face,levels);D3D11_MAPPED_SUBRESOURCE mapped{};
-                if(FAILED(dc->Map(capture.staging[kind].Get(),sub,D3D11_MAP_READ,D3D11_MAP_FLAG_DO_NOT_WAIT,&mapped))){error="Environment nonblocking staging map";return false;}
+                const HRESULT result=dc->Map(capture.staging[kind].Get(),sub,D3D11_MAP_READ,D3D11_MAP_FLAG_DO_NOT_WAIT,&mapped);if(FAILED(result)){backend.ReportApiFailure(result);error="Environment nonblocking staging map";return false;}
                 const uint32_t count=size*size*components,at=kind==1?offset+face*count:offset;
                 for(uint32_t y=0;y<size;y++)std::memcpy(values.data()+at+y*size*components,static_cast<const uint8_t*>(mapped.pData)+static_cast<size_t>(y)*mapped.RowPitch,size*components*4);
                 dc->Unmap(capture.staging[kind].Get(),sub);offset+=6*count;size/=2;

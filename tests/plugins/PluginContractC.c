@@ -3,6 +3,12 @@
 _Static_assert(sizeof(NcmaGuiApiV1)==104 && sizeof(NcmaGuiApiV1_4)==112, "scoped toolbar additive table");
 #include "NcmaPhysics.h"
 #include "NcmaRenderer.h"
+#include "NcmaRendererFrame.h"
+#include "NcmaRendererFault.h"
+_Static_assert(sizeof(NcmaRendererFaultV1)==48 && sizeof(NcmaRendererFaultApiV1)==24,"copied renderer diagnostic ABI");
+_Static_assert(offsetof(NcmaRendererFaultV1,generation)==16 && offsetof(NcmaRendererFaultV1,native_code)==36,"renderer diagnostic field offsets");
+_Static_assert(sizeof(NcmaRendererFrameApiV1)==32 && sizeof(NcmaRendererFrameStateV1)==40,"optional renderer frame lifetime POD");
+_Static_assert(offsetof(NcmaRendererFrameApiV1, read)==16 && offsetof(NcmaRendererFrameStateV1, generation)==16,"renderer frame callback/state offsets");
 #include "NcmaEnvironmentGpu.h"
 #include "NcmaEnvironmentScene.h"
 #include "NcmaPostProcess.h"

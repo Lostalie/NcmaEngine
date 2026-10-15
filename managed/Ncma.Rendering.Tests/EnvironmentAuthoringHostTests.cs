@@ -15,6 +15,9 @@ internal static unsafe partial class Program
 {
     private static int EnvironmentAuthoringHostTests(string root,string output)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);int cases=0,maxError=0;
         void Pass(bool value,string label){Check(value,"M7.3-C3-B2 "+label);cases++;}
         var repository=new DirectoryInfo(Path.GetFullPath(root));while(!File.Exists(Path.Combine(repository.FullName,"Build.bat")))repository=repository.Parent??throw new Exception("Repository missing");
@@ -46,8 +49,8 @@ internal static unsafe partial class Program
             Pass(editor.VerificationStats.ValidationErrors==0&&editor.VerificationStats.ValidationWarnings==0,"DX11 API0/0");File.WriteAllBytes(Path.Combine(output,"authored-preset.png"),Png(size.Width,size.Height,lit));
         }
         var options=new PlayerOptions(projectPath,false,null,4,1d/60,30,Path.Combine(output,"player.json"),false,false);int captures=0;
-        var player=PlayerRunner.RunForVerification(options,Path.GetFullPath(root),(pixels,w,h)=>{Pixels(pixels,w,h);captures++;});Pass(player.ExitCode==0&&captures>0&&player.ValidationErrors==0&&player.ValidationWarnings==0&&player.ShutdownErrors.Length==0,"saved source Player exact environment");
-        config=config with{AssetPackage="assets/game.ncpak"};SaveProject();captures=0;var packed=PlayerRunner.RunForVerification(options with{Report=Path.Combine(output,"packed-player.json")},Path.GetFullPath(root),(pixels,w,h)=>{Pixels(pixels,w,h);captures++;});Pass(packed.ExitCode==0&&captures>0&&packed.ValidationErrors==0&&packed.ValidationWarnings==0&&packed.ShutdownErrors.Length==0,"NCP authored environment Player");
+        var player=playerRunOwner0.RunForVerification(options,Path.GetFullPath(root),(pixels,w,h)=>{Pixels(pixels,w,h);captures++;});Pass(player.ExitCode==0&&captures>0&&player.ValidationErrors==0&&player.ValidationWarnings==0&&player.ShutdownErrors.Length==0,"saved source Player exact environment");
+        config=config with{AssetPackage="assets/game.ncpak"};SaveProject();captures=0;var packed=playerRunOwner1.RunForVerification(options with{Report=Path.Combine(output,"packed-player.json")},Path.GetFullPath(root),(pixels,w,h)=>{Pixels(pixels,w,h);captures++;});Pass(packed.ExitCode==0&&captures>0&&packed.ValidationErrors==0&&packed.ValidationWarnings==0&&packed.ShutdownErrors.Length==0,"NCP authored environment Player");
         File.WriteAllText(Path.Combine(output,"authoring-host-results.json"),JsonSerializer.Serialize(new{cases,maxError}));Console.WriteLine($"PASS M7.3-C3-B2 formal authoring hosts: {cases} cases; pixelError={maxError}; API0/0");return 0;
     }
 }

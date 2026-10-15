@@ -6,7 +6,7 @@ namespace Ncma.Rendering.Scene;
 
 // Trusted C# startup only. Not serialized, dynamically loaded or exposed through an Agent.
 // Both the factory and Build callback run at an exact committed, read-only World boundary.
-public static class ScenePipelineStartup
+public sealed partial class ScenePipelineStartup : IDisposable
 {
     public static Func<float, float, bool, RenderPipeline>? Bind(RendererSession renderer, World world,
         Func<float, float, bool, RenderPipeline>? factory, Func<bool> allowed)
@@ -22,9 +22,14 @@ public static class ScenePipelineStartup
     // Validate both shadow variants with real bounded bindings BEFORE gameplay is loaded.
     // Viewport-sized candidates are still validated again; this is not a code sandbox,
     // future-callback guarantee or permission to call a factory inside a simulation tick.
-    public static void Prepare(RendererSession renderer, World world, SceneDocumentSnapshot scene,
+    public void Prepare(World world, SceneDocumentSnapshot scene,
         Func<float, float, bool, RenderPipeline>? factory, PostProcessRuntime? post, Func<bool> allowed,PreparedShadowLibrary? highShadows=null)
+    {ArgumentNullException.ThrowIfNull(allowed);PrepareOwned(()=>PrepareCore(world,scene,factory,post,()=>Approved(allowed),highShadows));}
+    private void PrepareCore(World world,SceneDocumentSnapshot scene,Func<float,float,bool,RenderPipeline>? factory,
+        PostProcessRuntime? post,Func<bool> allowed,PreparedShadowLibrary? highShadows)
     {
+        ArgumentNullException.ThrowIfNull(world);ArgumentNullException.ThrowIfNull(scene);
+        var renderer=_renderer;
         using var read = SceneEnvironmentState.BeginRead(world, world.Identity);
         var shadowSelection=SceneShadowState.Read(world,world.Identity);
         if(shadowSelection!=SceneShadowState.Read(scene))throw new ArgumentException("Stale pipeline startup shadow selection.");
@@ -66,16 +71,10 @@ public static class ScenePipelineStartup
             ScenePipelineSession Create()
             {
                 var pipeline=SceneShadowPipelinePolicy.Create(bound,exposure,config.Ambient,shadows,shadowSelection,environment?ShaderProfile.SceneEnvironment:ShaderProfile.Scene3D);
-                var candidate = new ScenePipelineSession(renderer, pipeline, 16, 16,
+                return new ScenePipelineSession(renderer, pipeline, 16, 16,
                     shaders: shaders, environmentShaders: environmentShaders);
-                try
-                {
-                    if (prepared?.Plan is not null) candidate.ConfigurePostProcess(prepared.Plan, prepared.Programs, post!.BindingAllowed);
-                    return candidate;
-                }
-                catch { candidate.Dispose(); throw; }
             }
-            using var binding = post is null ? Create() : post.Install(Create);
+            PrepareProbe(Create,binding=>{if(prepared?.Plan is not null)binding.ConfigurePostProcess(prepared.Plan,prepared.Programs,post!.BindingAllowed);},post,allowed);
         }
     }
 

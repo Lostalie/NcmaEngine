@@ -28,7 +28,8 @@ public sealed class PostProcessRuntime : IDisposable
     private void Verify()
     {
         if(_owner!=Environment.CurrentManagedThreadId)throw new InvalidOperationException("Post runtime owner thread.");
-        ObjectDisposedException.ThrowIf(_disposed,this);_sceneFiles.Verify();_library.Verify();_renderer.VerifyShaderPreparation();
+        ObjectDisposedException.ThrowIf(_disposed,this);
+        _sceneFiles.Verify();_library.Verify();_renderer.VerifyShaderPreparation();
     }
     private bool Approved(){Verify();bool result=_allowed();Verify();return result;}
     internal void VerifyFor(RendererSession renderer)
@@ -68,14 +69,15 @@ public sealed class PostProcessRuntime : IDisposable
     }
     internal PostProcessData Validate(PostProcessData settings) { VerifyFor(_renderer);return _modules.Validate(settings); }
     internal bool BindingAllowed() => Approved();
-    internal ScenePipelineSession Install(Func<ScenePipelineSession> create)
+    // The caller must retain every resource BEFORE a fallible binding/approval.
+    // This gate never assumes ownership of a partially constructed candidate.
+    internal void ApproveInstallation(Action prepare)
     {
-        VerifyFor(_renderer);_preparing=true;ScenePipelineSession? candidate=null;
+        ArgumentNullException.ThrowIfNull(prepare);VerifyFor(_renderer);_preparing=true;
         try {
-            candidate=create();
+            prepare();
             _renderer.BeginToneOperation();try { if(!Approved())throw new InvalidOperationException("Post install approval revoked."); }finally{_renderer.EndToneOperation();}
-            var result=candidate;candidate=null;return result;
-        }finally{try{candidate?.Dispose();}finally{_preparing=false;}}
+        }finally{_preparing=false;}
     }
     public void Dispose() { if(_owner!=Environment.CurrentManagedThreadId)throw new InvalidOperationException("Post runtime owner thread.");if(_disposed)return;if(_preparing)throw new InvalidOperationException("Cannot close during post preparation.");_compositions.Clear();_disposed=true; }
 }

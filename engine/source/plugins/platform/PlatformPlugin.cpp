@@ -1,5 +1,6 @@
 #include "PlatformPrivate.h"
 #include "../PluginSupport.h"
+#include "../WindowsHandle.h"
 #include "../Utf8.h"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -16,7 +17,7 @@ namespace {
 const auto loadingThread = std::this_thread::get_id();
 std::mutex diagnosticsGate;
 std::deque<std::string> diagnostics;
-uint64_t module = 0, nextModule = 1, nextWindow = 1;
+uint64_t module = 0;
 bool busy = false;
 struct Window {
     GLFWwindow* pointer = nullptr;
@@ -115,9 +116,9 @@ uint32_t NCMA_CALL Initialize(const uint8_t* input, uint32_t length, uint64_t* o
         if (std::this_thread::get_id() != loadingThread) return NcmaPlugin::Error(error, NCMA_WRONG_THREAD);
         if (!output || input || length) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
         if (module || busy) return NcmaPlugin::Error(error, NCMA_BUSY);
-        *output = 0; BusyScope scope; glfwSetErrorCallback(GlfwError);
+        *output = 0; const uint64_t identity=NcmaPlugin::NewWindowsHandle(); BusyScope scope; glfwSetErrorCallback(GlfwError);
         if (!glfwInit()) { glfwSetErrorCallback(nullptr); return NcmaPlugin::Error(error, NCMA_INTERNAL_ERROR, "GLFW initialization failed."); }
-        module = 0x504C000000000000ull | nextModule++; *output = module; return NCMA_OK;
+        module = identity; *output = module; return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL Shutdown(uint64_t context, NcmaErrorV1* error) noexcept
@@ -161,12 +162,12 @@ uint32_t NCMA_CALL PlatformCreateWindow(uint64_t context, const NcmaWindowDescri
         if (window) return NcmaPlugin::Error(error, NCMA_BUSY);
         *output = 0; BusyScope scope;
         auto candidate = std::make_unique<Window>();
+        candidate->handle = NcmaPlugin::NewWindowsHandle();
         glfwDefaultWindowHints(); glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_VISIBLE, static_cast<int>(desc->visible));
         glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
         candidate->pointer = glfwCreateWindow(static_cast<int>(desc->width), static_cast<int>(desc->height), title.c_str(), nullptr, nullptr);
         if (!candidate->pointer) return NcmaPlugin::Error(error, NCMA_INTERNAL_ERROR, "Window creation failed.");
-        candidate->handle = 0x574E000000000000ull | nextWindow++;
         glfwSetWindowUserPointer(candidate->pointer, candidate.get());
         glfwSetKeyCallback(candidate->pointer, Key); glfwSetMouseButtonCallback(candidate->pointer, Mouse);
         glfwSetCursorPosCallback(candidate->pointer, Pointer); glfwSetScrollCallback(candidate->pointer, Scroll);

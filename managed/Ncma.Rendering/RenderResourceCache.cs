@@ -12,6 +12,34 @@ public readonly record struct RenderAssetVersion(Guid AssetId, ulong Generation,
 public sealed record ResolvedTexture(RenderAssetVersion Version, TextureData Data);
 public sealed record ResolvedMaterial(RenderAssetVersion Version, MaterialDefinition Definition);
 public sealed record MaterialFallback(string Code, int Slot);
+internal interface ICacheOwnedGpuResource : IDisposable
+{
+    void AttachCache(RenderResourceCache owner);
+    void RetireFromCache(RenderResourceCache owner);
+}
+// Ownership survives a failed native release. Borrowing the public GPU object never
+// transfers retirement authority, even after the caller drops its cache lease.
+internal struct GpuCacheOwnership
+{
+    private RenderResourceCache? _owner;
+    internal readonly bool IsAttached => _owner is not null;
+    internal void Attach(RenderResourceCache owner)
+    {
+        if (_owner is not null) throw new InvalidOperationException("GPU resource already belongs to a cache.");
+        _owner = owner;
+    }
+    internal readonly void VerifyDirectRelease()
+    {
+        if (_owner is null) return;
+        _owner.Verify(); // A swallowed callback violation still rejects the outer preparation.
+        throw new InvalidOperationException("Dispose the cache lease, not the borrowed GPU resource.");
+    }
+    internal readonly void VerifyRetirement(RenderResourceCache owner)
+    {
+        owner.Verify();
+        if (!ReferenceEquals(_owner, owner)) throw new InvalidOperationException("Foreign GPU resource cache owner.");
+    }
+}
 public sealed class RenderMaterialSetLease : IDisposable
 {
     private RenderAssetLease<GpuMaterial>[]? _materials;
@@ -37,7 +65,7 @@ public sealed class RenderResourceCache : IDisposable
     private readonly RendererSession _renderer;
     private readonly int _thread = Environment.CurrentManagedThreadId;
     private readonly Dictionary<(int Kind, RenderAssetVersion Version, string Variant), Entry> _entries = [];
-    private bool _disposed;
+    private bool _disposed, _resolving, _resolverRejected;
     private readonly ulong _geometryBudget, _textureBudget;
     public ulong GeometryBytes { get; private set; }
     public ulong TextureBytes { get; private set; }
@@ -45,7 +73,30 @@ public sealed class RenderResourceCache : IDisposable
     public int Count => _entries.Count;
     public RenderResourceCache(RendererSession renderer, ulong geometryBudget = 256 * 1024 * 1024, ulong textureBudget = 256 * 1024 * 1024)
     { _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer)); _ = renderer.Handle; if (geometryBudget > 256 * 1024 * 1024 || textureBudget > 256 * 1024 * 1024) throw new ArgumentException("Native resident budget exceeded."); _geometryBudget = geometryBudget; _textureBudget = textureBudget; }
-    internal void Verify() { ObjectDisposedException.ThrowIf(_disposed, this); if (_thread != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Cache requires owner thread."); _ = _renderer.Handle; }
+    internal void Verify()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_thread != Environment.CurrentManagedThreadId) throw new InvalidOperationException("Cache requires owner thread.");
+        if (_resolving) { _resolverRejected = true; throw new InvalidOperationException("Cache cannot be reentered during resource resolution."); }
+        _ = _renderer.Handle;
+    }
+    internal void VerifyFor(RendererSession renderer)
+    { Verify();if(!ReferenceEquals(renderer,_renderer))throw new ArgumentException("Foreign cache renderer."); }
+    // Trusted resolvers supply copied CPU descriptions, never ownership over this cache.
+    // A caught reentry refusal still poisons the outer candidate, but ordinary failures
+    // clear the guard so an explicit retry can reuse the last valid generation.
+    private T ResolveExternal<T>(Func<T> resolve)
+    {
+        ArgumentNullException.ThrowIfNull(resolve); Verify();
+        _resolving = true; _resolverRejected = false;
+        try {
+            var result = resolve();
+            if (_resolverRejected) throw new InvalidOperationException("Resource resolver violated cache ownership.");
+            _ = _renderer.Handle;
+            return result;
+        }
+        finally { _resolving = false; _resolverRejected = false; }
+    }
     private static string MeshHash(MeshUploadData data)
     { using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256); hash.AppendData(data.Vertices); hash.AppendData(MemoryMarshal.AsBytes(data.Indices)); return Convert.ToHexString(hash.GetHashAndReset()); }
     public RenderAssetLease<GpuMesh> AcquireMesh(RenderAssetVersion version, MeshUploadData data)
@@ -63,10 +114,11 @@ public sealed class RenderResourceCache : IDisposable
     {
         ArgumentNullException.ThrowIfNull(package); Verify();
         // Recheck even a cache hit. Immutable CPU packages are not GPU installation credentials.
-        _renderer.VerifyEnvironmentPreparation(preparationAllowed);
+        bool Approved() => ResolveExternal(preparationAllowed);
+        _renderer.VerifyEnvironmentPreparation(Approved);
         var version=new RenderAssetVersion(package.AssetId,package.Generation,package.ContentHash);version.Validate();
         return Acquire(5,version,"environment-v1",package.ContentHash,checked((ulong)package.Settings.FloatCount*4),false,
-            ()=> {var resource=_renderer.CreateEnvironment(package,preparationAllowed);resource.MarkCacheOwned();return (resource,Array.Empty<IDisposable>());});
+            ()=> (_renderer.CreateEnvironment(package,Approved),Array.Empty<IDisposable>()));
     }
     public RenderAssetLease<GpuMesh> AcquireBindPoseMesh(RenderAssetVersion version, BindPoseMeshUploadData data)
     {
@@ -82,7 +134,7 @@ public sealed class RenderResourceCache : IDisposable
         if (version.AssetId != definition.AssetId || version.ContentHash != Convert.ToHexString(SHA256.HashData(encoded))) throw new ArgumentException("Material identity/hash mismatch.");
         var fallbacks = new List<MaterialFallback>(); var resolved = new ResolvedTexture?[6]; var ids = definition.TextureIds;
         for (int i = 0; i < 6; i++) if (ids[i] != Guid.Empty) {
-            resolved[i] = resolve(ids[i]);
+            resolved[i] = ResolveExternal(() => resolve(ids[i]));
             if (resolved[i] is { } t) {
                 t.Version.Validate();
                 if (t.Version.AssetId != ids[i] || t.Version.ContentHash != t.Data.ContentHash || t.Data.Semantic != MaterialSurfaceContract.Semantic(i)) throw new ArgumentException("Texture reference identity/role mismatch.");
@@ -109,7 +161,7 @@ public sealed class RenderResourceCache : IDisposable
         Guid[] ids = (Guid[])definition.Materials.Clone(); var leases = new List<RenderAssetLease<GpuMaterial>>(); var diagnostics = new List<MaterialFallback>();
         try {
             for (int i = 0; i < ids.Length; i++) {
-                var resolved = resolveMaterial(ids[i]);
+                var resolved = ResolveExternal(() => resolveMaterial(ids[i]));
                 if (resolved is null) { var fallback = MaterialDefinition.Default(ids[i]); resolved = new(new(ids[i], 1, Convert.ToHexString(SHA256.HashData(MaterialCodec.Encode(fallback)))), fallback); diagnostics.Add(new("missing_material", i)); }
                 if (resolved.Version.AssetId != ids[i]) throw new ArgumentException("Material-set UUID reference mismatch.");
                 leases.Add(AcquireMaterial(resolved.Version, resolved.Definition, resolveTexture, safeUV, safeTangents, out var losses));
@@ -118,8 +170,9 @@ public sealed class RenderResourceCache : IDisposable
             return new(leases.ToArray(), diagnostics.ToArray());
         } catch { foreach (var lease in leases) lease.Dispose(); throw; }
     }
-    private RenderAssetLease<T> Acquire<T>(int kind, RenderAssetVersion version, string variant, string fingerprint, ulong bytes, bool geometry, Func<(T Resource, IDisposable[] Dependencies)> create) where T : class, IDisposable
+    private RenderAssetLease<T> Acquire<T>(int kind, RenderAssetVersion version, string variant, string fingerprint, ulong bytes, bool geometry, Func<(T Resource, IDisposable[] Dependencies)> create) where T : class, ICacheOwnedGpuResource
     {
+        Verify();
         var key = (kind, version, variant);
         foreach (var existing in _entries.Keys) if (existing.Kind == kind && existing.Version.AssetId == version.AssetId && existing.Version.Generation == version.Generation && existing.Version.ContentHash != version.ContentHash) throw new ArgumentException("Immutable generation hash changed.");
         if (_entries.TryGetValue(key, out var old)) { if (old.Resource is null) throw new InvalidOperationException("Reentrant candidate acquisition."); if (old.Fingerprint != fingerprint) throw new ArgumentException("Immutable generation content changed."); var reused = new RenderAssetLease<T>(this, old); Reuses++; old.References++; return reused; }
@@ -127,15 +180,21 @@ public sealed class RenderResourceCache : IDisposable
         // Entry, external lease and dictionary storage all allocated BEFORE native publication.
         Entry candidate = new(fingerprint, bytes, geometry) { References = 1 }; var lease = new RenderAssetLease<T>(this, candidate);
         _entries.Add(key, candidate); if (geometry) GeometryBytes += bytes; else TextureBytes += bytes;
-        try { var created = create(); candidate.Resource = created.Resource; candidate.Dependencies = created.Dependencies; return lease; }
-        catch { _entries.Remove(key); if (geometry) GeometryBytes -= bytes; else TextureBytes -= bytes; throw; }
+        try { var created = create(); candidate.Resource = created.Resource; candidate.Dependencies = created.Dependencies; created.Resource.AttachCache(this); return lease; }
+        catch {
+            // Never lose an already-published resource if an ownership invariant fails.
+            // Retain the entry/dependencies for explicit diagnosis; do not force-release.
+            if (candidate.Resource is not null) candidate.References = 0;
+            else { _entries.Remove(key); if (geometry) GeometryBytes -= bytes; else TextureBytes -= bytes; }
+            throw;
+        }
     }
     public void Trim()
     {
         Verify();
         // Native material dependencies must be released BEFORE textures; a failed release stays resident.
         foreach (int kind in new[] { 3, 1, 4, 2, 5 }) foreach (var pair in _entries.Where(p => p.Key.Kind == kind && p.Value.References == 0).ToArray()) {
-            var entry = pair.Value; if (entry.Resource is null) throw new InvalidOperationException("Unpublished resource candidate."); entry.Resource.Dispose(); foreach (var dependency in entry.Dependencies) dependency.Dispose();
+            var entry = pair.Value; if (entry.Resource is not ICacheOwnedGpuResource resource) throw new InvalidOperationException("Unpublished resource candidate."); resource.RetireFromCache(this); foreach (var dependency in entry.Dependencies) dependency.Dispose();
             _entries.Remove(pair.Key); if (entry.Geometry) GeometryBytes -= entry.Bytes; else TextureBytes -= entry.Bytes;
         }
     }

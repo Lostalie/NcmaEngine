@@ -39,11 +39,17 @@ static void EnvironmentGpuNativeTests(uint64_t context,uint64_t handle) {
  Check(api.capture(context,handle,token,nullptr,224,&error)==NCMA_INVALID_ARGUMENT&&stats().captures==0,"GPU null capture closed");
  testEnvironmentGpuPublicationFault=true;Check(capture(224)==NCMA_INTERNAL_ERROR&&std::all_of(output.begin(),output.end(),[](float v){return v==-7;})&&stats().captures==0,"Actual GPU readback late fault atomic");testEnvironmentGpuPublicationFault=false;
  testWaitTimeout=true;Check(capture(224)==NCMA_SHUTDOWN_TIMEOUT&&output[0]==-7&&stats().captures==0,"GPU capture bounded drain timeout atomic");testWaitTimeout=false;
+ testWaitQueryFailure=true;Check(capture(224)==NCMA_INTERNAL_ERROR&&output[0]==-7&&stats().captures==0,"GPU capture bounded drain query-creation failure atomic");testWaitQueryFailure=false;
+ testWaitPollFailure=true;Check(capture(224)==NCMA_INTERNAL_ERROR&&output[0]==-7&&stats().captures==0,"GPU capture bounded drain poll failure atomic");testWaitPollFailure=false;
  Check(capture(224)==NCMA_OK&&output==input,"Actual full face/mip/LUT GPU staging readback");const auto active=stats();
  auto retained=[&](){const auto s=stats();return std::memcmp(&s,&active,64)==0&&renderer->backend->GetLiveResourceCount()==4&&key.value==token.value;};
  input[0]=2;
  testWaitTimeout=true;Check(publish(token)==NCMA_SHUTDOWN_TIMEOUT&&retained(),"Replacement GPU timeout retains old all counters");
  Check(api.destroy(context,handle,token,&error)==NCMA_SHUTDOWN_TIMEOUT&&retained(),"Destroy timeout keeps retryable resources");testWaitTimeout=false;
+ testWaitQueryFailure=true;Check(publish(token)==NCMA_INTERNAL_ERROR&&retained(),"Replacement GPU query-creation failure retains old all counters");
+ Check(api.destroy(context,handle,token,&error)==NCMA_INTERNAL_ERROR&&retained(),"Destroy query-creation failure keeps retryable resources");testWaitQueryFailure=false;
+ testWaitPollFailure=true;Check(publish(token)==NCMA_INTERNAL_ERROR&&retained(),"Replacement GPU poll failure retains old all counters");
+ Check(api.destroy(context,handle,token,&error)==NCMA_INTERNAL_ERROR&&retained(),"Destroy poll failure keeps retryable resources");testWaitPollFailure=false;
  testEnvironmentGpuPublicationFault=true;Check(publish(token)==NCMA_INTERNAL_ERROR&&retained(),"Replacement diagnostic fault retains old");testEnvironmentGpuPublicationFault=false;
  Check(publish({token.value,handle+1})==NCMA_INVALID_HANDLE&&retained(),"Foreign generation rejected before GPU");
  Check(capture(224)==NCMA_OK&&output[0]!=2,"Old pixels retained after rejected replacement");

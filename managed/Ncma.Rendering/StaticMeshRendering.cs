@@ -47,10 +47,11 @@ public unsafe struct StaticMeshDraw
 }
 
 /// <summary>Owner-thread GPU lease. Never serialize handles; dispose before the renderer.</summary>
-public sealed class GpuMesh : IDisposable
+public sealed class GpuMesh : IDisposable, ICacheOwnedGpuResource
 {
     internal RendererSession Owner { get; }
     private GpuMeshKey _key;
+    private GpuCacheOwnership _cacheOwnership;
     internal GpuMeshKey Key { get { _ = Owner.Handle; ObjectDisposedException.ThrowIf(_key.Value == 0, this); return _key; } }
     public MeshBounds Bounds { get; }
     public uint IndexCount { get; }
@@ -66,7 +67,10 @@ public sealed class GpuMesh : IDisposable
     internal GpuMesh(RendererSession owner, BindPoseMeshUploadData data)
     { Owner = owner; Bounds = data.Bounds; IndexCount = (uint)data.Indices.Length; _bindPoseSource = data; IsBindPose = true;VertexCount=data.VertexCount; }
     internal void Publish(GpuMeshKey key) => _key = key;
-    public void Dispose() { if (_key.Value == 0) return; Owner.ReleaseMesh(this, _key); _key = default; _bindPoseSource = null; }
+    void ICacheOwnedGpuResource.AttachCache(RenderResourceCache owner) => _cacheOwnership.Attach(owner);
+    void ICacheOwnedGpuResource.RetireFromCache(RenderResourceCache owner) { _cacheOwnership.VerifyRetirement(owner); Release(); }
+    public void Dispose() { if (_key.Value == 0) return; _cacheOwnership.VerifyDirectRelease(); Release(); }
+    private void Release() { if (_key.Value == 0) return; Owner.ReleaseMesh(this, _key); _key = default; _bindPoseSource = null; }
 }
 
 public sealed unsafe partial class RendererSession

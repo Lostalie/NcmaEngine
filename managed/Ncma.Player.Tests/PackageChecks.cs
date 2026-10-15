@@ -28,8 +28,12 @@ internal static class PackageChecks
     }
     public static string[] Run(string root, string configuration, string output, string plugins)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
+        using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
         string indexPath = Path.Combine(root, "out/verification/m2-7", configuration, "packages.json");
         using var index = JsonDocument.Parse(File.ReadAllText(indexPath));
+        PhysicsPackageChecks.Run(index.RootElement,output);
         string sourceNull = index.RootElement.GetProperty("playerNull").GetString()!;
         string sourceDx11 = index.RootElement.GetProperty("playerDx11").GetString()!;
         string editor = index.RootElement.GetProperty("editor").GetString()!;
@@ -53,7 +57,7 @@ internal static class PackageChecks
         string movedDx11 = Path.Combine(output, "搬迁 包 DX11"); CopyPackage(sourceDx11, movedDx11); DeploymentManifest.Validate(movedDx11);
         Check(!File.Exists(Path.Combine(movedDx11, "plugins/NcmaGui.dll")), "DX11 Player accidentally needs ImGui");
         var options = PlayerOptions.Parse(["--project", Path.Combine(movedDx11, "sample/sample.ncmaproject"), "--ticks", "2", "--max-runtime-seconds", "20", "--report", Path.Combine(output, "package-dx11.json")]);
-        var rendered = PlayerRunner.Run(options, pluginRoot: Path.Combine(movedDx11, "plugins"), visible: false);
+        var rendered = playerRunOwner0.Run(options, pluginRoot: Path.Combine(movedDx11, "plugins"), visible: false);
         Check(rendered.ExitCode == 0 && rendered.Tick >= 2 && rendered.RenderedFrames > 0 && rendered.ValidationErrors == 0 && rendered.ValidationWarnings == 0,
             "Real DX11 Player did not render/validate/release: " + rendered.Reason + " / " + string.Join(',', rendered.ShutdownErrors));
         Check(Run(Path.Combine(editor, "NcmaEngine.exe"), output, "--smoke-test") == 0, "Packaged Editor apphost failed");
@@ -78,7 +82,7 @@ internal static class PackageChecks
         var physicsOptions = PlayerOptions.Parse(["--project", project, "--headless", "--ticks", "1", "--report", Path.Combine(output, "physics-on.json")]);
         var configurationValue = JsonSerializer.Deserialize<ProjectConfiguration>(File.ReadAllText(project), new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase })!;
         File.WriteAllText(project, JsonSerializer.Serialize(configurationValue with { PhysicsEnabled = true }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
-        var physics = PlayerRunner.Run(physicsOptions, pluginRoot: plugins);
+        var physics = playerRunOwner1.Run(physicsOptions, pluginRoot: plugins);
         Check(physics.ExitCode == 0 && physics.Modules.Length == 1 && physics.Modules[0].Id == "ncma.physics", "Optional physics pulled graphics or failed cleanup");
         return ["Independent Null package/moved cwd/Chinese path/read-only scene/apphost", "Real DX11 Player without ImGui and validation 0/0",
             "Packaged C# Editor WinExe/apphost hidden smoke", "Manifest hashes/tamper/path traversal fail closed", "Headless explicit Physics loads only independent solver"];

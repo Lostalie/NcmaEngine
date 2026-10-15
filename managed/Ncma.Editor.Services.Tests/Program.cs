@@ -745,7 +745,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         using var loader=new PluginLoader();loader.Load(args[1],[new("platform",ModuleKind.Platform,"NcmaPlatform.dll","NcmaPlatform.dll",1,0,[]),new("renderer",ModuleKind.Renderer,"NcmaRenderer.dll","NcmaRenderer.dll",1,2,["platform"])]);
         using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"Inspection test",256,256,false);
         using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,256,256);
-        using var owner=new EditorSessionOwner("Scene inspection");SceneRenderInspections.Register(owner.Edit!,renderer,()=>null);
+        using var owner=new EditorSessionOwner("Scene inspection");SceneRenderInspections.Register(owner.Edit!,()=>renderer,()=>null);
         foreach(string name in new[]{"ncma.render.inspect_pipeline","ncma.render.inspect_graph","ncma.render.get_profile"}) {
             var request=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),owner.Edit!.SessionId,owner.Edit.Revision,name,JsonSerializer.SerializeToElement(new{}));
             var result=owner.Edit.Invoke(request);Check(result.Status=="ok"&&!result.Changed&&result.Data.GetProperty("version").GetInt32()==4);

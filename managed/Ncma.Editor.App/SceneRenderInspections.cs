@@ -6,7 +6,7 @@ namespace Ncma.Editor.App;
 
 internal static class SceneRenderInspections
 {
-    internal static void Register(EditSession edit,RendererSession renderer,Func<SceneRenderSession?> current)
+    internal static void Register(EditSession edit,Func<RendererSession> renderer,Func<SceneRenderSession?> current)
     {
         static JsonElement Json(string text) { using var doc=JsonDocument.Parse(text);return doc.RootElement.Clone(); }
         void Add(string name,string description,Func<object> read,string schema) {
@@ -25,7 +25,7 @@ internal static class SceneRenderInspections
             ()=>new{version=4,passes=current()?.Plan?.PassNames??[],resources=current()?.Plan?.Resources??[]},
             """{"type":"object","required":["version","passes","resources"],"properties":{"version":{"const":4},"passes":{"type":"array","maxItems":16,"items":{"type":"string"}},"resources":{"type":"array","maxItems":16,"items":{"type":"object"}}}}""");
         Add("ncma.render.get_profile","Inspect bounded scene/pose/palette ABI/GPU costs and DX11 validation; no World/GPU mutation or animation control.",
-            ()=>new{version=4,renderer=renderer.Stats,pipeline=renderer.PipelineStats,costs=current()?.Costs,submitCalls=renderer.SubmitCalls,copiedBytes=renderer.CopiedBytes,
+            ()=>new{version=4,renderer=renderer().Stats,pipeline=renderer().PipelineStats,costs=current()?.Costs,submitCalls=renderer().SubmitCalls,copiedBytes=renderer().CopiedBytes,
                 animation=current()?.Animation?.Costs,skinAbiMilliseconds=current()?.SkinAbiMilliseconds,skinBackpressureFrames=current()?.SkinBackpressureFrames},
             """{"type":"object","required":["version","renderer","pipeline","costs","submitCalls","copiedBytes","animation","skinAbiMilliseconds","skinBackpressureFrames"],"properties":{"version":{"const":4},"renderer":{"type":"object"},"pipeline":{"type":"object"},"costs":{"type":["object","null"]},"submitCalls":{"type":"integer"},"copiedBytes":{"type":"integer"},"animation":{"type":["object","null"]},"skinAbiMilliseconds":{"type":["number","null"]},"skinBackpressureFrames":{"type":["integer","null"]}}}""");
     }

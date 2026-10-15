@@ -55,7 +55,7 @@ public sealed unsafe partial class RendererSession
             fixed(PostProgramNative* p=pins.Programs)fixed(PostTargetNative* t=plan.Targets)fixed(PostPassNative* f=plan.Passes){
                 PostDescriptionNative d=new(){Size=56,Version=1,Width=plan.Width,Height=plan.Height,Programs=(uint)pins.Programs.Length,Targets=(uint)plan.Targets.Length,Passes=(uint)plan.Passes.Length,Output=plan.Output,ProgramData=p,TargetData=t,PassData=f};
                 // Recheck after all managed preparation; callbacks cannot mutate this scene.
-                if(!allowed())throw new InvalidOperationException("Post approval revoked.");programs.Verify(this);
+                if(!allowed())throw new InvalidOperationException("Post approval revoked.");programs.Verify(this);scene.VerifyPreparedCandidate();
                 PluginModule.Check(Module.Id,"bind_post",_postBind!(Module.Context,Handle,scene.Key,&d,&e),e);
             }
         }finally{EndToneOperation();}

@@ -315,9 +315,16 @@ internal static unsafe partial class Program
     }
     public static int Main(string[] args)
     {
+
+        using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
         if(args.Length==4 && args[0]=="--graph-root-player-child")
-            return Ncma.Player.App.PlayerRunner.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
+            return playerRunOwner0.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
+            if (args.Length == 3 && args[0] == "--scene-candidate-safety-tests") return SceneCandidateSafetyTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--scene-exchange-safety-tests") return SceneExchangeSafetyTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--scene-construction-safety-tests") return SceneConstructionSafetyTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--player-runner-lifetime-tests") return PlayerRunnerLifetimeTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--resource-update-safety-tests") return ResourceUpdateSafetyTests(args[1], args[2]);
             if (args.SequenceEqual(new[] { "--shadow-preset-contract-tests" })) { ShadowPresetContracts(); return 0; }
             if (args.Length == 3 && args[0] == "--shadow-preset-tests") return ShadowPresetTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--shadow-filter-image-tests") return ShadowFilterImageTests(args[1], args[2]);
@@ -328,6 +335,14 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--shadow-boundary-tests") return ShadowBoundaryImageTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--shadow-joint-products-tests") return SceneUiJointProductTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--shadow-library-preflight") return ShadowLibraryChild(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--window-surface-tests") return WindowSurfaceTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--renderer-diagnostic-tests") return RendererFailureDiagnosticTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--editor-lifetime-tests") return EditorLifetimeTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--editor-graphics-recovery-tests") return EditorGraphicsRecoveryTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--player-graphics-recovery-tests") return PlayerGraphicsRecoveryTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--editor-recovery-loop-tests") return EditorRecoveryLoopTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--presentation-state-tests") return PresentationStateTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--play-graphics-recovery-tests") return PlayGraphicsRecoveryTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--shader-compile-tests") return ShaderCompileTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--registered-tone-tests") return RegisteredToneTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--tone-preset-tests") return TonePresetTests(args[1], args[2]);
@@ -347,6 +362,8 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--scene-ui-publication-tests") return SceneUiPublicationTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--scene-ui-publication-products-tests") return SceneUiPublicationTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--scene-ui-joint-products-tests") return SceneUiJointProductTests(args[1],args[2]);
+            if (args.Length == 3 && args[0] == "--graphics-recovery-joint-tests") return SceneUiJointProductTests(args[1],args[2],highShadow:true,recoveryJoint:true);
+            if (args.Length == 4 && args[0] == "--graphics-recovery-joint-tests") return SceneUiJointProductTests(args[1],args[2],highShadow:true,recoveryJoint:true,recoveryQuality:Enum.Parse<Ncma.Assets.SceneShadowQuality>(args[3],false));
             if (args.Length == 3 && args[0] == "--scene-ui-host-source-tests") return SceneUiHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--pipeline-host-source-tests") return PipelineHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--post-library-preflight") return PostLibraryChild(args[1], args[2]);
@@ -403,6 +420,7 @@ internal static unsafe partial class Program
             var absent=new RenderGraph();absent.AddResource(new("Empty",RenderRole.Output,RenderFormat.Rgba8,RenderUsage.ColorTarget,256,256,Imported:true));Reject(()=>absent.Compile(caps),"graph_budget");
             Console.WriteLine("PASS graph validation/cache/capabilities");
 
+            var fullSuiteTime=Stopwatch.StartNew();
             ShaderCompileTests(root,output);
             RegisteredToneTests(root, Path.Combine(output, "registered-tone"));
             TonePresetTests(root, Path.Combine(output, "tone-presets"));
@@ -413,16 +431,27 @@ internal static unsafe partial class Program
             RuntimeShaderTests(root, Path.Combine(output, "runtime-shaders"));
             ShaderFileTests(root,Path.Combine(output,"shader-files"));
             MaterialSurfaceTests(root,Path.Combine(output,"material-surface"));
+            Console.WriteLine($"CHECKPOINT original rendering shader/material groups seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentCookTests(root,Path.Combine(output,"environment-cook"));
+            Console.WriteLine($"CHECKPOINT original rendering environment cook seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentGpuTests(root,Path.Combine(output,"environment-gpu"));
+            Console.WriteLine($"CHECKPOINT original rendering environment GPU seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentSceneTests(root,Path.Combine(output,"environment-scene"));
+            Console.WriteLine($"CHECKPOINT original rendering environment scene seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentImageTests(root,Path.Combine(output,"environment-image"));
+            Console.WriteLine($"CHECKPOINT original rendering environment images seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentShaderFileTests(root,Path.Combine(output,"environment-shader-files"));
+            Console.WriteLine($"CHECKPOINT original rendering environment shaders seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentRenderSessionTests(root,Path.Combine(output,"environment-render-session"));
+            Console.WriteLine($"CHECKPOINT original rendering environment session seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentHostTests(root,Path.Combine(output,"environment-hosts"));
+            Console.WriteLine($"CHECKPOINT original rendering environment hosts seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentPresetTests(root,Path.Combine(output,"environment-presets"));
+            Console.WriteLine($"CHECKPOINT original rendering environment presets seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentAuthoringHostTests(root,Path.Combine(output,"environment-authoring-hosts"));
+            Console.WriteLine($"CHECKPOINT original rendering environment author hosts seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             EnvironmentProductTests(root,Path.Combine(output,"environment-products"));
+            Console.WriteLine($"CHECKPOINT original rendering environment/product groups seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             using var loader=new PluginLoader();loader.Load(root,Specs());
             var platform=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);var native=loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer);var guiModule=loader.Modules.Single(m=>m.Kind==ModuleKind.Gui);
             byte[] baseline=File.ReadAllBytes(baselinePath);Check(baseline.Length==256*256*4,"Kernel fixture dimension");
@@ -515,6 +544,7 @@ internal static unsafe partial class Program
                 // Explicit order: GUI borrow first, then GPU resources, then renderer, then window.
                 gui.Dispose();resources.Dispose();Check(renderer.Stats.LiveGroups==0,"GPU resource group leak");renderer.Dispose();window.Dispose();
                 Check(native.Status.LiveResources==0 && guiModule.Status.LiveResources==0 && platform.Status.LiveResources==0,"Native live resource leak");
+                Console.WriteLine($"CHECKPOINT original rendering lifecycle cycle={cycleIndex+1}/32 seconds={fullSuiteTime.Elapsed.TotalSeconds:F3}");
             }
             File.WriteAllText(Path.Combine(output,"render-results.json"),JsonSerializer.Serialize(new{schema=1,backend="DX11 reference",hardware,cycles=32,width=256,height=256,vsync=false,validation=true,maxChannelError=max,meanChannelError=mean,submitCalls=calls,copiedBytes=bytes,lastSubmitMsAverage=submit/32,gpuMsAverage=gpu/32,kernelReference=true,legacyComparison=args.Length>=4,staticMesh=args.Length==6,legacyMaxChannelError=legacyMax,legacyMeanChannelError=legacyMean,cachedSubmitFrames=64,cachedOwnerAllocatedBytes=_cachedThreadBytes,cachedProcessAllocatedBytes=_cachedProcessBytes,cachedSubmitElapsedMs=_cachedElapsedMs,manualAcceptance=false},new JsonSerializerOptions{WriteIndented=true}));
             Console.WriteLine($"PASS real reference/GUI/customization/32 cycles; max={max}; mean={mean}; validation=0/0");

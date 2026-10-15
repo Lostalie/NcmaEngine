@@ -48,7 +48,7 @@ internal static unsafe partial class Program
             using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
             play.Start(_=>throw new Exception("No behaviours"));play.Pause();var ids=d.World.GetObjects().Where(o=>o.Has<AnimatorData>()).Select(o=>o.PersistentId).ToArray();Guid camera=d.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
             try{using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
-                using(var scene=new SceneRenderSession(renderer,cache,d.World,assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters)){
+                using(var scene=new SceneRenderSession(renderer,cache,d.World)){scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
                     var vertices=new byte[4*48];var intervals=new MontageInterval[528];
                     for(int step=0;step<5;step++){
                         var status=play.Step();Check(status.State==PlayState.Paused,"Persistent Slot quantum: "+status.Fault+" root="+root+" count="+count+" step="+step);var identities=new HashSet<Guid>();

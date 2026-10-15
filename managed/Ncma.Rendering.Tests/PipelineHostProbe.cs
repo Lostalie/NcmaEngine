@@ -36,9 +36,13 @@ internal static class PipelineHostProbe
             bool headless = kind == "null";
             PlayerOptions Options() => new(project, headless, null, 4, 1d/60, 30, Path.Combine(output, Guid.NewGuid()+"-report.json"), false, false);
             byte[]? baseline = null;
-            PlayerReport Run(Func<float,float,bool,RenderPipeline>? factory, Action<byte[],uint,uint>? capture = null) => headless
-                ? PlayerRunner.Run(Options(), pluginRoot: plugins, visible: false, postModules: modules, pipelineFactory: factory)
-                : PlayerRunner.RunForVerification(Options(), plugins, capture ?? ((_,_,_)=>{}), postModules: modules, pipelineFactory: factory);
+            PlayerReport Run(Func<float,float,bool,RenderPipeline>? factory, Action<byte[],uint,uint>? capture = null)
+            {
+                using var playerRunOwner = new PlayerRunner();
+                return headless
+                    ? playerRunOwner.Run(Options(), pluginRoot: plugins, visible: false, postModules: modules, pipelineFactory: factory)
+                    : playerRunOwner.RunForVerification(Options(), plugins, capture ?? ((_,_,_)=>{}), postModules: modules, pipelineFactory: factory);
+            }
             void Healthy(PlayerReport report) => Pass(report.ExitCode == 0 && report.Tick >= 4 && report.ShutdownErrors.Length == 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0, "Player ticks/close/API0/0: " + JsonSerializer.Serialize(report));
             Healthy(Run(null, (p,_,_)=>baseline??=p));
             byte[]? stage = null;

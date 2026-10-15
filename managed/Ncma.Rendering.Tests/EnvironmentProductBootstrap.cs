@@ -33,6 +33,8 @@ internal static class EnvironmentProductBootstrap
             probeType=kind=="editor"?"SceneUiPublicationEditorProbe":"SceneUiPublicationPlayerProbe";
         if(value.TryGetProperty("probe",out selected)&&selected.GetString()=="scene-ui-joint")
             probeType=kind=="editor"?"SceneUiJointEditorProbe":"SceneUiJointPlayerProbe";
+        if(value.TryGetProperty("probe",out selected)&&selected.GetString()=="graphics-recovery-joint")
+            probeType=kind=="editor"?"GraphicsRecoveryJointEditorProbe":"GraphicsRecoveryJointPlayerProbe";
         var type=probe.GetType(probeType,true)!;
         try { type.GetMethod("Run",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[requestPath]); }
         catch(TargetInvocationException e){throw new Exception("Checked product probe failed.",e.InnerException);}

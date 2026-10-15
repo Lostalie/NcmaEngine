@@ -32,7 +32,8 @@ internal static unsafe partial class Program
         using(var clear=new RenderPipelineService(renderer)){
             clear.Configure(RenderConfiguration.Default(Guid.NewGuid()) with{PipelineType="ncma.clear.v1"},64,64);clear.Submit(1);before=calls;Bad(Build);Pass(calls==before,"active renderer frame rejects before callback");renderer.Present();
         }
-        before=calls;ScenePipelineStartup.Prepare(renderer,document.World,document.CaptureSnapshot(),bound,null,()=>true);
+        using var startup=new ScenePipelineStartup(renderer);
+        before=calls;startup.Prepare(document.World,document.CaptureSnapshot(),bound,null,()=>true);
         Pass(before==calls&&renderer.PipelineStats.Pipelines==0&&renderer.EnvironmentStats.Live==0&&renderer.PostStats.Bindings==0,"empty World never initializes custom scene resources");
         document.RestoreSnapshot(document.CaptureSnapshot());Bad(Build);Pass(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"boundary API0/0");return checks;
     }

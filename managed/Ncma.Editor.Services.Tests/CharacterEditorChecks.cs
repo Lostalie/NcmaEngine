@@ -70,7 +70,7 @@ internal static class CharacterEditorChecks
             workspace.PlayControl(workspace.Stamp, "start"); var play = owner.Play!;
             Check(play.Document.World.Identity != editWorld && owner.Edit.State.Frozen, "Play isolates and freezes Edit");
             var assets = owner.PlayRenderAssets!;
-            scene = new(renderer, cache, play.Document.World, assets, play.Document.CaptureSnapshot(), poseKernel:kernel,play: play, interpolateTransforms: true,rootMotion:runtime);
+            scene = new(renderer, cache, play.Document.World);scene.Prepare(assets, play.Document.CaptureSnapshot(), poseKernel:kernel,play: play, interpolateTransforms: true,rootMotion:runtime);
             var held = new ulong[8]; held[1] = 1UL << 4; // D, world +X
             play.SubmitInput(new(play.SessionId, 1, true, held, new ulong[8], new ulong[8]));
             for (int i = 0; i < 120; ++i) Check(play.AdvanceFrame(1d / 60).State == PlayState.Running, "Actual Editor coupled movement");
@@ -104,7 +104,7 @@ internal static class CharacterEditorChecks
         Reject(()=>workspace.Transaction(workspace.Stamp,"Foreign clip",[Operation(definition with{AttackClip=Guid.NewGuid()})],actorId));
         Check(authored.SequenceEqual(owner.Document.CaptureBytes()),"rejected action assets preserve document/history/leases");
         preparation=owner.RenderAssets;workspace.PlayControl(workspace.Stamp,"start");var actionPlay=owner.Play!;
-        scene=new(renderer,cache,actionPlay.Document.World,owner.PlayRenderAssets!,actionPlay.Document.CaptureSnapshot(),poseKernel:kernel,play:actionPlay,interpolateTransforms:true,rootMotion:runtime);
+        scene=new(renderer,cache,actionPlay.Document.World);scene.Prepare(owner.PlayRenderAssets!,actionPlay.Document.CaptureSnapshot(),poseKernel:kernel,play:actionPlay,interpolateTransforms:true,rootMotion:runtime);
         runtime!.RequestAction(actorId,ActionRequest.Attack);actionPlay.AdvanceFrame(1d/60);
         Check(actionPlay.State==PlayState.Running&&actionPlay.Document.World.FindObject(targetId).Get<HealthData>().Current==60&&runtime.ReadCombatEvents().Any(e=>e.Kind==CombatEventKind.Hit),"formal Editor action has committed tuned damage");
         Check(scene.Submit(++frame,320,240,cameraId),"Editor action pose/main/shadow draws");renderer.Present();

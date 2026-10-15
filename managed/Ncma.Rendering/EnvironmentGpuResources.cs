@@ -12,22 +12,24 @@ namespace Ncma.Rendering;
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)] internal unsafe delegate uint EnvironmentGpuStatsNative(ulong module,ulong renderer,EnvironmentGpuStatistics* output,PluginError* error);
 
 // Resource only. This does NOT bind an environment to a scene or assert IBL image validation.
-public sealed class GpuEnvironmentResource : IDisposable
+public sealed class GpuEnvironmentResource : IDisposable, ICacheOwnedGpuResource
 {
     internal RendererSession Owner {get;}
     internal GpuMeshKey Token;
     private EnvironmentPackage _package;
-    private bool _cacheOwned;
+    private GpuCacheOwnership _cacheOwnership;
     public EnvironmentPackage Package {get{Verify();return _package;}}
     internal GpuEnvironmentResource(RendererSession owner,EnvironmentPackage package){Owner=owner;_package=package;}
     internal void Verify(){_=Owner.Handle;ObjectDisposedException.ThrowIf(Token.Value==0,this);}
     internal void Publish(GpuMeshKey key,EnvironmentPackage package){Token=key;_package=package;}
-    internal void MarkCacheOwned()=>_cacheOwned=true;
+    void ICacheOwnedGpuResource.AttachCache(RenderResourceCache owner)=>_cacheOwnership.Attach(owner);
+    void ICacheOwnedGpuResource.RetireFromCache(RenderResourceCache owner){_cacheOwnership.VerifyRetirement(owner);Release();}
     public void Replace(EnvironmentPackage package,Func<bool> preparationAllowed)
-    {if(_cacheOwned)throw new InvalidOperationException("Cached environment generations are immutable.");Owner.PublishEnvironment(this,package,preparationAllowed);}
+    {if(_cacheOwnership.IsAttached)throw new InvalidOperationException("Cached environment generations are immutable.");Owner.PublishEnvironment(this,package,preparationAllowed);}
     // Offline diagnostic only; bounded GPU copy/drain. Never call from simulation/render ticks.
     public float[] CaptureForDiagnostics(Func<bool> preparationAllowed)=>Owner.CaptureEnvironment(this,preparationAllowed);
-    public void Dispose(){if(Token.Value==0)return;Owner.ReleaseEnvironment(this);Token=default;}
+    public void Dispose(){if(Token.Value==0)return;_cacheOwnership.VerifyDirectRelease();Release();}
+    private void Release(){if(Token.Value==0)return;Owner.ReleaseEnvironment(this);Token=default;}
 }
 
 public sealed unsafe partial class RendererSession

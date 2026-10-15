@@ -25,7 +25,7 @@ uint32_t NCMA_CALL CreateTexture(uint64_t context,uint64_t handle,const NcmaText
         BusyScope scope;std::string message;auto candidate=std::make_unique<TextureGpu>(*renderer->backend);
         candidate->texture=renderer->backend->CreateTexture(t,message);if(!candidate->texture)return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
         candidate->bytes=d.data_bytes;candidate->format=d.format;Validation(*renderer);
-        const uint64_t id=0x5458000000000000ull|nextResource++;renderer->textures.emplace(id,std::move(candidate));
+        const uint64_t id=NcmaPlugin::NewWindowsHandle();renderer->textures.emplace(id,std::move(candidate));
         renderer->resourceStats.creates++;renderer->resourceStats.uploaded_bytes+=d.data_bytes;renderer->resourceStats.resident_bytes+=d.data_bytes;*output={id,handle};return NCMA_OK;
     });
 }
@@ -50,7 +50,7 @@ uint32_t NCMA_CALL CreateMaterial(uint64_t context,uint64_t handle,const NcmaMat
         }
         BusyScope scope;std::string message;std::unique_ptr<Rendering::ResourceKernel> kernel;
         if(!renderer->resourceKernel){kernel=std::make_unique<Rendering::ResourceKernel>(*renderer->backend);if(!kernel->Initialize(message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
-        Validation(*renderer);const uint64_t id=0x4D54000000000000ull|nextResource++;renderer->materials.emplace(id,std::move(candidate));
+        Validation(*renderer);const uint64_t id=NcmaPlugin::NewWindowsHandle();renderer->materials.emplace(id,std::move(candidate));
         if(kernel)renderer->resourceKernel=std::move(kernel);renderer->resourceStats.creates++;*output={id,handle};return NCMA_OK;
     });
 }
@@ -64,7 +64,7 @@ uint32_t NCMA_CALL CreateTarget(uint64_t context,uint64_t handle,const NcmaTarge
         candidate->color=renderer->backend->CreateTexture(t,message);if(!candidate->color)return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
         t.Format=Rhi::TextureFormat::D32Float;t.Usage=Rhi::TextureUsage::DepthStencil;candidate->depth=renderer->backend->CreateTexture(t,message);
         if(!candidate->depth)return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
-        Validation(*renderer);const uint64_t id=0x5447000000000000ull|nextResource++;renderer->targets.emplace(id,std::move(candidate));
+        Validation(*renderer);const uint64_t id=NcmaPlugin::NewWindowsHandle();renderer->targets.emplace(id,std::move(candidate));
         renderer->resourceStats.creates++;renderer->resourceStats.resident_bytes+=bytes;*output={id,handle};return NCMA_OK;
     });
 }
@@ -75,7 +75,7 @@ uint32_t NCMA_CALL DestroyResource(uint64_t context,uint64_t handle,NcmaGpuResou
         if(renderer->active)return NcmaPlugin::Error(error,NCMA_BUSY);
         if(renderer->targets.contains(resource.value)&&renderer->targets.at(resource.value)->guiPins)return NcmaPlugin::Error(error,NCMA_BUSY,"Target pinned by GUI draw data.");
         if(renderer->textures.contains(resource.value))for(const auto& pair:renderer->materials)for(const auto& t:pair.second->description.textures)if(t.value==resource.value)return NcmaPlugin::Error(error,NCMA_BUSY,"Texture pinned by material.");
-        BusyScope scope;std::string message;if(SUCCEEDED(renderer->backend->GetDevice()->GetDeviceRemovedReason())&&!Wait(*renderer,message))return NcmaPlugin::Error(error,NCMA_SHUTDOWN_TIMEOUT,message);
+        BusyScope scope;std::string message;if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         renderer->backend->GetDeviceContext()->ClearState();
         if(renderer->textures.contains(resource.value)){renderer->resourceStats.resident_bytes-=renderer->textures.at(resource.value)->bytes;renderer->textures.erase(resource.value);}
         else if(renderer->targets.contains(resource.value)){const auto& t=*renderer->targets.at(resource.value);renderer->resourceStats.resident_bytes-=static_cast<uint64_t>(t.width)*t.height*8;renderer->targets.erase(resource.value);}
@@ -112,7 +112,7 @@ uint32_t NCMA_CALL SubmitResources(uint64_t context,uint64_t handle,const NcmaRe
             if(m[3]!=0||m[7]!=0||m[11]!=0||m[15]!=1||!std::isfinite(determinant)||determinant<=1e-8)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Positive affine model required.");
             for(int row=0;row<3;++row)for(int col=0;col<3;++col){double dot=0;for(int k=0;k<3;++k)dot+=static_cast<double>(m[row*4+k])*n[col*4+k];if(std::abs(dot-(row==col?1.0:0.0))>.01)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Normal inverse-transpose mismatch.");}
         }
-        BusyScope scope;ExecutionScope execution;std::string message;const auto started=std::chrono::steady_clock::now();ResolveTiming(*renderer);
+        BusyScope scope;ExecutionScope execution(f.frame);std::string message;const auto started=std::chrono::steady_clock::now();ResolveTiming(*renderer);
         if(!renderer->timingPending){auto* dc=renderer->backend->GetDeviceContext();dc->Begin(renderer->gpuDisjoint.Get());dc->End(renderer->gpuBegin.Get());renderer->measuring=true;}
         const auto encode=[](float x){return x<=.0031308f?12.92f*x:1.055f*std::pow(x,1.0f/2.4f)-.055f;};
         renderer->backend->SetClearColor(encode(f.clear[0]),encode(f.clear[1]),encode(f.clear[2]),f.clear[3]);

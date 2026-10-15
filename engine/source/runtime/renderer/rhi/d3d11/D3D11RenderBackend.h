@@ -49,6 +49,11 @@ namespace NcmaEngine::Rhi
         [[nodiscard]] ID3D11Device* GetDevice() const noexcept { return m_Device.Get(); }
         [[nodiscard]] ID3D11DeviceContext* GetDeviceContext() const noexcept { return m_DeviceContext.Get(); }
         [[nodiscard]] IDXGISwapChain* GetSwapChain() const noexcept { return m_SwapChain.Get(); }
+        // Native plugin-only, synchronous owner-thread observer. No allocation/throw;
+        // the plugin owner outlives this backend, including failed startup cleanup.
+        using FailureObserver=void(*)(void*,HRESULT) noexcept;
+        void SetFailureObserver(void* owner,FailureObserver observer) noexcept { m_FailureOwner=owner;m_FailureObserver=observer; }
+        void ReportApiFailure(HRESULT result) noexcept { if(FAILED(result)&&m_FailureObserver)m_FailureObserver(m_FailureOwner,result); }
         [[nodiscard]] size_t GetLiveResourceCount() const noexcept {
             return m_Buffers.size()+m_Textures.size()+m_Samplers.size()+m_Pipelines.size();
         }
@@ -84,6 +89,9 @@ namespace NcmaEngine::Rhi
         };
 
         bool CreateRenderTarget(std::string& error);
+        std::string ApiError(const char* operation,HRESULT result);
+        void* m_FailureOwner=nullptr;
+        FailureObserver m_FailureObserver=nullptr;
         void ReleaseRenderTarget() noexcept;
 
         BackendCapabilities m_Capabilities{

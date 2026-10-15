@@ -110,7 +110,7 @@ internal static class RootMotionChecks
             using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,320,240);using var cache=new RenderResourceCache(renderer);
             string kernelPath=Path.Combine(plugins,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(kernelPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(kernelPath))));
             var copy=doc.CreateIsolatedCopy();using var play=new PlaySession(copy,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=CharacterPlayRuntime.Compose(play,physics,assets)!;play.Start(_=>throw new Exception("no behaviours"));
-            try { using(var scene=new SceneRenderSession(renderer,cache,copy.World,assets,copy.CaptureSnapshot(),poseKernel:kernel,play:play,interpolateTransforms:true,rootMotion:runtime)) {
+            try { using(var scene=new SceneRenderSession(renderer,cache,copy.World)) {scene.Prepare(assets,copy.CaptureSnapshot(),poseKernel:kernel,play:play,interpolateTransforms:true,rootMotion:runtime);
                 var captured=new byte[3*48];Guid camera=copy.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
                 for(ulong frame=1;frame<=6;frame++) {
                     for(int i=0;i<20;i++)play.AdvanceFixedStep();scene.Submit(frame,320,240,camera);renderer.Present();scene.CaptureCharacterVertices(actorId,captured);
@@ -128,9 +128,11 @@ internal static class RootMotionChecks
         var config=new ProjectConfiguration(1,project,"Root Player","start.ncmascene","gameplay.dll","Direct3D11",[],true,doc.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId);
         File.WriteAllBytes(Path.Combine(root,"assets/game.ncpak"),SceneAssetPreparation.CreateRuntimePackage(root,project,doc.CaptureSnapshot(),[]));
         foreach(bool packed in new[]{false,true})foreach(bool headless in new[]{false,true}) {
+
+            using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
             string file=Path.Combine(root,"root.ncmaproject");File.WriteAllBytes(file,JsonSerializer.SerializeToUtf8Bytes(config with{AssetPackage=packed?"assets/game.ncpak":null},new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
             var flags=new List<string>{"--project",file,"--ticks","30","--report",Path.Combine(root,$"{packed}-{headless}.json")};if(headless)flags.Add("--headless");
-            var report=PlayerRunner.Run(PlayerOptions.Parse(flags.ToArray()),pluginRoot:plugins,visible:false);
+            var report=playerRunOwner0.Run(PlayerOptions.Parse(flags.ToArray()),pluginRoot:plugins,visible:false);
             Check(report.ExitCode==0&&report.Tick>=30&&report.ShutdownErrors.Length==0&&report.ValidationErrors==0&&report.ValidationWarnings==0,"formal root Player: "+report.Reason);
             Check(!headless||report.Modules.All(m=>m.Id is not ("ncma.renderer" or "ncma.platform")),"Headless root path never initializes graphics");
         }

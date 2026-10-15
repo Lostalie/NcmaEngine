@@ -10,6 +10,9 @@ static void Check(bool value,const char* message){if(!value)throw std::runtime_e
 #include "EnvironmentGpuNativeTests.inl"
 #include "EnvironmentSceneNativeTests.inl"
 #include "PostProcessNativeTests.inl"
+#include "RendererCompletionNativeTests.inl"
+#include "GraphicsHandleFailureTests.inl"
+#include "RendererDiagnosticNativeTests.inl"
 int main(int argc,char** argv) {
     try{
         if(argc!=2)return 2;
@@ -28,6 +31,10 @@ int main(int argc,char** argv) {
         Check(ncma_plugin_get_api(1,3,&latest,sizeof(latest),&error)==NCMA_ABI_MISMATCH,"Unknown renderer minor");
         uint64_t platformModule=0,renderModule=0,window=0,handle=0,group=0;
         Check(platform.module.initialize(nullptr,0,&platformModule,&error)==0,"Platform init");
+        NcmaPlugin::failHandleAllocation=true;
+        const auto failedIdentity=api.module.initialize(nullptr,0,&renderModule,&error);
+        NcmaPlugin::failHandleAllocation=false;
+        Check(failedIdentity==NCMA_INTERNAL_ERROR&&renderModule==0&&module==0,"Module identity failure cannot publish context");
         Check(api.module.initialize(nullptr,0,&renderModule,&error)==0,"Renderer init");
         {
             NcmaEnvironmentCookApiV1 env{};
@@ -52,7 +59,12 @@ int main(int argc,char** argv) {
         NcmaWindowDescriptionV1 windowDesc{sizeof(windowDesc),256,256,0,title,sizeof(title)-1,0};
         Check(platform.create_window(platformModule,&windowDesc,&window,&error)==0,"Window create");
         NcmaRendererDescriptionV1 desc{sizeof(desc),1,1,0,platformModule,window,256,256,{0,0}};
+        NcmaPlugin::failHandleAllocation=true;
+        const auto failedRendererIdentity=api.create_renderer(renderModule,&desc,&handle,&error);
+        NcmaPlugin::failHandleAllocation=false;
+        Check(failedRendererIdentity==NCMA_INTERNAL_ERROR&&handle==0&&!renderer,"Renderer identity failure before window borrow/device creation");
         Check(api.create_renderer(renderModule,&desc,&handle,&error)==0,"Renderer create");
+        GraphicsHandleFailureTests(renderModule,handle);
         EnvironmentGpuNativeTests(renderModule,handle);
         EnvironmentSceneNativeTests(renderModule,handle);
         PostProcessNativeTests(renderModule,handle);
@@ -63,11 +75,15 @@ int main(int argc,char** argv) {
             busy=true;Check(env.validate_preparation(renderModule,&error)==NCMA_BUSY,"Environment native nonreentry");busy=false;
             Check(env.validate_preparation(renderModule+1,&error)==NCMA_INVALID_HANDLE,"Environment foreign context");
         }
+        testWaitQueryFailure=true;
+        const auto queryFailure=api.resize(renderModule,handle,257,257,&error);
+        testWaitQueryFailure=false;
+        Check(queryFailure==NCMA_INTERNAL_ERROR&&renderer->stats.width==256&&renderer->stats.height==256&&!renderer->failed,"Completion query creation failure must not be misclassified as timeout or resize the old target");
         NcmaSceneRenderApiV1 scene{};
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,17,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,19,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");
@@ -120,6 +136,8 @@ int main(int argc,char** argv) {
         const auto toneResourceCount=renderer->backend->GetLiveResourceCount();
         testTonePreparationThrow=true;Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==toneResourceCount&&renderer->scenePipelines.contains(registeredKey.value)&&!renderer->failed,"Diagnostic exception before Tone exchange retains old stage and releases candidate");testTonePreparationThrow=false;
         testWaitTimeout=true;Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->backend->GetLiveResourceCount()==toneResourceCount&&renderer->scenePipelines.contains(registeredKey.value),"Tone drain failure retains old stage and retires candidate");testWaitTimeout=false;
+        testWaitQueryFailure=true;Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==toneResourceCount&&renderer->scenePipelines.contains(registeredKey.value),"Tone drain failure retains old stage and retires candidate");testWaitQueryFailure=false;
+        testWaitPollFailure=true;Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==toneResourceCount&&renderer->scenePipelines.contains(registeredKey.value),"Tone drain failure retains old stage and retires candidate");testWaitPollFailure=false;
         Check(registered.replace_tone(renderModule,handle,registeredKey,&pair,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==toneResourceCount,"Tone atomic replacement resource baseline");
         Check(DestroyScenePipeline(renderModule,handle,registeredKey,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"Registered Tone drain complete");shaderRequest=originalRequest; }
         {NcmaShaderStagesApiV1 stages{};
@@ -156,6 +174,8 @@ int main(int argc,char** argv) {
          Check(stages.create_scene(renderModule,handle,&description,&stageGroup,&key,&error)==NCMA_OK,"Actual full registered group creation");auto count=renderer->backend->GetLiveResourceCount();auto creates=renderer->sceneStats.creates;
          testTonePreparationThrow=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==count&&!renderer->failed,"Group diagnostic exception retains old whole group");testTonePreparationThrow=false;
          testWaitTimeout=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->backend->GetLiveResourceCount()==count,"Whole-group drain failure retains old and frees all candidates");testWaitTimeout=false;
+         testWaitQueryFailure=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==count,"Whole-group drain failure retains old and frees all candidates");testWaitQueryFailure=false;
+         testWaitPollFailure=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_INTERNAL_ERROR&&renderer->backend->GetLiveResourceCount()==count,"Whole-group drain failure retains old and frees all candidates");testWaitPollFailure=false;
          renderer->active=true;Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_BUSY,"Group active frame rejection");renderer->active=false;
          Check(stages.replace_scene(renderModule,handle,key,&stageGroup,&error)==NCMA_OK&&renderer->sceneStats.creates==creates&&renderer->backend->GetLiveResourceCount()==count,"Whole-group replacement no target rebuild");
          Check(DestroyScenePipeline(renderModule,handle,key,&error)==NCMA_OK&&renderer->backend->GetLiveResourceCount()==0,"Registered whole group closes");
@@ -171,10 +191,14 @@ int main(int argc,char** argv) {
          bad=pair;bad.pixel=pair.vertex;bad.pixel_bytes=pair.vertex_bytes;Check(uiPrograms.create(renderModule,handle,&bad,&error)==NCMA_INVALID_ARGUMENT&&!renderer->ui,"UI last wrong stage no kernel");
          testTonePreparationThrow=true;Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&!renderer->ui&&!renderer->failed,"UI create diagnostic failure atomic");testTonePreparationThrow=false;
          testWaitTimeout=true;Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_SHUTDOWN_TIMEOUT&&!renderer->ui,"UI create drain failure atomic");testWaitTimeout=false;
+         testWaitQueryFailure=true;Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&!renderer->ui,"UI create drain failure atomic");testWaitQueryFailure=false;
+         testWaitPollFailure=true;Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&!renderer->ui,"UI create drain failure atomic");testWaitPollFailure=false;
          Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_OK&&renderer->ui,"UI registered creation");auto* retained=renderer->ui.get();
          Check(uiPrograms.create(renderModule,handle,&pair,&error)==NCMA_INVALID_HANDLE&&renderer->ui.get()==retained,"UI no implicit replacement");
          testTonePreparationThrow=true;Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->ui.get()==retained&&!renderer->failed,"UI replacement diagnostic atomic");testTonePreparationThrow=false;
          testWaitTimeout=true;Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->ui.get()==retained,"UI replacement drain failure retains kernel");testWaitTimeout=false;
+         testWaitQueryFailure=true;Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->ui.get()==retained,"UI replacement drain failure retains kernel");testWaitQueryFailure=false;
+         testWaitPollFailure=true;Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_INTERNAL_ERROR&&renderer->ui.get()==retained,"UI replacement drain failure retains kernel");testWaitPollFailure=false;
          Check(uiPrograms.replace(renderModule,handle,&pair,&error)==NCMA_OK&&renderer->ui.get()==retained&&renderer->scenePipelines.empty()&&!renderer->skinKernel&&renderer->backend->GetLiveResourceCount()==0,"UI replacement no 3D resources");
          renderer->backend->GetDeviceContext()->ClearState();renderer->ui.reset();
         }
@@ -374,6 +398,8 @@ int main(int argc,char** argv) {
          Check(stages.create_skin(renderModule,handle,&skinDesc,&program,&key,&error)==NCMA_OK&&renderer->skinKernel->Matches(program),"Registered actual compute first kernel creation");auto count=renderer->backend->GetLiveResourceCount();auto creates=renderer->skinStats.creates;
          testTonePreparationThrow=true;Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_INTERNAL_ERROR&&renderer->skinKernel->Matches(program)&&renderer->backend->GetLiveResourceCount()==count&&!renderer->failed,"Compute diagnostic exception preserves program/resources");testTonePreparationThrow=false;
          testWaitTimeout=true;Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->skinKernel->Matches(program),"Compute drain failure retains exact program");testWaitTimeout=false;
+         testWaitQueryFailure=true;Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_INTERNAL_ERROR&&renderer->skinKernel->Matches(program),"Compute drain failure retains exact program");testWaitQueryFailure=false;
+         testWaitPollFailure=true;Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_INTERNAL_ERROR&&renderer->skinKernel->Matches(program),"Compute drain failure retains exact program");testWaitPollFailure=false;
          Check(stages.replace_skin(renderModule,handle,&program,&error)==NCMA_OK&&renderer->skinStats.creates==creates&&renderer->backend->GetLiveResourceCount()==count,"Registered compute replaces no mesh/palette resources");
          Check(skinApi.destroy(renderModule,handle,key,&error)==NCMA_OK&&!renderer->skinKernel&&renderer->backend->GetLiveResourceCount()==resourceCount,"Last registered skin resource closes");
         }
@@ -436,7 +462,7 @@ int main(int argc,char** argv) {
         Check(scene.destroy_mesh(renderModule,handle,faultMesh,&error)==NCMA_OK && renderer->meshes.empty(),"Faulted active mesh can drain");
         Check(typed.create_texture(renderModule,handle,&textureDesc,&denied,&error)==NCMA_INTERNAL_ERROR,"Fault texture creation blocked");
         Check(typed.destroy_resource(renderModule,handle,target,&error)==NCMA_OK&&typed.destroy_resource(renderModule,handle,material,&error)==NCMA_OK&&typed.destroy_resource(renderModule,handle,texture,&error)==NCMA_OK,"Faulted typed resources drain");
-        try {ExecutionScope scope;throw std::runtime_error("Injected post-validation execution failure.");}catch(const std::runtime_error&){}
+        try {ExecutionScope scope(renderer->lastFrame);throw std::runtime_error("Injected post-validation execution failure.");}catch(const std::runtime_error&){}
         frame.frame=5;
         Check(api.submit(renderModule,handle,&frame,passes,&error)==NCMA_INTERNAL_ERROR,"Execution exception fail-stop");
         renderer->failed=true;renderer->faultResult=NCMA_DEVICE_LOST;renderer->stats.state=2; // Device-lost state machine injection, not a driver reset.
@@ -454,6 +480,36 @@ int main(int argc,char** argv) {
         Check(renderer->backend->GetLiveResourceCount()==0,"Native GPU resource maps leaked.");
         Check(api.destroy_renderer(renderModule,handle,&error)==0,"Destroy");
         Check(api.stats(renderModule,handle,nullptr,&error)==NCMA_INVALID_HANDLE,"Stale renderer");
+        RendererCompletionNativeTests(api,typed,renderModule,desc,handle);
+        RendererDiagnosticNativeTests(latest,renderModule,desc);
+        {
+            NcmaRendererFrameApiV1 frames{};
+            Check(latest.query_scene_render(renderModule,17,&frames,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short frame lifecycle API");
+            Check(latest.query_scene_render(renderModule,17,&frames,32,&error)==NCMA_OK&&frames.version==1&&frames.capabilities==1&&frames.read&&frames.abandon,"Frame lifecycle query17/v1");
+            const auto oldHandle=handle;
+            Check(api.create_renderer(renderModule,&desc,&handle,&error)==NCMA_OK,"Frame lifecycle independent renderer");
+            NcmaRendererFrameStateV1 state{};state.struct_size=99;
+            Check(frames.read(renderModule,oldHandle,&state,&error)==NCMA_INVALID_HANDLE&&state.struct_size==99,"Stale renderer cannot read frame state");
+            Check(frames.read(renderModule,handle,&state,&error)==NCMA_OK&&state.struct_size==40&&state.version==1&&!state.flags&&state.generation==handle&&!state.frame&&!state.abandoned_frames,"Empty frame state");
+            Check(frames.abandon(renderModule,handle,1,&error)==NCMA_BUSY,"No implicit frame to abandon");
+            Check(typed.create_target(renderModule,handle,&targetDesc,&target,&error)==NCMA_OK,"Retained target before explicit abort");
+            auto clearFrame=frame;clearFrame.frame=1;clearFrame.pass_count=1;
+            NcmaRenderPassV1 clearPass{NCMA_RENDER_CLEAR,0,0,{0,0,0,1}};
+            Check(api.submit(renderModule,handle,&clearFrame,&clearPass,&error)==NCMA_OK,"Actual frame pending without Present");
+            Check(frames.abandon(renderModule,handle,2,&error)==NCMA_INVALID_ARGUMENT&&renderer->active,"Exact frame required");
+            uint32_t frameForeign=0;std::thread foreignThread([&]{NcmaErrorV1 e{};frameForeign=frames.abandon(renderModule,handle,1,&e);});foreignThread.join();
+            Check(frameForeign==NCMA_WRONG_THREAD&&renderer->active,"Frame abandonment owner thread");
+            Check(frames.abandon(renderModule,handle,1,&error)==NCMA_OK&&!renderer->active&&!renderer->measuring&&!renderer->timingPending,"Explicit abort terminates frame/query without Present");
+            Check(frames.read(renderModule,handle,&state,&error)==NCMA_OK&&state.flags==2&&state.frame==1&&state.abandoned_frames==1,"Terminal abandonment distinguishable from new renderer");
+            NcmaRendererStatsV1 terminal{};Check(api.stats(renderModule,handle,&terminal,&error)==NCMA_OK&&terminal.presents==0&&terminal.submitted_frames==1&&!terminal.gpu_sample_valid&&terminal.gpu_ms==0&&!terminal.validation_errors&&!terminal.validation_warnings,"Abort has no presented image or valid timing sample; API0/0");
+            clearFrame.frame=2;
+            Check(api.submit(renderModule,handle,&clearFrame,&clearPass,&error)==NCMA_INTERNAL_ERROR&&api.present(renderModule,handle,&error)==NCMA_INTERNAL_ERROR,"Abandoned renderer cannot resume drawing");
+            Check(frames.abandon(renderModule,handle,1,&error)==NCMA_INTERNAL_ERROR&&renderer->abandonedFrames==1,"Abandon is not a repeatable reset");
+            testWaitTimeout=true;Check(typed.destroy_resource(renderModule,handle,target,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->targets.contains(target.value),"Abandon never bypasses resource retirement wait");testWaitTimeout=false;
+            testWaitQueryFailure=true;Check(typed.destroy_resource(renderModule,handle,target,&error)==NCMA_INTERNAL_ERROR&&renderer->targets.contains(target.value),"Abandon never bypasses resource retirement wait");testWaitQueryFailure=false;
+            testWaitPollFailure=true;Check(typed.destroy_resource(renderModule,handle,target,&error)==NCMA_INTERNAL_ERROR&&renderer->targets.contains(target.value),"Abandon never bypasses resource retirement wait");testWaitPollFailure=false;
+            Check(typed.destroy_resource(renderModule,handle,target,&error)==NCMA_OK&&api.destroy_renderer(renderModule,handle,&error)==NCMA_OK,"Explicit retirement retry closes abandoned renderer");
+        }
         NcmaUiApiV1 ui{};
         Check(latest.query_scene_render(renderModule,6,&ui,sizeof(ui)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==sizeof(ui),"Short UI table");
         Check(latest.query_scene_render(renderModule,6,&ui,sizeof(ui),&error)==NCMA_OK&&ui.version==1&&ui.capabilities==7,"UI table negotiate");
@@ -484,6 +540,8 @@ int main(int argc,char** argv) {
         Check(ncma_renderer_release_gui_cached_image_v1(renderModule,handle,{uiLease.value,uiLease.generation},&error)==NCMA_OK,"GUI releases pin");
         Check(uiTargets.release(renderModule,handle,uiLease,&error)==NCMA_OK,"UI lease release");
         testWaitTimeout=true;Check(uiTargets.destroy_target(renderModule,handle,uiTarget,&error)==NCMA_SHUTDOWN_TIMEOUT&&renderer->uiTargets.size()==1&&renderer->uiTargetBytes==128*128*4,"Target timeout retains texture and owner");testWaitTimeout=false;
+        testWaitQueryFailure=true;Check(uiTargets.destroy_target(renderModule,handle,uiTarget,&error)==NCMA_INTERNAL_ERROR&&renderer->uiTargets.size()==1&&renderer->uiTargetBytes==128*128*4,"Target query-creation failure retains texture and owner");testWaitQueryFailure=false;
+        testWaitPollFailure=true;Check(uiTargets.destroy_target(renderModule,handle,uiTarget,&error)==NCMA_INTERNAL_ERROR&&renderer->uiTargets.size()==1&&renderer->uiTargetBytes==128*128*4,"Target poll failure retains texture and owner");testWaitPollFailure=false;
         Check(api.destroy_renderer(renderModule,handle,&error)==NCMA_BUSY,"Renderer refuses unload under UI resources");
         NcmaUiFrameV1 uiFrame{sizeof(uiFrame),0,1,listKey,{0,0,0,1}};
         Check(ui.submit(renderModule,handle,&uiFrame,&error)==NCMA_OK,"UI submit");
