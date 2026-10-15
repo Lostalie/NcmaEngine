@@ -40,7 +40,7 @@ uint32_t NCMA_CALL SubmitUi(uint64_t context,uint64_t handle,const NcmaUiFrameV1
         if(f.frame<=renderer->lastUiFrame)return NcmaPlugin::Error(error,NCMA_BUSY,"UI frame already submitted.");
         if(f.overlay?(!renderer->active||f.frame!=renderer->lastFrame):(renderer->active||f.frame<=renderer->lastFrame))return NcmaPlugin::Error(error,NCMA_BUSY);
         BusyScope scope;ExecutionScope execution(f.frame);std::string message;
-        if(!f.overlay){Rhi::RenderPassDescription pass{};pass.ClearColor=true;std::copy_n(f.clear,4,pass.ClearColorValue);
+        if(!f.overlay){BeginTiming(*renderer,f.frame);Rhi::RenderPassDescription pass{};pass.ClearColor=true;std::copy_n(f.clear,4,pass.ClearColorValue);
             if(!renderer->backend->BeginRenderPass(pass,message))return Failure(error,message);}
         renderer->ui->Draw(f.list.value,renderer->stats.width,renderer->stats.height);
         if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"UI device lost");

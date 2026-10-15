@@ -17,7 +17,9 @@ public sealed class UiRuntime
     private readonly UiDocument _document; private readonly UiLayoutEngine _layout; private readonly Dictionary<Guid, UiElement> _elements;
     private readonly Dictionary<Guid, UiWidgetState> _state = [];
     private readonly Queue<UiAction> _actions = []; private UiLayoutBox[] _boxes = [];
-    private UiViewport _viewport; private ulong _lastSequence, _presentation, _layoutRevision = ulong.MaxValue;
+    private UiViewport _viewport; private ulong _lastSequence, _presentation;
+    private bool _layoutDirty = true, _inputPrepared;
+    private readonly Dictionary<Guid,int> _boxIndices = [];
     private Guid _focus, _capture; private UiStamp _stamp;
     public UiRuntime(UiDocument document, IUiTextMetrics? metrics = null)
     {
@@ -31,7 +33,7 @@ public sealed class UiRuntime
     }
     public UiStamp Stamp { get { _document.VerifyAccess(); return _stamp; } }
     public UiDefinition CaptureDefinition() => _document.Capture();
-    public UiViewport PreparedViewport { get { _document.VerifyAccess(); if (_layoutRevision == ulong.MaxValue) throw new InvalidOperationException("Prepare UI layout before input."); return _viewport; } }
+    public UiViewport PreparedViewport { get { _document.VerifyAccess(); if (!_inputPrepared) throw new InvalidOperationException("Prepare UI layout before input."); return _viewport; } }
     public Guid Focus { get { _document.VerifyAccess(); return _focus; } }
     public Guid Capture { get { _document.VerifyAccess(); return _capture; } }
     public ulong PresentationRevision { get { _document.VerifyAccess(); return _presentation; } }
@@ -52,7 +54,7 @@ public sealed class UiRuntime
     {
         _document.VerifyAccess(); var e = Element(id); if (e.Visible == visible && e.Enabled == enabled) return;
         _elements[id] = e with { Visible = visible, Enabled = enabled }; _layout.UpdateFlags(id, visible, enabled);
-        _presentation = checked(_presentation + 1); _layoutRevision = ulong.MaxValue;
+        _presentation = checked(_presentation + 1); _layoutDirty = true; _inputPrepared = false;
         _actions.Clear(); // Old interaction proposals never cross a changed visible/enabled topology.
         _focus = _capture = Guid.Empty; // Safe conservative cancellation on changed interaction topology.
     }
@@ -65,7 +67,7 @@ public sealed class UiRuntime
     public void PreparedText(Guid elementId, IUiTextMetrics metrics)
     {
         _document.VerifyAccess(); var e = _elements.GetValueOrDefault(elementId) ?? throw new ArgumentException("Missing UI text element.");
-        _layout.UpdateText(elementId, Text(elementId), metrics); _layoutRevision = ulong.MaxValue;
+        _layout.UpdateText(elementId, Text(elementId), metrics); _layoutDirty = true; _inputPrepared = false;
     }
     public void Bind(Guid playSession, Guid world, ulong committedTick)
     {
@@ -90,23 +92,25 @@ public sealed class UiRuntime
     public ReadOnlySpan<UiLayoutBox> Layout(UiViewport viewport)
     {
         _document.VerifyAccess(); viewport.Validate();
-        if (_layoutRevision == _presentation && _viewport == viewport) return _boxes;
-        _boxes = _layout.Layout(viewport).ToArray(); _viewport = viewport;
-        var offsets = new Vector2[_boxes.Length];
-        for (int i = 0; i < _boxes.Length; i++) {
-            var box = _boxes[i]; var element = _elements[box.Id]; var offset = Vector2.Zero;
+        // Paint-only value/focus/caret changes do not invalidate geometry or hit testing.
+        if (!_layoutDirty && _viewport == viewport) return _boxes;
+        var boxes = _layout.Layout(viewport).ToArray();
+        var offsets = new Vector2[boxes.Length];
+        for (int i = 0; i < boxes.Length; i++) {
+            var box = boxes[i]; var element = _elements[box.Id]; var offset = Vector2.Zero;
             UiRect clip = new(0, 0, viewport.Width / viewport.Scale, viewport.Height / viewport.Scale);
             if (box.ParentIndex >= 0) {
-                var parent = _boxes[box.ParentIndex]; var pe = _elements[parent.Id]; offset = offsets[box.ParentIndex];
+                var parent = boxes[box.ParentIndex]; var pe = _elements[parent.Id]; offset = offsets[box.ParentIndex];
                 if (pe.Kind == UiKind.ScrollView) offset += Vector2.TransformNormal(new(0, -_state[pe.Id].Scroll), parent.Transform);
                 clip = parent.Clip;
                 if (pe.Style.Clip || pe.Kind == UiKind.ScrollView) clip = UiRect.Intersect(clip, UiLayoutEngine.Bounds(parent.Rect.Width, parent.Rect.Height, parent.Transform));
             }
             var transform = box.Transform; transform.M31 += offset.X; transform.M32 += offset.Y;
-            offsets[i] = offset; _boxes[i] = box with { Transform = transform, Clip = clip };
+            offsets[i] = offset; boxes[i] = box with { Transform = transform, Clip = clip };
             if (element.Kind == UiKind.ScrollView && element.Layout.Rotation != 0) throw new ArgumentException("Rotated scroll clipping unsupported.");
         }
-        _layoutRevision = _presentation; return _boxes;
+        _boxIndices.Clear();for(int i=0;i<boxes.Length;i++)_boxIndices.Add(boxes[i].Id,i);
+        _boxes=boxes;_viewport=viewport;_layoutDirty=false;_inputPrepared=true;return _boxes;
     }
     public Guid HitTest(Vector2 framebufferPoint)
     {
@@ -130,7 +134,7 @@ public sealed class UiRuntime
     public void Input(UiStamp expected, ReadOnlySpan<UiInput> input)
     {
         _document.VerifyAccess();
-        if (expected != _stamp || _layoutRevision == ulong.MaxValue) throw new InvalidOperationException("Stale/unprepared UI input.");
+        if (expected != _stamp || !_inputPrepared) throw new InvalidOperationException("Stale/unprepared UI input.");
         int potentialActions = 0;
         foreach (var e in input) if (e.Kind is UiInputKind.PointerDown or UiInputKind.PointerMove or UiInputKind.PointerUp or UiInputKind.Activate or UiInputKind.Text or UiInputKind.Backspace) potentialActions++;
         if (input.Length > MaxInputBatch || _actions.Count + potentialActions > MaxQueuedActions) throw new InvalidOperationException("UI input/action queue backpressure; no partial application.");
@@ -153,14 +157,13 @@ public sealed class UiRuntime
                     if (_capture != Guid.Empty && _capture == hit && _elements[hit].Kind == UiKind.Button) Emit(hit, e);
                     _capture = Guid.Empty; break;
                 case UiInputKind.Tab:
-                    var ids = _boxes.Where(b => b.Enabled && b.Opacity > 0 && _elements[b.Id].Kind is UiKind.Button or UiKind.Slider or UiKind.TextInput).Select(b => b.Id).ToArray();
-                    if (ids.Length != 0) { int index = Array.IndexOf(ids, _focus); _focus = ids[index < 0 ? (e.Reverse ? ids.Length - 1 : 0) : (index + (e.Reverse ? ids.Length - 1 : 1)) % ids.Length]; } _capture = Guid.Empty; break;
+                    MoveFocus(e.Reverse); _capture = Guid.Empty; break;
                 case UiInputKind.Activate:
                     if (_focus != Guid.Empty && _elements[_focus].Kind == UiKind.Button) Emit(_focus, e); break;
                 case UiInputKind.Scroll:
                     if (hit != Guid.Empty) {
                         var element = _elements[hit]; while (element.Kind != UiKind.ScrollView && element.Parent != Guid.Empty) element = _elements[element.Parent];
-                        if (element.Kind == UiKind.ScrollView) { var state = _state[element.Id]; float scroll = Math.Clamp(state.Scroll + e.Delta, 0, 65536); visual = scroll != state.Scroll; _state[element.Id] = state with { Scroll = scroll }; }
+                        if (element.Kind == UiKind.ScrollView) { var state = _state[element.Id]; float scroll = Math.Clamp(state.Scroll + e.Delta, 0, 65536); visual = scroll != state.Scroll; _state[element.Id] = state with { Scroll = scroll }; _layoutDirty |= visual; }
                     } break;
                 case UiInputKind.Text: case UiInputKind.Backspace: case UiInputKind.Left: case UiInputKind.Right:
                 case UiInputKind.Composition: case UiInputKind.CompositionCancel:
@@ -172,15 +175,28 @@ public sealed class UiRuntime
     }
     private bool Slide(Guid id, UiInput input)
     {
-        var box = _boxes.First(b => b.Id == id); if (!Matrix3x2.Invert(box.Transform, out var inverse)) return false;
+        if(!_boxIndices.TryGetValue(id,out int index))throw new InvalidOperationException("Slider has no prepared layout.");
+        var box = _boxes[index]; if (!Matrix3x2.Invert(box.Transform, out var inverse)) return false;
         float x = Vector2.Transform(input.Position / _viewport.Scale, inverse).X;
         float value = box.Rect.Width <= 0 ? 0 : Math.Clamp(x / box.Rect.Width, 0, 1); bool changed = value != _state[id].Value;
         _state[id] = _state[id] with { Value = value }; if (changed) Emit(id, input, value); return changed;
     }
+    private void MoveFocus(bool reverse)
+    {
+        bool Candidate(int i)=>_boxes[i].Enabled&&_boxes[i].Opacity>0&&_elements[_boxes[i].Id].Kind is UiKind.Button or UiKind.Slider or UiKind.TextInput;
+        int current=_boxIndices.TryGetValue(_focus,out int found)&&Candidate(found)?found:(reverse?0:-1);
+        for(int step=1;step<=_boxes.Length;step++){
+            int i=reverse?(current-step+_boxes.Length)%_boxes.Length:(current+step)%_boxes.Length;
+            if(Candidate(i)){_focus=_boxes[i].Id;return;}
+        }
+    }
     private void EditText(Guid id, UiInput input)
     {
-        var state = _state[id]; int[] starts = StringInfo.ParseCombiningCharacters(state.Text);
-        int previous = starts.LastOrDefault(i => i < state.Caret), next = starts.FirstOrDefault(i => i > state.Caret, state.Text.Length);
+        var state = _state[id];int previous=0,next=state.Text.Length;
+        if(input.Kind is UiInputKind.Backspace or UiInputKind.Left or UiInputKind.Right)
+            foreach(int start in StringInfo.ParseCombiningCharacters(state.Text)){
+                if(start<state.Caret)previous=start;else if(start>state.Caret){next=start;break;}
+            }
         switch (input.Kind) {
             case UiInputKind.Text:
                 if (state.Text.Length + input.Text.Length > 16384) return;

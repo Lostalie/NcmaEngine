@@ -14,7 +14,7 @@ internal static unsafe partial class Program
     private delegate void JointImageObserver(SceneGpuDraw[] geometry,SceneGpuDraw[] casters,ResourceLighting lighting,
         Matrix4x4 lightVp,SceneShadowSettings shadow,GpuSkinRequest[] requests,GpuSkinPalette[] palettes,string label,ref ulong frame);
 
-    private static int JointPostImageTests(string plugins,string output)
+    private static int JointPostImageTests(string plugins,string output,SceneShadowQuality? costQuality=null)
     {
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);
         int cases=0,maxError=0,jointImages=0;ulong frame=1;var evidence=new List<object>();var observed=new HashSet<string>(StringComparer.Ordinal);
@@ -26,7 +26,10 @@ internal static unsafe partial class Program
         using var cache=new RenderResourceCache(renderer);
         var skinCatalog=DefaultSkinShader.CopyCatalog(renderer);
         var skin=RegisteredSkinShader.Prepare(renderer,skinCatalog,DefaultSkinShader.Select(skinCatalog),()=>true);
-        var sc=DefaultEnvironmentSceneShaders.CopyCatalog(renderer,true);var selected=DefaultEnvironmentSceneShaders.Select(sc,true);
+        var preset=costQuality is {} quality?SceneShadowPresets.Get(quality):null;
+        bool shadows=preset?.Enabled??true;
+        var sc=DefaultEnvironmentSceneShaders.CopyCatalog(renderer,shadows);var selected=DefaultEnvironmentSceneShaders.Select(sc,shadows);
+        if(preset?.RequiresHighShader==true){var high=SceneShadowShaders.ComposeHigh(sc,selected);sc=high.Catalog;selected=high.Selection;}
         var official=RegisteredEnvironmentSceneShaders.Prepare(renderer,sc,selected,()=>true);
         // A test-only transport of the actual half-float HDR buffer, NOT a shading oracle.
         // Each channel is encoded into two exact UNORM bytes before display conversion.
@@ -53,7 +56,7 @@ internal static unsafe partial class Program
         var config=new EnvironmentLightingConfiguration(env.AssetId,1,env.ContentHash,.5f,.5f,true);
         using var white=renderer.CreateUiImage(1,1,[255,255,255,255]);
         // Verify that the measurement transport itself preserves exact Half bits, including HDR.
-        using(var scene=new ScenePipelineSession(renderer,new Scene3DPipeline(ambient:0,shadowResolution:512),32,32,environmentShaders:official))
+        using(var scene=new ScenePipelineSession(renderer,new Scene3DPipeline(ambient:0,shadowResolution:512,shadows:shadows),32,32,environmentShaders:official))
         using(var target=renderer.CreateViewTarget(32,32)){
             byte[] bytes=new byte[32*32*4];using var quad=renderer.CreateStaticMesh(Quad());
             foreach(float value in new[]{0,.001f,.25f,4,16})for(int c=0;c<3;c++){
@@ -73,6 +76,7 @@ internal static unsafe partial class Program
         {
             // Real imported geometry/palettes are borrowed only for this bounded call.
             observed.Add(label);
+            if(preset is not null){shadow=preset.Settings;if(!shadows)casters=[];}
             foreach((int w,int h) in new[]{(256,256),(255,193)}){
                 renderer.Resize((uint)w,(uint)h);byte[] bytes=new byte[w*h*4];var hdr=new Vector3[w*h];
                 using var target=renderer.CreateViewTarget((uint)w,(uint)h);
@@ -84,9 +88,15 @@ internal static unsafe partial class Program
                 builder.Quad(new(Guid.NewGuid(),new(0,0,80,80),Matrix3x2.Identity,new(8,8,64,64),1,true,-1),white,new(.2f,.4f,.8f,1));
                 builder.Quad(new(Guid.NewGuid(),new(0,0,128,96),Matrix3x2.CreateTranslation(40,16),new(60,32,80,64),1,true,-1),white,new(.8f,.3f,.1f,.5f));
                 using var ui=builder.Build();byte[]? defaultPixels=null;ulong defaultGeneration=0;
-                foreach(bool custom in new[]{false,true}){
-                    RenderPipeline Pipeline(float exposure)=>custom?new ExampleScenePipeline(exposure,0,true):new Scene3DPipeline(exposure,0,512);
+                foreach(int mode in costQuality is null?new[]{0,2}:new[]{0,1,2}){
+                    bool custom=mode!=0;
+                    RenderPipeline Pipeline(float exposure)=>preset is null?
+                        (custom?new ExampleScenePipeline(exposure,0,true):new Scene3DPipeline(exposure,0,512)):
+                        CostJointPipeline(preset,mode,exposure);
                     using var scene=new ScenePipelineSession(renderer,Pipeline(1),(uint)w,(uint)h,environmentShaders:official);
+                    if(preset is not null){var maps=scene.Plan.Resources.Where(r=>r.Role==RenderRole.SceneShadow).ToArray();
+                        Pass(shadows?maps.Length==1&&maps[0].Width==preset.Budget.Resolution&&maps[0].Height==preset.Budget.Resolution:maps.Length==0,"exact selected shadow resources "+costQuality);
+                        if(preset.RequiresHighShader)Pass(scene.Plan.RequiredSceneGeometryPixelHash==selected.GeometryPixel.ContentHash,"High exact registered geometry pixel required");}
                     scene.ConfigureEnvironment(environment,config,()=>true);
                     bool Draw(ulong f,bool overlay=false,bool noCasters=false,bool capture=true){
                         // Diagnostic readback explicitly drains outside simulation; warm submit
@@ -120,7 +130,7 @@ internal static unsafe partial class Program
                         }
                         if(error>3){File.WriteAllBytes(Path.Combine(output,"failed-actual.png"),Png((uint)w,(uint)h,bytes));File.WriteAllBytes(Path.Combine(output,"failed-expected.png"),Png((uint)w,(uint)h,expectedImage));}
                         maxError=Math.Max(maxError,error);Pass(error<=3,$"independent HDR-input Bloom/Tone/UI whole image {label} {w}x{h} custom={custom} EVscale={exposure} error={error} at={maxAt/4%w},{maxAt/4/w} c={maxAt%4} actual={bytes[maxAt]} expected={expectedImage[maxAt]} hdr={hdr[maxAt/4]}");
-                        jointImages++;evidence.Add(new{label,w,h,custom,exposure,error});
+                        jointImages++;evidence.Add(new{label,w,h,custom,mode,costQuality,exposure,error});
                     }
                     scene.Configure(Pipeline(1));Draw(next++);var baseline=bytes.ToArray();
                     if(!custom){defaultPixels=baseline;defaultGeneration=scene.Key.Value;}else Pass(defaultPixels is not null&&bytes.SequenceEqual(defaultPixels)&&scene.Key.Value!=defaultGeneration,"fresh custom resource identity and default/full pipeline whole-image parity");
@@ -137,17 +147,20 @@ internal static unsafe partial class Program
                     double ms=Stopwatch.GetElapsedTime(started).TotalMilliseconds;allocated=GC.GetAllocatedBytesForCurrentThread()-allocated;
                     Pass(submitted>0&&allocated==0&&renderer.ResourceStats.UploadedBytes==resources.UploadedBytes&&renderer.PostStats.Publications==posts.Publications&&renderer.EnvironmentStats.Live==envStats.Live,"warm joint skin/scene/post no managed allocation/immutable upload/publication");
                     evidence.Add(new{label,w,h,custom,allocated,elapsedMs=ms,attempts=16,submitted,busy=16-submitted});
-                    Draw(next++,overlay:true);File.WriteAllBytes(Path.Combine(output,$"joint-{label}-{w}-{custom}.png"),Png((uint)w,(uint)h,bytes));
+                    if(preset is not null)evidence.Add(MeasureSceneJointCosts(renderer,f=>Draw(f,overlay:true,capture:false),
+                        label,w,h,mode,preset,geometry.Length,casters.Length,requests.Length,palettes.Length,ref next));
+                    Draw(next++,overlay:true);string imageMode=costQuality is null?custom.ToString():mode.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    File.WriteAllBytes(Path.Combine(output,$"joint-{label}-{w}-{imageMode}.png"),Png((uint)w,(uint)h,bytes));
                 }
             }
             renderer.Resize(256,256);
         }
         int inheritedCases=EnvironmentJointImages(plugins,output,renderer,cache,skin,environment,config,ref frame,Observe);cases+=inheritedCases;
-        Pass(jointImages==observed.Count*12&&observed.Contains("static-fbx")&&observed.Any(s=>s.StartsWith("blender_279_sausage_6100_ascii",StringComparison.Ordinal))&&observed.Any(s=>s.StartsWith("blender_279_sausage_7400_binary",StringComparison.Ordinal)),"static plus both actual FBX encodings/clips joint image coverage");
+        Pass(jointImages==observed.Count*(costQuality is null?12:18)&&observed.Contains("static-fbx")&&observed.Any(s=>s.StartsWith("blender_279_sausage_6100_ascii",StringComparison.Ordinal))&&observed.Any(s=>s.StartsWith("blender_279_sausage_7400_binary",StringComparison.Ordinal)),"static plus both actual FBX encodings/clips joint image coverage");
         Pass(renderer.PostStats.Bindings==0&&renderer.PostStats.ResidentBytes==0&&renderer.PipelineStats.Pipelines==0&&renderer.SkinStats.Meshes==0,"joint scenes and skin/post resources released");
         Pass(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"DX11 API0/0");
-        File.WriteAllText(Path.Combine(output,"joint-post-results.json"),JsonSerializer.Serialize(new{cases,jointImages,maxError,evidence,apiErrors=0,apiWarnings=0,independentPostOracle=true,independentWholeShadingOracle=false,relocatedProductsAccepted=false,manualAccepted=false},new JsonSerializerOptions{WriteIndented=true}));
-        Console.WriteLine($"PASS M7.4-D2 {cases} checks / {jointImages} joint images; maxError={maxError}; API0/0; {output}");return 0;
+        File.WriteAllText(Path.Combine(output,"joint-post-results.json"),JsonSerializer.Serialize(new{cases,jointImages,maxError,costQuality,evidence,apiErrors=0,apiWarnings=0,independentPostOracle=true,independentWholeShadingOracle=false,relocatedProductsAccepted=false,manualAccepted=false,fullPerformanceAccepted=false},new JsonSerializerOptions{WriteIndented=true}));
+        Console.WriteLine($"PASS {(costQuality is null?"M7.4-D2":"M7.7 joint costs "+costQuality)} {cases} checks / {jointImages} joint images; maxError={maxError}; API0/0; {output}");return 0;
     }
     private static int ChangedPixels(byte[] a,byte[] b){int count=0;for(int i=0;i<a.Length;i+=4)if(Math.Abs(a[i]-b[i])+Math.Abs(a[i+1]-b[i+1])+Math.Abs(a[i+2]-b[i+2])>3)count++;return count;}
 }

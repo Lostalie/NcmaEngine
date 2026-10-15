@@ -88,9 +88,13 @@ public sealed class UiDisplayListBuilder
 {
     private readonly RendererSession _renderer; private readonly List<UiVertex> _vertices = []; private readonly List<UiBatch> _batches = [];
     private static readonly Vector2[] Corners = [new(0, 0), new(1, 0), new(0, 1), new(0, 1), new(1, 0), new(1, 1)];
-    public UiDisplayListBuilder(RendererSession renderer) => _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer));
+    public UiDisplayListBuilder(RendererSession renderer) { _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer)); _ = _renderer.Handle; }
+    // Retain bounded CPU capacity only. Build copies into an independent native list;
+    // resetting never mutates a published list or owns/releases its image resources.
+    public void Reset() { _ = _renderer.Handle; _vertices.Clear(); _batches.Clear(); }
     public void Quad(UiLayoutBox box, UiGpuImage image, UiColor color, float scale = 1, float radius = 0, Vector4? uvRegion = null)
     {
+        _ = _renderer.Handle;
         ArgumentNullException.ThrowIfNull(image);
         if (image.Owner != _renderer || image.Key.Value == 0 || !float.IsFinite(scale) || scale <= 0 || !float.IsFinite(radius) || radius < 0) throw new ArgumentException("UI image/scale/radius.");
         if (box.Rect.Width <= 0 || box.Rect.Height <= 0 || box.Opacity <= 0 || box.Clip.Width <= 0 || box.Clip.Height <= 0) return;
@@ -109,6 +113,6 @@ public sealed class UiDisplayListBuilder
         }
     }
     public UiGpuList Build() => _renderer.CreateUiList(CollectionsMarshal.AsSpan(_vertices), CollectionsMarshal.AsSpan(_batches));
-    public int VertexCount => _vertices.Count;
-    public int BatchCount => _batches.Count;
+    public int VertexCount { get { _ = _renderer.Handle; return _vertices.Count; } }
+    public int BatchCount { get { _ = _renderer.Handle; return _batches.Count; } }
 }

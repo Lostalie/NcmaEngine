@@ -4,12 +4,13 @@ namespace Ncma.Player.App;
 public sealed record PlayerOptions(string? Project, bool Headless, string? Renderer, ulong? Ticks,
     double FixedDelta, double MaxRuntimeSeconds, string Report, bool Help, bool Version)
 {
+    public bool PresentationCosts { get; init; }
     public static PlayerOptions Parse(string[] args, string? defaultReportRoot = null)
     {
         ArgumentNullException.ThrowIfNull(args);
         if (args.Length > 32) throw new ArgumentException("argument_budget");
         string? project = null, renderer = null, report = null; bool headless = false, help = false, version = false;
-        ulong? ticks = null; double delta = 1d / 60, seconds = 120;
+        bool costs=false; ulong? ticks = null; double delta = 1d / 60, seconds = 120;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < args.Length; i++)
         {
@@ -31,6 +32,7 @@ public sealed record PlayerOptions(string? Project, bool Headless, string? Rende
             {
                 case "--project": project = Path.GetFullPath(Value()); break;
                 case "--headless": headless = true; break;
+                case "--presentation-costs": costs = true; break;
                 case "--renderer": renderer = Value(); if (renderer is not ("d3d11" or "null" or "vulkan")) throw new ArgumentException("invalid_renderer"); break;
                 case "--ticks": if (!ulong.TryParse(Value(), NumberStyles.None, CultureInfo.InvariantCulture, out ulong n) || n is 0 or > 1_000_000)
                         throw new ArgumentException("invalid_ticks"); ticks = n; break;
@@ -49,7 +51,7 @@ public sealed record PlayerOptions(string? Project, bool Headless, string? Rende
             "NcmaEngine", "player"), "player-" + Guid.NewGuid().ToString("N") + ".json");
         report = Path.GetFullPath(report);
         if (!report.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("report_extension");
-        return new(project, headless, renderer, ticks, delta, seconds, report, help, version);
+        return new(project, headless, renderer, ticks, delta, seconds, report, help, version) { PresentationCosts=costs };
     }
     public void ValidateRun()
     {

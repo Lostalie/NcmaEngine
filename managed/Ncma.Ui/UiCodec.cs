@@ -27,7 +27,40 @@ public static class UiCodec
         var document = JsonSerializer.Deserialize<UiDefinition>(bytes, Json) ?? throw new ArgumentException("UI document required.");
         Validate(document); return document;
     }
-    public static UiDefinition Copy(UiDefinition document) => Decode(Encode(document));
+    public static UiDefinition Copy(UiDefinition document)
+    {
+        ValidateIdentity(document);
+        // Own the only mutable containers before validating. Every reachable record
+        // is sealed and init-only, and its remaining fields are values/immutable strings.
+        var copy=CopyOwned(document);Validate(copy);
+        // Use the SAME serializer/options as Encode, but retain no JSON/DOM/object graph.
+        // Counting escaped UTF-8 output preserves the exact canonical 4 MiB boundary.
+        using var budget=new WireBudgetStream();JsonSerializer.Serialize(budget,copy,Json);
+        return copy;
+    }
+    // Container copy only, NOT validation. External input must use Copy (which
+    // validates the result); UiDocument.Capture uses its already validated private graph.
+    internal static UiDefinition CopyOwned(UiDefinition document)=>document with{
+        Elements=(UiElement[])document.Elements.Clone(),Tokens=(UiToken[])document.Tokens.Clone()};
+    private sealed class WireBudgetStream:Stream
+    {
+        private int _bytes;
+        public override bool CanRead=>false;
+        public override bool CanSeek=>false;
+        public override bool CanWrite=>true;
+        public override long Length=>_bytes;
+        public override long Position{get=>_bytes;set=>throw new NotSupportedException();}
+        public override void Write(byte[] buffer,int offset,int count)=>Write(buffer.AsSpan(offset,count));
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            if(buffer.Length>MaxBytes-_bytes)throw new ArgumentException("UI document byte budget.");
+            _bytes+=buffer.Length;
+        }
+        public override void Flush(){}
+        public override int Read(byte[] buffer,int offset,int count)=>throw new NotSupportedException();
+        public override long Seek(long offset,SeekOrigin origin)=>throw new NotSupportedException();
+        public override void SetLength(long value)=>throw new NotSupportedException();
+    }
     private static void Visit(JsonElement e)
     {
         if (e.ValueKind == JsonValueKind.Object) {
@@ -47,9 +80,7 @@ public static class UiCodec
     }
     public static void Validate(UiDefinition d)
     {
-        ArgumentNullException.ThrowIfNull(d);
-        if (d.Version != 1 || d.AssetId == Guid.Empty || d.Root == Guid.Empty || d.Elements is null || d.Tokens is null ||
-            d.Elements.Length is < 1 or > MaxElements || d.Tokens.Length > MaxTokens) throw new ArgumentException("UI identity/version/budget.");
+        ValidateIdentity(d);
         Text(d.Name, 256, true);
         var tokens = new Dictionary<Guid, UiToken>(); var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in d.Tokens) {
@@ -87,4 +118,10 @@ public static class UiCodec
     }
     public static Guid[] Dependencies(UiDefinition d)
     { Validate(d); return d.Elements.SelectMany(e => new[] { e.Font, e.Image }).Where(id => id != Guid.Empty).Distinct().Order().ToArray(); }
+    private static void ValidateIdentity(UiDefinition d)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        if(d.Version!=1||d.AssetId==Guid.Empty||d.Root==Guid.Empty||d.Elements is null||d.Tokens is null||
+            d.Elements.Length is <1 or >MaxElements||d.Tokens.Length>MaxTokens)throw new ArgumentException("UI identity/version/budget.");
+    }
 }

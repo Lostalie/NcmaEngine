@@ -9,7 +9,7 @@ using Ncma.Ui.Rendering;
 
 try {
     string Value(string name, string fallback) { int i = Array.IndexOf(args, name); return i < 0 ? fallback : i + 1 < args.Length ? args[i + 1] : throw new ArgumentException("Missing " + name); }
-    bool smoke = args.Contains("--smoke"); string plugins = Path.GetFullPath(Value("--plugins", "out/build/windows-ninja-debug/m2/plugins"));
+    bool smoke = args.Contains("--smoke"), captureCosts=args.Contains("--presentation-costs"); string plugins = Path.GetFullPath(Value("--plugins", "out/build/windows-ninja-debug/m2/plugins"));
     using var shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,null,null);
     if (shaderFiles is not null && shaderFiles.Count != 1) throw new ArgumentException("Pure UI requires only one Flat2D package.");
     if (args.Contains("--recovery-smoke")) { UiRecoverySmoke.Run(plugins,shaderFiles); return; }
@@ -38,6 +38,7 @@ try {
     var shaders = renderer.DefaultRuntimeShaders.Prepare(ShaderProfile.Flat2D,false,false,() => preparing);
     renderer.CreateUiShaders(shaders.Ui!);
     preparing = false;
+    var costs=captureCosts?new PresentationCostCapture(renderer):null;
     using var canvas = UiCanvas.Create(new(UiCodec.Decode(UiCodec.Encode(d))), renderer, textService, new Dictionary<Guid, FontAsset> { [fontId] = asset });
     var input = new UiWindowInput(); ulong frame = 1, renderedRevision = ulong.MaxValue; uint width = 640, height = 400; int value = 100;
     for (;;) {
@@ -49,9 +50,15 @@ try {
         foreach (var action in input.Drain(canvas)) if (action.Action == "attack") { value = Math.Max(0, value - 10); canvas.Runtime.SetText(health.Id, "生命值 " + value); }
         canvas.Prepare(viewport);
         // Static application redraws on state/window changes, not a continuous simulation clock.
-        if (smoke || renderedRevision != canvas.Runtime.PresentationRevision) { canvas.Submit(frame++, Vector4.Zero); renderer.Present(); renderedRevision = canvas.Runtime.PresentationRevision; }
+        if (smoke || renderedRevision != canvas.Runtime.PresentationRevision) {
+            costs?.Begin(frame);
+            try{canvas.Submit(frame++, Vector4.Zero); renderer.Present();costs?.End();}
+            catch{costs?.Abort();throw;}
+            renderedRevision = canvas.Runtime.PresentationRevision;
+        }
         if (smoke && frame == 5) break; if (!smoke) window.Wait(.05);
     }
+    if(captureCosts)Console.WriteLine(JsonSerializer.Serialize(new { presentationCosts=costs!.Last, scope="UI submit/present only; input/layout/text/image preparation excluded" }));
     canvas.Dispose(); textService.Dispose(); var stats = renderer.Stats;
     if (stats.ValidationErrors != 0 || stats.ValidationWarnings != 0) throw new InvalidOperationException("UI sample graphics validation failed.");
     var environment=renderer.EnvironmentStats;

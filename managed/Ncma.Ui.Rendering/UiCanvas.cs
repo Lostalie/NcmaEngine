@@ -25,6 +25,10 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
 {
     private sealed record Run(PreparedText Text, UiGpuImage Image, float Width, float Height, float Scale, float Size);
     private readonly UiDefinition _definition; private readonly RendererSession _renderer; private readonly TextService? _text;
+    private readonly UiElement[] _textElements;
+    private readonly Dictionary<Guid,UiColor> _colors;
+    private readonly UiDisplayListBuilder _builder;
+    private readonly HashSet<Guid> _emptyText = [];
     private readonly Dictionary<Guid, PreparedFont> _fonts = [];
     private readonly Dictionary<Guid, UiGpuImage> _images = [];
     private readonly Dictionary<Guid, Run> _runs = [];
@@ -38,6 +42,9 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
     private UiCanvas(UiDocument document, RendererSession renderer, TextService? text,UiRuntime? retainedRuntime=null)
     {
         ArgumentNullException.ThrowIfNull(document); _definition = document.Capture(); _renderer = renderer ?? throw new ArgumentNullException(nameof(renderer)); _text = text;
+        _textElements=_definition.Elements.Where(e=>e.Kind is UiKind.Text or UiKind.Button or UiKind.TextInput).ToArray();
+        _colors=_definition.Tokens.ToDictionary(t=>t.Id,t=>t.Color);
+        _builder=new(renderer);
         renderer.PrepareDefaultUiShaders();
         Runtime = retainedRuntime??new(document, this); _ = Runtime.Stamp;
         _white = renderer.CreateUiImage(1, 1, new byte[] { 255, 255, 255, 255 });
@@ -83,26 +90,38 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
         ObjectDisposedException.ThrowIf(_disposed, this); _ = Runtime.Stamp; viewport.Validate();
         if (_preparedViewport == viewport && _preparedRevision == Runtime.PresentationRevision) return;
         _preparedRevision = ulong.MaxValue; // A failed new preparation cannot submit an old list as current UI.
-        foreach (var e in _definition.Elements.Where(e => e.Kind is UiKind.Text or UiKind.Button or UiKind.TextInput)) {
+        foreach (var e in _textElements) {
             string content = Runtime.Text(e.Id);
-            if (content.Length == 0) { Runtime.PreparedText(e.Id, this); continue; }
+            if (content.Length == 0) {
+                if(_runs.Remove(e.Id,out var old)){_retained.Add(old.Image);_retained.Add(old.Text);}
+                if(!_emptyText.Contains(e.Id)){Runtime.PreparedText(e.Id,this);_emptyText.Add(e.Id);}
+                continue;
+            }
+            _emptyText.Remove(e.Id);
+            // Keep final wrapped metrics on paint-only updates. Replacing them with
+            // provisional viewport-wide metrics would reshape twice on every focus/value change.
+            // A failed preparation may have replaced only some runs at another DPI
+            // without publishing that viewport. Validate the run itself as well.
+            if(_preparedViewport==viewport&&_runs.TryGetValue(e.Id,out var current)&&current.Text.Text==content&&current.Scale==viewport.Scale&&current.Size==e.FontSize)continue;
             float w = e.Layout.WidthMode == UiSizing.Fixed ? Math.Max(1, e.Layout.Width) : Math.Clamp(viewport.Width / viewport.Scale, 1, Math.Min(e.Layout.MaxWidth, 4096 / viewport.Scale));
             float h = e.Layout.HeightMode == UiSizing.Fixed ? Math.Max(1, e.Layout.Height) : Math.Clamp(viewport.Height / viewport.Scale, 1, Math.Min(e.Layout.MaxHeight, 4096 / viewport.Scale));
-            PrepareRun(e, content, w, h, viewport.Scale); Runtime.PreparedText(e.Id, this);
+            if(PrepareRun(e, content, w, h, viewport.Scale))Runtime.PreparedText(e.Id, this);
         }
         // Final sized wrapping is resolved in a bounded second pass. A later incompatible intrinsic
         // dependency fails explicitly rather than entering an unbounded layout/shaping loop.
-        var boxes = Runtime.Layout(viewport).ToArray();
+        // Borrow only within this synchronous preparation. PreparedText invalidates
+        // layout but never mutates its returned array; reacquire after the text pass.
+        var boxes = Runtime.Layout(viewport);
         foreach (var box in boxes) {
-            var e = _definition.Elements.First(e => e.Id == box.Id);
+            var e = Runtime.Element(box.Id);
             if (!_runs.TryGetValue(e.Id, out var run)) continue;
             if (e.Layout.WidthMode == UiSizing.Fill && run.Width != Math.Max(1, box.Rect.Width) || e.Layout.HeightMode == UiSizing.Fill && run.Height != Math.Max(1, box.Rect.Height)) {
                 PrepareRun(e, run.Text.Text, Math.Max(1, box.Rect.Width), Math.Max(1, box.Rect.Height), viewport.Scale); Runtime.PreparedText(e.Id, this);
             }
         }
-        boxes = Runtime.Layout(viewport).ToArray(); var builder = new UiDisplayListBuilder(_renderer);
+        boxes = Runtime.Layout(viewport); var builder = _builder;builder.Reset();
         foreach (var box in boxes) {
-            var e = _definition.Elements.First(e => e.Id == box.Id); var fill = Resolve(e.Style.FillToken, e.Style.Fill); var foreground = Resolve(e.Style.ForegroundToken, e.Style.Foreground);
+            var e = Runtime.Element(box.Id); var fill = Resolve(e.Style.FillToken, e.Style.Fill); var foreground = Resolve(e.Style.ForegroundToken, e.Style.Foreground);
             if (fill.A > 0) builder.Quad(box, _white, fill, viewport.Scale, e.Style.CornerRadius);
             if (e.Kind == UiKind.Image) {
                 if (e.Image == Guid.Empty || !_images.TryGetValue(e.Image, out var image)) throw new ArgumentException("Missing UI image asset.");
@@ -129,9 +148,9 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
         _list = candidate; _preparedViewport = viewport; _preparedRevision = Runtime.PresentationRevision; Preparations++;
         while (_retained.Count != 0) { _retained[0].Dispose(); _retained.RemoveAt(0); }
     }
-    private void PrepareRun(UiElement e, string content, float width, float height, float scale)
+    private bool PrepareRun(UiElement e, string content, float width, float height, float scale)
     {
-        if (_runs.TryGetValue(e.Id, out var old) && old.Text.Text == content && old.Width == width && old.Height == height && old.Scale == scale && old.Size == e.FontSize) return;
+        if (_runs.TryGetValue(e.Id, out var old) && old.Text.Text == content && old.Width == width && old.Height == height && old.Scale == scale && old.Size == e.FontSize) return false;
         if (_text is null || !_fonts.TryGetValue(e.Font, out var font)) throw new ArgumentException("Text has no explicit prepared font asset.");
         var text = _text.Prepare(font, content, e.FontSize, width, height, scale);
         UiGpuImage image;
@@ -139,8 +158,9 @@ public sealed class UiCanvas : IDisposable, IUiTextMetrics
         catch { text.Dispose(); throw; }
         if (old is not null) { _retained.Add(old.Image); _retained.Add(old.Text); }
         _runs[e.Id] = new(text, image, width, height, scale, e.FontSize);
+        return true;
     }
-    private UiColor Resolve(Guid token, UiColor fallback) => token == Guid.Empty ? fallback : _definition.Tokens.First(t => t.Id == token).Color;
+    private UiColor Resolve(Guid token, UiColor fallback) => token == Guid.Empty ? fallback : _colors[token];
     public void Submit(ulong frame, Vector4 clear, bool overlay = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

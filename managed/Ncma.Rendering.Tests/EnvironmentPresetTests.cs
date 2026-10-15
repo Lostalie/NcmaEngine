@@ -35,12 +35,14 @@ internal static unsafe partial class Program
         using(var files=RuntimeShaderFileSet.Load(player))Pass(files.Count==9&&files.Get(ShaderProfile.Flat2D,false,false).Profile==ShaderProfile.Flat2D,"Player original8 plus checked HUD profile");
         using(var files=RuntimeShaderFileSet.Load(ui))Pass(files.Count==1&&Directory.GetFiles(ui,"*",SearchOption.AllDirectories).Length==2&&!Directory.Exists(Path.Combine(ui,"assets/environments")),"UI1+index only");
         var originals=new Dictionary<string,string>{
-            ["Flat2D-0-0.ncshader"]="23EBD59DF449AE1A8A9CEE8073E22156A5586D46FD7A44FF1626B02FA3971193",
+            // M7.7 intentionally fixes zero-radius square edge coverage. UiCostJoint's
+            // independent integer-grid oracle verifies this delta; all 3D hashes stay frozen.
+            ["Flat2D-0-0.ncshader"]="447012BF011FF89E2241A8ABA15ED73BF7C9F3C4E0C27A5037FCF9EB6DA82416",
             ["Scene3D-0-0.ncshader"]="45A8FCB09245305D60E26B782BA6417B3403CF933C2DD721E214460959526716",
             ["Scene3D-0-1.ncshader"]="418B1E852877637446ECDF0D823FC0C5E66893072D8A8BCCB4AEE90CCAE34058",
             ["Scene3D-1-0.ncshader"]="7EC30FF9BDE840058C0DE7468B9B6B0A2E90ECCD17A77EFD9C08B70BFA1B4B40",
             ["Scene3D-1-1.ncshader"]="86E0F92FFB7CB7F91F932266E00B0C38D685E4DAAA38DBC65635DF221A794313"};
-        foreach(var old in originals)Pass(Hash(File.ReadAllBytes(Path.Combine(editor,"assets/shaders",old.Key)))==old.Value,"original shader "+old.Key);
+        foreach(var old in originals)Pass(Hash(File.ReadAllBytes(Path.Combine(editor,"assets/shaders",old.Key)))==old.Value,"pinned shader "+old.Key);
         string Fixture(byte[]? metadata=null,byte[]? data=null){string path=Path.Combine(output,"cases",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Path.Combine(path,"assets/environments"));File.WriteAllBytes(Path.Combine(path,EnvironmentPresetIndex.IndexPath),metadata??indexBytes);File.WriteAllBytes(Path.Combine(path,index.Path),data??packageBytes);return path;}
         string Manifest(string path,Action<JsonObject>? change=null){
             var files=new[]{EnvironmentPresetIndex.IndexPath,index.Path}.Select(p=>{byte[] bytes=File.ReadAllBytes(Path.Combine(path,p));return new{path=p,size=bytes.Length,sha256=Hash(bytes)};}).ToArray();

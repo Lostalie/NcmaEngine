@@ -38,6 +38,7 @@ public sealed partial class PlayerRunner
         postModules??=Ncma.Rendering.Scene.PostProcessModules.Official();
         int exit = 0, count = 0; string reason = "completed", renderer = options.Headless ? "null" : "unknown";
         string? digest = null; string phase = "configuration"; var errors = new List<string>(); PlayerModule[] modules = [];
+        PresentationCostReport? costs=null;
         ulong rendered = 0, validationErrors = 0, validationWarnings = 0; bool running = false;
         try
         {
@@ -96,7 +97,7 @@ public sealed partial class PlayerRunner
                 if (physics.Inspect() is { Enabled: true } inspected) modules = [new("ncma.physics", inspected.AbiMajor, inspected.AbiMinor, (ulong)inspected.Capabilities)];
                 if (!options.Headless)
                 {
-                    presentation = new(plugins, visible, pipelineFactory); presentation.Start(shaderFiles,postLibrary,postModules,shadowLibrary);
+                    presentation = new(plugins, visible, pipelineFactory,options.PresentationCosts); presentation.Start(shaderFiles,postLibrary,postModules,shadowLibrary);
                     presentation.PrepareBeforeGameplay(document,renderAssets!,uiPackage,uiActions);
                     CheckRun();modules = modules.Concat(presentation.Modules).ToArray();
                 }
@@ -163,6 +164,7 @@ public sealed partial class PlayerRunner
         }
         finally
         {
+            costs=presentation?.LastPresentationCosts;
             LastPresentationFailure=presentation?.FirstGraphicsFailure??presentation?.SurfaceStatus?.Failure;
             LastNativeFailureDiagnostic??=presentation?.FirstNativeFailure;
             if(!TryShutdown())errors.Add(_failedService!);
@@ -173,7 +175,7 @@ public sealed partial class PlayerRunner
         var report = new PlayerReport(1, options.Headless ? "headless" : "graphical", renderer, project?.Configuration.ProjectId ?? Guid.Empty,
             status?.SessionId ?? Guid.Empty, status?.WorldId ?? Guid.Empty, options.Ticks, status?.Tick ?? 0, options.FixedDelta,
             status?.State ?? PlayState.Stopped, exit, reason, fault, errors.ToArray(), null, digest, count,
-            clock.Elapsed.TotalSeconds, modules, rendered, validationErrors, validationWarnings);
+            clock.Elapsed.TotalSeconds, modules, rendered, validationErrors, validationWarnings) { PresentationCosts=costs };
         try { PlayerReports.Write(options.Report, report); }
         catch { report = report with { ReportError = "report_write_failed", ExitCode = exit == 0 ? 9 : exit,
             Reason = exit == 0 ? "report_write_failed" : reason }; }

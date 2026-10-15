@@ -75,8 +75,7 @@ uint32_t NCMA_CALL SubmitScenePipeline(uint64_t context,uint64_t handle,const Nc
   };
   std::vector<NcmaSceneDrawV4> geo,caster;if(b.draw_count)geo.assign(geometry,geometry+b.draw_count);if(f.caster_count)caster.assign(casters,casters+f.caster_count);
   for(const auto& d:geo)if(!validateDraw(d))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Scene geometry batch.");for(const auto& d:caster)if(!validateDraw(d))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Scene shadow batch.");
-  BusyScope busyScope;ExecutionScope execution(b.frame);std::string message;const auto started=std::chrono::steady_clock::now();ResolveTiming(*renderer);
-  if(!renderer->timingPending){auto* dc=renderer->backend->GetDeviceContext();dc->Begin(renderer->gpuDisjoint.Get());dc->End(renderer->gpuBegin.Get());renderer->measuring=true;}
+  BusyScope busyScope;ExecutionScope execution(b.frame);std::string message;const auto started=std::chrono::steady_clock::now();BeginTiming(*renderer,b.frame);
   if(!renderer->backend->BeginFrame(message))return Failure(error,message);
   for(const auto& p:operations){
    if(p.operation==6){if(!pipeline.BeginShadow(message))return Failure(error,message);for(const auto& d:caster){const auto& m=*renderer->materials.at(d.draw.material.value);if(!pipeline.Draw(*renderer->meshes.at(d.draw.mesh.value),d,m.description,m.textures,f,true,shadows,0,message))return Failure(error,message);}renderer->backend->EndRenderPass();}

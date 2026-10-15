@@ -5,7 +5,7 @@ using Ncma.Platform;
 using Ncma.Rendering;
 namespace Ncma.Player.App;
 
-internal sealed partial class PlayerPresentation(string plugins, bool visible, Func<float,float,bool,RenderPipeline>? pipelineFactory = null) : IDisposable
+internal sealed partial class PlayerPresentation(string plugins, bool visible, Func<float,float,bool,RenderPipeline>? pipelineFactory = null, bool presentationCosts=false) : IDisposable
 {
     private readonly PluginLoader _loader = new();
     private PlatformWindow? _window;
@@ -34,6 +34,9 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     private bool _focused, _disposed;
     public PlayerModule[] Modules => _loader.Modules.Concat(_ui?.Modules ?? []).Select(m => new PlayerModule(m.Id, m.AbiMajor, m.AbiMinor, m.Capabilities)).ToArray();
     public RendererStats Stats => _renderer!.Stats;
+    private RendererSession? _costRenderer;
+    private PresentationCostCapture? _costCapture;
+    public PresentationCostReport? LastPresentationCosts => _costCapture?.Last;
     public void Start(RuntimeShaderFileSet? shaderFiles = null, RuntimePostProcessLibrary? postLibrary = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null,RuntimeShadowLibrary? shadowLibrary=null)
     {
         VerifyGraphicsAccess();_shaderFiles=shaderFiles;_postLibrary=postLibrary;_postModules=postModules;_shadowLibrary=shadowLibrary;
@@ -120,8 +123,15 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     public void Present(PlaySession play,Action<byte[],uint,uint>? verificationCapture=null)
     {
         RequireGraphicsReady();
-        try{PresentCore(play,verificationCapture);}
-        catch(Exception error){_windowSurface?.RecordFailure(error);_firstGraphicsFailure??=_windowSurface?.Status.Failure;RememberNativeFailure(error);_graphicsFailed=true;throw;}
+        PresentationCostCapture? costs=null;
+        try{
+            if(presentationCosts&&_renderer is not null&&RendererWindowSurface.CanPresent(_state)){
+                if(!ReferenceEquals(_costRenderer,_renderer)){_costCapture=new(_renderer);_costRenderer=_renderer;}
+                costs=_costCapture;costs!.Begin(checked(_frame+1),verificationCapture is not null);
+            }
+            PresentCore(play,verificationCapture);costs?.End();
+        }
+        catch(Exception error){costs?.Abort();_windowSurface?.RecordFailure(error);_firstGraphicsFailure??=_windowSurface?.Status.Failure;RememberNativeFailure(error);_graphicsFailed=true;throw;}
     }
     private void PresentCore(PlaySession play,Action<byte[],uint,uint>? verificationCapture)
     {

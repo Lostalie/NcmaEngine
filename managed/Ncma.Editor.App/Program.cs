@@ -28,11 +28,12 @@ internal static class Program
             if (File.Exists(Path.Combine(AppContext.BaseDirectory, DeploymentManifest.FileName))) DeploymentManifest.Validate(AppContext.BaseDirectory);
             if (args.SequenceEqual(new[] { "--validate-package" })) return 0;
             if (args.Length == 0) args = ["--editor"];
-            string? projectPath = null, plugins = null; bool smoke = false, cpuOnly = false, preview = false, editor = false; ulong frames = ulong.MaxValue;
+            string? projectPath = null, plugins = null; bool smoke = false, cpuOnly = false, preview = false, editor = false, costs=false; ulong frames = ulong.MaxValue;
             var flags = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < args.Length; i++) {
                 if (!flags.Add(args[i])) { Console.Error.WriteLine("duplicate_arguments"); return 2; }
                 switch (args[i]) {
+                    case "--presentation-costs": costs=true; break;
                     case "--preview" when !preview: preview = true; break;
                     case "--editor" when !editor: editor = true; break;
                     case "--cpu-only" when !cpuOnly: cpuOnly = true; break;
@@ -56,12 +57,13 @@ internal static class Program
             string pluginRoot = Path.GetFullPath(plugins ?? Path.Combine(AppContext.BaseDirectory, "plugins"));
             if(_execution is not null){Console.Error.WriteLine("editor_shutdown_retained");return 4;}
             var lifetime = execution = new ApplicationLifetime();_execution=lifetime;
-            var presentation = new CandidatePresentation(pluginRoot, project, smoke, cpuOnly, preview);
+            var presentation = new CandidatePresentation(pluginRoot, project, smoke, cpuOnly, preview,presentationCosts:costs);
             lifetime.Start([presentation]);
             var confirmation=new WindowsConfirmation();
             ulong rendered = EditorRunLoop.Run(lifetime,presentation,new MonotonicClock(),frames,
                 smoke||preview?null:request=>confirmation.Confirm(request.Message,"NcmaEngine 图形恢复"));
             lifetime.Dispose();
+            if(costs)Console.WriteLine(JsonSerializer.Serialize(new { presentationCosts=presentation.LastPresentationCosts }));
             Console.WriteLine($"candidate_{(cpuOnly ? "cpu_gui" : (preview||smoke)&&project is null ? "dx11_reference" : "dx11_scene")} frames={rendered}; resources released");
             return 0;
         } catch (ArgumentException e) { Console.Error.WriteLine("invalid_configuration: " + ErrorText(e,execution)); return 2; }
@@ -80,13 +82,16 @@ internal static class Program
 }
 internal sealed unsafe partial class CandidatePresentation(string plugins, ProjectContext? project, bool smoke, bool cpuOnly, bool preview,
     Func<Ncma.Assets.EnvironmentPresetLibrary>? environmentPresets = null, Ncma.Rendering.Scene.PostProcessModules? postProcessModules = null,
-    Func<float,float,bool,RenderPipeline>? pipelineFactory = null, Ncma.Application.Runtime.SceneUiActions? uiActions = null) : IApplicationService, IFramePipeline
+    Func<float,float,bool,RenderPipeline>? pipelineFactory = null, Ncma.Application.Runtime.SceneUiActions? uiActions = null, bool presentationCosts=false) : IApplicationService, IFramePipeline
 {
     internal static void RequireComposition(Ncma.Scene.SceneDocumentSnapshot snapshot)
     {
         Ncma.Characters.CharacterComponents.RequireComposition(snapshot);
     }
     private bool ReferencePreview => (preview||smoke) && project is null;
+    private RendererSession? _costRenderer;
+    private PresentationCostCapture? _costCapture;
+    internal PresentationCostReport? LastPresentationCosts => _costCapture?.Last;
     private readonly PluginLoader _loader = new();
     private PhysicsService? _physics;
     private PlatformWindow? _window;
@@ -362,8 +367,15 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     public void Present(FrameContext frame)
     {
         RequireGraphicsReady();
-        try{PresentCore(frame);}
-        catch(Exception error){_windowSurface?.RecordFailure(error);RememberGraphicsNativeFailure(error);throw;}
+        PresentationCostCapture? costs=null;
+        try{
+            if(presentationCosts&&_renderer is not null&&RendererWindowSurface.CanPresent(_state)){
+                if(!ReferenceEquals(_costRenderer,_renderer)){_costCapture=new(_renderer);_costRenderer=_renderer;}
+                costs=_costCapture;costs!.Begin(frame.FrameId,_verificationCapture is not null||_verificationComposite is not null);
+            }
+            PresentCore(frame);costs?.End();
+        }
+        catch(Exception error){costs?.Abort();_windowSurface?.RecordFailure(error);RememberGraphicsNativeFailure(error);throw;}
         finally{_graphicsFrameOpen=false;}
     }
     private void PresentCore(FrameContext frame)

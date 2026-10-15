@@ -81,4 +81,9 @@ _Static_assert(sizeof(NcmaErrorV1) == 528, "error layout");
 _Static_assert(sizeof(NcmaModuleStatusV1) == 32, "status layout");
 _Static_assert(sizeof(NcmaModuleApiV1) == 56, "x64 API layout");
 _Static_assert(offsetof(NcmaModuleApiV1, initialize) == 24, "API offset");
+#include "NcmaRendererTiming.h"
+_Static_assert(sizeof(NcmaGpuSampleV1)==72, "GPU sample POD");
+_Static_assert(sizeof(NcmaRendererTimingApiV1)==24, "GPU timing table");
+_Static_assert(sizeof(NcmaGpuWorkSampleV1)==88 && sizeof(NcmaRendererWorkTimingApiV1)==24, "GPU work timing layout");
+_Static_assert(offsetof(NcmaGpuSampleV1, generation)==16 && offsetof(NcmaGpuSampleV1, milliseconds)==56, "GPU timing offsets");
 int main(void) { return NCMA_MODULE_ABI_MAJOR != 1; }

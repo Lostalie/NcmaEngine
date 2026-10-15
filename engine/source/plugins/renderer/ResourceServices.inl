@@ -112,8 +112,7 @@ uint32_t NCMA_CALL SubmitResources(uint64_t context,uint64_t handle,const NcmaRe
             if(m[3]!=0||m[7]!=0||m[11]!=0||m[15]!=1||!std::isfinite(determinant)||determinant<=1e-8)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Positive affine model required.");
             for(int row=0;row<3;++row)for(int col=0;col<3;++col){double dot=0;for(int k=0;k<3;++k)dot+=static_cast<double>(m[row*4+k])*n[col*4+k];if(std::abs(dot-(row==col?1.0:0.0))>.01)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Normal inverse-transpose mismatch.");}
         }
-        BusyScope scope;ExecutionScope execution(f.frame);std::string message;const auto started=std::chrono::steady_clock::now();ResolveTiming(*renderer);
-        if(!renderer->timingPending){auto* dc=renderer->backend->GetDeviceContext();dc->Begin(renderer->gpuDisjoint.Get());dc->End(renderer->gpuBegin.Get());renderer->measuring=true;}
+        BusyScope scope;ExecutionScope execution(f.frame);std::string message;const auto started=std::chrono::steady_clock::now();BeginTiming(*renderer,f.frame);
         const auto encode=[](float x){return x<=.0031308f?12.92f*x:1.055f*std::pow(x,1.0f/2.4f)-.055f;};
         renderer->backend->SetClearColor(encode(f.clear[0]),encode(f.clear[1]),encode(f.clear[2]),f.clear[3]);
         bool begun=renderer->backend->BeginFrame(message);renderer->backend->SetClearColor(.035f,.039f,.052f,1);if(!begun)return Failure(error,message);

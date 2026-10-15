@@ -15,6 +15,21 @@ internal static class RuntimeTests
     }
     public static IEnumerable<(string Name, Action Run)> Cases()
     {
+        yield return ("Paint-only value/focus changes reuse layout storage and bounded pointer input is allocation-free", () => {
+            var (r,button,_,slider)=Runtime();var viewport=new UiViewport(200,150,1,default);var original=r.Layout(viewport);
+            r.SetValue(slider,.25f);Check(original.Overlaps(r.Layout(viewport)));
+            UiInput[] input=new UiInput[1];var actions=new UiAction[128];ulong sequence=0;
+            void Move(int i){input[0]=new(UiInputKind.PointerMove,++sequence,new(i%2==0?40:70,100));r.Input(r.Stamp,input);r.Layout(viewport);r.Drain(r.Stamp,actions);}
+            r.Input(r.Stamp,[new(UiInputKind.PointerDown,++sequence,new(60,100))]);r.Drain(r.Stamp,actions);
+            for(int i=0;i<32;i++)Move(i);
+            long bytes=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<256;i++)Move(i);bytes=GC.GetAllocatedBytesForCurrentThread()-bytes;
+            Check(bytes==0&&original.Overlaps(r.Layout(viewport)));
+            r.Input(r.Stamp,[new(UiInputKind.PointerUp,++sequence,new(70,100)),new(UiInputKind.Tab,++sequence,default)]);Check(r.Focus==button&&original.Overlaps(r.Layout(viewport)));
+            r.CancelInput();Check(original.Overlaps(r.Layout(viewport)));
+            r.SetFlags(button,false,false);Reject(()=>r.Input(r.Stamp,[]));Check(!original.Overlaps(r.Layout(viewport)));
+            Check(r.HitTest(new(20,20))==Guid.Empty);
+            Task.Run(()=>Reject(()=>r.Layout(viewport))).GetAwaiter().GetResult();
+        });
         yield return ("UI pointer capture/cancel, keyboard focus, slider and safe copied action drain", () => {
             var (r, button, text, slider) = Runtime(); Guid play = Guid.NewGuid(), world = Guid.NewGuid(); r.Bind(play, world, 10); var stamp = r.Stamp;
             r.Input(stamp, [new(UiInputKind.PointerDown, 1, new(20, 20)), new(UiInputKind.PointerUp, 2, new(150, 140))]); Check(r.QueuedActions == 0 && r.Capture == Guid.Empty);
@@ -25,6 +40,21 @@ internal static class RuntimeTests
             r.Input(stamp, [new(UiInputKind.PointerDown, 6, new(60, 100)), new(UiInputKind.PointerMove, 7, new(200, 100)), new(UiInputKind.PointerUp, 8, new(200, 100))]);
             Check(r.Widget(slider).Value == 1 && r.Drain(stamp, actions) == 2);
             r.Input(stamp, [new(UiInputKind.FocusLost, 9, default)]); Check(r.Focus == Guid.Empty && r.Capture == Guid.Empty);
+        });
+        yield return ("Geometry dirtiness still rebuilds scrolling and prepared intrinsic text without mutating borrowed old layouts", () => {
+            var d=UiDefinition.Create(Guid.NewGuid(),"Scroll");
+            var scroll=UiElement.Create(Guid.NewGuid(),"Scroll",UiKind.ScrollView,d.Root) with{Layout=UiLayout.Fixed(20,20,80,50),Style=UiStyle.Default with{Clip=true}};
+            var button=UiElement.Create(Guid.NewGuid(),"Button",UiKind.Button,scroll.Id) with{Layout=UiLayout.Fixed(0,40,40,20),Action="click"};
+            var r=new UiRuntime(new(d with{Elements=[d.Elements[0],scroll,button]}));var v=new UiViewport(200,150,1,default);var old=r.Layout(v);
+            Check(r.HitTest(new(30,65))==button.Id);r.Input(r.Stamp,[new(UiInputKind.Scroll,1,new(30,30),Delta:20)]);
+            var moved=r.Layout(v);Check(!old.Overlaps(moved)&&old[2].Transform.M32==60&&moved[2].Transform.M32==40&&r.HitTest(new(30,45))==button.Id);
+            d=UiDefinition.Create(Guid.NewGuid(),"Intrinsic");var root=d.Elements[0] with{Layout=d.Elements[0].Layout with{Flow=UiFlow.Horizontal}};
+            var text=UiElement.Create(Guid.NewGuid(),"Text",UiKind.Text,d.Root) with{Text="A",Layout=UiLayout.Fixed(0,0,0,20) with{WidthMode=UiSizing.Hug}};
+            button=button with{Parent=d.Root,Order=1,Layout=UiLayout.Fixed(0,0,20,20)};var metrics=new LengthMetrics();
+            r=new(new(d with{Elements=[root,text,button]}),metrics);old=r.Layout(v);Check(old[2].Transform.M31==10);
+            r.SetText(text.Id,"ABCD");r.PreparedText(text.Id,metrics);Reject(()=>r.Input(r.Stamp,[]));
+            moved=r.Layout(v);Check(!old.Overlaps(moved)&&old[2].Transform.M31==10&&moved[2].Transform.M31==40);
+            var resized=r.Layout(new(400,300,2,default));Check(!moved.Overlaps(resized)&&resized[2].Transform.M31==40);
         });
         yield return ("UI Unicode grapheme editing and IME proposal/commit/cancel do not run game callbacks", () => {
             var (r, _, id, _) = Runtime(); var stamp = r.Stamp;
@@ -61,4 +91,5 @@ internal static class RuntimeTests
             r.SetText(b.Id, "New"); Check(r.Text(b.Id) == "New" && d.Elements[0].Text.Length == 0);
         });
     }
+    private sealed class LengthMetrics:IUiTextMetrics{public Vector2 Measure(UiElement element,float width)=>new(element.Text.Length*10,20);}
 }

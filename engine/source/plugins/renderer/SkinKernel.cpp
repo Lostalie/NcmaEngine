@@ -55,25 +55,21 @@ bool SkinKernel::Initialize(std::string& error,const NcmaComputeShaderV1* regist
   if(!Ok(backend,device->CreateBuffer(&d,nullptr,&slot.buffer),error))return false;
   D3D11_SHADER_RESOURCE_VIEW_DESC sr{};sr.Format=DXGI_FORMAT_UNKNOWN;sr.ViewDimension=D3D11_SRV_DIMENSION_BUFFER;sr.Buffer.NumElements=32768;
   if(!Ok(backend,device->CreateShaderResourceView(slot.buffer.Get(),&sr,&slot.view),error))return false;
-  for(auto pair:{std::pair{D3D11_QUERY_EVENT,std::addressof(slot.event)},std::pair{D3D11_QUERY_TIMESTAMP_DISJOINT,std::addressof(slot.disjoint)},std::pair{D3D11_QUERY_TIMESTAMP,std::addressof(slot.begin)},std::pair{D3D11_QUERY_TIMESTAMP,std::addressof(slot.end)}}){D3D11_QUERY_DESC q{pair.first,0};if(!Ok(backend,device->CreateQuery(&q,pair.second->GetAddressOf()),error))return false;}
- }return true;
+  D3D11_QUERY_DESC q{D3D11_QUERY_EVENT,0};if(!Ok(backend,device->CreateQuery(&q,slot.event.GetAddressOf()),error))return false;
+ }return timing.Initialize(error);
 }
 void SkinKernel::Resolve(NcmaSkinStatsV5& stats){
  auto* dc=backend.GetDeviceContext();auto read=[&](ID3D11Query* query,void* output,UINT bytes){const HRESULT result=dc->GetData(query,output,bytes,D3D11_ASYNC_GETDATA_DONOTFLUSH);backend.ReportApiFailure(result);return result;};
- for(auto& slot:slots)if(slot.pending&&read(slot.event.Get(),nullptr,0)==S_OK){
-  D3D11_QUERY_DATA_TIMESTAMP_DISJOINT disjoint{};UINT64 begin=0,end=0;
-  if(read(slot.disjoint.Get(),&disjoint,sizeof(disjoint))==S_OK&&read(slot.begin.Get(),&begin,sizeof(begin))==S_OK&&read(slot.end.Get(),&end,sizeof(end))==S_OK){
-   stats.gpu_sample_valid=!disjoint.Disjoint&&disjoint.Frequency&&end>=begin?1u:0u;if(stats.gpu_sample_valid)stats.gpu_ms=static_cast<double>(end-begin)*1000/static_cast<double>(disjoint.Frequency);slot.pending=false;
-  }
- }
+ for(auto& slot:slots)if(slot.pending&&read(slot.event.Get(),nullptr,0)==S_OK)slot.pending=false;
+ ResolveTiming(stats);
 }
 uint32_t SkinKernel::SelectSlot(NcmaSkinStatsV5& stats,std::string& error){
  Resolve(stats);for(int i=0;i<3;i++)if(!slots[static_cast<size_t>(i)].pending){selected=i;return NCMA_OK;}
  if(FAILED(backend.GetDevice()->GetDeviceRemovedReason())){error="GPU skin device lost.";return NCMA_DEVICE_LOST;}error="All three bounded GPU skin palette slots are still in use.";return NCMA_BUSY;
 }
-void SkinKernel::Begin(const NcmaSkinPaletteV5* palette,uint32_t count){
+void SkinKernel::Begin(const NcmaSkinPaletteV5* palette,uint32_t count,uint64_t frame){
  auto* dc=backend.GetDeviceContext();dc->ClearState();auto& slot=slots[static_cast<size_t>(selected)];
- D3D11_BOX box{0,0,0,count*128,1,1};dc->UpdateSubresource(slot.buffer.Get(),0,&box,palette,0,0);dc->Begin(slot.disjoint.Get());dc->End(slot.begin.Get());dc->CSSetShader(shader.Get(),nullptr,0);
+ D3D11_BOX box{0,0,0,count*128,1,1};dc->UpdateSubresource(slot.buffer.Get(),0,&box,palette,0,0);timing.Begin(frame);dc->CSSetShader(shader.Get(),nullptr,0);
 }
 void SkinKernel::Dispatch(const SkinInstance& instance,uint32_t offset){
  auto* dc=backend.GetDeviceContext();uint32_t settings[4]{instance.vertices,offset,0,0};dc->UpdateSubresource(constants.Get(),0,nullptr,settings,0,0);
@@ -81,7 +77,7 @@ void SkinKernel::Dispatch(const SkinInstance& instance,uint32_t offset){
  dc->CSSetConstantBuffers(0,1,&cb);dc->CSSetShaderResources(0,2,sr);dc->CSSetUnorderedAccessViews(0,1,&ua,nullptr);dc->Dispatch((instance.vertices+63)/64,1,1);
  ID3D11UnorderedAccessView* none=nullptr;dc->CSSetUnorderedAccessViews(0,1,&none,nullptr);
 }
-void SkinKernel::End(){auto* dc=backend.GetDeviceContext();auto& slot=slots[static_cast<size_t>(selected)];dc->End(slot.end.Get());dc->End(slot.disjoint.Get());dc->End(slot.event.Get());slot.pending=true;selected=-1;dc->ClearState();}
+void SkinKernel::End(){auto* dc=backend.GetDeviceContext();auto& slot=slots[static_cast<size_t>(selected)];timing.End();dc->End(slot.event.Get());slot.pending=true;selected=-1;dc->ClearState();}
 bool SkinKernel::Capture(const StaticMesh& mesh,uint8_t* output,uint32_t bytes,std::string& error){
  auto* device=backend.GetDevice();auto* dc=backend.GetDeviceContext();D3D11_BUFFER_DESC d{};d.ByteWidth=bytes;d.Usage=D3D11_USAGE_STAGING;d.CPUAccessFlags=D3D11_CPU_ACCESS_READ;Microsoft::WRL::ComPtr<ID3D11Buffer> staging;
  if(!Ok(backend,device->CreateBuffer(&d,nullptr,&staging),error))return false;dc->CopyResource(staging.Get(),backend.BorrowBuffer(mesh.vertices));D3D11_MAPPED_SUBRESOURCE map{};

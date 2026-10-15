@@ -7,7 +7,11 @@ public sealed record PlayerModule(string Id, uint AbiMajor, uint AbiMinor, ulong
 public sealed record PlayerReport(int SchemaVersion, string Mode, string Renderer, Guid ProjectId, Guid SessionId,
     Guid WorldId, ulong? TargetTicks, ulong Tick, double FixedDeltaSeconds, PlayState State, int ExitCode,
     string Reason, PlayFault? Fault, string[] ShutdownErrors, string? ReportError, string? StateSha256,
-    int ObjectCount, double ElapsedSeconds, PlayerModule[] Modules, ulong RenderedFrames, ulong ValidationErrors, ulong ValidationWarnings);
+    int ObjectCount, double ElapsedSeconds, PlayerModule[] Modules, ulong RenderedFrames, ulong ValidationErrors, ulong ValidationWarnings)
+{
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public Ncma.Rendering.PresentationCostReport? PresentationCosts { get; init; }
+}
 
 public static class PlayerReports
 {

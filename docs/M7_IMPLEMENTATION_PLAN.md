@@ -1,5 +1,7 @@
 # M7 DX11 渲染与画质完成度：小阶段执行方案
 
+最新状态（2026-10-15）：M7.1～M7.7自动候选链闭合。M7.7冻结878份源码完成完整顺序无Skip Debug/Release，各13原生＋72托管／产品CTest、Python45及审计／可恢复部署通过。最终Release正式入口为 `out/bin/NcmaEngine.exe`，交付证据见本页D末节。人工／真实用户素材／物理设备故障／目标硬件完整性能／自包含／一小时长稳仍未验收，Vulkan/OpenGL仍延期下一版本；下一阶段M8可选AI模块与深度扩展。下列入口基线和逐次增量保留历史，不覆盖最新状态。
+
 入口基线：M6.10 `74be5b41e1b595aa43c9a4e04fcfd9a30684f60f` 已推送且远端main一致。
 M6最终完整Debug/Release自动门禁通过，详见[M6.10交付](M6_10_DELIVERY_REPORT.md)。
 M7.1-A纯C#描述/目录/声明验证自动候选已实现，70项定向及完整顺序Debug/Release/checked deployment通过；
@@ -364,12 +366,179 @@ C第二增量原宿主回归发现并修复前序B缺口：首轮14组定向只�
 
 源端新增普通Editor循环证明：错误参数准备得到的空持有者确实被保留、未变请求不重试；真实原生帧开启时新提交请求的恢复被拒绝且保留同一候选；结束该帧后不自动重试；再提交新配置修正后安全关闭旧候选并恢复逐字节相同视口，API0/0。反射仅读取持有者作证据，没有附加/替换字段或反射清理。C2宿主72、C3面板99检查通过，日志 `out/m7-6-completion-editor-recovery-expanded.log` / `out/m7-6-completion-editor-author-recovery-expanded.log`，证据分别为 `out/verification/m7-6/completion-editor-recovery-expanded/3ffe3a8cdf4940d2a1a6fa4cb6ed7bf3` / `completion-editor-author-recovery-expanded/068ab9cfb6b94da0b00566043ebc6701`。最终双配置规范候选、定向/原完整回归重新进行；尚未部署或提交阶段。
 
-## M7.7 联合参考与成本验收（未实现）
+## M7.7 联合参考与成本验收（自动候选完成）
+
+2026-10-15启动基线：M7.6源码 `af187b7c542290d2e108a4e7739bb518d21847d4` 已提交推送且远端一致，工作区仅保留4项IDE用户改动。以下按A→B→C→D推进，不以局部计时接口关闭整个阶段。
+
+- A：版本化只读GPU采样契约与真实DX11/托管验证。设备代+每设备单调采样序列+来源帧+观察帧明确分离；Unavailable/Recording/Pending/Valid/Disjoint/Invalid/Failed/Abandoned状态，非Valid毫秒必须为0。固定单个已存在query槽，忙时计数跳过、不覆盖来源、不等待/Flush/循环轮询。只读轮询最多三次GetData(DONOTFLUSH)，非法/异线程/短缓冲拒绝不改变状态。Renderer基础统计布局不变，新增独立query19/v1。采样边界明确为主呈现提交到Present前，不含之前的Skin dispatch、离屏UI预生产、上传、等待显示/CPU成本，不称整帧GPU耗时。
+- B：补齐Skin/离屏生产各自有界来源证据，正式Editor/Player/独立2D消费新采样身份，拒绝跨设备/旧帧误配；成本报告拆分CPU、GC、ABI批次、上传字节、GPU范围，记录缺样与无效样本，不以旧有效样本填补。真实失败/重建/延迟与无UI/无3D路径都要验证。
+- C：3D静态/实际FBX动画/PBR/IBL/四档shadow/HDR/UI完整联合固定容限图，保留独立数值oracle；2D事件刷新、缓存和dirty上传实测，无3D加载证据。读取计时不造成逐帧资源或分配增长；缺少目标硬件预算不能自行宣布性能验收。
+- D：正式Editor/Player/NCP1搬移、生命周期和联合报告；冻结同源完整无Skip Debug/Release、清单/备份/真实入口核验后整阶段提交推送。人工/真实用户素材/目标预算/自包含/1h保持独立，未经实测不打勾。
+
+A测试必须包含真实查询完成与延迟来源不变、跳过计数、单调序列、时钟不连续、非法时间值、GetData失败、显式废弃、重建新设备、异线程/短输出原子拒绝、实际纯UI主提交。注入只编译在原生白盒测试，不加入生产/Agent故障注入入口。旧统计与原故障/资源测试全部保留。
+
+A首轮实际测试发现查询失败后复用未取回结果的query，会产生DX11验证警告，日志 `out/m7-7-timing-native-debug-{first,second}.log` 保留。修正为该设备计时永久Failed/毫秒0、后续帧计数跳过，直到新设备才恢复采样；不影响健康渲染提交，不在逐帧路径创建替代query、隐式等待或忽略验证消息。Debug原生第三轮13/13通过；随后补充故障设备关闭前的API0/0断言并完成最终双配置定向核验，不删除原警告断言。
+
+**A主提交采样增量最终验证（2026-10-15，不是整阶段交付）**：规范Skip Debug候选 `57376c4120ca4594bd332a0abfa31ab5`、Release `dd157efb9aa34846965270e606644a41` 构建0编译警告。最终各11组定向/原回归全部通过，271.40/271.12秒；原Rendering183.02/179.03秒，原完整恢复联合67.48/70.44秒，门限未变。包含原生61项新采样断言、C#15项（实际pureUI主提交/overlay同源/废弃/新设备/卸载副本，128次暖态已完成样本读取0线程分配）、原UI/独立UI包、实际DLL重载、C布局、原始诊断/窗口回归。C#证据 `out/verification/m7-7/gpu-timing-{Debug/427b7d2775d34a34b559a290da501bd9,Release/0c5598d386014d54883a7272614d0fd4}/results.json`。
+
+Python45通过1.256秒，Release managed/native smoke通过；两配置五种产品包144/56/113/67/116文件SHA闭包通过。最后12份相关源码/测试SHA与Debug验证前一致，记录 `out/verification/m7-7/timing-increment-source.json`（不是整阶段冻结）。日志 `out/m7-7-timing-{debug-build-final,release-build-first,debug-regression-first,release-regression-first,package-audit-debug,package-audit-release,python-first,managed-native-smoke}.log`。包审计首次辅助命令有输出路径拼接错误，未实际执行审计；纠正明确路径后两配置审计退出0，没有放宽产品断言。全部工作会话终结，最后Release回归62071退出0。
+
+正式M7.6 Release EXE/DLL SHA仍为 `A0586BCFD4B2EE8A82B39CDDEBCC29D2C31C55F4188A5E6A43C6BEA577677636` / `7807324C8828449B87F49258D039138FE506B8473CD13B08959B1A83E99E2A62`，未部署/提交/推送M7.7。下一步B独立Skin/离屏生产来源与正式成本消费者，再C/D联合oracle和全阶段冻结无Skip；没有用本增量测试替代这些门禁或完整性能/人工验收。
+
+计时是两个GPU时间戳之间的elapsed区间，不等于GPU忙碌指令耗时之和；区间可能含CPU提交间隙造成的GPU空闲，尤其测试中显式Capture/WaitIdle不能混入无同步性能测量。测试同步仅用于建立查询完成证据，生产ReadGpuTiming不执行同步。完整场景成本报告必须标明这一范围，不能相加重叠区间冒充整帧成本。
+
+### B 工作来源采样增量（2026-10-15，尚非整个 B 交付）
+
+新增独立只读 query20/v1，88 字节复制 POD；domain2 是一批 Skin dispatch，domain3 是一次离屏 UI 目标生产。沿用设备代、来源帧、观察帧、单调序列、缺样及有效状态；UI 额外携带历史目标 token 和确切 content revision，token 不授予资源访问或租约。Skin 的观察帧是最后成功批次，UI 是最后成功生产的最大帧号，同一帧不同目标由 token/revision 区分。缓存 acquire/展示不算新生产，主 Present 不改写工作样本来源。
+
+每类数值资源持有者只拥有一个三查询槽；无对应资源时读取不初始化 Skin/UI/3D。查询忙时跳过新样本，失败后隔离该计时槽直到显式资源退休/重建，设备内序列不重置；非 Valid 毫秒为零。Skin 的三个 palette 完成 EVENT fence 与计时完全分离，时间戳延迟/失败不能阻止已安全完成的 palette 缓冲继续使用，失败的完成 fence 则不能被当作已完成。没有新增逐帧 Wait、Flush、资源分配或 Agent 权限。
+
+Skin 范围不含 palette 上传；UI 范围仅为目标生产，不含后续缓存展示。两者仍是时间戳区间，不是 GPU 忙碌时间，也不能同主提交简单相加宣称整帧成本。原 Renderer/Skin stats 布局、模块 ABI1.2、Shader 和现有数值结果保持。
+
+原生白盒新增90项：真实计算输出、超过3次 palette 轮换下延迟来源不变、错误时间戳隔离但数值输出继续、同帧多目标、缓存租约、disjoint/invalid/failed、退休重建、边界拒绝/API0/0。注入仅存在于整个白盒目标统一编译的测试宏，不进入产品。第一次编译因 ComPtr 重载取址导致类型推导失败；改用 std::addressof，失败日志保留。规范 Debug 原生第二轮13/13通过。托管新增18项实际 DX11 检查首次通过，256次暖态已完成工作样本读取线程分配0；这不是整帧零分配或完整性能验收。
+
+日志 `out/m7-7-work-timing-native-debug-{first,second}.log`、`out/m7-7-work-timing-managed-debug-{build-first,first}.log`。规范双配置候选和定向/原始联合回归正在进行，最终结果待下方补记。正式 Editor/Player/独立2D成本报告消费者尚未接入，仍需后续 B 增量；C/D 和整阶段冻结无Skip门禁未完成，不提交推送或替换正式 M7.6 EXE。
+
+Debug首次12组回归中11组通过，原 Rendering 在 EnvironmentProductTests:95 / SceneDocumentFiles:60 遇到历史 File.Replace IOException（无法删除要被替换的文件）。失败日志 `out/m7-7-work-timing-debug-regression-first.log` 和 fixture `out/verification/m2/render-Debug/environment-products/b1ca2326006b433a8d36816366860fa8` 保留。事后原 start.ncmascene 2995字节/Archive可独占只读打开，SHA `B5BC748B543F1E02F882DC42CF67E313B08169C250C55483DD8736E4EEE063DF`；未找到仍运行的产品进程。此证据不能证明失败时的外部锁来源，根因未明；不改变原子保存实现、不添加重试/覆盖回退、不忽略断言，按原12组重新运行并保留首次失败。
+
+**B 工作来源增量最终定向核验**：规范 Skip Debug `3f5cd42c5fe44deb8b6079e320b9c531`、Release `04d78fffd66b4b10a88e4b5e581cb3ab` 零编译警告。最终各12组通过272.08/265.57秒；原 Rendering184.17/178.48秒、High恢复联合66.81/65.07秒，原门限未改变。原生工作90项/主计时61项、托管工作18项/主计时15项均双配置通过；工作采样证据 `out/verification/m7-7/gpu-work-timing-{Debug/9fed21af7f6f42f59a5866ca0cfdbed0,Release/bfa4782f74d84219a36141f62f8eb241}/results.json`。原 UI、独立 UI 示例、真实 DLL 重载、窗口与诊断同时保留。
+
+补充互操作/无图形运行/严格场景格式各3组通过（Debug1.61/Release1.27秒）。Python45项通过1.218秒；Release托管/原生烟测、规范inspect和两配置五类产品144/56/113/67/116文件实际SHA审计通过。日志 `out/m7-7-work-timing-{debug-build-first,release-build-first,debug-regression-second,release-regression-first,formats-debug,formats-release,python-first,managed-native-smoke,package-audit-debug,package-audit-release}.log`。全部工作会话终结，Release回归29940退出0。
+
+以上只关闭 B 的工作来源采样增量，不关闭正式宿主成本报告、独立联合成本 oracle、整阶段冻结无Skip Debug/Release和交付门禁。正式M7.6 EXE/DLL哈希保持前述值，无部署/提交/推送；历史File.Replace异常调查、人工/物理设备故障/目标环境/自包含/完整性能/1h验收仍开放。下一步接入同一 C# 成本观测器至 Editor/Player/独立2D，记录 CPU/线程GC/ABI批次/上传和带身份的GPU范围，缺样或旧帧不得伪造为当前帧有效成本。
+
+### B 正式成本消费者增量（2026-10-15，进行中）
+
+纯 C# `PresentationCostCapture` 显式可选、默认关闭。仅保留最后一个值类型报告，不持有 GPU 资源租约、不调用 World、不注册 Agent 权限，也不等待 GPU。开启时固定查询现有统计与三类 GPU 样本；未开启时不创建观测器、不新增逐帧统计查询。初始化可缓存委托，但不得创建 Skin、UI target、3D/环境/后处理资源。每个观测器绑定确切 Renderer 实例/代；正式宿主重建设备后创建新观测器，旧结果只能作为带原始身份的历史复制值。
+
+报告 v1 分开记录呈现调用 CPU wall 时间、当前所有者线程托管分配、所选 native 批次/复制/上传计数差值和三类独立 GPU 观察。CPU 不含模拟、启动及观测器前后统计查询开销，也不声称纯 CPU 执行时间；GPU 是最后一个有界来源样本，不保证每次呈现均有新样本，更不把三个范围相加。计数明确是所选已存在的原生统计，不是所有 ABI 调用或全部上传；UI draw submissions 包含离屏生产。GPU 非 Valid 明确不可用，Valid 仍区分当前来源帧/更早来源帧；不同设备或未来帧拒绝。宿主异常时 Abort 不读 GPU，把本次计数/样本置为未知，而非沿用此前成功值。同步截图诊断有专门标记，不混称无同步性能测试。
+
+- 正式 Player `--presentation-costs` 写入既有不覆盖报告的可选字段；默认字段省略，Null 即使开启选项也不创建 GPU 观测器。报告在正式所有权关闭前复制，关闭/卸载后仍可读。
+- 正式 Editor 同名选项在退出时输出最后复制报告；呈现中只更新有界值，无逐帧日志/JSON序列化。CPU 范围是 Present 调用，不含前面的 BeginPresentation/模拟/资源准备。
+- 独立2D同名选项测量 submit/present，明确不含此前输入/layout/text/image准备。默认静态事件刷新政策不变；复制的18文件独立包增加开启成本选项的实际apphost烟测，保留原默认与恢复烟测。完整2D dirty成本与这些范围外开销仍由C覆盖。
+
+新增实际测试首轮24项通过；随后增加陈旧hostFrame准入拒绝、真实Player失败/显式恢复/新设备与像素保持，扩展30项Debug通过（`out/m7-7-cost-consumers-debug-second.log`，证据 `4254aac4628d45de8a46d24434c7a171`）。128次暖态空工作观测0线程分配，仅证明观测器读取路径，不能替代整个宿主性能。规范Debug候选最终为 `36e1220cb56a4c8891d2352cb2c773d3`，之前 `db35be80d98a472389d3b34f1078bd3d` 早于最后hostFrame守卫，不作最终证据。正在运行双配置定向/原回归，尚未冻结整阶段、部署、提交或推送；后续C/D完整联合门禁和全部人工/真实设备/目标/完整性能/1h仍开放。
+
+**B成本消费者增量最终定向验证（2026-10-15）**：同源规范Skip Debug `36e1220cb56a4c8891d2352cb2c773d3` / Release `d6d406ac02ad4d4f9bc3fa92d7147a72` 零编译警告。每配置16组定向和原回归全部通过438.82/426.14秒：原Rendering185.02/178.40、Editor79.70/76.02、Player72.57/71.97、完整High恢复联合68.24/64.75秒；原断言/门限不变。新增成本30项双配置证据为 `presentation-costs-Debug/144f23993abb4a2bbfd2fcadfc71aea8`、`presentation-costs-Release/5dc5f3fb612242049313638a833478ec`。独立18文件UI包保留默认/恢复烟测，新增开启成本的实际apphost也通过，静态末帧无上传、无3D初始化/API0/0。
+
+受检包真实Editor/Player/Null命令行全部通过：`out/verification/m7-7/cli-costs-Debug-d740d523b1db4b2b8b33e63fd8059f94`、`cli-costs-Release-f408aa2040d743dcb7704e4969d0724d`。首次PowerShell直接调用WinExe未可靠等待进程退出而得到空日志，保留 `cli-costs-Debug-11fe249c38b0491fa348161b58ff2a19`；改为明确隐藏进程/重定向输出/50秒有界等待，读取真实exit code后通过，没有修改产品作为绕过。这些是实际隐藏apphost，不是人工OS输入验收，也不是本增量的完整搬移联合证明。
+
+补充互操作/无图形运行/严格场景格式各3组通过1.35/1.29秒；Python45项1.200秒、Release托管/原生烟测及规范inspect通过；两配置五类产品144/56/113/67/116文件SHA审计通过。26份源码/测试脚本哈希验证前后一致，记录 `out/verification/m7-7/cost-consumers-increment-source.json`，仅增量清单。日志 `out/m7-7-cost-consumers-{debug-candidate-final,release-candidate-first,debug-regression-first,release-regression-first,formats-debug,formats-release,python-first,managed-native-smoke,package-audit-debug,package-audit-release}.log`。全部会话终结，Release48292退出0。
+
+本增量没有执行整阶段冻结无Skip，没有提交/推送/部署。正式M7.6 EXE/DLL仍保持前述哈希。下一步C验证真实FBX/PBR/IBL/四档阴影/HDR/UI独立图像和成本联合，以及2D完整准备/dirty/事件刷新；D补齐搬移生命周期/报告与最终完整门禁。以上呈现间隔/所选计数不替代完整性能预算，历史失败、人工、物理设备丢失、真实素材、目标环境/自包含与1h门禁继续开放。
+
+### C 2D 独立图像与准备成本增量（2026-10-15，进行中）
+
+新增独立 `UiCostJoint`：3075元素的纯平面应用（3072彩色矩形、根容器、Slider、RGBA图像），512×400及2倍DPI。CPU oracle直接按整数矩形填像素，不调用产品Layout/Shader/几何，事先固定误差≤1；六幅全图分别验证初始、值变化、隐藏、24次dirty之后、DPI2、恢复。256次静态完整Prepare验证0线程分配/0上传/0提交；实际dirty仍全量重建上传显示列表，明确不声称局部GPU更新。准备CPU/线程分配与submit/present独立报告，诊断截图另起帧，晚到的GPU样本标注其来源是否含readback。检查只有两个image/一个list、无3D/环境/Skin/post/target、API0/0及资源关闭。
+
+首轮测试错误地在Present后Capture，按既有API改为独立诊断帧Present前读回，保留失败。随后独立oracle发现真正GPU缺陷：零圆角矩形仍套用圆角距离抗锯齿，整数边角红色191而应255（误差64）。只对radius>0运行原SDF，零圆角保持矩形完整覆盖；没有放宽oracle。此处**有意改变默认Flat2D shader**，新cook包固定SHA `447012BF011FF89E2241A8ABA15ED73BF7C9F3C4E0C27A5037FCF9EB6DA82416`，先前哈希 `23EBD59DF449AE1A8A9CEE8073E22156A5586D46FD7A44FF1626B02FA3971193` 是历史行为。原回归首次因此触发旧哈希断言；只更新这一确定变更，3D全部固定哈希和其他断言不变。无ABI/SDK变更。失败日志 `out/m7-7-ui-cost-baseline-{first,second,third}.log`、`ui-cost-debug-regression-first.log` 保留。
+
+实测发现UiCanvas每个layout box线性查找元素导致二次复杂度。使用现有owner-checked Runtime.Element索引、初始化缓存text元素及color token，去除两份同步layout数组复制；Layout失效返回新数组，不修改借用数组，text pass后重新取Layout。原资源退休/失败保留/输入/owner守卫不变。
+
+同机器Debug固定shader的前后24次dirty观察：优化前平均105.6434ms/5,634,690B，优化后6.5543ms/3,691,423B；六图均误差0，静态256次仍0B。原UiCanvas SHA `197C2703710EA91E81DC926696679E871A212DB4CC44862982FD9966CDA38BAC`；基线证据 `out/verification/m7-7/ui-cost-baseline-Debug/b3e59d374fb247eeacc58d4f01228770/results.json`，优化后 `ui-cost-joint-Debug/ef5575adc73c4a6192176cf7340bb62c/results.json`。冷创建仍约630ms/74MB，dirty仍约960KB全表上传，不能据此宣布完整2D效率或目标硬件性能达标。测量包含当前实现退休和驱动调用，非纯CPU忙碌时间；整轮dirty额外包含测试记录开销。
+
+首次Debug候选 `984e21d26f63423cb5db1d79f8595312` 的22组回归21通过/1旧Flat2D固定hash失败，共354.25秒，失败保留。更新这一有意变更的固定hash后重新规范构建，两配置最终候选为 Debug `0b957d93930145cca184c7a79e9caf3b` / Release `c406a07a1fae4502ab27129e0aaaf7fd`，无编译警告。
+
+**C第一2D增量最终定向验证**：两配置22组全部通过，485.50/472.32秒；原Rendering185.86/180.78、High恢复联合67.32/65.26、Editor79.91/76.81、Player72.99/72.93秒，原超时/数值容限不变。包括原UI文本/圆角/混合、自定义Shader、独立18文件UI包、原生/ABI/DLL重载、后处理联合、HUD/交互/搬移、计时/成本消费者和恢复。新增70项证据为 `out/verification/m7-7/ui-cost-joint-Debug/0b37f8599d984286ae050221aaed0e68/results.json`、`ui-cost-joint-Release/32ba62236b3c49329648e2dd0c6c342b/results.json`；六图全像素误差0，固定shader优化前/最终Debug/Release六幅actual文件SHA逐字节一致。
+
+最终Debug/Release24次dirty准备均值6.7453/2.7357ms，线程分配3,691,424/3,691,303B；静态256次Prepare均0B/0上传/0draw。冷创建609.28/662.22ms及约74MB仍是明确限制，常驻959408B，完整dirty列表约960KB上传未消除。这是同机当前负载观测，不是全负载、全部线程、目标硬件或整帧GPU性能验收。辅助互操作/无图形/严格场景格式每配置3组通过1.32/1.28秒；Python45项1.393秒、Release托管/原生烟测、规范inspect和两配置五产品144/56/113/67/116文件实际SHA审计通过。34份变更源码/原生与托管测试/脚本SHA在最终验证前后一致，清单 `out/verification/m7-7/ui-cost-increment-source.json` 仅增量，不是整阶段冻结。
+
+日志 `out/m7-7-ui-cost-{debug-candidate-second,release-candidate-first,debug-regression-second,release-regression-first,formats-debug,formats-release,python-first,managed-native-smoke,package-audit-debug,package-audit-release}.log`。所有构建/测试会话终结，最后Release84176退出0。正式M7.6 EXE/DLL保持既有A0586BCF…/7807324C…哈希，HEAD仍af187b7c542290d2e108a4e7739bb518d21847d4，无部署/提交/推送。
+
+C的完整text/input预算及3D实际FBX/PBR/IBL/四档shadow/HDR/UI独立图像与成本联合、D整阶段冻结无Skip仍未完成。本次两配置定向/原回归不替代完整门禁。人工/真实设备故障/真实用户素材/目标环境/自包含/完整性能/1h，以及既有File.Replace、empty-cache、分配调查均保持开放。
+
+### C 四档3D联合图像／成本增量（2026-10-15，双配置定向通过；C仍进行中）
+
+保留原 `JointPostImages` 的范围、输出图片命名、原断言／容限及超时，新增四个 `SceneCostJoint{Off,Low,Medium,High}`（每个事先180秒上限）。复用真实静态FBX和ASCII/Binary角色导入／NCA重启／所有动画clip的实际中点姿态，四档官方阴影×默认／geometry stage替换／完整用户pipeline×正常与奇数尺寸×三档曝光。每档180张联合图，原独立CPU四权重全顶点、静态IBL解析参考保留；测得Half HDR经独立Bloom／Tone／UI数值参考全图比较，固定容限≤3不变。明确不是任意三角形独立CPU全光栅／全着色oracle，不把同Shader的管线一致性作为独立算法证据。
+
+Off不在受测graph创建shadow map、不提交caster；Low/Medium/High检查512/1024/2048资源声明。High默认／阶段替换／完整graph都必须声明并绑定准确High geometry pixel hash；不只凭名称说High。每档三种pipeline画面完全一致，实际IBL／Bloom／有阴影时caster的独立开关对画面有贡献，拒绝后处理候选仍保持原图像及发布计数。辅助导入／参考用的256shadow场景独立存在，因此不宣称整个测试进程Off时不存在任何参考阴影资源。
+
+每档60个32次暖态成本区间，计入预计算palette的Skin上传／dispatch、scene、Bloom、direct HUD、Present与有界观测；不含此前动画求值、游戏逻辑、输入、资源／UI准备与启动成本。区间前显式WaitIdle仅为诊断边界，区间内无Wait/Flush/Capture/重试/JSON/资源创建。逐次检查main/present/HUD/skin批次、128B每palette、geometry/caster数量、无immutable资产重传、无常驻资源或发布增长、owner线程分配0。忙时整次呈现跳过但记录尝试，不用此前成功帧填充。GPU来源位于测量窗之外明确标注为此前warm／diagnostic工作；非Valid保留状态与0毫秒，三类GPU区间不能相加。direct HUD没有离屏生产，不伪造UIProduction成本。
+
+首轮目标构建0警告，Off806项／High920项图像及范围检查各通过180图、maxError1、API0/0；还各含1920次逐帧成本断言。Off首轮1902次实际提交／18次busy，全部32帧区间0线程分配。证据 `out/verification/m7-7/scene-cost-joint-Off-Debug/ffa485fe46214114be62b8ac8af68364` / `scene-cost-joint-High-Debug/b2591a0bb2f1497089b3ad3e4c3775c1`，日志 `out/m7-7-scene-cost-{debug-build-first,off-debug-first,high-debug-first}.log`。最后仅恢复原模式图片命名后，规范Debug Skip构建／四档与原完整回归进行中；Release尚待。没有新增生产ABI／GPU算法／Agent权限。
+
+**四档3D联合增量最终定向验证**：规范Skip Debug `154ca0126efa4943a77209ed820c14f4` / Release `68a0529a0fa8490a96ac8ae656473f00` 均0编译警告，各26组回归全部通过581.39/542.62秒，原Rendering185.27/181.06、High恢复联合68.95/65.77、Editor80.69/76.56、Player73.37/72.99秒。四档新测试分别15.84/17.96/18.11/36.30秒和10.49/12.78/13.20/32.80秒，既有超时／断言不变。
+
+每配置四档共720图/maxError1/API0/0、3446项图像／结构断言及7680次逐帧成本核对；240个32次测量区间均0当前线程托管分配、无immutable上传或常驻资源增长。Debug四档实际提交1915/1912/1870/1882，共7579，busy101；Release1872/1876/1878/1830，共7456，busy224。未限定帧间节奏，不能据这些尝试次数推导游戏FPS。GPU观测条数可重复引用此前有效sample，不等于独立新GPU帧；来源在窗口之外的旧warm／diagnostic结果明确隔离。逐帧PresentationCostReport不含其前后统计查询开销，整段loop另包含观测开销；这些都不是完整宿主成本。
+
+新增证据位于 `out/verification/m7-7/scene-cost-joint-{Off,Low,Medium,High}-{Debug,Release}`，最终8份结果路径和数字汇总 `out/verification/m7-7/scene-cost-increment-summary.json`。Debug证据ID按四档顺序：`3e6270e2d4504ecbaa2a780ff224d2e7` / `4a6c49a997ee479a9d271b8bcf587f66` / `8f5874d9213c469bbb9a00fdd5c4b94f` / `6704c9670b874791be26aa2cb36228db`；Release：`60ce7b7c37a24edca67841bf1c8c0b0a` / `df65e6fd706840119747de8dc8a0e970` / `bb700f169a3845bf88780a46ceefb96c` / `d342f54cd89b4832a55101b117cd02f1`。
+
+两配置辅助互操作／无图形／严格格式各3组通过1.49/1.28秒；Python45项1.465秒、Release托管／原生烟测及规范inspect通过。两配置五产品144/56/113/67/116项实际SHA审计通过；36份变更源码／原生与托管测试／脚本SHA在最终回归前后一致，清单 `out/verification/m7-7/scene-cost-increment-source.json` 不是整阶段冻结。日志 `out/m7-7-scene-cost-{debug-candidate-first,release-candidate-first,debug-regression-first,release-regression-first,formats-debug,formats-release,python-first,managed-native-smoke,package-audit-debug,package-audit-release}.log`。所有会话终结，Release17152退出0。正式M7.6 EXE/DLL哈希及HEAD仍保持前述值。
+
+C文本／输入成本与前一增量已测出的dirty分配／全表上传问题仍需推进，随后D真实搬移宿主成本与生命周期／完整冻结无Skip。不能只增加通过测试而把已观测的性能缺口当成完成。本增量没有部署／提交推送，不关闭M7.7或人工／真实素材／物理设备丢失／目标／自包含／完整性能／1h门禁；所有先前失败及调查继续保留。
 
 补齐有界GPU sample origin frame/device身份、单调序列/valid/disjoint状态；非阻塞读、不可用返回明确状态。
 3D静态/动画/PBR/IBL/shadow/HDR/UI联合图，独立数值oracle和事先定义像素容限，API0/0。
 2D静态应用验证事件刷新/缓存/dirty上传及无3D资源，区分CPU/GC/ABI/upload/GPU成本。
 正式Editor/Player/NCP1搬移及生命周期回归；真实用户素材、可见操作、目标预算/自包含/1h仍需真实证据。
+
+### C UI 脏准备／文本与输入成本增量（2026-10-15，双配置定向通过；整阶段未交付）
+
+本增量针对前次实际观察到的每次dirty约3.69MB托管分配，不改变GPU ABI或将整表上传伪称局部上传。`UiRuntime`将绘制变化与几何变化分离：值／焦点／光标复用原布局与命中索引，滚动／可见性／显式文本度量／视口变化仍重新发布布局；旧借用数组不被就地修改。滑块索引、Tab扫描和普通文本插入移除多余LINQ／字素边界分配，Unicode移动／删除仍遵守字素边界。输入仍受原有owner／stamp／顺序／队列和显式准备约束。
+
+`UiDisplayListBuilder.Reset`仅复用有界CPU数组，生成的native列表仍是独立副本；每个canvas保留最大65536顶点／4096批次容量，非无成本缓存。`UiCanvas`复用构建器，绘制变化不重做已匹配的最终换行度量；几何变化仍有第二次有界Fill校验。修复Text／Button清空后旧glyph仍绘制的问题，旧字形资源随旧显示列表退役后释放；缺字继续由显式字体拒绝，不增加系统字体回退，准备失败不可提交旧内容。
+
+新增CPU几何／输入缓存与真实DX11文字回归，验证滚动、Hug文本、隐藏布局、DPI、Unicode输入／删除、清空／恢复像素、失败后显式恢复、资源排空、异线程Reset、Reset不修改已发布列表。预优化红测 `out/m7-7-ui-dirty-red.log` 复现SetValue后布局重新复制。第一轮真实文字fixture使用指定msyh.ttc不支持的emoji，产品正确拒绝；保留失败 `out/m7-7-ui-dirty-ui-debug-first.log`，正常路径改为该字体支持的中英文，另以精确text/prepare_text/UnsupportedFeature验证emoji拒绝，不放宽产品保护。该OS字体仅用于本机测试，不进入可分发包。
+
+初步Debug实际3,075元素联合70检查／独立整图最大误差0；24次dirty准备每次40B托管包装分配，GPU仍每次959400B整表上传，非局部更新；冷启动约74MB尚未解决。后续测试增加每次暖态dirty最多64B断言。真实小文本场景31组已通过：64次暖态指针输入／drain／Prepare／Submit／Present共2560B、19.104ms、159744B上传、0次重排；16次文字输入／Backspace共179648B、11.1911ms、162816B上传、恰好16次变更字形重排。这是本机一次观测，未计读回／显式等待／观测开销，不是FPS承诺或完整性能验收。此处为首轮观测，最终同源双配置结果见下文，不用初步结果代替最终验证。
+
+第一轮规范Debug候选fa9cfd12d4e741659c07d19a892ae1d4各26综合＋3格式回归通过575.71／1.37秒，但复查发现部分DPI准备失败后恢复原DPI时，只比较内容可能复用失败期间的不同scale字形。追加真实红测 `out/m7-7-ui-dirty-dpi-red.log` 明确复现，随后将每个run的scale／size也纳入复用条件；`ui-dirty-dpi-fixed.log` 31组通过，失败后恢复的原文字像素精确一致。第一轮综合证据早于此修复，不冒充最终源码验证；随后按修正源码重新构建并完成下述同源回归。
+
+本轮选定41份源码／测试／脚本SHA最终清单 `out/verification/m7-7/ui-dirty-increment-source-final.json` 仅是增量稳定性核对，不是整阶段冻结；先前 `ui-dirty-increment-source.json` 保留为DPI补修前记录。没有部署／提交／推送；正式M7.6入口不变。本增量双配置回归已完成，后续继续C剩余成本边界审查及D搬移正式宿主／生命周期联合成本与整阶段冻结无Skip；所有人工／物理掉线／目标预算／自包含／长稳及历史异常调查继续开放。
+
+**本增量最终验证**：规范Skip Debug `6d01b504279047e5881f45e206a35aad`／Release `1f05e9477857478c82a3637141327834` 均0编译警告，最终各26组综合回归通过576.80／545.96秒；各3组互操作／headless／严格格式通过1.35／1.30秒。原Rendering186.27／182.63秒、Editor80.77／76.74秒、Player73.85／73.31秒，未放宽门限。含31组UI（实际文字/DPI失败恢复），大型UI各94项、四档3D联合、原HUD源环境与搬移交互、完整故障恢复和原业务测试。Python45项1.263秒、规范inspect与Release托管／原生烟测通过；双配置五产品144／56／113／67／116文件SHA核验通过。41份选定源码哈希在所有测试前后一致，`git diff --check`通过。全部构建测试会话终结，最后串行验证38368退出0。
+
+最终3,075元素证据：Debug `ui-cost-joint-Debug/15bed240243340bfb9e747519f86b39c`、Release `ui-cost-joint-Release/8452eedfec064bd1ac3e96df814ea841`（均位于 `out/verification/m7-7`）。24次dirty平均准备5.3702／1.7040ms，均40B；静态256次完整Prepare均0线程分配／上传／提交，独立整图最大误差0。六幅实际图像与此前2D增量、当前Debug、当前Release的SHA完全一致。全表959400B/次上传、959408B GPU驻留和约74MB冷创建分配仍保留，不能将CPU缓存优化当作局部GPU上传实现或完整性能达标。
+
+最终64次暖态小文本面板指针输入／drain／Prepare／Submit／Present：Debug17.0702ms／Release16.1459ms，均2560B、159744B上传、0次文字重排。16次交替文字输入／Backspace：11.0299／9.8844ms，均179648B、162816B上传、恰好16次变更run准备；最终Unicode文字像素恢复一致。计时范围无显式读回／等待，不含观测开销、冷启动或整个应用；本机观测不是硬件预算承诺。成本摘要及六图SHA见 `out/verification/m7-7/ui-dirty-increment-summary.json`。
+
+日志 `out/m7-7-ui-dirty-{debug-candidate-second,release-candidate-first,debug-regression-second,release-regression-first,formats-debug-final,formats-release,python-first,inspect,managed-native-smoke,package-audit-debug,package-audit-release}.log`，红测和较早候选日志均保留。正式M7.6 EXE/DLL和HEAD保持前述值，4项IDE改动未纳入处理；无整阶段冻结无Skip／部署／提交／推送。下一步审查C剩余冷创建／整表上传成本边界，并完成D正式搬移Editor/Player/NCP1成本与生命周期联合证据，再执行整个M7.7冻结无Skip Debug/Release；人工、真实素材、物理掉线、目标预算、自包含、长稳与历史调查均不关闭。
+
+### C UI 文档复制／冷创建成本增量（2026-10-15，双配置定向通过；整阶段未交付）
+
+在上一轮40B脏准备之后，继续实测原有约74MB字体为空的大面板创建分配。定位到 `UiDocument` 构造与 `UiCanvas` 获取文档各调用一次 `UiCodec.Copy`，原实现每次Encode→JSON DOM重复字段检查→Decode→重建整个记录图。新的CPU红测 `out/m7-7-ui-copy-red.log` 记录3,075元素单次构造30,472,152B／197.6451ms、已拥有文档Capture30,473,488B／179.7224ms，复现后才修改复制路径；这是预热序列化器后的CPU窗口，不是应用启动总成本。
+
+`UiCodec.Copy`首先验证身份／数组数量上限，复制Elements／Tokens两个可变数组后对自有快照完整Validate，再用与Encode相同的JsonSerializer及选项向只计数不存储的stream写入，保持包含Unicode转义的精确4MiB规范字节预算。嵌套UiElement／UiStyle／UiLayout／UiToken均为sealed、init-only记录，其他成员为值或不可变string，因此可共享记录而不共享可变数组；新增结构测试要求未来可变字段必须重新审查，不能无声扩展。`UiDocument.Capture`仅对已经在构造时完整验证、私有持有的文档复制数组，并保留owner线程约束。外部输入不得使用内部已验证复制路径；没有反射或同进程恶意代码沙箱的声明。
+
+Encode／Decode的严格格式路径不变：版本、未知／重复字段、required、enum、Unicode、scalar、token、层级和资源声明等保护保留。新增35组UI中的4组复制测试验证独立数组、不可变成员形状、输入／Capture变更不污染内部文档、owner拒绝、与原JSON roundtrip规范输出完全一致、非法值与引用拒绝；独立序列化oracle造出恰好4MiB（接受）及多1字节（拒绝）的转义文本边界。初步Debug35组含真实GPU文字／DPI／回收通过；单文档构造1,884,720B／47.9228ms、已拥有文档Capture24,728B／0.0168ms。
+
+初步3,075元素canvas联合94检查、独立整图误差0，构造6,693,408B／230.0319ms（此前约74MB）；该窗口包含UiDocument／canvas准备，不包含之前已完成的窗口、renderer设备创建和普通应用启动。后续加入此固定无字体fixture的12MiB冷分配回归上界（不是通用UI资源预算），测试变为95项。GPU整表上传仍959400B/次，不用CPU复制优化冒充局部GPU更新。
+
+最终选择44份源码／测试／脚本SHA记录 `out/verification/m7-7/ui-copy-increment-source.json`，验证前后完全一致。规范Skip候选Debug `7e71979f96bd47f5a0ba37a337c26258`／Release `63b6495007c94ebe9d91f08dc7cae908` 构建0编译警告。
+
+Debug第一轮扩展回归33/34通过628.59秒，原Editor.Core测试在Dirty/history分支第二次Save的File.Replace处发生IOException（SceneDocumentFiles.cs:60／原测试:404）。该测试依赖仅Core/Scene/Runtime，不引用Ui；原保存实现与断言未修改。失败目录 `out/tests/editor-core/46ac1249fa0542ba929f25832c045af8/saved.ncmascene` 132B原对象A保留，当前可独占读取，SHA `23BAD7A078B51CDEFB8377A82F748ED77D5A766F4B97A959DA64468F8A0E2321`；检查未改写原文件。原样独立复测三次各36/36通过，随后同源重跑完整34组通过。不将间歇性File.Replace问题称为已修复，不增加生产重试／替代保存／断言或超时豁免，根因调查继续开放。完整诊断见 `out/verification/m7-7/ui-copy-save-failure-inspection.json`，首轮失败日志和三个retest日志保留。
+
+最终Debug／Release各34组扩展综合回归全部通过624.08／592.84秒；各3组互操作／headless／严格格式通过1.69／1.30秒。包含原35组UI及4MiB边界、UI准备／选择／发布／搬移联合、原Editor.Core、SceneRendering、Gameplay，以及四档3D／故障恢复／原业务回归。原Rendering185.57／181.44秒、Editor80.30／76.74秒、Player72.02／72.34秒；门限未改变。Python45项1.269秒、规范inspect、Release托管／原生烟测和两配置五产品144／56／113／67／116文件SHA审计通过。所有工作会话终结，首轮45606退出8，最终45107退出0，没有遗留需要续等的构建测试。
+
+最终3,075元素已验证文档Capture均24,728B；构造均1,884,720B，Debug／Release28.7233／30.7477ms，Capture0.0168／0.0101ms。实际无字体canvas冷创建6,647,520／6,681,176B、212.7158／199.9397ms（此前同一窗口约74MB），明确不包含窗口／renderer设备创建或整体应用启动。大型UI每配置95检查、独立整图最大误差0；六幅实际图像与优化前及当前两配置SHA相同。静态256次仍0分配／上传／提交，dirty准备仍40B，平均5.5544／1.7126ms；GPU仍959400B整表上传、959408B驻留，没有局部GPU更新声明。
+
+证据位于 `out/verification/m7-7/ui-cost-joint-Debug/0b4f8322d6684f5d96eeb8940ddf7928` 与 `ui-cost-joint-Release/653f4af83de94256be7a7fd80d877c79`；完整摘要、文档CPU测量和六图SHA见 `ui-copy-increment-summary.json`。日志 `out/m7-7-ui-copy-{debug-candidate-first,release-candidate-first,debug-regression-second,release-regression-first,formats-debug,formats-release,python-first,inspect,managed-native-smoke,package-audit-debug,package-audit-release}.log`，较早红测／失败／初测全部保留。正式M7.6 EXE/DLL及HEAD未变，4项IDE改动保留，没有部署／提交／推送，也未完成整阶段冻结无Skip。
+
+下一步推进M7.7-D正式搬移Editor/Player/NCP1成本与生命周期联合证据，再完成整个M7.7冻结无Skip Debug/Release。C的整表GPU上传作为已量化的未优化项保留，不能借CPU优化宣称局部更新或完整性能通过；目标硬件预算、人工／真实素材／物理掉线／自包含／长稳及历史保存异常调查继续开放。
+
+### D 正式搬移宿主成本／生命周期联合（2026-10-15，双配置自动门禁完成）
+
+沿用原严格搬移产品／NCP1运行资源联合测试，不新增兼容入口：真实清单文件复制及SHA检查、作者FBX/资源和原始运行目录独占锁、实际加载托管程序集与native路径/哈希、默认实际apphost及未授权HUD拒绝均保留。Editor与含物理Player的默认／stage／完整pipeline开启原有成本消费者，场景包含实际ASCII/Binary FBX、已知root-motion伴随角色、Jolt、IBL、四档阴影、Bloom和交互HUD。
+
+新增测试专用有界复制证据：每窗口8帧暖态＋16帧测量，不在测量中截图、WaitIdle、Flush、序列化或主动推进模拟。Editor取恢复后的Play及两次Reload各一窗口，Player取两次新设备后的窗口；记录完整host调用与正式Present范围各自CPU/分配，以及原有选定批次/上传和独立GPU样本。窗口结束后验证实际设备generation、单调hostFrame、API0/0、每帧一次提交/Present和静态资源零上传。GPU Pending/无效与早期来源保持原样；额外标出来源是否是之前的截图诊断帧，不把旧离屏HUD样本当作新生产，不汇总成所谓整帧GPU成本。
+
+失败报告必须清空计数/GPU样本；最小化/零尺寸保持上次报告原始身份而不伪造新采样；恢复使用实际新设备，Play状态/对象/动画/数值solver/私人脚本与Undo隔离保持原断言；完整关闭后只保留复制报告。实际搬移CLI增加默认无成本字段／显式开启非截图成本字段，Null与Physics-Null即使开启也没有GPU观测器；没有新增路由权限、插件依赖或同步AI工作。
+
+首轮Debug规范Skip候选 `cd995c1529414df9990be2196744a0f1` 零编译警告，High完整搬移联合80.48秒通过，证据 `out/verification/m7-6/graphics-recovery-joint-Debug/9ea45dea26aa4faea061a279f48ce3bf`，日志 `out/m7-7-relocated-costs-debug-first.log`。同机ASCII Editor16帧整个调用约1.24MB分配，仍不是目标硬件性能达标。随后加强实际设备/API核对，并澄清UiCodec内部复制helper不负责验证的注释；这些最终改动需要重新回归。接下来冻结同源执行完整无Skip Debug/Release和正式部署闭包核验，尚未提交/推送，不提前关闭M7.7。全部人工／真实物理设备故障／用户素材／目标预算／自包含／1h及历史File.Replace调查继续开放。
+
+**D整阶段冻结Debug验证（Release仍进行中）**：878份源码／测试／构建文件冻结清单 `out/verification/m7-7/stage-source-first.json`，SHA `FC9F2903E0E7F4F1502D0D4635C15502C413B04DD55E10EA8C7E68103730D885`。无Skip Debug首轮13原生／72托管产品CTest全部通过10.25／1142.54秒，Python45项1.497秒、ABI烟测／inspect／三轮运行时测量／前后审计通过。规范候选 `7ffd920b809d49d8be9084a88d4d1166`，日志 `out/m7-7-full-debug-first.log`；未改变断言、容差或期限，原Rendering187.62秒，Editor80.64秒，Player72.37秒，四档恢复80.20／68.91／70.20／70.38秒。
+
+Debug部署Complete `2d4246eb274a4466a83cdf907363d703`，144清单／148实际／148旧文件备份逐项SHA通过，真实apphost包校验退出0，五产品144／56／113／67／116文件审计通过。冻结源码复核878份完全一致；Release全量门禁正在执行，仍未提交／推送。详细机器证据 `debug-deployment-check.json`、`debug-relocated-costs.json`；源码／备份／历史失败和4项IDE改动保留。
+
+Debug完整搬移四质量×两FBX共120个窗口、1920测量帧；Editor1152帧、Player768帧。每帧平均整个调用分配Editor约77.6～78.1KB、Player约34.2KB，不是零分配宿主。主提交GPU只有4份Valid观察，其他为真实待完成状态；Skin823份Valid，Editor1152份缓存UI生产样本都明确来自更早截图诊断帧。固定单槽非阻塞采样不保证每帧有效，不能将这些观察汇总为整体GPU忙碌时间、性能均值或目标硬件验收；不为获取数字添加同步等待。现有报告的来源／状态可见性与完整性能验收必须继续区分。
+
+**M7.7最终双配置自动交付核对（2026-10-15）**：同一878源码冻结清单在完整顺序无Skip Debug／Release后再次逐项SHA一致，源码未修改。两配置首轮各13原生＋72托管／产品全部通过：原生10.25／8.85秒，托管1142.54／1052.57秒；Python各45项1.497／1.320秒，ABI烟测、inspect、严格新格式与旧格式拒绝、MCP、三轮历史运行时测量、前后审计与恢复测试全部通过。编译零警告，原Rendering187.62／179.83秒，Editor80.64／77.73秒，Player72.37／72.81秒，未调整原断言／容差／期限；本轮全量无新增失败，旧失败记录与未证实根因的File.Replace调查仍保留。
+
+Release规范候选 `c3c96ca566fc4d658984325ea6e210ba`。正式部署Complete `5b7ffe1b0f0c4028ab3745428311dd7f`，144清单／148实际文件与148旧文件备份逐项哈希通过，真实 `NcmaEngine.exe --validate-package` 退出0，规范部署原路径烟测通过。两配置五种产品144／56／113／67／116文件审计通过；旧部署保留可恢复备份，没有清除用户数据或4项IDE改动。最终EXE SHA `43511ACE40A3E16C0961A8916E754E7AC96A5734EC78ECB25A35225DCEF4BE40`，托管入口DLL SHA `603EBC5F63279C2642D5A2CF303D0854A94EBC7FC8F3C1257C6121A39962F24C`。与M7.6正式包比较，native DLL仅Renderer变化；Shader数值载荷仅此前已解释的Flat2D矩形边角修正变化，其他3D/Post/Shadow/环境数值载荷保持原哈希。
+
+最终四档3D每配置720幅参考图最大误差1/API0/0，真实主／工作采样15／18检查、正式成本30检查和大型UI95检查通过。大型UI六幅实际图与独立CPU期望完全相同，两配置SHA逐字节一致；纯2D静态零准备分配／上传证据保留，但dirty GPU仍整表上传。搬移产品每配置120个窗口／1920测量帧，两配置共3840帧；完整Editor/Player现有分配并未消失。Release整个调用平均分配Editor约77.6～78.1KB／帧、Player约34.2KB／帧；主提交176份Valid、Skin317份Valid、Editor1152份UI样本均来自较早截图诊断帧，其余状态如实保留。所有时间是本机特定范围的观察，不是整帧GPU忙碌、端到端游戏成本或目标性能验收，不增加等待以制造样本。
+
+完整日志 `out/m7-7-full-{debug,release}-first.log`；机器证据 `out/verification/m7-7/{debug,release}-deployment-check.json`、`{debug,release}-relocated-costs.json`；包审计 `out/m7-7-full-package-audit-{debug,release}.log`。构建／测试进程全部终结（Debug65505／Release77245均退出0）。本次关闭的是M7.7及M7自动候选链，非所有人工或性能门禁；提交推送仅包含源码、测试、文档，生成包／备份／IDE配置不提交。完成Git远端一致性核对后进入M8，不自动配置推理凭据、启用任意执行或把Python恢复为游戏脚本。
 
 ## 每个小阶段统一交付规则
 

@@ -337,6 +337,10 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--shadow-library-preflight") return ShadowLibraryChild(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--window-surface-tests") return WindowSurfaceTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--renderer-diagnostic-tests") return RendererFailureDiagnosticTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--gpu-timing-tests") return GpuTimingTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--gpu-work-timing-tests") return GpuWorkTimingTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--presentation-cost-tests") return PresentationCostTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--ui-cost-joint-tests") return UiCostJointTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--editor-lifetime-tests") return EditorLifetimeTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--editor-graphics-recovery-tests") return EditorGraphicsRecoveryTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--player-graphics-recovery-tests") return PlayerGraphicsRecoveryTests(args[1], args[2]);
@@ -354,6 +358,7 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--post-author-host-tests") return PostHostTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--customization-example-tests") return CustomizationExampleTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--joint-post-image-tests") return JointPostImageTests(args[1], args[2]);
+            if (args.Length == 4 && args[0] == "--scene-cost-joint-tests") return JointPostImageTests(args[1], args[2],Enum.Parse<SceneShadowQuality>(args[3],false));
             if (args.Length == 3 && args[0] == "--pipeline-host-tests") return PipelineHostTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--scene-ui-host-tests") return SceneUiHostTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--scene-ui-surface-tests") return SceneUiSurfaceTests(args[1], args[2]);

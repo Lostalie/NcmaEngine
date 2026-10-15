@@ -1,5 +1,6 @@
 #pragma once
 #include "StaticMeshKernel.h"
+#include "GpuWorkTimingKernel.h"
 #include "contracts/NcmaSkin.h"
 #include "contracts/NcmaShaderStages.h"
 #include "renderer/rhi/d3d11/D3D11RenderBackend.h"
@@ -16,10 +17,12 @@ class SkinKernel final {
  struct Slot {
   Microsoft::WRL::ComPtr<ID3D11Buffer> buffer;
   Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> view;
-  Microsoft::WRL::ComPtr<ID3D11Query> event,disjoint,begin,end;
+  Microsoft::WRL::ComPtr<ID3D11Query> event;
   bool pending=false;
  };
  Rhi::D3D11RenderBackend& backend;
+ NcmaGpuWorkSampleV1& sample;
+ GpuWorkTimingKernel timing;
  std::array<Slot,3> slots;
  Microsoft::WRL::ComPtr<ID3D11ComputeShader> shader;
  Microsoft::WRL::ComPtr<ID3D11Buffer> constants;
@@ -30,7 +33,7 @@ public:
  std::array<NcmaSkinPaletteV5,32768> copiedPalettes{};
  static constexpr uint64_t ResidentBytes=3ull*32768*128+16;
  static constexpr uint64_t CpuScratchBytes=32ull*24+32768ull*128;
- explicit SkinKernel(Rhi::D3D11RenderBackend& b):backend(b){}
+ explicit SkinKernel(Rhi::D3D11RenderBackend& b,NcmaGpuWorkSampleV1& s):backend(b),sample(s),timing(b,s){}
  static std::string_view ShaderSource();
  bool Initialize(std::string&,const NcmaComputeShaderV1* = nullptr);
  bool Matches(const NcmaComputeShaderV1& d) const noexcept { return registeredCode.size()==d.bytes&&std::equal(registeredCode.begin(),registeredCode.end(),d.bytecode); }
@@ -38,10 +41,12 @@ public:
  void PublishShader(Microsoft::WRL::ComPtr<ID3D11ComputeShader>& candidate,std::vector<uint8_t>& code) noexcept { shader.Swap(candidate);registeredCode.swap(code); }
  // Nonblocking. Called after whole-batch CPU preflight, before any GPU work.
  uint32_t SelectSlot(NcmaSkinStatsV5&,std::string&);
- void Begin(const NcmaSkinPaletteV5*,uint32_t);
+ void Begin(const NcmaSkinPaletteV5*,uint32_t,uint64_t frame);
  void Dispatch(const SkinInstance&,uint32_t);
  void End();
  void Resolve(NcmaSkinStatsV5&);
+ void ResolveTiming(NcmaSkinStatsV5& stats){timing.Resolve();stats.gpu_sample_valid=sample.timing.state==NCMA_GPU_SAMPLE_VALID?1u:0u;stats.gpu_ms=sample.timing.milliseconds;}
+ void InvalidateTiming(uint32_t state) noexcept {timing.Invalidate(state);}
  bool Capture(const StaticMesh&,uint8_t*,uint32_t,std::string&);
 };
 }

@@ -8,12 +8,16 @@ uint32_t NCMA_CALL CreateUiTarget(uint64_t context,uint64_t handle,const NcmaUiT
         const uint64_t bytes=static_cast<uint64_t>(d->width)*d->height*4;
         if(renderer->uiTargets.size()>=4||bytes+renderer->uiTargetBytes+renderer->ui->Stats(handle,renderer->pureUi).resident_bytes>128ull*1024*1024)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"UI target resident budget.");
         BusyScope scope;std::string message;Rhi::TextureDescription desc{};desc.Width=d->width;desc.Height=d->height;
+        std::unique_ptr<Rendering::GpuWorkTimingKernel> timing;
+        if(!renderer->uiTiming){timing=std::make_unique<Rendering::GpuWorkTimingKernel>(*renderer->backend,renderer->uiSample);
+            if(!timing->Initialize(message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
         desc.Usage=Rhi::TextureUsage::RenderTarget|Rhi::TextureUsage::Sampled;
         const uint64_t id=NcmaPlugin::NewWindowsHandle();
         auto texture=renderer->backend->CreateTexture(desc,message);
         if(!texture)return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
         try {renderer->uiTargets.emplace(id,Renderer::UiTarget{texture,d->width,d->height});}
         catch(...) {renderer->backend->DestroyTexture(texture);throw;}
+        if(timing)renderer->uiTiming=std::move(timing);
         renderer->uiTargetBytes+=bytes;*output={id,handle};Validation(*renderer);return NCMA_OK;
     });
 }
@@ -26,7 +30,9 @@ uint32_t NCMA_CALL DestroyUiTarget(uint64_t context,uint64_t handle,NcmaUiKeyV1 
         BusyScope scope;std::string message;
         if(const auto completion=CompleteGpu(error,true);completion!=NCMA_OK)return completion;
         renderer->backend->GetDeviceContext()->ClearState();renderer->backend->DestroyTexture(it->second.color);
-        renderer->uiTargetBytes-=static_cast<uint64_t>(it->second.width)*it->second.height*4;renderer->uiTargets.erase(it);Validation(*renderer);return NCMA_OK;
+        renderer->uiTargetBytes-=static_cast<uint64_t>(it->second.width)*it->second.height*4;renderer->uiTargets.erase(it);
+        if(renderer->uiTargets.empty()){renderer->uiTiming->Invalidate(NCMA_GPU_SAMPLE_ABANDONED);renderer->uiTiming.reset();}
+        Validation(*renderer);return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL SubmitUiTarget(uint64_t context,uint64_t handle,const NcmaUiTargetFrameV1* input,NcmaErrorV1* error) noexcept {
@@ -39,11 +45,13 @@ uint32_t NCMA_CALL SubmitUiTarget(uint64_t context,uint64_t handle,const NcmaUiT
         auto& target=it->second;
         if(renderer->active||target.leases||input->frame<=renderer->lastFrame||input->frame<=target.produced||input->content_revision<=target.content)return NcmaPlugin::Error(error,NCMA_BUSY,"Stale/pinned UI production.");
         BusyScope scope;ExecutionScope execution(input->frame);std::string message;Rhi::RenderPassDescription pass{};
+        renderer->uiTiming->Begin(input->frame,input->target.value,input->content_revision);
         pass.ColorTarget=target.color;pass.ClearColor=true;std::copy_n(input->clear,4,pass.ClearColorValue);
         if(!renderer->backend->BeginRenderPass(pass,message))return Failure(error,message);
         renderer->ui->Draw(input->list.value,target.width,target.height);renderer->backend->EndRenderPass();
+        renderer->uiTiming->End();
         if(FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason()))return Failure(error,"UI target device lost.");
-        target.produced=input->frame;target.content=input->content_revision;renderer->uiProductions++;Validation(*renderer);execution.success=true;return NCMA_OK;
+        target.produced=input->frame;target.content=input->content_revision;renderer->lastUiProductionFrame=std::max(renderer->lastUiProductionFrame,input->frame);renderer->uiProductions++;Validation(*renderer);execution.success=true;return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL CaptureUiTarget(uint64_t context,uint64_t handle,NcmaUiKeyV1 key,uint8_t* output,uint32_t capacity,NcmaErrorV1* error) noexcept {

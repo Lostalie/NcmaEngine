@@ -8,7 +8,9 @@ public sealed class UiDocument
     private readonly UiDefinition _definition;
     public Guid InstanceId { get; } = Guid.NewGuid();
     public UiDocument(UiDefinition definition) => _definition = UiCodec.Copy(definition);
-    public UiDefinition Capture() { VerifyAccess(); return UiCodec.Copy(_definition); }
+    // This private graph was validated (including canonical wire size) at construction.
+    // Copy arrays only; no mutable record state escapes through Capture or runtime metrics.
+    public UiDefinition Capture() { VerifyAccess(); return UiCodec.CopyOwned(_definition); }
     public byte[] CaptureBytes() { VerifyAccess(); return UiCodec.Encode(_definition); }
     internal UiDefinition Definition { get { VerifyAccess(); return _definition; } }
     public void VerifyAccess() { if (_owner != Environment.CurrentManagedThreadId) throw new InvalidOperationException("UI owner thread required."); }

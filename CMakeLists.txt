@@ -242,7 +242,7 @@ if(WIN32 AND NCMA_BUILD_TESTS)
         engine/source/plugins/renderer/PostProcessKernel.cpp
         engine/source/plugins/renderer/ReferenceKernel.cpp engine/source/runtime/renderer/rhi/d3d11/D3D11RenderBackend.cpp engine/source/runtime/renderer/rhi/RhiResources.cpp)
     target_include_directories(NcmaRendererNativeTests PRIVATE engine/source/runtime engine/source/plugins)
-    target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE NCMA_PLUGIN_HANDLE_TEST)
+    target_compile_definitions(NcmaRendererNativeTests PRIVATE NCMA_RENDERER_EXPORTS NOMINMAX WIN32_LEAN_AND_MEAN GLFW_INCLUDE_NONE NCMA_PLUGIN_HANDLE_TEST NCMA_GPU_TIMING_TEST)
     target_compile_options(NcmaRendererNativeTests PRIVATE /W4 /WX /permissive- /utf-8)
     target_link_libraries(NcmaRendererNativeTests PRIVATE NcmaPlatform glfw Ncma::Eigen d3d11 dxgi d3dcompiler advapi32)
     set_target_properties(NcmaRendererNativeTests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/m2/plugins")
@@ -591,6 +591,33 @@ if(NCMA_BUILD_TESTS)
                 --renderer-diagnostic-tests "${CMAKE_BINARY_DIR}/m2/plugins"
                 "${CMAKE_SOURCE_DIR}/out/verification/m7-6/gpu-diagnostics-$<IF:$<CONFIG:Debug>,Debug,Release>")
             set_tests_properties(NcmaRenderingTests.GpuDiagnostics PROPERTIES TIMEOUT 60)
+            add_test(NAME NcmaRenderingTests.GpuTiming COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --gpu-timing-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-7/gpu-timing-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.GpuTiming PROPERTIES TIMEOUT 60)
+            add_test(NAME NcmaRenderingTests.GpuWorkTiming COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --gpu-work-timing-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-7/gpu-work-timing-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.GpuWorkTiming PROPERTIES TIMEOUT 60)
+            add_test(NAME NcmaRenderingTests.PresentationCosts COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --presentation-cost-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-7/presentation-costs-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.PresentationCosts PROPERTIES TIMEOUT 90)
+            add_test(NAME NcmaRenderingTests.UiCostJoint COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                --ui-cost-joint-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                "${CMAKE_SOURCE_DIR}/out/verification/m7-7/ui-cost-joint-$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaRenderingTests.UiCostJoint PROPERTIES TIMEOUT 90)
+            foreach(cost_quality IN ITEMS Off Low Medium High)
+                add_test(NAME NcmaRenderingTests.SceneCostJoint${cost_quality} COMMAND "${DOTNET_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
+                    --scene-cost-joint-tests "${CMAKE_BINARY_DIR}/m2/plugins"
+                    "${CMAKE_SOURCE_DIR}/out/verification/m7-7/scene-cost-joint-${cost_quality}-$<IF:$<CONFIG:Debug>,Debug,Release>" "${cost_quality}")
+                set_tests_properties(NcmaRenderingTests.SceneCostJoint${cost_quality} PROPERTIES TIMEOUT 180)
+            endforeach()
             add_test(NAME NcmaRenderingTests.GraphicsRecoveryJoint COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Rendering.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Rendering.Tests.dll"
                 --graphics-recovery-joint-tests "${CMAKE_BINARY_DIR}/m2/plugins"

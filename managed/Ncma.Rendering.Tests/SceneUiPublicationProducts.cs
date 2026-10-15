@@ -39,6 +39,25 @@ internal static unsafe partial class Program
                 if(kind is "null" or "nullPhysics")cli.ArgumentList.Add("--headless");Run(cli,Path.Combine(evidence,"apphost.log"),0);
                 if(kind!="editor"){using var report=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost.json")));ulong tick=report.RootElement.GetProperty("tick").GetUInt64();pass(kind is "null" or "nullPhysics"?tick==2:tick>=2,"actual Player apphost committed ticks");}
                 if(probeName=="graphics-recovery-joint"){
+                    if(kind!="editor"){
+                        using var ordinary=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost.json")));
+                        pass(!ordinary.RootElement.TryGetProperty("presentationCosts",out _),"default relocated Player CLI has no cost report");
+                    }else pass(!File.ReadAllText(Path.Combine(evidence,"apphost.log")).Contains("presentationCosts",StringComparison.Ordinal),"default relocated Editor CLI has no cost output");
+                    var measured=new ProcessStartInfo(cli.FileName){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
+                    foreach(string arg in cli.ArgumentList)measured.ArgumentList.Add(arg==Path.Combine(evidence,"apphost.json")?Path.Combine(evidence,"apphost-costs.json"):arg);
+                    measured.ArgumentList.Add("--presentation-costs");Run(measured,Path.Combine(evidence,"apphost-costs.log"),0);
+                    if(kind=="editor"){
+                        string line=File.ReadLines(Path.Combine(evidence,"apphost-costs.log")).Single(l=>l.StartsWith("{\"presentationCosts\":",StringComparison.Ordinal));
+                        using var measuredReport=JsonDocument.Parse(line);var observation=measuredReport.RootElement.GetProperty("presentationCosts");
+                        pass(observation.GetProperty("Completed").GetBoolean()&&!observation.GetProperty("IncludesDiagnosticCapture").GetBoolean()&&observation.GetProperty("Generation").GetUInt64()>0,"actual relocated Editor CLI opt-in copied non-capture report");
+                    }else{
+                        using var measuredReport=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost-costs.json")));
+                        if(kind is "null" or "nullPhysics")pass(!measuredReport.RootElement.TryGetProperty("presentationCosts",out _)&&measuredReport.RootElement.GetProperty("renderedFrames").GetUInt64()==0,"Null CLI opt-in never initializes GPU instrumentation");
+                        else{
+                            var observation=measuredReport.RootElement.GetProperty("presentationCosts");
+                            pass(observation.GetProperty("completed").GetBoolean()&&!observation.GetProperty("includesDiagnosticCapture").GetBoolean()&&observation.GetProperty("generation").GetUInt64()>0,"actual relocated Player CLI opt-in durable non-capture report");
+                        }
+                    }
                     var denied=new ProcessStartInfo(cli.FileName){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
                     foreach(string arg in new[]{"--project",Path.Combine(game,"interactive.ncmaproject")})denied.ArgumentList.Add(arg);
                     foreach(string arg in kind=="editor"?new[]{"--smoke-test","--frames","2"}:new[]{"--ticks","2","--report",Path.Combine(evidence,"unregistered-ui.json")})denied.ArgumentList.Add(arg);

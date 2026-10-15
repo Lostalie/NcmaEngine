@@ -10,7 +10,7 @@ internal static class Program
         try { options = PlayerOptions.Parse(args); }
         catch (Exception e) when (e is ArgumentException or IOException or NotSupportedException)
         { Console.Error.WriteLine("invalid_arguments"); return 2; }
-        if (options.Help) { Console.WriteLine("NcmaPlayer --project <file.ncmaproject> [--headless --ticks N] [--renderer d3d11|null|vulkan] [--fixed-delta h] [--max-runtime-seconds N] [--report file.json]"); return 0; }
+        if (options.Help) { Console.WriteLine("NcmaPlayer --project <file.ncmaproject> [--headless --ticks N] [--renderer d3d11|null|vulkan] [--fixed-delta h] [--max-runtime-seconds N] [--report file.json] [--presentation-costs]"); return 0; }
         if (options.Version) { Console.WriteLine("NcmaPlayer M2.7 / report v1 / scene JSON v1"); return 0; }
         int cancelled = 0;
         ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; Interlocked.Exchange(ref cancelled, 1); };

@@ -13,6 +13,8 @@ static void Check(bool value,const char* message){if(!value)throw std::runtime_e
 #include "RendererCompletionNativeTests.inl"
 #include "GraphicsHandleFailureTests.inl"
 #include "RendererDiagnosticNativeTests.inl"
+#include "RendererTimingNativeTests.inl"
+#include "RendererWorkTimingNativeTests.inl"
 int main(int argc,char** argv) {
     try{
         if(argc!=2)return 2;
@@ -83,7 +85,7 @@ int main(int argc,char** argv) {
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,19,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,21,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");
@@ -482,6 +484,8 @@ int main(int argc,char** argv) {
         Check(api.stats(renderModule,handle,nullptr,&error)==NCMA_INVALID_HANDLE,"Stale renderer");
         RendererCompletionNativeTests(api,typed,renderModule,desc,handle);
         RendererDiagnosticNativeTests(latest,renderModule,desc);
+        RendererTimingNativeTests(latest,renderModule,desc);
+        RendererWorkTimingNativeTests(latest,renderModule,desc);
         {
             NcmaRendererFrameApiV1 frames{};
             Check(latest.query_scene_render(renderModule,17,&frames,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short frame lifecycle API");
