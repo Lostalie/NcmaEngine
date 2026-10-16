@@ -38,7 +38,7 @@ internal static class AnimationRuntimeInspectionTests
         using var owner=new EditorSessionOwner("Graph runtime",components:CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),validateComposition:CharacterComponents.RequireComposition,
             composePreparedPlay:(play,assets)=>{runtime=ScenePlayRuntime.Compose(play,physics,assets);play.AddSystem(new Failure(()=>injectFailure));return runtime;});
         SceneDocumentFiles.Load(owner.Document,Path.Combine(sample.Root,"start.ncmascene"));
-        foreach(Guid id in sample.Actors){var actor=owner.Document.World.FindObject(id);actor.Remove<ActionDefinitionData>();actor.Remove<ClipPlaybackData>();actor.Set(new AnimatorData(graph.AssetId,rig));}
+        foreach(Guid id in sample.Actors){global::Ncma.Runtime.Entity actor=owner.Document.World.FindEntity(id);owner.Document.World.Remove<ActionDefinitionData>(actor);owner.Document.World.Remove<ClipPlaybackData>(actor);owner.Document.World.Set(actor, new AnimatorData(graph.AssetId,rig));}
         owner.Edit!.Resynchronize();owner.PrepareRenderAssets(sample.Root,sample.ProjectId);var workspace=new EditorWorkspace(owner);var clock=new Clock();
         SceneRenderSession? presentation=null;
         var service=new AnimationRuntimeInspectionService(owner,()=>runtime,presentation:()=>presentation,clock:clock);service.Register();owner.ConfigureEndpoint(true,output);var endpoint=owner.Endpoint!;
@@ -74,7 +74,7 @@ internal static class AnimationRuntimeInspectionTests
                 using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,320,240);using var cache=new RenderResourceCache(renderer);
                 string kernelPath=Path.Combine(plugins,"NcmaAnimationKernel.dll");using var kernel=new Ncma.Animation.Native.PoseKernel(kernelPath,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(kernelPath))),blendSupport:true);
                 using var scene=new SceneRenderSession(renderer,cache,play.Document.World);scene.Prepare(owner.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime!.Characters,animators:runtime.Animators);
-                presentation=scene;Guid camera=play.Document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+                presentation=scene;Guid camera=play.Document.World.GetUuid(play.Document.World.GetEntities().Single(o=>play.Document.World.Has<CameraData>(o)));
                 Check(scene.Submit(1,320,240,camera),"Runtime observation requires actual successful skin/shadow submission");renderer.Present();
                 var pose=Call(Input(sample.Actors[0])).GetProperty("data").GetProperty("observation").GetProperty("pose");Check(pose.GetProperty("rendererFrame").GetUInt64()==1&&pose.GetProperty("geometryDraws").GetInt32()==2,"Current exact publication/tick pose evidence");
                 Check(play.AdvanceFrame(1d/60).State==PlayState.Running);Check(Call(Input(sample.Actors[0])).GetProperty("data").GetProperty("observation").GetProperty("pose").ValueKind==JsonValueKind.Null,"Previous successful pose cannot label a new graph tick");

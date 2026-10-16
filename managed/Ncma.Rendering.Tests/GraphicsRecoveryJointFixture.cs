@@ -22,12 +22,12 @@ internal static unsafe partial class Program
         var graph=AnimatorGraph(actor);File.WriteAllBytes(Path.Combine(imported.Root,"assets/root.ncmaanim"),AnimationGraphCodec.Encode(graph));
         var document=new SceneDocument("Full recovery joint",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
         document.RestoreSnapshot(source.CaptureSnapshot());
-        var obj=document.World.CreateObject("Graph root recovery actor");obj.Set(TransformData.Identity with{Position=new(-1,0,-3)});
-        obj.Set(new SkinnedMeshData(actor.Model,actor.Manifest.Meshes[0].Mesh,graph.SkeletonId,actor.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
-        obj.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));obj.Set(new RootMotionData(0));obj.Set(CharacterData.Default with{Controlled=false,Gravity=0});
-        var floor=document.World.CreateObject("Solver floor");floor.Set(TransformData.Identity with{Position=new(0,-1.1f,-3)});floor.Set(new BoxColliderData(20,.2f,20,1000,1,false));
+        global::Ncma.Runtime.Entity obj=document.World.CreateEntity("Graph root recovery actor");document.World.Set(obj, TransformData.Identity with{Position=new(-1,0,-3)});
+        document.World.Set(obj, new SkinnedMeshData(actor.Model,actor.Manifest.Meshes[0].Mesh,graph.SkeletonId,actor.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
+        document.World.Set(obj, new AnimatorData(graph.AssetId,graph.SkeletonId));document.World.Set(obj, new RootMotionData(0));document.World.Set(obj, CharacterData.Default with{Controlled=false,Gravity=0});
+        global::Ncma.Runtime.Entity floor=document.World.CreateEntity("Solver floor");document.World.Set(floor, TransformData.Identity with{Position=new(0,-1.1f,-3)});document.World.Set(floor, new BoxColliderData(20,.2f,20,1000,1,false));
         foreach(var(name,type)in new[]{("Private recovery state","RecoveryProbe"),("HUD recovery state","HudProbe")}){
-            var probe=document.World.CreateObject(name);probe.Set(TransformData.Identity);document.SetBindings(probe.PersistentId,[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture."+type,true,[])]);
+            global::Ncma.Runtime.Entity probe=document.World.CreateEntity(name);document.World.Set(probe, TransformData.Identity);document.SetBindings(document.World.GetUuid(probe),[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture."+type,true,[])]);
         }
         document.ValidateAuthoring();return document;
     }

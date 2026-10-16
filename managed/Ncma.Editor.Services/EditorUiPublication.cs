@@ -50,8 +50,8 @@ public sealed class EditorUiPublication:IEditCommandSceneParticipant,IDisposable
     public UiSelectionReview Review(EditorViewStamp stamp,Guid target,UiPackageReference? package)
     {
         Writable(stamp);if(target==Guid.Empty)throw new ArgumentException("Exact target UUID required.");
-        var selected=SceneUiState.Read(Edit.Document.CaptureSnapshot());var obj=Edit.Document.World.FindObject(target);
-        SceneUiData? before=obj.Has<SceneUiData>()?obj.Get<SceneUiData>():null;
+        var selected=SceneUiState.Read(Edit.Document.CaptureSnapshot());global::Ncma.Runtime.Entity obj=Edit.Document.World.FindEntity(target);
+        SceneUiData? before=Edit.Document.World.Has<SceneUiData>(obj)?Edit.Document.World.Get<SceneUiData>(obj):null;
         if(selected is not null&&before is null)throw new EditRejectedException("ui_selection_other_object");
         package=package?.Validate();if(package is not null)_prepared.RequirePrepared(package);
         var after=package is null?SceneUiData.Off:SceneUiData.From(package);

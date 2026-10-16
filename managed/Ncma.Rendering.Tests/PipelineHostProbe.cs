@@ -104,7 +104,7 @@ internal static class PipelineHostProbe
                     Pass(!image.SequenceEqual(defaultImage!),"Editor uses custom stage/final Tone");
                     if(mode==1)stageImage=image;else Pass(image.SequenceEqual(stageImage!),"Editor full graph/stage parity");
                     var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;
-                    var setting=owner.Document.World.GetObjects().Single(o=>o.Has<PostProcessData>());Guid id=setting.PersistentId;var active=setting.Get<PostProcessData>();
+                    global::Ncma.Runtime.Entity setting=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<PostProcessData>(o));Guid id=owner.Document.World.GetUuid(setting);var active=owner.Document.World.Get<PostProcessData>(setting);
                     void Set(PostProcessData value)
                     {
                         var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=id,typeId=PostProcessData.TypeId,version=1,data=owner.Document.World.Components.Encode(value)}}}));
@@ -122,13 +122,13 @@ internal static class PipelineHostProbe
                         Pass(Draw().SequenceEqual(image),"Reload custom graph");owner.StopPlay();Pass(Draw().SequenceEqual(image),"Stop restores Edit");
                     }
                     var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
-                    foreach(Action forbidden in new Action[]{()=>owner.Document.World.CreateObject("forbidden Build write"),()=>renderer.Dispose()})
+                    foreach(Action forbidden in new Action[]{()=>owner.Document.World.CreateEntity("forbidden Build write"),()=>renderer.Dispose()})
                     {
                         onBuild=forbidden;Set(active with{ExposureEv=-1});var clear=Draw();
                         Pass(clear.Where((b,i)=>b!=clear[i%4]).Any()==false,"Build callback rejects World write/renderer unload and clears");
                         onBuild=null;Set(active);Pass(Draw().SequenceEqual(image),"explicit recovery after callback fault");
                     }
-                    Pass(owner.Document.World.GetObjects().All(o=>o.Name!="forbidden Build write"),"no callback World mutation");
+                    Pass(owner.Document.World.GetEntities().All(o=>owner.Document.World.GetName(o)!="forbidden Build write"),"no callback World mutation");
                     broken=true;Set(active with{ExposureEv=-1});var fault=Draw();Pass(fault.Where((b,i)=>b!=fault[i%4]).Any()==false,"late invalid graph themed clear");
                     broken=false;Set(active);Pass(Draw().SequenceEqual(image),"invalid graph recovery");
                     var view=editor.VerificationPresenter;view.AttachLayout(new(Path.Combine(output,$"layout-{mode}.json")));Draw();var vf=view.Frame;

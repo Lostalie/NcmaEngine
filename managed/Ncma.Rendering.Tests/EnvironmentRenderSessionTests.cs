@@ -30,9 +30,9 @@ internal static unsafe partial class Program
         var config=new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true);
         void Publish(string projectRoot,Guid project,EnvironmentPackage p){var d=EnvironmentAssetDescriptor.FromPackage(project,p);string path=Path.Combine(projectRoot,d.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,p.CopyBytes());File.WriteAllBytes(Path.Combine(projectRoot,"assets/environment.ncenv"),d.Encode());}
         var fixture=new SceneGpuFixture(output);var (document,camera,_,_)=fixture.Scene();
-        var light=document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());
-        light.Set(light.Get<DirectionalLightData>() with{Intensity=0,CastShadow=false});
-        var env=document.World.CreateObject("Environment");env.Set(config);Publish(fixture.Root,fixture.Project,package);
+        global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));
+        document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{Intensity=0,CastShadow=false});
+        global::Ncma.Runtime.Entity env=document.World.CreateEntity("Environment");document.World.Set(env, config);Publish(fixture.Root,fixture.Project,package);
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         byte[] image=new byte[256*256*4];
@@ -56,26 +56,26 @@ internal static unsafe partial class Program
         }
         File.WriteAllBytes(Path.Combine(output,"shared-ibl.png"),Png(256,256,baseline));
         var before=renderer.EnvironmentStats;ulong plans=renderer.PipelineStats.Creates;
-        env.Set(config with{Strength=.5f,RotationRadians=.7f});Bad(()=>session.Submit(frame,256,256,camera,ambient:0,target:target));
+        document.World.Set(env, config with{Strength=.5f,RotationRadians=.7f});Bad(()=>session.Submit(frame,256,256,camera,ambient:0,target:target));
         allowed=false;Bad(()=>session.RefreshEnvironment(assets,()=>allowed));Pass(session.PreparedEnvironment==config,"revoked refresh retains installed configuration");
         allowed=true;session.RefreshEnvironment(assets,()=>allowed);Prepare();Tick();
         byte[] halfImage=(byte[])image.Clone();
         Pass(!image.SequenceEqual(baseline)&&renderer.EnvironmentStats.Publications==before.Publications&&renderer.EnvironmentStats.UploadedBytes==before.UploadedBytes&&renderer.PipelineStats.Creates==plans,"scalar refresh rebinds without allocation or upload");
-        env.Set(config);session.RefreshEnvironment(assets,()=>true);Prepare();Tick();Pass(image.SequenceEqual(baseline),"restored committed values reproduce image");
-        env.Set(config with{Generation=2});Bad(()=>session.RefreshEnvironment(assets,()=>true));Pass(session.PreparedEnvironment==config,"wrong generation retains last configuration");env.Set(config);Tick();Pass(image.SequenceEqual(baseline),"failed generation preserves image after document restoration");
+        document.World.Set(env, config);session.RefreshEnvironment(assets,()=>true);Prepare();Tick();Pass(image.SequenceEqual(baseline),"restored committed values reproduce image");
+        document.World.Set(env, config with{Generation=2});Bad(()=>session.RefreshEnvironment(assets,()=>true));Pass(session.PreparedEnvironment==config,"wrong generation retains last configuration");document.World.Set(env, config);Tick();Pass(image.SequenceEqual(baseline),"failed generation preserves image after document restoration");
         Bad(()=>session.RefreshEnvironment(assets,()=>{session.Dispose();return true;}));
         Bad(()=>session.RefreshEnvironment(assets,()=>{session.Submit(frame,256,256,camera,ambient:0,target:target);return true;}));
-        Bad(()=>session.RefreshEnvironment(assets,()=>{env.Set(config with{Strength=2});return true;}));
-        Pass(env.Get<EnvironmentLightingData>()==config,"approval callback cannot mutate live World");
+        Bad(()=>session.RefreshEnvironment(assets,()=>{document.World.Set(env, config with{Strength=2});return true;}));
+        Pass(document.World.Get<EnvironmentLightingData>(env)==config,"approval callback cannot mutate live World");
         var runner=new Ncma.Runtime.WorldRunner(document.World);runner.AddSystem(new GraphFailure(_=>{
             Bad(()=>session.RefreshEnvironment(assets,()=>true));Bad(()=>session.PrepareEnvironmentView(256,256,camera));Bad(()=>session.Submit(frame,256,256,camera,target:target));
         }));runner.Advance(1d/60);Pass(!runner.IsFaulted&&document.World.Tick==1,"simulation boundary rejected without faulting runner");
         Exception? foreign=null;var thread=new Thread(()=>{try{session.RefreshEnvironment(assets,()=>true);}catch(Exception e){foreign=e;}});thread.Start();thread.Join();Pass(foreign is InvalidOperationException,"foreign-thread refresh rejected");
         renderer.SubmitResources(frame++,[],new(0,0,256,256),Vector4.Zero,new(Vector3.Zero,Vector3.UnitY,Vector4.Zero));Bad(()=>session.RefreshEnvironment(assets,()=>true));renderer.Present();
-        light.Set(light.Get<DirectionalLightData>() with{CastShadow=true});Bad(()=>session.Submit(frame,256,256,camera,ambient:0,target:target));Prepare();Tick();
+        document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=true});Bad(()=>session.Submit(frame,256,256,camera,ambient:0,target:target));Prepare();Tick();
         Pass(session.Costs.ShadowDraws==2&&renderer.EnvironmentStats.Publications==before.Publications,"shadow variant keeps exact environment without upload");
         session.PrepareEnvironmentView(128,128,camera,ambient:0);Pass(session.Submit(frame++,128,128,camera,ambient:0,target:target),"resize retains binding");renderer.Present();Prepare();
-        light.Set(light.Get<DirectionalLightData>() with{CastShadow=false});Prepare();
+        document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});Prepare();
         // Source-free asset closure is distinct from author metadata; both sessions share immutable GPU generations.
         string packed="assets/scene.ncpak";File.WriteAllBytes(Path.Combine(fixture.Root,packed),SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]));
         using(var packedAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true,packed))
@@ -83,9 +83,9 @@ internal static unsafe partial class Program
             second.PrepareEnvironmentView(256,256,camera,ambient:0);Pass(second.Submit(frame++,256,256,camera,ambient:0,target:target),"source-free NCP shared scene");renderer.CaptureTarget(target,image);renderer.Present();
             Pass(image.SequenceEqual(baseline)&&renderer.EnvironmentStats.Publications==before.Publications&&renderer.EnvironmentStats.Live==1,"source-free pixels and GPU generation sharing");
         }
-        env.Set(EnvironmentLightingData.Off);session.RefreshEnvironment(assets,()=>true);Prepare();Tick();Pass(image.Where((_,i)=>i%4!=3).All(b=>b==0),"explicit Off removes IBL contribution");cache.Trim();Pass(renderer.EnvironmentStats.Live==0,"Off releases scene pins before final environment retirement");
+        document.World.Set(env, EnvironmentLightingData.Off);session.RefreshEnvironment(assets,()=>true);Prepare();Tick();Pass(image.Where((_,i)=>i%4!=3).All(b=>b==0),"explicit Off removes IBL contribution");cache.Trim();Pass(renderer.EnvironmentStats.Live==0,"Off releases scene pins before final environment retirement");
         var next=cook.Cook(package.AssetId,2,source,new(8,4,8,128));Publish(fixture.Root,fixture.Project,next);
-        var nextConfig=config with{Generation=2,ContentHash=next.ContentHash};env.Set(nextConfig);
+        var nextConfig=config with{Generation=2,ContentHash=next.ContentHash};document.World.Set(env, nextConfig);
         using var nextAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
         session.RefreshEnvironment(nextAssets,()=>true);Prepare();Tick();Pass(image.SequenceEqual(baseline)&&renderer.EnvironmentStats.Live==1,"exact second generation refresh");
         for(int i=0;i<16;i++){session.Submit(frame++,256,256,camera,ambient:0,target:target);renderer.Present();}
@@ -97,16 +97,16 @@ internal static unsafe partial class Program
         Pass(renderer.EnvironmentStats.Publications==before.Publications&&renderer.EnvironmentStats.UploadedBytes==before.UploadedBytes&&renderer.EnvironmentStats.Captures==before.Captures&&renderer.ResourceStats.Creates==resources.Creates&&renderer.ResourceStats.UploadedBytes==resources.UploadedBytes&&renderer.PipelineStats.Creates==plans&&cook.NativeCalls==cookCalls&&renderer.SubmitCalls==calls+64,"warm submit no cook/readback/upload/rebuild; one scene batch");
         session.Dispose();cache.Trim();Pass(renderer.EnvironmentStats.Live==0&&renderer.PipelineStats.Pipelines==0,"final ordered close clears resources");
         // An empty scene never requests an environment GPU or shader, even if metadata selects one.
-        var empty=new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry());empty.World.CreateObject("Environment").Set(nextConfig);
+        var empty=new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry());empty.World.Set(empty.World.CreateEntity("Environment"), nextConfig);
         using(var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true))
         using(var flat=new SceneRenderSession(renderer,cache,empty.World))
         {flat.Prepare(emptyAssets,empty.CaptureSnapshot());
             Pass(!flat.Submit(frame,256,256,Guid.Empty)&&renderer.EnvironmentStats.Live==0&&flat.PreparedEnvironmentShaders is null,"empty avoids unused 3D initialization");
         }
         // Promotion of an already submitted old-profile scene is explicit and preserves resources.
-        env.Set(EnvironmentLightingData.Off);
+        document.World.Set(env, EnvironmentLightingData.Off);
         using(var old=new SceneRenderSession(renderer,cache,document.World)){old.Prepare(nextAssets,document.CaptureSnapshot());
-            old.Submit(frame++,256,256,camera,ambient:0,target:target);renderer.Present();env.Set(nextConfig);
+            old.Submit(frame++,256,256,camera,ambient:0,target:target);renderer.Present();document.World.Set(env, nextConfig);
             old.RefreshEnvironment(nextAssets,()=>true);old.PrepareEnvironmentView(256,256,camera,ambient:0);
             Pass(old.Submit(frame++,256,256,camera,ambient:0,target:target),"old profile explicit promotion");renderer.CaptureTarget(target,image);renderer.Present();Pass(image.SequenceEqual(baseline),"promotion actual image parity");
             var restored=document.CaptureSnapshot();document.RestoreSnapshot(restored);Bad(()=>old.RefreshEnvironment(nextAssets,()=>true));Bad(()=>old.Submit(frame,256,256,camera,target:target));
@@ -117,7 +117,7 @@ internal static unsafe partial class Program
         using var kernel=new PoseKernel(posePath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(posePath))));
         foreach(string f in new[]{"synthetic","blender_279_sausage_6100_ascii.fbx","blender_279_sausage_7400_binary.fbx"}){
             SkinFixture skinFixture;if(f=="synthetic")skinFixture=new(output);else{using var importer=new ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath))));skinFixture=new(output,importer.LoadAndCopy(Path.Combine(repo.FullName,"tests/assets/fbx",f),30));}
-            var (skinDocument,skinCamera,objects)=skinFixture.Scene();skinDocument.World.CreateObject("Environment").Set(config);Publish(skinFixture.Root,skinFixture.Project,package);
+            var (skinDocument,skinCamera,objects)=skinFixture.Scene();skinDocument.World.Set(skinDocument.World.CreateEntity("Environment"), config);Publish(skinFixture.Root,skinFixture.Project,package);
             using var skinAssets=SceneAssetPreparation.Prepare(skinFixture.Root,skinFixture.Project,skinDocument.CaptureSnapshot(),true);
             using var skinSession=new SceneRenderSession(renderer,cache,skinDocument.World);skinSession.Prepare(skinAssets,skinDocument.CaptureSnapshot(),poseKernel:kernel,environmentPreparationAllowed:()=>true);
             skinSession.PrepareEnvironmentView(256,256,skinCamera,ambient:0);
@@ -151,12 +151,12 @@ internal static unsafe partial class Program
             }
             fileCache.Trim();Pass(fileRenderer.EnvironmentStats.Live==0&&fileRenderer.Stats.ValidationErrors==0&&fileRenderer.Stats.ValidationWarnings==0,"file-backed resource lifetime/API0/0");
         }
-        var duplicate=document.World.CreateObject("Duplicate environment");duplicate.Set(nextConfig);Bad(()=>SceneEnvironmentState.Read(document.World,document.World.Identity));
+        global::Ncma.Runtime.Entity duplicate=document.World.CreateEntity("Duplicate environment");document.World.Set(duplicate, nextConfig);Bad(()=>SceneEnvironmentState.Read(document.World,document.World.Identity));
         Ncma.Runtime.World? probeWorld=null;var registry=Ncma.Runtime.ComponentRegistry.CreateDefault();
         registry.Register<EnvironmentBoundaryProbe>("test.environment_boundary",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>{
             if(probeWorld is not null)Bad(()=>SceneEnvironmentState.VerifyBoundary(probeWorld,probeWorld.Identity));return v;
         });
-        probeWorld=new("Boundary probe",registry);probeWorld.CreateObject("Probe").Set(new EnvironmentBoundaryProbe(1));
+        probeWorld=new("Boundary probe",registry);probeWorld.Set(probeWorld.CreateEntity("Probe"), new EnvironmentBoundaryProbe(1));
         var probeSnapshot=probeWorld.CaptureSnapshot();probeWorld.RestoreSnapshot(probeSnapshot);Pass(probeWorld.Count==1,"component validation/restore reject preparation reentry without changing document");
         File.WriteAllText(Path.Combine(output,"shared-environment-results.json"),JsonSerializer.Serialize(new{cases,maxError,warmFrames=64,allocatedBytes=allocated,elapsedMilliseconds=elapsed,formalHostsEnabled=false,validationErrors=finalStats.ValidationErrors,validationWarnings=finalStats.ValidationWarnings},new JsonSerializerOptions{WriteIndented=true}));
         Console.WriteLine($"PASS M7.3-C2-B shared SceneRenderSession cases={cases} pixelError={maxError} warmAllocation={allocated} API0/0; formal hosts remain pending");return 0;

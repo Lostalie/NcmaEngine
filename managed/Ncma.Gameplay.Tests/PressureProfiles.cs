@@ -25,7 +25,7 @@ internal static class PressureProfiles
         public void FixedUpdate(World world, double dt)
         {
             long start = Stopwatch.GetTimestamp(); double sum = 0;
-            foreach (var item in world.GetObjects()) sum += item.Get<TransformData>().Position.X + dt;
+            foreach (global::Ncma.Runtime.Entity item in world.GetEntities()) sum += world.Get<TransformData>(item).Position.X + dt;
             counter.Sum = sum; counter.SystemTicks += Stopwatch.GetTimestamp() - start;
         }
     }

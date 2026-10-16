@@ -27,11 +27,11 @@ internal static unsafe partial class Program
             string fbx=Path.Combine(repo.FullName,"tests/assets/fbx",file);SkinFixture skin;
             using(var importer=new Ncma.Asset.Import.ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath)))))skin=new(folder,importer.LoadAndCopy(fbx,30));
             var(doc,camera,objects)=skin.Scene();var blocks=DerivedAssetCodec.Decode(skin.Plan.DerivedBytes);
-            if(highShadow)doc.World.CreateObject("Explicit shadow quality").Set(new SceneShadowData(1,recoveryJoint?recoveryQuality:SceneShadowQuality.High));
+            if(highShadow)doc.World.Set(doc.World.CreateEntity("Explicit shadow quality"), new SceneShadowData(1,recoveryJoint?recoveryQuality:SceneShadowQuality.High));
             var rig=ModelPayloadCodec.DecodeSkeleton(blocks.Single(b=>b.AssetId==skin.Manifest.Skeleton!.Value).Data);
             var mesh=ModelPayloadCodec.DecodeMesh(blocks.Single(b=>b.AssetId==skin.Manifest.Meshes[0].Mesh).Data);var bounds=BindPoseMeshUploadData.Prepare(mesh,rig).Bounds;
-            float scale=2.5f/Math.Max(bounds.Max.X-bounds.Min.X,Math.Max(bounds.Max.Y-bounds.Min.Y,bounds.Max.Z-bounds.Min.Z));var character=doc.World.FindObject(objects[0]);
-            character.Set(Ncma.Runtime.TransformData.Identity with{Position=-(bounds.Min+bounds.Max)*(.5f*scale)+new Vector3(0,0,-3.5f),Scale=new(scale)});
+            float scale=2.5f/Math.Max(bounds.Max.X-bounds.Min.X,Math.Max(bounds.Max.Y-bounds.Min.Y,bounds.Max.Z-bounds.Min.Z));global::Ncma.Runtime.Entity character=doc.World.FindEntity(objects[0]);
+            doc.World.Set(character, Ncma.Runtime.TransformData.Identity with{Position=-(bounds.Min+bounds.Max)*(.5f*scale)+new Vector3(0,0,-3.5f),Scale=new(scale)});
             if(highShadow){
                 // The original HUD joint fixture had no shadow receiver: it cannot prove
                 // a visible High/Off transition. Add a real packaged static receiver.
@@ -40,21 +40,27 @@ internal static unsafe partial class Program
                 string target=Path.Combine(skin.Root,generation.RelativePath);Directory.CreateDirectory(Path.GetDirectoryName(target)!);File.Copy(floor.GenerationPath,target);
                 File.WriteAllBytes(Path.Combine(skin.Root,"assets/floor.fbx.ncmeta"),AssetRecordCodec.Encode(record with{SourcePath="assets/floor.fbx",Generation=generation}));
                 File.Copy(Path.Combine(floor.Root,"assets/default.ncmaterial"),Path.Combine(skin.Root,"assets/floor.ncmaterial"));File.Copy(Path.Combine(floor.Root,"assets/default.ncmatset"),Path.Combine(skin.Root,"assets/floor.ncmatset"));
-                var receiver=doc.World.CreateObject("Shadow receiver");receiver.Set(Ncma.Runtime.TransformData.Identity with{Position=new(0,0,-5.5f),Scale=new(4,4,1)});receiver.Set(new StaticMeshData(floor.Mesh,floor.Set,true,false,uint.MaxValue));
+                global::Ncma.Runtime.Entity receiver=doc.World.CreateEntity("Shadow receiver");doc.World.Set(receiver, Ncma.Runtime.TransformData.Identity with{Position=new(0,0,-5.5f),Scale=new(4,4,1)});doc.World.Set(receiver, new StaticMeshData(floor.Mesh,floor.Set,true,false,uint.MaxValue));
             }
             var clips=skin.Manifest.Clips.Select(id=>(Id:id,Clip:ModelPayloadCodec.DecodeClip(blocks.Single(b=>b.AssetId==id).Data).Clip)).ToArray();
             var animated=clips.OrderByDescending(c=>c.Clip.Tracks.Sum(t=>t.Keys.Count(k=>k.Value!=t.Keys[0].Value))).First();
-            Pass(animated.Clip.Tracks.Any(t=>t.Keys.Any(k=>k.Value!=t.Keys[0].Value)),label+" real non-bind clip");character.Set(character.Get<Ncma.Animation.ClipPlaybackData>() with{ClipId=animated.Id});
+            Pass(animated.Clip.Tracks.Any(t=>t.Keys.Any(k=>k.Value!=t.Keys[0].Value)),label+" real non-bind clip");doc.World.Set(character, doc.World.Get<Ncma.Animation.ClipPlaybackData>(character) with{ClipId=animated.Id});
             var descriptor=EnvironmentAssetDescriptor.FromPackage(skin.Project,environment);string envPath=Path.Combine(skin.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(envPath)!);File.WriteAllBytes(envPath,environment.CopyBytes());File.WriteAllBytes(Path.Combine(skin.Root,"assets/environment.ncenv"),descriptor.Encode());
-            doc.World.CreateObject("IBL").Set(new EnvironmentLightingData(1,environment.AssetId,1,environment.ContentHash,1,.4f,true));
-            doc.World.CreateObject("Post").Set(PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([Ncma.Rendering.Scene.PostProcessModules.Bloom(new(Levels:3,Threshold:.03f,Intensity:.8f))])});
-            if(recoveryJoint)doc=AddRecoveryJointCharacter(skin,doc,folder);
+            doc.World.Set(doc.World.CreateEntity("IBL"), new EnvironmentLightingData(1,environment.AssetId,1,environment.ContentHash,1,.4f,true));
+            doc.World.Set(doc.World.CreateEntity("Post"), PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([Ncma.Rendering.Scene.PostProcessModules.Bloom(new(Levels:3,Threshold:.03f,Intensity:.8f))])});
+            if(recoveryJoint){
+                doc=AddRecoveryJointCharacter(skin,doc,folder);
+                // This fixture replaces the complete World. Resolve its persistent UUID;
+                // an Entity from the original document must never cross that boundary.
+                var oldCharacter=character;character=doc.World.FindEntity(objects[0]);
+                Pass(character.WorldIdentity!=oldCharacter.WorldIdentity,"replaced fixture World has a fresh Entity identity");
+            }
             string runtime=Path.Combine(folder,"runtime");Directory.CreateDirectory(Path.Combine(runtime,"assets"));
             File.WriteAllBytes(Path.Combine(runtime,"assets/game.ncpak"),SceneAssetPreparation.CreateRuntimePackage(skin.Root,skin.Project,doc.CaptureSnapshot(),[]));
             var ui=UiDefinition.Create(Guid.NewGuid(),"Joint HUD");var rect=UiElement.Create(Guid.NewGuid(),"Tone-independent marker",UiKind.Rectangle,ui.Root)with{Layout=UiLayout.Fixed(8,8,64,40),Style=UiStyle.Default with{Fill=new(.2f,.4f,.8f,1)}};
             ui=ui with{Elements=[ui.Elements[0],rect]};File.WriteAllBytes(Path.Combine(skin.Root,"assets/hud.ncmaui"),UiCodec.Encode(ui));
             byte[] hud=RuntimeUiPackage.Encode(skin.Project,2,ui,[],[]);File.WriteAllBytes(Path.Combine(runtime,"assets/hud.ncupak"),hud);
-            doc.World.CreateObject("Scene HUD").Set(SceneUiData.From(new(1,ui.AssetId,2,"assets/hud.ncupak",Convert.ToHexString(SHA256.HashData(hud)))));
+            doc.World.Set(doc.World.CreateEntity("Scene HUD"), SceneUiData.From(new(1,ui.AssetId,2,"assets/hud.ncupak",Convert.ToHexString(SHA256.HashData(hud)))));
             string gameplay=recoveryJoint?Path.Combine(repo.FullName,"managed/Ncma.Gameplay.UiFixture/bin",configuration,"net8.0/Ncma.Gameplay.UiFixture.dll"):Path.Combine(repo.FullName,"out/managed/Ncma.Gameplay.Sample.dll");File.Copy(gameplay,Path.Combine(runtime,"gameplay.dll"));File.Copy(Path.ChangeExtension(gameplay,".deps.json"),Path.Combine(runtime,"gameplay.deps.json"));
             SceneDocumentFiles.Save(doc,Path.Combine(runtime,"start.ncmascene"));File.WriteAllBytes(Path.Combine(runtime,"project.ncmaproject"),JsonSerializer.SerializeToUtf8Bytes(new ProjectConfiguration(1,skin.Project,label+" joint","start.ncmascene","gameplay.dll","Direct3D11",[],PhysicsEnabled:recoveryJoint,SceneCamera:camera,AssetPackage:"assets/game.ncpak"),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
             if(recoveryJoint){
@@ -78,12 +84,12 @@ internal static unsafe partial class Program
             void Bad(string name,string type,JsonElement data){var snapshot=doc.CaptureSnapshot();snapshot=snapshot with{Objects=snapshot.Objects.Select(o=>o with{Components=o.Components.Select(c=>c.TypeId==type?c with{Data=data}:c).ToArray()}).ToArray()};
                 File.WriteAllBytes(Path.Combine(runtime,name+".ncmascene"),SceneDocumentCodec.Encode(snapshot));
                 var config=ProjectContext.Load(Path.Combine(runtime,"project.ncmaproject")).Configuration with{StartupScene=name+".ncmascene"};File.WriteAllBytes(Path.Combine(runtime,name+".ncmaproject"),JsonSerializer.SerializeToUtf8Bytes(config,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));}
-            Bad("bad-model",SkinnedMeshData.TypeId,doc.World.Components.Encode(character.Get<SkinnedMeshData>() with{MeshId=Guid.NewGuid()}));
-            var envValue=doc.World.GetObjects().Single(o=>o.Has<EnvironmentLightingData>()).Get<EnvironmentLightingData>();Bad("bad-environment",EnvironmentLightingData.TypeId,doc.World.Components.Encode(envValue with{Generation=999}));
-            var uiValue=doc.World.GetObjects().Single(o=>o.Has<SceneUiData>()).Get<SceneUiData>();Bad("bad-ui",SceneUiData.TypeId,doc.World.Components.Encode(uiValue with{Path="assets/absent.ncupak"}));
+            Bad("bad-model",SkinnedMeshData.TypeId,doc.World.Components.Encode(doc.World.Get<SkinnedMeshData>(character) with{MeshId=Guid.NewGuid()}));
+            var envValue=doc.World.Get<EnvironmentLightingData>(doc.World.GetEntities().Single(o=>doc.World.Has<EnvironmentLightingData>(o)));Bad("bad-environment",EnvironmentLightingData.TypeId,doc.World.Components.Encode(envValue with{Generation=999}));
+            var uiValue=doc.World.Get<SceneUiData>(doc.World.GetEntities().Single(o=>doc.World.Has<SceneUiData>(o)));Bad("bad-ui",SceneUiData.TypeId,doc.World.Components.Encode(uiValue with{Path="assets/absent.ncupak"}));
             var nextUi=ui with{Elements=[ui.Elements[0],rect with{Style=rect.Style with{Fill=new(.8f,.3f,.1f,1)}}]};byte[] nextHud=RuntimeUiPackage.Encode(skin.Project,3,nextUi,[],[]);File.WriteAllBytes(Path.Combine(runtime,"assets/hud-next.ncupak"),nextHud);
             Bad("next-ui",SceneUiData.TypeId,doc.World.Components.Encode(SceneUiData.From(new(1,ui.AssetId,3,"assets/hud-next.ncupak",Convert.ToHexString(SHA256.HashData(nextHud))))));
-            var postValue=doc.World.GetObjects().Single(o=>o.Has<PostProcessData>()).Get<PostProcessData>();Bad("bad-post-module",PostProcessData.TypeId,doc.World.Components.Encode(postValue with{StackJson=PostProcessData.EncodeStack([new(Guid.NewGuid(),1,[])])}));
+            var postValue=doc.World.Get<PostProcessData>(doc.World.GetEntities().Single(o=>doc.World.Has<PostProcessData>(o)));Bad("bad-post-module",PostProcessData.TypeId,doc.World.Components.Encode(postValue with{StackJson=PostProcessData.EncodeStack([new(Guid.NewGuid(),1,[])])}));
             if(highShadow){
                 Bad("bad-shadow-quality",SceneShadowData.TypeId,JsonSerializer.SerializeToElement(new{version=1,quality=4}));
                 // The High program library is intentionally lazy for Off/Low/Medium.

@@ -22,7 +22,7 @@ internal static unsafe partial class Program
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);
         var repo=new DirectoryInfo(Path.GetFullPath(plugins));while(!File.Exists(Path.Combine(repo.FullName,"Build.bat")))repo=repo.Parent!;
         int checks=0;void Pass(bool value,string name){Check(value,"UI publication "+name);checks++;}
-        var fixture=new SceneGpuFixture(output);var(doc,camera,_,_)=fixture.Scene();Guid target=doc.World.CreateObject("Scene HUD").PersistentId;
+        var fixture=new SceneGpuFixture(output);var(doc,camera,_,_)=fixture.Scene();Guid target=doc.World.GetUuid(doc.World.CreateEntity("Scene HUD"));
         string runtime=Path.Combine(output,"runtime");Directory.CreateDirectory(Path.Combine(runtime,"assets"));
         File.WriteAllBytes(Path.Combine(runtime,"assets/scene.ncpak"),SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,doc.CaptureSnapshot(),[]));
         var ui=UiDefinition.Create(Guid.NewGuid(),"Published HUD");var rect=UiElement.Create(Guid.NewGuid(),"Color",UiKind.Rectangle,ui.Root)with{Layout=UiLayout.Fixed(8,8,64,40),Style=UiStyle.Default with{Fill=new(0,0,1,1)}};

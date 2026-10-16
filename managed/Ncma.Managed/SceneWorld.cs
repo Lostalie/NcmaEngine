@@ -13,14 +13,14 @@ public sealed partial class SceneWorld : IDisposable
     public GameObject CreateObject(string name)
     {
         Verify();
-        return new(this, Runtime.CreateObject(name).Entity); // Empty container: Transform is optional.
+        return new(this, Runtime.CreateEntity(name)); // Empty container: Transform is optional.
     }
     internal Entity Resolve(Entity entity)
     {
         Verify();
         return Runtime.Resolve(entity);
     }
-    public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetObjects().Select(o => new GameObject(this, o.Entity)).ToArray(); }
+    public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetEntities().Select(o => new GameObject(this, o)).ToArray(); }
     public void Dispose()
     {
         Runtime.VerifyAccess(); if (_disposed) return;

@@ -38,14 +38,14 @@ internal static unsafe partial class Program
             var d=new SceneDocument("Skinned scene",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
             var m=Manifest;var objects=new Guid[count];
             for(int i=0;i<count;i++) {
-                var obj=d.World.CreateObject("Character "+i);objects[i]=obj.PersistentId;
-                obj.Set(TransformData.Identity with{Position=new(-.7f+(i%8)*.12f,0,-3),Scale=new(.8f,1.1f,1)});
-                obj.Set(new SkinnedMeshData(Model,m.Meshes[0].Mesh,m.Skeleton!.Value,m.Meshes[0].Materials,true,true,uint.MaxValue));
-                obj.Set(new ClipPlaybackData(m.Clips[i% m.Clips.Length],true,true,1+i*.01,0));
+                global::Ncma.Runtime.Entity obj=d.World.CreateEntity("Character "+i);objects[i]=d.World.GetUuid(obj);
+                d.World.Set(obj, TransformData.Identity with{Position=new(-.7f+(i%8)*.12f,0,-3),Scale=new(.8f,1.1f,1)});
+                d.World.Set(obj, new SkinnedMeshData(Model,m.Meshes[0].Mesh,m.Skeleton!.Value,m.Meshes[0].Materials,true,true,uint.MaxValue));
+                d.World.Set(obj, new ClipPlaybackData(m.Clips[i% m.Clips.Length],true,true,1+i*.01,0));
             }
-            var camera=d.World.CreateObject("Camera");camera.Set(TransformData.Identity);camera.Set(CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
-            var light=d.World.CreateObject("Light");light.Set(TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,.35f)});light.Set(DirectionalLightData.Default);
-            d.ValidateAuthoring();return(d,camera.PersistentId,objects);
+            global::Ncma.Runtime.Entity camera=d.World.CreateEntity("Camera");d.World.Set(camera, TransformData.Identity);d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
+            global::Ncma.Runtime.Entity light=d.World.CreateEntity("Light");d.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,.35f)});d.World.Set(light, DirectionalLightData.Default);
+            d.ValidateAuthoring();return(d,d.World.GetUuid(camera),objects);
         }
     }
     private static ImportedModel SyntheticModel() {
@@ -138,7 +138,7 @@ internal static unsafe partial class Program
                     Check(Math.Abs(session.Animation!.RootDisplacement(objects[0]).X-1f/60)<1e-5,"Paused Step pose not current");
                     play.Resume();play.AdvanceFrame(1.0/60);session.Submit(frame++,256,256,camera,target:target);renderer.Present();
                     Check(play.Tick==2&&Math.Abs(session.Animation.RootDisplacement(objects[0]).X-1f/60)<1e-5,"Running interpolation did not use adjacent committed times");
-                    Check(editor.Document.World.Tick==0&&play.Document.World.FindObject(objects[0]).Get<TransformData>()==editor.Document.World.FindObject(objects[0]).Get<TransformData>(),"Root motion wrote gameplay transform");
+                    Check(editor.Document.World.Tick==0&&play.Document.World.Get<TransformData>(play.Document.World.FindEntity(objects[0]))==editor.Document.World.Get<TransformData>(editor.Document.World.FindEntity(objects[0])),"Root motion wrote gameplay transform");
                     ulong rigCreates=kernel.Statistics.Rigs;play.Reload(_=>throw new Exception("No behaviours"));session.Animation.ResynchronizeAfterReload(play);
                     session.Submit(frame++,256,256,camera,target:target);renderer.Present();Check(play.Tick==2&&kernel.Statistics.Rigs==rigCreates&&Math.Abs(session.Animation.RootDisplacement(objects[0]).X-2f/60)<1e-5,"Reload reset active rig/clock instead of retaining committed time");
                     editor.StopPlay(); // Derived leases can detach after the application disposed Play.
@@ -154,16 +154,16 @@ internal static unsafe partial class Program
                     candidate.Submit(frame++,256,256,camera,target:target);renderer.Present();
                 }
                 // Bad candidate retains installed resources and document.
-                byte[] prior=editor.Document.CaptureBytes();var obj=editor.Document.World.FindObject(objects[0]);var data=obj.Get<ClipPlaybackData>();obj.Set(data with{StartTime=2});
+                byte[] prior=editor.Document.CaptureBytes();global::Ncma.Runtime.Entity obj=editor.Document.World.FindEntity(objects[0]);var data=editor.Document.World.Get<ClipPlaybackData>(obj);editor.Document.World.Set(obj, data with{StartTime=2});
                 using var deniedAnimation=new SceneAnimationSession(editor.Document.World,kernel);
-                Reject(()=>deniedAnimation.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot()));obj.Set(data);
+                Reject(()=>deniedAnimation.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot()));editor.Document.World.Set(obj, data);
                 Check(editor.Document.CaptureBytes().SequenceEqual(prior)&&renderer.SkinStats.Meshes==2,"Failed animation candidate changed live resources/document");editor.StopPlay();
             }
         } finally {edit.Dispose();}
         Check(renderer.SkinStats.Meshes==0&&kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0,"Final animation native leases nonzero");
         // Editor missing references are diagnostic-only, with no bind-pose fallback or UUID rewrite.
         var (missingDoc,missingCamera,missingObjects)=fixture.Scene();var missingId=Guid.NewGuid();
-        var missingObj=missingDoc.World.FindObject(missingObjects[0]);missingObj.Set(missingObj.Get<ClipPlaybackData>() with{ClipId=missingId});byte[] missingBytes=missingDoc.CaptureBytes();
+        global::Ncma.Runtime.Entity missingObj=missingDoc.World.FindEntity(missingObjects[0]);missingDoc.World.Set(missingObj, missingDoc.World.Get<ClipPlaybackData>(missingObj) with{ClipId=missingId});byte[] missingBytes=missingDoc.CaptureBytes();
         using(var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,missingDoc.CaptureSnapshot(),false))
         using(var scene=new SceneRenderSession(renderer,cache,missingDoc.World)) {scene.Prepare(prepared,missingDoc.CaptureSnapshot(),poseKernel:kernel);
             Check(!scene.Submit(frame,256,256,missingCamera,target:target)&&scene.Diagnostics.Any(d=>d.Code=="animation_clip_missing"&&d.AssetId==missingId),"Missing clip silently fell back to bind pose");
@@ -179,7 +179,7 @@ internal static unsafe partial class Program
                     string from=other.GenerationPath;string relative=other.Plan.Record.Generation!.RelativePath.Replace(other.Project.ToString("N"),f.Project.ToString("N"));string to=Path.Combine(f.Root,relative);Directory.CreateDirectory(Path.GetDirectoryName(to)!);File.Copy(from,to);
                     File.WriteAllBytes(Path.Combine(f.Root,"assets",other.Model+".fbx.ncmeta"),AssetRecordCodec.Encode(other.Plan.Record with{SourcePath="assets/"+other.Model+".fbx",Generation=other.Plan.Record.Generation with{RelativePath=relative}}));
                 }
-                for(int i=1;i<count;i++){var other=fixtures[i-1];var manifest=other.Manifest;d.World.FindObject(ids[i]).Set(new SkinnedMeshData(other.Model,manifest.Meshes[0].Mesh,manifest.Skeleton!.Value,manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.World.FindObject(ids[i]).Set(new ClipPlaybackData(manifest.Clips[0],true,true,1,0));}
+                for(int i=1;i<count;i++){var other=fixtures[i-1];var manifest=other.Manifest;d.World.Set(d.World.FindEntity(ids[i]), new SkinnedMeshData(other.Model,manifest.Meshes[0].Mesh,manifest.Skeleton!.Value,manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.World.Set(d.World.FindEntity(ids[i]), new ClipPlaybackData(manifest.Clips[0],true,true,1,0));}
             }
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
             using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(prepared,d.CaptureSnapshot(),poseKernel:kernel);

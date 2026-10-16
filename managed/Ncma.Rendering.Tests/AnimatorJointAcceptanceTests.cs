@@ -25,7 +25,7 @@ internal static unsafe partial class Program
         var graph=source with{AssetId=Guid.NewGuid(),Name="Joint persistent animation",Events=montage?source.Events:source.Events.Select(e=>e with{Time=.001}).ToArray(),
             Transitions=source.Transitions.Select(t=>t with{Conditions=t.Conditions.Select(c=>c with{BoolValue=false}).ToArray()}).ToArray()};
         File.WriteAllBytes(Path.Combine(fixture.Root,"assets/joint.ncmaanim"),AnimationGraphCodec.Encode(graph));
-        SceneDocument Document(int count,bool root){var d=create(count,root);int index=0;foreach(var o in d.World.GetObjects().Where(o=>o.Has<AnimatorData>())){o.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));o.Set(TransformData.Identity with{Position=new((index%8-3.5f)*2,0,-(index/8)*2)});index++;}foreach(var camera in d.World.GetObjects().Where(o=>o.Has<CameraData>()))camera.Set(camera.Get<CameraData>() with{Projection=CameraProjection.Orthographic,OrthographicHeight=40});return d;}
+        SceneDocument Document(int count,bool root){var d=create(count,root);int index=0;foreach(global::Ncma.Runtime.Entity o in d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o))){d.World.Set(o, new AnimatorData(graph.AssetId,graph.SkeletonId));d.World.Set(o, TransformData.Identity with{Position=new((index%8-3.5f)*2,0,-(index/8)*2)});index++;}foreach(global::Ncma.Runtime.Entity camera in d.World.GetEntities().Where(o=>d.World.Has<CameraData>(o)))d.World.Set(camera, d.World.Get<CameraData>(camera) with{Projection=CameraProjection.Orthographic,OrthographicHeight=40});return d;}
         var counts=new[]{0,1,8,32};
         foreach(int count in counts) {
             ScenePlayRuntime? runtime=null;SceneRenderSession? scene=null;bool failClose=false;
@@ -35,7 +35,7 @@ internal static unsafe partial class Program
             editor.Document.RestoreSnapshot(Document(count,true).CaptureSnapshot());editor.PrepareRenderAssets(fixture.Root,fixture.Project);
             byte[] unchanged=editor.Document.CaptureBytes();Guid editWorld=editor.Document.World.Identity;
             for(int cycle=0;cycle<2;cycle++) {
-                var play=editor.StartPlay();play.Pause();var actors=play.Document.World.GetObjects().Where(o=>o.Has<AnimatorData>()).Select(o=>o.PersistentId).ToArray();Guid camera=play.Document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+                var play=editor.StartPlay();play.Pause();var actors=play.Document.World.GetEntities().Where(o=>play.Document.World.Has<AnimatorData>(o)).Select(o=>play.Document.World.GetUuid(o)).ToArray();Guid camera=play.Document.World.GetUuid(play.Document.World.GetEntities().Single(o=>play.Document.World.Has<CameraData>(o)));
                 scene=new(renderer,cache,play.Document.World);scene.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime!.Animators,rootMotion:runtime.Characters);
                 for(int step=0;step<8;step++) {
                     Check(play.Step().State==PlayState.Paused,"Joint Editor quantum: "+play.Fault?.Code);
@@ -67,7 +67,7 @@ internal static unsafe partial class Program
             byte[] package=SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]);File.WriteAllBytes(Path.Combine(moved,"assets/game.ncpak"),package);
             if(count>0){using var packed=SceneAssetPreparation.Prepare(moved,fixture.Project,document.CaptureSnapshot(),true,"assets/game.ncpak");var restored=((RuntimeAnimationGraphAsset)packed.Assets.Require(graph.AssetId,Ncma.Assets.AssetKind.AnimationGraph)).CopyDefinition();var semantic=graph with{Nodes=graph.Nodes.Select(n=>n with{X=0,Y=0}).ToArray()};Check((montage?restored.Montage is not null&&restored.Nodes.Any(n=>n.PlayOnStart):restored.InterruptTransitions)&&restored.Nodes.All(n=>n.X==0&&n.Y==0)&&AnimationGraphCodec.Encode(restored).SequenceEqual(AnimationGraphCodec.Encode(semantic)),"Cook strips layout only and preserves every current semantic field/UUID/policy/event/Montage");}
             SceneDocumentFiles.Save(document,Path.Combine(moved,"start.ncmascene"));File.Copy(Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),Path.Combine(moved,"gameplay.dll"));
-            Guid camera=document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+            Guid camera=document.World.GetUuid(document.World.GetEntities().Single(o=>document.World.Has<CameraData>(o)));
             var configuration=new Ncma.Application.ProjectConfiguration(1,fixture.Project,"Joint Player","start.ncmascene","gameplay.dll","Direct3D11",[],root,camera,AssetPackage:"assets/game.ncpak");
             string project=Path.Combine(moved,"joint.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(configuration,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
             foreach(bool headless in new[]{true,false}) {

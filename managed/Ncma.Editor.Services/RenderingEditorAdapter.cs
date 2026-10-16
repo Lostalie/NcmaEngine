@@ -32,8 +32,8 @@ public static partial class RenderingEditorAdapter
     }
     public static RenderConfiguration ReadConfiguration(EditSession edit,Guid objectId)
     {
-        var item=edit.Document.World.FindObject(objectId);
-        return item.Get<RenderConfiguration>();
+        global::Ncma.Runtime.Entity item=edit.Document.World.FindEntity(objectId);
+        return edit.Document.World.Get<RenderConfiguration>(item);
     }
     public static CapabilityRequest SettingsRequest(EditSession edit,Guid objectId,RenderConfiguration configuration,ulong expectedRevision)
     {

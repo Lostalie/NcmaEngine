@@ -36,9 +36,9 @@ internal static class EcsBaseline
         var document = new SceneDocument("E0 deterministic fixture", registry);
         for (int i = 0; i < count; i++)
         {
-            var item = document.World.CreateObject("Object " + i, Id(i));
-            item.Set(TransformData.Identity with { Position = new(i, 0, 0) });
-            if (i % 2 == 0) item.Set(new Marker(i));
+            global::Ncma.Runtime.Entity item = document.World.CreateEntity("Object " + i, Id(i));
+            document.World.Set(item, TransformData.Identity with { Position = new(i, 0, 0) });
+            if (i % 2 == 0) document.World.Set(item, new Marker(i));
         }
         return document;
     }
@@ -116,8 +116,8 @@ internal static class EcsBaseline
                     () =>
                     {
                         sum = 0; matches = 0;
-                        foreach (var item in doc.World.GetObjects())
-                            if (!joint || item.Has<Marker>()) { sum += item.Get<TransformData>().Position.X; matches++; }
+                        foreach (global::Ncma.Runtime.Entity item in doc.World.GetEntities())
+                            if (!joint || doc.World.Has<Marker>(item)) { sum += doc.World.Get<TransformData>(item).Position.X; matches++; }
                     },
                     () => Require(matches == (joint ? (count + 1) / 2 : count) &&
                         sum == Enumerable.Range(0, count).Where(i => !joint || i % 2 == 0).Sum(i => (double)i)));
@@ -157,7 +157,7 @@ internal static class EcsBaseline
                     {
                         VerifyMoves(doc.World, count, Math.Max(0, stride), steps);
                         Require(play.Tick == (ulong)steps && play.RenderView.Objects.Length == count);
-                        if (stride == -1) for (int i = 0; i < count; i += 100) Require(doc.World.FindObject(Id(i)).Has<Marker>() == markerPresent);
+                        if (stride == -1) for (int i = 0; i < count; i += 100) Require(doc.World.Has<Marker>(doc.World.FindEntity(Id(i))) == markerPresent);
                     },
                     () =>
                     {
@@ -211,8 +211,8 @@ internal static class EcsBaseline
                     {
                         Require(doc.World.Count == count && play.Tick == (ulong)steps && play.RenderView.Objects.Length == count);
                         for (int i = 0; i < targets.Length; i++)
-                            Require(doc.World.FindObject(live[i]).Get<TransformData>().Position.X == targets[i]);
-                        Require(doc.World.GetObjects().Sum(o => (double)o.Get<TransformData>().Position.X) == count * (count - 1d) / 2);
+                            Require(doc.World.Get<TransformData>(doc.World.FindEntity(live[i])).Position.X == targets[i]);
+                        Require(doc.World.GetEntities().Sum(o => (double)doc.World.Get<TransformData>(o).Position.X) == count * (count - 1d) / 2);
                     }, () => Layers(play));
                 cases++;
             }
@@ -228,17 +228,17 @@ internal static class EcsBaseline
     private static void Move(World world, int stride)
     {
         if (stride == 0) return;
-        var objects = world.GetObjects();
+        var objects = world.GetEntities();
         for (int i = 0; i < objects.Count; i += stride)
         {
-            var old = objects[i].Get<TransformData>();
-            objects[i].Set(old with { Position = old.Position + new global::System.Numerics.Vector3(1, 0, 0) });
+            var old = world.Get<TransformData>(objects[i]);
+            world.Set(objects[i], old with { Position = old.Position + new global::System.Numerics.Vector3(1, 0, 0) });
         }
     }
     private static void VerifyMoves(World world, int count, int stride, int steps)
     {
         Require(world.Count == count && world.Tick == (ulong)steps);
         for (int i = 0; i < count; i++)
-            Require(world.FindObject(Id(i)).Get<TransformData>().Position.X == i + (stride > 0 && i % stride == 0 ? steps : 0));
+            Require(world.Get<TransformData>(world.FindEntity(Id(i))).Position.X == i + (stride > 0 && i % stride == 0 ? steps : 0));
     }
 }

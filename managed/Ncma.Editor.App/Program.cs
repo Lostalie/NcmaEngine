@@ -428,10 +428,10 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             if(_viewportTarget is not null){x=0;y=0;width=_viewportTarget.Width;height=_viewportTarget.Height;}
             var configurationWorld=_editor.Play?.Document.World??_editor.Document.World;
             if (_configurationRevision != configurationWorld.Revision || _configurationWorld != configurationWorld.Identity) {
-                var objects = configurationWorld.GetObjects();
-                var configurations=objects.Where(item=>item.Has<RenderConfiguration>()).Take(2).ToArray();
+                var objects = configurationWorld.GetEntities();
+                var configurations=objects.Where(item=>configurationWorld.Has<RenderConfiguration>(item)).Take(2).ToArray();
                 if(configurations.Length>1) _log!.Write("warning","render.ambiguous_configuration","Multiple render configurations; keeping the last valid configuration.",_correlation);
-                else _configuration=configurations.Length==1?configurations[0].Get<RenderConfiguration>():RenderConfiguration.Default(_editor.Edit.SessionId);
+                else _configuration=configurations.Length==1?configurationWorld.Get<RenderConfiguration>(configurations[0]):RenderConfiguration.Default(_editor.Edit.SessionId);
                 _configurationRevision=configurationWorld.Revision; _configurationWorld=configurationWorld.Identity;
             }
             if(_presenter?.UiWorkspaceActive==true||_presenter?.GraphWorkspaceActive==true){

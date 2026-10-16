@@ -42,7 +42,7 @@ public sealed partial class SceneWorld
     public GameObject FindObject(ObjectUuid uuid)
     {
         Verify();
-        return new(this, Runtime.FindObject(ToGuid(uuid.High, uuid.Low)).Entity);
+        return new(this, Runtime.FindEntity(ToGuid(uuid.High, uuid.Low)));
     }
     public void ReadTransforms(ReadOnlySpan<Entity> objects, Span<Transform> output)
     {
@@ -99,7 +99,7 @@ public sealed partial class SceneWorld
         Action commit = Runtime.PrepareStep(world =>
         {
             var alive = world.Objects.Select(o => o.PersistentId).ToHashSet();
-            var entities = Runtime.GetObjects().Where(o => alive.Contains(o.PersistentId)).Select(o => o.Entity).ToHashSet();
+            var entities = Runtime.GetEntities().Where(o => alive.Contains(Runtime.GetUuid(o))).ToHashSet();
             ready = _ready.Where(s => !_consumed.Contains(s.Sequence) && entities.Contains(s.Source) && entities.Contains(s.Target))
                 .Concat(_pendingSignals.Where(s => entities.Contains(s.Source) && entities.Contains(s.Target))).ToList();
             if (ready.Count > AccessCapacity) throw new InvalidOperationException("Signal capacity exceeded.");

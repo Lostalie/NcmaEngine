@@ -20,13 +20,13 @@ internal static unsafe partial class Program
         void Pass(bool ok,string label){Check(ok,"D3-A "+label);checks++;}
         var json=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase,WriteIndented=true};var runs=new List<object>();
         var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
-        var light=document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());light.Set(light.Get<DirectionalLightData>() with{CastShadow=false});
-        var post=document.World.CreateObject("Post");post.Set(PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([new(ExampleHdrGain.ModuleId,1,[new("gain",.25f)]),PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.3f))])});
+        global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
+        global::Ncma.Runtime.Entity post=document.World.CreateEntity("Post");document.World.Set(post, PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([new(ExampleHdrGain.ModuleId,1,[new("gain",.25f)]),PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.3f))])});
         Guid envObject;
         using(var presets=EnvironmentPresetLibrary.LoadDeployment(deployed)){
             var env=presets.Package.CloneForAsset(Guid.NewGuid(),1);var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,env);string path=Path.Combine(fixture.Root,descriptor.Path);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,env.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/environment.ncenv"),descriptor.Encode());
-            var obj=document.World.CreateObject("Environment");obj.Set(new EnvironmentLightingData(1,env.AssetId,1,env.ContentHash,1,0,true));envObject=obj.PersistentId;
+            global::Ncma.Runtime.Entity obj=document.World.CreateEntity("Environment");document.World.Set(obj, new EnvironmentLightingData(1,env.AssetId,1,env.ContentHash,1,0,true));envObject=document.World.GetUuid(obj);
         }
         // Runtime-only copied project. Source files are kept but exclusively locked during every host run.
         string runtime=Path.Combine(output,"runtime");Directory.CreateDirectory(Path.Combine(runtime,"assets"));
@@ -39,7 +39,7 @@ internal static unsafe partial class Program
         File.WriteAllBytes(Path.Combine(runtime,PostProcessLibrarySelection.IndexPath),index);
         string gameplay=Path.Combine(repo.FullName,"out/managed/Ncma.Gameplay.Sample.dll");File.Copy(gameplay,Path.Combine(runtime,"gameplay.dll"));File.Copy(Path.ChangeExtension(gameplay,".deps.json"),Path.Combine(runtime,"gameplay.deps.json"));
         SceneDocumentFiles.Save(document,Path.Combine(runtime,"start.ncmascene"));
-        var plain=document.CaptureSnapshot();plain=plain with{Objects=plain.Objects.Where(o=>o.Id!=post.PersistentId&&o.Id!=envObject).ToArray()};File.WriteAllBytes(Path.Combine(runtime,"plain.ncmascene"),SceneDocumentCodec.Encode(plain));
+        var plain=document.CaptureSnapshot();plain=plain with{Objects=plain.Objects.Where(o=>o.Id!=document.World.GetUuid(post)&&o.Id!=envObject).ToArray()};File.WriteAllBytes(Path.Combine(runtime,"plain.ncmascene"),SceneDocumentCodec.Encode(plain));
         var config=new ProjectConfiguration(1,fixture.Project,"Pipeline product","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera,AssetPackage:"assets/game.ncpak",ShaderPackages:shaders,PostProcessLibrary:new(1,Convert.ToHexString(SHA256.HashData(index))));
         string project=Path.Combine(runtime,"project.ncmaproject"),plainProject=Path.Combine(runtime,"plain.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(config,json));File.WriteAllBytes(plainProject,JsonSerializer.SerializeToUtf8Bytes(config with{StartupScene="plain.ncmascene",PostProcessLibrary=null},json));
         Pass(!Directory.GetFiles(runtime,"*",SearchOption.AllDirectories).Any(p=>new[]{".fbx",".nca",".ncenv",".nce",".ncmeta",".hlsl",".cs"}.Contains(Path.GetExtension(p))),"runtime project has no author model/environment/shader/code sources");

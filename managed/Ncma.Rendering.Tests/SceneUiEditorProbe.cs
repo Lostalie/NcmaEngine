@@ -40,8 +40,8 @@ internal static class SceneUiEditorProbe
             Pass(renderer.UiTargetStats.Productions==before.Productions&&renderer.UiStats.UploadedBytes==uploaded&&renderer.UiTargetStats.Leases==0,"warm16 cached target no upload/production/live lease");
             var owner=editor.VerificationEditor;
             var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;
-            var light=owner.Document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());
-            Guid lightId=light.PersistentId;var initial=light.Get<DirectionalLightData>();
+            global::Ncma.Runtime.Entity light=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<DirectionalLightData>(o));
+            Guid lightId=owner.Document.World.GetUuid(light);var initial=owner.Document.World.Get<DirectionalLightData>(light);
             var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",
                 JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=lightId,typeId=DirectionalLightData.TypeId,version=1,data=owner.Document.World.Components.Encode(initial with{Intensity=initial.Intensity*.25f})}}}));
             Pass(edit.Invoke(command).Status=="denied","Agent remains read-only");

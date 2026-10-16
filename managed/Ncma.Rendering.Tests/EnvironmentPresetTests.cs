@@ -87,8 +87,8 @@ internal static unsafe partial class Program
             pipeline.ConfigureEnvironment(environment,new(copied.AssetId,copied.Generation,copied.ContentHash,1,0,true),()=>true);
             Pass(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"actual default binding/API0/0");
             var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
-            var light=document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());light.Set(light.Get<DirectionalLightData>() with{Intensity=0,CastShadow=false});
-            document.World.CreateObject("Environment").Set(new EnvironmentLightingData(1,copied.AssetId,copied.Generation,copied.ContentHash,1,0,true));
+            global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{Intensity=0,CastShadow=false});
+            document.World.Set(document.World.CreateEntity("Environment"), new EnvironmentLightingData(1,copied.AssetId,copied.Generation,copied.ContentHash,1,0,true));
             var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,copied);string path=Path.Combine(fixture.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,copied.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/environment.ncenv"),descriptor.Encode());
             using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
             using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);

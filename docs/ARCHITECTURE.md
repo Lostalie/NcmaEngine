@@ -1,6 +1,6 @@
 # NcmaEngine 引擎架构
 
-2026-10-16 ECS 增量：E1-A 的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典并通过双配置各 89 项 CTest。E1-B 正在实施：源码已使用 WorldIdentity/Index/Generation，代次预约不随候选回滚；移除两种 ObjectReference，用户 GameObject 直接持有 Entity，信号/批次使用完整身份。低层 Runtime.GameObject 消费者迁移/删除仍待完成，Query/增量 tick 尚未实现。完整快照与整池首次写复制保留，正式 EXE 仍为 M8.2，不宣称完整高性能 ECS。验证状态见 [E1-B 记录](ECS_E1_B_DELIVERY.md)；下文旧存储描述为此前状态。
+2026-10-16 ECS 增量：E1-A 的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典。E1-B 身份与单一门面迁移已完成，通过同源码双配置各 89 项 CTest：WorldIdentity/Index/Generation 的预约不随候选回滚，两种 ObjectReference 与 Runtime.GameObject 已删除；低层 World.CreateEntity/FindEntity/GetEntities 返回值身份，组件访问显式携带 Entity，用户 Ncma.GameObject 直接持有 Entity/服务并共享组件存储，信号/批次使用完整身份。旧低层签名没有兼容转发，直接引用它们的扩展须迁移重编译。Query/增量 tick 尚未实现，完整快照与整池首次写复制保留；正式 EXE 仍为 M8.2，不宣称完整高性能 ECS。验证状态见 [E1-B 记录](ECS_E1_B_DELIVERY.md)；下文旧存储描述为此前状态。
 
 2026-10-16 当前模块/顺序更新：M8.2 已有独立可选本机 TLS gRPC 工具 worker、进程审批/故障保留与客户端受检搬移，实际范围及最终门禁状态见 [M8.2 契约](M8_2_RUNTIME_CONTRACT.md)。正式 Editor/Player 模块接线、模型推理、pythonnet/ZeroMQ 仍未实现；下文早期“全部传输未实现”为历史状态。用户已确认 **M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**，ECS 目标为 C# 唯一存储、GameObject 封装同一 Entity，当前尚未实现；具体门禁见 [路线图](ROADMAP.md)。
 
@@ -73,7 +73,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 | 模块 | 职责 | 当前状态 |
 |---|---|---|
 | Application / Services | Editor、Player、Headless 入口和服务生命周期 | C# apphost 与共享运行服务已实现；默认 Editor 已切换，部署/恢复自动回归通过；自包含/人工待验 |
-| World / Entity / GameObject | 扁平实体存储、UUID、代次身份、创建/销毁及高层门面 | C# World 唯一权威；E1-B 源码已接入代次 Entity，用户门面直接访问同一实体；低层 Runtime.GameObject 消费者迁移删除未完成；C++ 插件只接收有界复制数据/资源句柄 |
+| World / Entity / GameObject | 扁平实体存储、UUID、代次身份、创建/销毁及高层门面 | C# World 唯一权威；低层直接使用 Entity，仅保留 Ncma.GameObject 高层门面；旧 Runtime.GameObject 及旧创建/查找/枚举入口已删除；C++ 插件只接收有界复制数据/资源句柄 |
 | Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | E1-A 类型池已接入源码并通过双配置候选验证；既有 schema/预算保留；通用 Query 与增量提交未实现 |
 | Behaviour Host | C# 生命周期、实例绑定、Export、程序集加载/重载 | 已接入托管 World；私有状态迁移、自动重建未实现 |
 | WorldRunner / Systems | 固定步、呈现步、依赖和结构命令提交 | PlaySession 固定步/顺序 Systems 已接入编辑器；输入/插值/运行结构命令已实现基础 |

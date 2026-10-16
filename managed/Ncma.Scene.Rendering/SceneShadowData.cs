@@ -28,9 +28,9 @@ public static class SceneShadowState
     public static SceneShadowData? Read(World world, Guid expectedWorld)
     {
         SceneEnvironmentState.VerifyBoundary(world, expectedWorld); SceneShadowData? value = null;
-        foreach (var obj in world.GetObjects()) if (obj.Has<SceneShadowData>()) {
+        foreach (global::Ncma.Runtime.Entity obj in world.GetEntities()) if (world.Has<SceneShadowData>(obj)) {
             if (value is not null) throw new ArgumentException("At most one scene shadow selection, including Off.");
-            value = SceneShadowData.Validate(obj.Get<SceneShadowData>());
+            value = SceneShadowData.Validate(world.Get<SceneShadowData>(obj));
         }
         return value;
     }

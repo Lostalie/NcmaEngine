@@ -19,7 +19,7 @@ internal static unsafe partial class Program
         using var cook=new EnvironmentCookService(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),()=>true);
         var package=cook.Cook(Guid.NewGuid(),1,HdrEnvironmentSource.Neutral(Guid.NewGuid()),new(8,4,8,64));
         var fixture=new SceneGpuFixture(output);var(document,_,_,_)=fixture.Scene();
-        var environment=document.World.CreateObject("Environment");environment.Set(new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true));
+        global::Ncma.Runtime.Entity environment=document.World.CreateEntity("Environment");document.World.Set(environment, new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true));
         var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,package);string path=Path.Combine(fixture.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path,package.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/environment.ncenv"),descriptor.Encode());
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
@@ -67,7 +67,7 @@ internal static unsafe partial class Program
             Pass(revoked.Status.Phase==EnvironmentPreflightPhase.Failed&&renderer.PipelineStats.Pipelines==0&&renderer.EnvironmentStats.Live==0,"revocation leaves no unowned resources");
         }
         Pass(bytes.SequenceEqual(document.CaptureBytes()),"all preparation/failure/close paths preserve exact World document");
-        environment.Set(EnvironmentLightingData.Off);var stats=renderer.EnvironmentStats;
+        document.World.Set(environment, EnvironmentLightingData.Off);var stats=renderer.EnvironmentStats;
         using(var empty=new SceneEnvironmentPreflight(renderer,cache)) {
             int callbacks=0;empty.Prepare(document.World,assets,document.CaptureSnapshot(),()=>{callbacks++;return true;});
             Pass(empty.Status is{Phase:EnvironmentPreflightPhase.Ready,BindingRetained:false,GpuRetained:false,AssetsRetained:false}&&callbacks==0&&renderer.EnvironmentStats.Publications==stats.Publications,"Off creates no environment resources or approvals");

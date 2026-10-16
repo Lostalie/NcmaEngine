@@ -53,9 +53,9 @@ internal static class ActionJointChecks
         var rows=new List<object>();ulong frame=0;
         foreach(int count in new[]{0,1,8,32}) {
             var sample=ActionSample.Create(evidence,assembly,count);
-            var doc=Load(sample);var camera=doc.World.FindObject(sample.Camera);
-            camera.Set(TransformData.Identity with{Position=new(Math.Max(0,(count-1)*1.5f),1,7)});
-            camera.Set(CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=100});
+            var doc=Load(sample);global::Ncma.Runtime.Entity camera=doc.World.FindEntity(sample.Camera);
+            doc.World.Set(camera, TransformData.Identity with{Position=new(Math.Max(0,(count-1)*1.5f),1,7)});
+            doc.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=100});
             byte[] startup=doc.CaptureBytes();
             using var assets=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,doc.CaptureSnapshot(),true,"assets/action.ncpak");
             using var physics=new PhysicsService(plugins,enabled:count!=0,characterSupport:count!=0);
@@ -114,7 +114,7 @@ internal static class ActionJointChecks
                     scene=new(renderer,cache,doc.World);scene.Prepare(assets,doc.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime);
                     runtime.RequestAction(cycleSample.Actors[0],ActionRequest.Attack);
                     for(int i=0;i<12;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Cycle committed attack");if(!scene.Submit(++frame,320,240,cycleSample.Camera))renderer.Submit(clear,null,RenderFrame.Reference(frame,320,240));renderer.Present();}
-                    Check(doc.World.FindObject(cycleSample.Targets[0]).Get<HealthData>().Current==75,"Cycle real damage");
+                    Check(doc.World.Get<HealthData>(doc.World.FindEntity(cycleSample.Targets[0])).Current==75,"Cycle real damage");
                     if(cycle%2!=0)Reject(()=>runtime.ReadStepProfile());
                     fail=true;byte[] before=doc.CaptureBytes();ulong tick=play.Tick;
                     Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==tick&&before.SequenceEqual(doc.CaptureBytes()),"Post-solver injected failure never installs candidate movement/health");
@@ -128,7 +128,7 @@ internal static class ActionJointChecks
                     recovered.Start(_=>throw new Exception("No behaviours"));
                     Check(identities.Add(recovered.SessionId)&&identities.Add(recoveryDoc.World.Identity)&&identities.Add(recoveredRuntime.NumericalEpoch),"Recovery rotates identities");
                     try {
-                        Check(recoveryDoc.World.FindObject(cycleSample.Targets[0]).Get<HealthData>().Current==100&&recoveredRuntime.ReadCombatEvents().Length==0&&recoveredRuntime.InspectRootMotion(cycleSample.Actors[0]).Time==0,"Recovery from frozen startup resets damage/action/root/events");Reject(()=>recoveredRuntime.ReadStepProfile());
+                        Check(recoveryDoc.World.Get<HealthData>(recoveryDoc.World.FindEntity(cycleSample.Targets[0])).Current==100&&recoveredRuntime.ReadCombatEvents().Length==0&&recoveredRuntime.InspectRootMotion(cycleSample.Actors[0]).Time==0,"Recovery from frozen startup resets damage/action/root/events");Reject(()=>recoveredRuntime.ReadStepProfile());
                         recovered.AdvanceFixedStep();Check(recoveredRuntime.ReadStepProfile().Tick==recovered.Tick,"Recovered committed profile");
                         recovered.Reload(_=>throw new Exception("No behaviours"));
                         Check(recovered.State==PlayState.Paused&&identities.Add(recovered.SessionId)&&identities.Add(recoveryDoc.World.Identity)&&identities.Add(recoveredRuntime.NumericalEpoch),"Active reload rotates identities");Reject(()=>recoveredRuntime.ReadStepProfile());

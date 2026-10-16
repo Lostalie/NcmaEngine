@@ -70,94 +70,94 @@ internal static class EcsStorageTests
                 Check(nested.Get<TransformData>(1).Position == Vector3.One && candidate.Count(1) == 0);
             }),
             ("public committed reads allocate zero after warmup", () => {
-                var world = new World(components: Registry()); var obj = world.CreateObject("A"); obj.Set(new Label("text", 7));
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity obj = world.CreateEntity("A"); world.Set(obj, new Label("text", 7));
                 int sum = 0;
-                for (int i = 0; i < 20000; i++) sum += obj.Get<Label>().Value;
+                for (int i = 0; i < 20000; i++) sum += world.Get<Label>(obj).Value;
                 long before = GC.GetAllocatedBytesForCurrentThread();
-                for (int i = 0; i < 20000; i++) { if (obj.Has<Label>()) sum += obj.Get<Label>().Value; }
+                for (int i = 0; i < 20000; i++) { if (world.Has<Label>(obj)) sum += world.Get<Label>(obj).Value; }
                 long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
                 Check(allocated == 0 && sum == 280000);
             }),
             ("pool order does not change authoring order", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); var b = world.CreateObject("B"); var c = world.CreateObject("C");
-                a.Set(new Label("a", 1)); b.Set(new Label("b", 2)); c.Set(new Label("c", 3));
-                a.Remove<Label>(); b.Destroy(); var d = world.CreateObject("D"); d.Set(new Label("d", 4));
-                Check(world.GetObjects().Select(o => o.Name).SequenceEqual(new[] { "A", "C", "D" }));
-                Check(c.Get<Label>().Value == 3 && d.Get<Label>().Value == 4 && !a.Has<Label>());
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); global::Ncma.Runtime.Entity b = world.CreateEntity("B"); global::Ncma.Runtime.Entity c = world.CreateEntity("C");
+                world.Set(a, new Label("a", 1)); world.Set(b, new Label("b", 2)); world.Set(c, new Label("c", 3));
+                world.Remove<Label>(a); world.Destroy(b); global::Ncma.Runtime.Entity d = world.CreateEntity("D"); world.Set(d, new Label("d", 4));
+                Check(world.GetEntities().Select(o => world.GetName(o)).SequenceEqual(new[] { "A", "C", "D" }));
+                Check(world.Get<Label>(c).Value == 3 && world.Get<Label>(d).Value == 4 && !world.Has<Label>(a));
                 Check(world.CaptureSnapshot().Objects.Select(o => o.Name).SequenceEqual(new[] { "A", "C", "D" }));
-                Reject(() => b.Get<Label>());
+                Reject(() => world.Get<Label>(b));
             }),
             ("bounded slots can churn past lifetime capacity", () => {
                 var world = new World(components: Registry());
                 for (int round = 0; round < 2; round++)
                 {
-                    var objects = Enumerable.Range(0, World.MaxObjects).Select(i => world.CreateObject("A" + i)).ToArray();
-                    for (int i = 0; i < objects.Length; i += 2) objects[i].Set(new Label("value", i));
-                    Reject(() => world.CreateObject("overflow"));
-                    for (int i = 0; i < objects.Length; i++) { Check(objects[i].Has<Label>() == (i % 2 == 0)); objects[i].Destroy(); }
+                    var objects = Enumerable.Range(0, World.MaxObjects).Select(i => world.CreateEntity("A" + i)).ToArray();
+                    for (int i = 0; i < objects.Length; i += 2) world.Set(objects[i], new Label("value", i));
+                    Reject(() => world.CreateEntity("overflow"));
+                    for (int i = 0; i < objects.Length; i++) { Check(world.Has<Label>(objects[i]) == (i % 2 == 0)); world.Destroy(objects[i]); }
                     Check(world.Count == 0);
-                    Reject(() => objects[0].Get<Label>());
+                    Reject(() => world.Get<Label>(objects[0]));
                 }
-                var empty = world.CreateObject("empty"); Check(!empty.Has<Label>() && !empty.Has<TransformData>());
+                global::Ncma.Runtime.Entity empty = world.CreateEntity("empty"); Check(!world.Has<Label>(empty) && !world.Has<TransformData>(empty));
             }),
             ("candidate writes are invisible until commit", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); var b = world.CreateObject("B");
-                a.Set(new Label("before", 1)); b.Set(new Label("other", 3));
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); global::Ncma.Runtime.Entity b = world.CreateEntity("B");
+                world.Set(a, new Label("before", 1)); world.Set(b, new Label("other", 3));
                 world.BeginStep();
-                a.Set(new Label("first", 2)); a.Set(new Label("last", 4));
-                Check(a.Get<Label>().Value == 1 && b.Get<Label>().Value == 3);
-                world.CommitStep(); Check(a.Get<Label>().Value == 4 && b.Get<Label>().Value == 3 && world.Tick == 1);
-                world.BeginStep(); b.Set(new Label("abort", 5)); world.AbortStep();
-                Check(a.Get<Label>().Value == 4 && b.Get<Label>().Value == 3 && world.Tick == 1);
+                world.Set(a, new Label("first", 2)); world.Set(a, new Label("last", 4));
+                Check(world.Get<Label>(a).Value == 1 && world.Get<Label>(b).Value == 3);
+                world.CommitStep(); Check(world.Get<Label>(a).Value == 4 && world.Get<Label>(b).Value == 3 && world.Tick == 1);
+                world.BeginStep(); world.Set(b, new Label("abort", 5)); world.AbortStep();
+                Check(world.Get<Label>(a).Value == 4 && world.Get<Label>(b).Value == 3 && world.Tick == 1);
             }),
             ("candidate delete and slot reuse never leak", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); a.Set(new Label("old", 1));
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, new Label("old", 1));
                 Guid fresh = Guid.NewGuid(); string before = world.SerializeSnapshot();
-                world.BeginStep(); world.StageDestroy(a.PersistentId); world.StageCreate(fresh, "new");
+                world.BeginStep(); world.StageDestroy(world.GetUuid(a)); world.StageCreate(fresh, "new");
                 world.StageAdd(fresh, new("test.label", 1, world.Components.Encode(new Label("new", 2))));
-                Check(a.Get<Label>().Value == 1); Reject(() => world.FindObject(fresh));
-                world.AbortStep(); Check(world.SerializeSnapshot() == before && a.Get<Label>().Value == 1);
-                world.BeginStep(); world.StageDestroy(a.PersistentId); world.StageCreate(fresh, "new");
-                world.CommitStep(); Reject(() => a.Get<Label>()); Check(!world.FindObject(fresh).Has<Label>());
+                Check(world.Get<Label>(a).Value == 1); Reject(() => world.FindEntity(fresh));
+                world.AbortStep(); Check(world.SerializeSnapshot() == before && world.Get<Label>(a).Value == 1);
+                world.BeginStep(); world.StageDestroy(world.GetUuid(a)); world.StageCreate(fresh, "new");
+                world.CommitStep(); Reject(() => world.Get<Label>(a)); Check(!world.Has<Label>(world.FindEntity(fresh)));
             }),
             ("removed candidate component rejects caught write and poisons step", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); a.Set(new Label("old", 1));
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, new Label("old", 1));
                 ulong revision = world.Revision;
-                world.BeginStep(); world.StageRemove(a.PersistentId, "test.label");
-                Check(a.Has<Label>()); Reject(() => a.Set(new Label("lost", 2))); Reject(() => world.CommitStep());
-                world.AbortStep(); Check(a.Get<Label>().Value == 1 && world.Revision == revision && world.Tick == 0);
+                world.BeginStep(); world.StageRemove(world.GetUuid(a), "test.label");
+                Check(world.Has<Label>(a)); Reject(() => world.Set(a, new Label("lost", 2))); Reject(() => world.CommitStep());
+                world.AbortStep(); Check(world.Get<Label>(a).Value == 1 && world.Revision == revision && world.Tick == 0);
             }),
             ("restore strings and failed preparation preserve identity and data", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); a.Set(new Label("中文 🌍", 17));
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, new Label("中文 🌍", 17));
                 var snapshot = world.CaptureSnapshot(); Guid identity = world.Identity; ulong revision = world.Revision;
                 var bad = snapshot with { Objects = [snapshot.Objects[0] with { Components = [snapshot.Objects[0].Components[0], snapshot.Objects[0].Components[0]] }] };
                 Reject(() => world.RestoreSnapshot(bad));
-                Check(world.Identity == identity && world.Revision == revision && a.Get<Label>().Value == 17);
-                Guid uuid = a.PersistentId; string text = world.SerializeSnapshot();
-                world.LoadSnapshot(text); Reject(() => a.Get<Label>());
-                Check(world.FindObject(uuid).Get<Label>().Text == "中文 🌍" && world.SerializeSnapshot() == text);
+                Check(world.Identity == identity && world.Revision == revision && world.Get<Label>(a).Value == 17);
+                Guid uuid = world.GetUuid(a); string text = world.SerializeSnapshot();
+                world.LoadSnapshot(text); Reject(() => world.Get<Label>(a));
+                Check(world.Get<Label>(world.FindEntity(uuid)).Text == "中文 🌍" && world.SerializeSnapshot() == text);
                 Check(!text.Contains("slot", StringComparison.OrdinalIgnoreCase));
             }),
             ("late candidate validator failure leaves every pool unchanged", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); a.Set(new Label("old", 1)); a.Set(TransformData.Identity);
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, new Label("old", 1)); world.Set(a, TransformData.Identity);
                 string before = world.SerializeSnapshot(); ulong revision = world.Revision;
-                world.BeginStep(); a.Set(new Label("changed", 2)); a.Set(TransformData.Identity with { Position = Vector3.One });
+                world.BeginStep(); world.Set(a, new Label("changed", 2)); world.Set(a, TransformData.Identity with { Position = Vector3.One });
                 Reject(() => world.PrepareStep(_ => throw new ArgumentException("late validator")));
                 world.AbortStep(); Check(world.SerializeSnapshot() == before && world.Revision == revision && world.Tick == 0);
             }),
             ("write authority still guards typed storage", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); a.Set(new Label("owned", 1));
-                using var authority = world.ClaimComponents<Label>([a.PersistentId], freezeMembership: true);
-                Reject(() => a.Set(new Label("outside", 2))); Reject(() => a.Remove<Label>()); Reject(a.Destroy);
-                world.BeginStep(); Check(world.WriteOwned(authority, a.PersistentId, new Label("owned update", 3)).Value == 3);
-                Check(a.Get<Label>().Value == 1); world.CommitStep(); Check(a.Get<Label>().Value == 3);
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, new Label("owned", 1));
+                using var authority = world.ClaimComponents<Label>([world.GetUuid(a)], freezeMembership: true);
+                Reject(() => world.Set(a, new Label("outside", 2))); Reject(() => world.Remove<Label>(a)); Reject(() => world.Destroy(a));
+                world.BeginStep(); Check(world.WriteOwned(authority, world.GetUuid(a), new Label("owned update", 3)).Value == 3);
+                Check(world.Get<Label>(a).Value == 1); world.CommitStep(); Check(world.Get<Label>(a).Value == 3);
                 world.BeginStep(); Reject(() => world.CommitStep()); world.AbortStep(); Check(world.Tick == 1);
             }),
             ("thread and read-only guards precede typed access", () => {
-                var world = new World(components: Registry()); var a = world.CreateObject("A"); a.Set(new Label("old", 1));
-                Check(Task.Run(() => { try { a.Get<Label>(); return false; } catch (InvalidOperationException) { return true; } }).GetAwaiter().GetResult());
-                using (world.ReadOnly()) { Reject(() => a.Set(new Label("new", 2))); Reject(() => a.Remove<Label>()); }
-                Check(a.Get<Label>().Value == 1);
+                var world = new World(components: Registry()); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, new Label("old", 1));
+                Check(Task.Run(() => { try { world.Get<Label>(a); return false; } catch (InvalidOperationException) { return true; } }).GetAwaiter().GetResult());
+                using (world.ReadOnly()) { Reject(() => world.Set(a, new Label("new", 2))); Reject(() => world.Remove<Label>(a)); }
+                Check(world.Get<Label>(a).Value == 1);
             }),
         };
         int failures = 0;

@@ -30,8 +30,8 @@ internal static unsafe partial class Program
         void Pass(bool ok,string label){Check(ok,"C2 formal post "+label);cases++;}
         var repo=new DirectoryInfo(Path.GetFullPath(plugins));while(!File.Exists(Path.Combine(repo.FullName,"Build.bat")))repo=repo.Parent??throw new Exception("Repository missing");
         string deployed=Path.Combine(repo.FullName,"out/bin");var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
-        var light=document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());light.Set(light.Get<DirectionalLightData>() with{CastShadow=false});
-        var obj=document.World.CreateObject("Post configuration");var active=PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.8f))])};obj.Set(active);Guid settingId=obj.PersistentId;
+        global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
+        global::Ncma.Runtime.Entity obj=document.World.CreateEntity("Post configuration");var active=PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.8f))])};document.World.Set(obj, active);Guid settingId=document.World.GetUuid(obj);
         byte[] shaderIndex=File.ReadAllBytes(Path.Combine(deployed,RuntimeShaderFileSet.DefaultSelectionPath));var shaders=ShaderPackageSelection.Decode(shaderIndex);
         byte[] postIndex=File.ReadAllBytes(Path.Combine(deployed,PostProcessLibrarySelection.IndexPath));var post=PostProcessLibrarySelection.Decode(postIndex);
         foreach(string path in shaders.Packages.Select(p=>p.Path).Concat(post.Programs.Select(p=>p.Path)).Concat(post.Tones.Select(p=>p.Path)).Append(PostProcessLibrarySelection.IndexPath)){
@@ -45,22 +45,22 @@ internal static unsafe partial class Program
         PlayerOptions Options(bool headless=false)=>new(projectPath,headless,null,4,1d/60,30,Path.Combine(output,Guid.NewGuid()+".json"),false,false);
         byte[]? playerBloom=null;var report=playerRunOwner0.RunForVerification(Options(),Path.GetFullPath(plugins),(pixels,w,h)=>playerBloom??=pixels);
         Pass(report.ExitCode==0&&report.Tick>=4&&playerBloom is not null&&report.ValidationErrors==0&&report.ValidationWarnings==0&&report.ShutdownErrors.Length==0,"formal Player renders configured post");
-        obj.Set(PostProcessData.Off);SceneDocumentFiles.Save(document,scenePath);byte[]? playerOff=null;
+        document.World.Set(obj, PostProcessData.Off);SceneDocumentFiles.Save(document,scenePath);byte[]? playerOff=null;
         report=playerRunOwner1.RunForVerification(Options(),Path.GetFullPath(plugins),(pixels,w,h)=>playerOff??=pixels);
-        Pass(report.ExitCode==0&&playerOff is not null&&!playerOff.SequenceEqual(playerBloom!),"formal Player Off distinct from Bloom");obj.Set(active);SceneDocumentFiles.Save(document,scenePath);
+        Pass(report.ExitCode==0&&playerOff is not null&&!playerOff.SequenceEqual(playerBloom!),"formal Player Off distinct from Bloom");document.World.Set(obj, active);SceneDocumentFiles.Save(document,scenePath);
         var headless=playerRunOwner2.Run(Options(true),pluginRoot:Path.GetFullPath(plugins),visible:false);
         Pass(headless.ExitCode==0&&headless.Tick==4&&headless.RenderedFrames==0&&headless.Modules.Length==0,"Headless validates values and explicit file closure without graphics service");
         Project(config with{PostProcessLibrary=new(1,new string('0',64))});
         foreach(bool cpu in new[]{false,true}){
             using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
             var bad=playerRunOwner3.Run(Options(cpu),pluginRoot:Path.GetFullPath(plugins),visible:false);Pass(bad.ExitCode==3&&bad.Tick==0&&bad.SessionId==Guid.Empty&&bad.ShutdownErrors.Length==0,"wrong explicit library hash before gameplay, no default fallback");}Project(config);
-        obj.Set(active with{ToneModule=Guid.NewGuid()});SceneDocumentFiles.Save(document,scenePath);var invalid=playerRunOwner4.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false);
-        Pass(invalid.ExitCode==2&&invalid.SessionId==Guid.Empty&&invalid.Tick==0,"unknown registered module before gameplay");obj.Set(active);SceneDocumentFiles.Save(document,scenePath);
+        document.World.Set(obj, active with{ToneModule=Guid.NewGuid()});SceneDocumentFiles.Save(document,scenePath);var invalid=playerRunOwner4.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false);
+        Pass(invalid.ExitCode==2&&invalid.SessionId==Guid.Empty&&invalid.Tick==0,"unknown registered module before gameplay");document.World.Set(obj, active);SceneDocumentFiles.Save(document,scenePath);
         string packed="assets/game.ncpak";File.WriteAllBytes(Path.Combine(fixture.Root,packed),SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]));Project(config with{AssetPackage=packed});
         report=playerRunOwner5.RunForVerification(Options(),Path.GetFullPath(plugins),(pixels,w,h)=>Pass(pixels.SequenceEqual(playerBloom!),"NCP scene same post pixels"));Pass(report.ExitCode==0&&report.ShutdownErrors.Length==0,"runtime package post binding");Project(config);
         int captured=0;byte[]? last=null;
         report=playerRunOwner6.RunForVerification(Options() with{Ticks=16},Path.GetFullPath(plugins),(pixels,w,h)=>{captured++;last=pixels;},
-            (play,tick)=>{if(captured>0)play.Document.World.FindObject(settingId).Set(active with{ToneModule=Guid.NewGuid()});});
+            (play,tick)=>{if(captured>0)play.Document.World.Set(play.Document.World.FindEntity(settingId), active with{ToneModule=Guid.NewGuid()});});
         Pass(report.ExitCode==5&&captured==2&&last is not null&&last.Where((b,i)=>b!=last[i%4]).Any()==false&&report.ShutdownErrors.Length==0,"Player runtime corruption clears then faults without stale output");
         using(var editor=new CandidatePresentation(Path.GetFullPath(plugins),ProjectContext.Load(projectPath),true,false,false)){
             editor.Start();ulong frame=0;byte[] Draw(){byte[]? pixels=null;editor.CaptureNextViewportForVerification((p,w,h)=>pixels=p);Pass(editor.PumpPlatform(),"Editor pump");var f=new FrameContext(++frame,1d/60);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);return pixels??throw new Exception("No viewport capture");}
@@ -83,18 +83,18 @@ internal static unsafe partial class Program
             Pass(edit.Invoke(History("ncma.history.undo"),permission).Changed,"sole Undo");Pass(Draw().SequenceEqual(baseline),"Undo exact viewport");
             Pass(edit.Invoke(History("ncma.history.redo"),permission).Changed,"sole Redo");Pass(Draw().SequenceEqual(off),"Redo exact viewport");
             Pass(edit.Invoke(Request(active),permission).Changed,"restore active");byte[] beforePlay=Draw();var play=owner.StartPlay();Pass(Draw().SequenceEqual(beforePlay),"Edit/Play shared post");play.Pause();owner.ReloadGameplay(Path.Combine(fixture.Root,"gameplay.dll"));Pass(Draw().SequenceEqual(beforePlay),"reload post binding");owner.StopPlay();Pass(Draw().SequenceEqual(beforePlay),"stop preserves Edit");
-            owner.Document.World.FindObject(settingId).Set(active with{ToneModule=Guid.NewGuid()});byte[] failed=Draw();Pass(!failed.SequenceEqual(beforePlay)&&failed.Where((b,i)=>b!=failed[i%4]).Any()==false,"invalid scene clears viewport, no stale effect");
+            owner.Document.World.Set(owner.Document.World.FindEntity(settingId), active with{ToneModule=Guid.NewGuid()});byte[] failed=Draw();Pass(!failed.SequenceEqual(beforePlay)&&failed.Where((b,i)=>b!=failed[i%4]).Any()==false,"invalid scene clears viewport, no stale effect");
             if(authoring)Pass(editor.VerificationPresenter.PostPreparationStatus.Contains("失败"),"failed prepared status exact world stamp");
             object? Field(string name)=>typeof(CandidatePresentation).GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(editor);
             var retained=(SceneRenderSession?)Field("_pendingScene");
             Pass(retained is not null&&retained.PreparationPhase==ScenePreparationPhase.Empty,"actual rejected argument preparation retains its constructed owner");
             Pass(Draw().SequenceEqual(failed)&&ReferenceEquals(retained,Field("_pendingScene")),"unchanged failing request does not retry or overwrite candidate");
-            owner.Document.World.FindObject(settingId).Set(active);Pass(Draw().SequenceEqual(beforePlay),"explicit recovery restores pixels");
+            owner.Document.World.Set(owner.Document.World.FindEntity(settingId), active);Pass(Draw().SequenceEqual(beforePlay),"explicit recovery restores pixels");
             Pass(retained!.PreparationPhase==ScenePreparationPhase.Closed&&Field("_pendingScene") is null,"corrected committed request drains failed owner before new publication");
             // Real active native frame at the ordinary off-frame PumpAgent boundary.
             // Reflection only reads owners for evidence; no injected field ownership or cleanup.
-            owner.Document.World.FindObject(settingId).Set(active with{ToneModule=Guid.NewGuid()});_ = Draw();
-            retained=(SceneRenderSession?)Field("_pendingScene");owner.Document.World.FindObject(settingId).Set(active);
+            owner.Document.World.Set(owner.Document.World.FindEntity(settingId), active with{ToneModule=Guid.NewGuid()});_ = Draw();
+            retained=(SceneRenderSession?)Field("_pendingScene");owner.Document.World.Set(owner.Document.World.FindEntity(settingId), active);
             var renderer=(RendererSession)Field("_renderer")!;
             var blocked=new FrameContext(++frame,1d/60);
             renderer.SubmitResources(blocked.FrameId,[],new(0,0,64,64),System.Numerics.Vector4.Zero,
@@ -103,7 +103,7 @@ internal static unsafe partial class Program
             Pass(ReferenceEquals(retained,Field("_pendingScene"))&&retained!.PreparationPhase==ScenePreparationPhase.Empty&&renderer.ReadFrameState().Active,"active-frame recovery rejects before retirement and retains same owner");
             renderer.Present();
             Pass(Draw().SequenceEqual(failed)&&ReferenceEquals(retained,Field("_pendingScene")),"ending frame alone does not automatically retry failed recovery stamp");
-            owner.Document.World.FindObject(settingId).Set(PostProcessData.Off);owner.Document.World.FindObject(settingId).Set(active);
+            owner.Document.World.Set(owner.Document.World.FindEntity(settingId), PostProcessData.Off);owner.Document.World.Set(owner.Document.World.FindEntity(settingId), active);
             Pass(Draw().SequenceEqual(beforePlay)&&retained!.PreparationPhase==ScenePreparationPhase.Closed&&Field("_pendingScene") is null,"fresh committed request after blocked recovery restores exact viewport");
             Pass(editor.VerificationStats.ValidationErrors==0&&editor.VerificationStats.ValidationWarnings==0,"Editor API0/0");
         }
@@ -111,7 +111,7 @@ internal static unsafe partial class Program
         // the same formal host path. No special official-module dispatch or source compilation.
         Guid userModule=Guid.NewGuid();var userIndex=post with{Programs=post.Programs.Select(p=>p with{ModuleId=userModule}).ToArray()};byte[] userBytes=userIndex.Encode();
         File.WriteAllBytes(Path.Combine(fixture.Root,PostProcessLibrarySelection.IndexPath),userBytes);Project(config with{PostProcessLibrary=new(1,Convert.ToHexString(SHA256.HashData(userBytes)))});
-        obj.Set(active with{StackJson=PostProcessData.EncodeStack([new(userModule,3,[new("gain",.8f)])])});SceneDocumentFiles.Save(document,scenePath);int builds=0;
+        document.World.Set(obj, active with{StackJson=PostProcessData.EncodeStack([new(userModule,3,[new("gain",.8f)])])});SceneDocumentFiles.Save(document,scenePath);int builds=0;
         var custom=new PostProcessModules([new(PostProcessLibrarySelection.AcesModule,1)],
             [new(userModule,3,10,[new("gain",0,4)],[],(w,h,p,program)=>{builds++;return BloomFeature.Build(w,h,new(Levels:2,Threshold:0,Intensity:p["gain"]),program);},"Host user Bloom")]);
         byte[]? userPixels=null;report=playerRunOwner7.RunForVerification(Options(),Path.GetFullPath(plugins),(pixels,w,h)=>userPixels??=pixels,postModules:custom);

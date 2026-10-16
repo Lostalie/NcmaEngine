@@ -52,8 +52,8 @@ internal static unsafe partial class Program
             Pass(host.FirstNativeFailure==nativeDiagnostic,"owned numeric diagnosis survives plugin unload");
         }
         // Actual catalog-loaded SDK-only private-state behaviour through the ordinary runner.
-        var(runDocument,runCamera,_)=fixture.Scene();var probe=runDocument.World.CreateObject("Private recovery state");probe.Set(TransformData.Identity);
-        runDocument.SetBindings(probe.PersistentId,[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture.RecoveryProbe",true,[])]);
+        var(runDocument,runCamera,_)=fixture.Scene();global::Ncma.Runtime.Entity probe=runDocument.World.CreateEntity("Private recovery state");runDocument.World.Set(probe, TransformData.Identity);
+        runDocument.SetBindings(runDocument.World.GetUuid(probe),[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture.RecoveryProbe",true,[])]);
         string config=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         string script=Path.Combine(repo.FullName,"managed/Ncma.Gameplay.UiFixture/bin",config,"net8.0/Ncma.Gameplay.UiFixture.dll");
         File.Copy(script,Path.Combine(fixture.Root,"gameplay.dll"));File.Copy(Path.ChangeExtension(script,".deps.json"),Path.Combine(fixture.Root,"gameplay.deps.json"));
@@ -63,7 +63,7 @@ internal static unsafe partial class Program
             PlaySession? original=null;Guid session=default,world=default;ulong tick=0;bool failed=false;int prompts=0;GpuViewTarget? held=null;PlayStatus? reviewed=null;
             var report=runner.RunForVerification(new(project,false,null,18,1d/60,60,Path.Combine(output,"runner.json"),false,false),plugins,
                 (_,_,_)=>{if(!failed&&held is not null){failed=true;throw new Exception("runner-private-capture");}},
-                trustedInput:(play,_)=>{original??=play;if(session==Guid.Empty){session=play.SessionId;world=play.Document.World.Identity;}var value=play.Document.World.FindObject(probe.PersistentId).Get<TransformData>();Check(ReferenceEquals(original,play)&&play.SessionId==session&&play.Document.World.Identity==world&&play.Tick>=tick&&value.Position.X==play.Tick&&value.Position.Z==1&&value.Scale.Y==2,"Runner retained private script state");tick=play.Tick;
+                trustedInput:(play,_)=>{original??=play;if(session==Guid.Empty){session=play.SessionId;world=play.Document.World.Identity;}var value=play.Document.World.Get<TransformData>(play.Document.World.FindEntity(runDocument.World.GetUuid(probe)));Check(ReferenceEquals(original,play)&&play.SessionId==session&&play.Document.World.Identity==world&&play.Tick>=tick&&value.Position.X==play.Tick&&value.Position.Z==1&&value.Scale.Y==2,"Runner retained private script state");tick=play.Tick;
                     if(!failed&&held is null&&play.Tick>=6)held=EnvironmentProductEvidence.Field<RendererSession>(EnvironmentProductEvidence.Field<PlayerPresentation>(runner,"presentation"),"_renderer").CreateViewTarget(16,16);},
                 confirmGraphicsRecovery:request=>{prompts++;reviewed??=original!.Status;Pass(request.Review.Play==original!.Status&&original.Status==reviewed&&request.Message.Contains("不重启脚本"),"runner exact approval preserves status during retry");if(request.Retry){held!.Dispose();held=null;}return true;});
             Pass(report.ExitCode==0&&failed&&prompts==2&&report.Tick>=18&&report.SessionId==session,$"actual PlayerRunner resumes same session after explicit failed-close retry: exit={report.ExitCode}, failed={failed}, prompts={prompts}, tick={report.Tick}, session={report.SessionId==session}");

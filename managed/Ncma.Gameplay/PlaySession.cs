@@ -151,7 +151,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                     foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                     {
                         var behaviour = createBehaviour(binding) ?? throw new ArgumentException("Null Behaviour.");
-                        behaviour.GameObject = new(_facade, _document.World.FindObject(obj.Id).Entity);
+                        behaviour.GameObject = new(_facade, _document.World.FindEntity(obj.Id));
                         prepared.Add(new(obj.Id, binding, behaviour));
                     }
             _instances = prepared.ToArray();
@@ -277,7 +277,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                 {
                     var behaviour = createBehaviour(binding) ?? throw new ArgumentException("Null Behaviour.");
-                    behaviour.GameObject = new(_facade, _document.World.FindObject(obj.Id).Entity);
+                    behaviour.GameObject = new(_facade, _document.World.FindEntity(obj.Id));
                     prepared.Add(new(obj.Id, binding, behaviour));
                 }
         var instances = prepared.ToArray();

@@ -24,9 +24,39 @@ internal static class EntityIdentityTests
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("single value identity API has no obsolete wrapper or signatures", () => {
+                Check(typeof(Entity).IsValueType && typeof(World).Assembly.GetType("Ncma.Runtime.GameObject") is null);
+                Check(new[] { "CreateObject", "FindObject", "GetObjects" }.All(name => typeof(World).GetMethod(name) is null));
+                Check(typeof(World).GetMethod("CreateEntity")!.ReturnType == typeof(Entity));
+                Check(typeof(World).GetMethod("FindEntity")!.ReturnType == typeof(Entity));
+                Check(typeof(World).GetMethod("GetEntities")!.ReturnType == typeof(IReadOnlyList<Entity>));
+                var world = new World(); var a = world.CreateEntity("A"); Guid uuid = world.GetUuid(a);
+                for (int i = 0; i < 512; i++) _ = world.FindEntity(uuid);
+                long before = GC.GetAllocatedBytesForCurrentThread(); Entity found = default;
+                for (int i = 0; i < 512; i++) found = world.FindEntity(uuid);
+                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Check(found == a && allocated == 0); // Lookup itself allocates no per-entity facade.
+            }),
+            ("enumeration is a detached committed identity copy", () => {
+                var world = new World(); var a = world.CreateEntity("A"); var b = world.CreateEntity("B");
+                var copy = (Entity[])world.GetEntities(); copy[0] = default;
+                Check(world.GetEntities().SequenceEqual(new[] { a, b }));
+                world.BeginStep(); world.StageDestroy(world.GetUuid(a)); var uuid = Guid.NewGuid();
+                world.StageCreate(uuid, "C"); var candidate = world.CandidateEntity(uuid);
+                Check(world.GetEntities().SequenceEqual(new[] { a, b })); Reject(() => world.FindEntity(uuid));
+                world.CommitStep(); Check(world.GetEntities().SequenceEqual(new[] { b, candidate }));
+                Reject(() => world.GetName(a)); Check(world.FindEntity(uuid) == candidate);
+            }),
+            ("entity entry points enforce owner thread and read-only creation", () => {
+                var world = new World(); var a = world.CreateEntity("A"); Guid uuid = world.GetUuid(a);
+                foreach (Action action in new Action[] { () => world.CreateEntity("bad"), () => world.FindEntity(uuid), () => world.GetEntities() })
+                    Check(Task.Run(() => { try { action(); return false; } catch (InvalidOperationException) { return true; } }).GetAwaiter().GetResult());
+                using (world.ReadOnly()) { Reject(() => world.CreateEntity("bad")); Check(world.FindEntity(uuid) == a); }
+                Check(world.Count == 1 && world.Revision == 1);
+            }),
             ("default/foreign/range/zero/wrong generation rejected", () => {
-                var world = new World(); var a = world.CreateObject("A").Entity;
-                var foreign = new World().CreateObject("foreign").Entity;
+                var world = new World(); var a = world.CreateEntity("A");
+                var foreign = new World().CreateEntity("foreign");
                 Entity[] invalid = [default, foreign, a with { Index = -1 }, a with { Index = World.MaxObjects },
                     a with { Generation = 0 }, a with { Generation = a.Generation + 1 }, a with { WorldIdentity = Guid.Empty }];
                 foreach (var entity in invalid)
@@ -38,12 +68,12 @@ internal static class EntityIdentityTests
                 Check(world.Count == 1 && world.GetName(a) == "A" && !world.Has<TransformData>(a));
             }),
             ("slot reuse increments generation without changing creation order", () => {
-                var world = new World(); var a = world.CreateObject("A"); var b = world.CreateObject("B");
-                a.Destroy(); var c = world.CreateObject("C");
-                Check(c.Entity.Index == a.Entity.Index && c.Entity.Generation > a.Entity.Generation);
-                Reject(() => world.Resolve(a.Entity));
-                Check(world.GetObjects().Select(o => o.Name).SequenceEqual(new[] { "B", "C" }));
-                Check(world.CaptureSnapshot().Objects.Select(o => o.PersistentId).SequenceEqual(new[] { b.PersistentId, c.PersistentId }));
+                var world = new World(); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); global::Ncma.Runtime.Entity b = world.CreateEntity("B");
+                world.Destroy(a); global::Ncma.Runtime.Entity c = world.CreateEntity("C");
+                Check(c.Index == a.Index && c.Generation > a.Generation);
+                Reject(() => world.Resolve(a));
+                Check(world.GetEntities().Select(o => world.GetName(o)).SequenceEqual(new[] { "B", "C" }));
+                Check(world.CaptureSnapshot().Objects.Select(o => o.PersistentId).SequenceEqual(new[] { world.GetUuid(b), world.GetUuid(c) }));
             }),
             ("aborted candidate reservation never revives", () => {
                 var world = new World(); Guid uuid = Guid.NewGuid();
@@ -54,15 +84,15 @@ internal static class EntityIdentityTests
                 world.CommitStep(); Check(world.Resolve(accepted) == accepted); Reject(() => world.Resolve(aborted));
             }),
             ("candidate reuse preserves committed handle through abort", () => {
-                var world = new World(); var a = world.CreateObject("A"); a.Set(TransformData.Identity);
+                var world = new World(); global::Ncma.Runtime.Entity a = world.CreateEntity("A"); world.Set(a, TransformData.Identity);
                 string before = world.SerializeSnapshot(); ulong revision = world.Revision;
-                world.BeginStep(); world.StageDestroy(a.PersistentId); Guid uuid = Guid.NewGuid(); world.StageCreate(uuid, "B");
+                world.BeginStep(); world.StageDestroy(world.GetUuid(a)); Guid uuid = Guid.NewGuid(); world.StageCreate(uuid, "B");
                 var b = world.CandidateEntity(uuid);
-                Check(a.Entity.Index == b.Index && a.Get<TransformData>() == TransformData.Identity);
+                Check(a.Index == b.Index && world.Get<TransformData>(a) == TransformData.Identity);
                 Reject(() => world.Resolve(b)); world.AbortStep();
-                Check(world.SerializeSnapshot() == before && world.Revision == revision && world.Resolve(a.Entity) == a.Entity);
-                a.Destroy(); var c = world.CreateObject("C"); Check(c.Entity.Generation > b.Generation);
-                Reject(() => world.Resolve(b)); Reject(() => world.Resolve(a.Entity));
+                Check(world.SerializeSnapshot() == before && world.Revision == revision && world.Resolve(a) == a);
+                world.Destroy(a); global::Ncma.Runtime.Entity c = world.CreateEntity("C"); Check(c.Generation > b.Generation);
+                Reject(() => world.Resolve(b)); Reject(() => world.Resolve(a));
             }),
             ("destroyed candidate handle never revives within a step", () => {
                 var world = new World(); var first = Guid.NewGuid(); var second = Guid.NewGuid();
@@ -75,44 +105,44 @@ internal static class EntityIdentityTests
                 var world = new World(); Guid uuid = Guid.NewGuid();
                 world.BeginStep(); world.StageCreate(uuid, "bad"); var bad = world.CandidateEntity(uuid);
                 Reject(() => world.PrepareStep(_ => throw new ArgumentException("late validation"))); world.AbortStep();
-                var good = world.CreateObject("good", uuid).Entity;
+                var good = world.CreateEntity("good", uuid);
                 Check(good.Index == bad.Index && good.Generation > bad.Generation && world.Tick == 0 && world.Revision == 1);
                 Reject(() => world.Resolve(bad));
             }),
             ("last generation can live then slot retires without wrapping", () => {
                 var world = new World(); Reservations(world)[0] = ulong.MaxValue - 1;
-                var last = world.CreateObject("last"); Check(last.Entity.Index == 0 && last.Entity.Generation == ulong.MaxValue);
-                last.Destroy(); var next = world.CreateObject("next"); Check(next.Entity.Index == 1 && next.Entity.Generation == 1);
-                Reject(() => world.Resolve(last.Entity));
+                global::Ncma.Runtime.Entity last = world.CreateEntity("last"); Check(last.Index == 0 && last.Generation == ulong.MaxValue);
+                world.Destroy(last); global::Ncma.Runtime.Entity next = world.CreateEntity("next"); Check(next.Index == 1 && next.Generation == 1);
+                Reject(() => world.Resolve(last));
                 Array.Fill(Reservations(world), ulong.MaxValue);
                 var before = world.SerializeSnapshot(); ulong revision = world.Revision;
-                Reject(() => world.CreateObject("exhausted"));
-                Check(world.SerializeSnapshot() == before && world.Revision == revision && next.Name == "next");
+                Reject(() => world.CreateEntity("exhausted"));
+                Check(world.SerializeSnapshot() == before && world.Revision == revision && world.GetName(next) == "next");
             }),
             ("aborting final generation retires slot but preserves old live entity", () => {
-                var world = new World(); var a = world.CreateObject("old"); Reservations(world)[0] = ulong.MaxValue - 1;
-                world.BeginStep(); world.StageDestroy(a.PersistentId); var uuid = Guid.NewGuid(); world.StageCreate(uuid, "last");
+                var world = new World(); global::Ncma.Runtime.Entity a = world.CreateEntity("old"); Reservations(world)[0] = ulong.MaxValue - 1;
+                world.BeginStep(); world.StageDestroy(world.GetUuid(a)); var uuid = Guid.NewGuid(); world.StageCreate(uuid, "last");
                 var candidate = world.CandidateEntity(uuid); Check(candidate.Generation == ulong.MaxValue);
-                world.AbortStep(); Check(a.Name == "old"); a.Destroy();
-                var fresh = world.CreateObject("new"); Check(fresh.Entity.Index == 1); Reject(() => world.Resolve(candidate));
+                world.AbortStep(); Check(world.GetName(a) == "old"); world.Destroy(a);
+                global::Ncma.Runtime.Entity fresh = world.CreateEntity("new"); Check(fresh.Index == 1); Reject(() => world.Resolve(candidate));
             }),
             ("creation ordinal exhaustion fails without publishing", () => {
-                var world = new World(); var a = world.CreateObject("old");
+                var world = new World(); global::Ncma.Runtime.Entity a = world.CreateEntity("old");
                 typeof(World).GetField("_nextOrdinal", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(world, ulong.MaxValue);
-                Reject(() => world.CreateObject("overflow")); world.BeginStep();
+                Reject(() => world.CreateEntity("overflow")); world.BeginStep();
                 Reject(() => world.StageCreate(Guid.NewGuid(), "overflow")); world.AbortStep();
-                Check(world.Count == 1 && world.Revision == 1 && a.Name == "old");
+                Check(world.Count == 1 && world.Revision == 1 && world.GetName(a) == "old");
             }),
             ("failed restore preserves identities; successful restore invalidates all", () => {
-                var world = new World(); var a = world.CreateObject("old"); var snapshot = world.CaptureSnapshot();
+                var world = new World(); global::Ncma.Runtime.Entity a = world.CreateEntity("old"); var snapshot = world.CaptureSnapshot();
                 Reject(() => world.PrepareRestore(snapshot, _ => throw new ArgumentException("late restore failure")));
-                Check(world.Resolve(a.Entity) == a.Entity);
-                string json = world.SerializeSnapshot(); Guid uuid = a.PersistentId; world.RestoreSnapshot(snapshot); var fresh = world.FindObject(uuid);
-                Check(fresh.Entity.WorldIdentity != a.Entity.WorldIdentity && world.SerializeSnapshot() == json);
-                Reject(() => world.Resolve(a.Entity)); Check(world.Resolve(fresh.Entity) == fresh.Entity);
+                Check(world.Resolve(a) == a);
+                string json = world.SerializeSnapshot(); Guid uuid = world.GetUuid(a); world.RestoreSnapshot(snapshot); global::Ncma.Runtime.Entity fresh = world.FindEntity(uuid);
+                Check(fresh.WorldIdentity != a.WorldIdentity && world.SerializeSnapshot() == json);
+                Reject(() => world.Resolve(a)); Check(world.Resolve(fresh) == fresh);
             }),
             ("runtime identity cannot be serialized directly or nested", () => {
-                var world = new World(); var a = world.CreateObject("A").Entity;
+                var world = new World(); var a = world.CreateEntity("A");
                 Reject(() => JsonSerializer.Serialize(a)); Reject(() => JsonSerializer.Serialize(new { Nested = a }));
                 Reject(() => JsonSerializer.Deserialize<Entity>("{}"));
                 var registry = new ComponentRegistry();
@@ -123,7 +153,7 @@ internal static class EntityIdentityTests
                 Check(!json.Contains("generation", StringComparison.OrdinalIgnoreCase) && !json.Contains("worldIdentity", StringComparison.OrdinalIgnoreCase));
             }),
             ("owner thread/read-only and stale writes keep guards", () => {
-                var world = new World(); var entity = world.CreateObject("A").Entity; world.Set(entity, TransformData.Identity);
+                var world = new World(); var entity = world.CreateEntity("A"); world.Set(entity, TransformData.Identity);
                 Check(Task.Run(() => { try { world.Resolve(entity); return false; } catch (InvalidOperationException) { return true; } }).GetAwaiter().GetResult());
                 using (world.ReadOnly()) { Reject(() => world.Set(entity, TransformData.Identity)); Reject(() => world.Destroy(entity)); }
                 world.BeginStep(); Reject(() => world.Set(entity with { Generation = 0 }, TransformData.Identity));

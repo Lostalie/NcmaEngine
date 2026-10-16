@@ -14,7 +14,7 @@ internal static unsafe class SceneUiInteractionEditorProbe
     {
         var e=new SceneUiInteractionEvidence(requestPath);var context=ProjectContext.Load(e.Project);var routes=SceneUiInteractionEvidence.Routes();string[] native;
         using(var editor=new CandidatePresentation(e.Plugins,context,true,false,false,uiActions:routes)) {
-            editor.Start();var owner=editor.VerificationEditor;Guid target=owner.Document.World.GetObjects().Single(o=>o.Name=="HUD target").PersistentId;
+            editor.Start();var owner=editor.VerificationEditor;Guid target=owner.Document.World.GetUuid(owner.Document.World.GetEntities().Single(o=>owner.Document.World.GetName(o)=="HUD target"));
             var window=EnvironmentProductEvidence.Field<PlatformWindow>(editor,"_window");var state=window.State;state.Focused=1;state.InputReset=state.Overflow=0;state.Sequence=0;
             ulong frame=0,sequence=0;
             byte[] Draw(InputEvent[]? input=null,double dt=0,bool capture=false){state.Sequence=sequence;editor.SetWindowInputForVerification(state,input??[]);var f=new FrameContext(++frame,dt);byte[]? pixels=null;
@@ -27,7 +27,7 @@ internal static unsafe class SceneUiInteractionEditorProbe
                 var play=owner.StartPlay();Draw();Draw(dt:1d/60);var editHud=EnvironmentProductEvidence.Field<SceneUiPresentation>(editor,"_sceneHud");var hud=EnvironmentProductEvidence.Field<SceneUiPresentation>(editor,"_playHud");
                 Guid text=hud.Runtime.CaptureDefinition().Elements.Single(i=>i.Kind==UiKind.TextInput).Id;
                 e.Pass(hud.Runtime.Stamp.Instance!=editHud.Runtime.Stamp.Instance&&hud.Runtime.Widget(text).Text=="","fresh independent Play HUD");
-                Vector3 Position()=>play.Document.World.FindObject(target).Get<TransformData>().Position;
+                Vector3 Position()=>play.Document.World.Get<TransformData>(play.Document.World.FindEntity(target)).Position;
                 Draw([Pointer(1,20,20),Pointer(0,20,20)],1d/60);e.Pass(Position()==new Vector3(1,0,0),"Editor click consumes physical edge");
                 Draw([new(){Kind=1,Key=32,Action=1,Sequence=++sequence}],1d/60);e.Pass(Position()==new Vector3(2,0,0),"Editor Space consumes physical edge");
                 var changed=Draw([Pointer(1,20,60),Pointer(0,20,60),new(){Kind=5,Codepoint='A',Sequence=++sequence}],1d/60,true);

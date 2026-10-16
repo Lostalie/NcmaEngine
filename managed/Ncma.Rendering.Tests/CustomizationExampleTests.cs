@@ -92,13 +92,13 @@ internal static unsafe partial class Program
         bool approved = true;
         using var runtime = new PostProcessRuntime(renderer, files, library, modules, () => approved);
         var fixture = new SceneGpuFixture(output); var (document, camera, _, _) = fixture.Scene();
-        var light = document.World.GetObjects().Single(o => o.Has<DirectionalLightData>()); light.Set(light.Get<DirectionalLightData>() with { CastShadow = false });
-        document.World.CreateObject("Post").Set(active);
+        global::Ncma.Runtime.Entity light = document.World.GetEntities().Single(o => document.World.Has<DirectionalLightData>(o)); document.World.Set(light, document.World.Get<DirectionalLightData>(light) with { CastShadow = false });
+        document.World.Set(document.World.CreateEntity("Post"), active);
         using (var presets = EnvironmentPresetLibrary.LoadDeployment(deployed)) {
             var environment = presets.Package.CloneForAsset(Guid.NewGuid(), 1); var descriptor = EnvironmentAssetDescriptor.FromPackage(fixture.Project, environment);
             string path = Path.Combine(fixture.Root, descriptor.Path); Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllBytes(path, environment.CopyBytes());
             File.WriteAllBytes(Path.Combine(fixture.Root, "assets/environment.ncenv"), descriptor.Encode());
-            document.World.CreateObject("Environment").Set(new EnvironmentLightingData(1, environment.AssetId, 1, environment.ContentHash, 1, 0, true));
+            document.World.Set(document.World.CreateEntity("Environment"), new EnvironmentLightingData(1, environment.AssetId, 1, environment.ContentHash, 1, 0, true));
         }
         using var assets = SceneAssetPreparation.Prepare(fixture.Root, fixture.Project, document.CaptureSnapshot(), true);
         using var cache = new RenderResourceCache(renderer); var observations = new List<object>(); byte[]? stageImage = null;
@@ -126,7 +126,7 @@ internal static unsafe partial class Program
             bytes = GC.GetAllocatedBytesForCurrentThread() - bytes;
             observations.Add(new { full, bytes, elapsedMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds, builds });
             Pass(bytes == 0 && builds == built && renderer.PipelineStats.Creates == creates && renderer.PostStats.Publications == publications && renderer.ResourceStats.UploadedBytes == uploaded, "warm stable Submit no allocation/build/upload");
-            foreach (Action forbidden in new Action[] { () => document.World.CreateObject("illegal callback"), () => scene.Dispose(), () => Prepare(63) }) {
+            foreach (Action forbidden in new Action[] { () => document.World.CreateEntity("illegal callback"), () => scene.Dispose(), () => Prepare(63) }) {
                 duringBuild = forbidden; Bad(() => Prepare(63)); duringBuild = null;
                 Pass(scene.IsPostProcessReady && Draw().SequenceEqual(baseline), "reentry/write candidate failure retains old binding and pixels");
             }
@@ -138,9 +138,9 @@ internal static unsafe partial class Program
             Exception? ownerError = null; var thread = new Thread(() => { try { Prepare(); } catch (Exception e) { ownerError = e; } }); thread.Start(); thread.Join();
             Pass(ownerError is InvalidOperationException, "shared custom owner boundary");
             Prepare(63); Draw(63); Prepare(); Pass(Draw().SequenceEqual(baseline), "odd resize and back exact pixels");
-            light.Set(light.Get<DirectionalLightData>() with { CastShadow = true }); Prepare(); var shadowed = Draw();
+            document.World.Set(light, document.World.Get<DirectionalLightData>(light) with { CastShadow = true }); Prepare(); var shadowed = Draw();
             Pass(scene.Plan!.Resources.Single(r => r.Role == RenderRole.SceneShadow).Width == (full ? 512 : 1024) && !shadowed.SequenceEqual(baseline), "custom shadow topology actually executed");
-            light.Set(light.Get<DirectionalLightData>() with { CastShadow = false }); Prepare(); Pass(Draw().SequenceEqual(baseline), "shadow removal restores baseline");
+            document.World.Set(light, document.World.Get<DirectionalLightData>(light) with { CastShadow = false }); Prepare(); Pass(Draw().SequenceEqual(baseline), "shadow removal restores baseline");
         }
         cache.Trim(); Pass(renderer.PostStats.Bindings == 0 && renderer.PipelineStats.Pipelines == 0 && renderer.EnvironmentStats.Live == 0, "close returns GPU resources");
         Pass(renderer.Stats.ValidationErrors == 0 && renderer.Stats.ValidationWarnings == 0, "API0/0");

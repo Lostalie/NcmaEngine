@@ -25,10 +25,10 @@ static BehaviourBindingData Binding() => new(Guid.NewGuid(), "Not.Installed.Beha
 static SceneDocument Populated()
 {
     var doc = new SceneDocument("Scene", Registry());
-    var logic = doc.World.CreateObject("Logic");
-    logic.Set(new Health(100));
-    var hero = doc.World.CreateObject("Hero"); hero.Set(TransformData.Identity);
-    doc.SetBindings(logic.PersistentId, [Binding(), Binding()]);
+    global::Ncma.Runtime.Entity logic = doc.World.CreateEntity("Logic");
+    doc.World.Set(logic, new Health(100));
+    global::Ncma.Runtime.Entity hero = doc.World.CreateEntity("Hero"); doc.World.Set(hero, TransformData.Identity);
+    doc.SetBindings(doc.World.GetUuid(logic), [Binding(), Binding()]);
     _ = doc.Revision; return doc;
 }
 static void AtomicReject(SceneDocument doc, SceneDocumentSnapshot snapshot)
@@ -58,8 +58,8 @@ var cases = new (string, Action)[]
         var doc = Populated(); byte[] before = doc.CaptureBytes(); var snapshot = doc.CaptureSnapshot();
         doc.RestoreBytes(before);
         Check(before.SequenceEqual(doc.CaptureBytes()));
-        var logic = doc.World.FindObject(snapshot.Objects[0].Id);
-        Check(!logic.Has<TransformData>() && logic.Get<Health>().Points == 100 && doc.GetBindings(logic.PersistentId).Length == 2);
+        global::Ncma.Runtime.Entity logic = doc.World.FindEntity(snapshot.Objects[0].Id);
+        Check(!doc.World.Has<TransformData>(logic) && doc.World.Get<Health>(logic).Points == 100 && doc.GetBindings(doc.World.GetUuid(logic)).Length == 2);
     }),
     ("Snapshot and binding copies never alias live data", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes(); var snapshot = doc.CaptureSnapshot();
@@ -69,21 +69,21 @@ var cases = new (string, Action)[]
         Check(before.SequenceEqual(doc.CaptureBytes()));
     }),
     ("Deleted UUID metadata removed; external World writes observed", () => {
-        var doc = Populated(); var obj = doc.World.GetObjects()[0]; ulong rev = doc.Revision;
-        obj.Destroy(); Check(doc.Revision == rev + 1);
+        var doc = Populated(); global::Ncma.Runtime.Entity obj = doc.World.GetEntities()[0]; ulong rev = doc.Revision;
+        doc.World.Destroy(obj); Check(doc.Revision == rev + 1);
         var clone = new SceneDocument("Clone", Registry()); clone.RestoreBytes(doc.CaptureBytes());
         Check(clone.World.Count == 1);
     }),
     ("Bindings update revision without changing World handles", () => {
-        var doc = Populated(); var obj = doc.World.GetObjects()[0]; ulong rev = doc.Revision; ulong wr = doc.World.Revision;
-        var bindings = doc.GetBindings(obj.PersistentId); bindings[0] = bindings[0] with { Enabled = true };
-        doc.SetBindings(obj.PersistentId, bindings);
-        Check(doc.Revision == rev + 1 && doc.World.Revision == wr && obj.Name == "Logic");
+        var doc = Populated(); global::Ncma.Runtime.Entity obj = doc.World.GetEntities()[0]; ulong rev = doc.Revision; ulong wr = doc.World.Revision;
+        var bindings = doc.GetBindings(doc.World.GetUuid(obj)); bindings[0] = bindings[0] with { Enabled = true };
+        doc.SetBindings(doc.World.GetUuid(obj), bindings);
+        Check(doc.Revision == rev + 1 && doc.World.Revision == wr && doc.World.GetName(obj) == "Logic");
     }),
     ("Restore invalidates old references and increments once", () => {
-        var doc = Populated(); var obj = doc.World.GetObjects()[0]; var id = obj.PersistentId; ulong rev = doc.Revision;
+        var doc = Populated(); global::Ncma.Runtime.Entity obj = doc.World.GetEntities()[0]; var id = doc.World.GetUuid(obj); ulong rev = doc.Revision;
         doc.RestoreSnapshot(doc.CaptureSnapshot(), rev);
-        Check(doc.Revision == rev + 1 && doc.World.FindObject(id).Name == "Logic"); Reject(() => _ = obj.Name);
+        Check(doc.Revision == rev + 1 && doc.World.GetName(doc.World.FindEntity(id)) == "Logic"); Reject(() => _ = doc.World.GetName(obj));
     }),
     ("Expected revision rejects before mutation", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes();
@@ -125,8 +125,8 @@ var cases = new (string, Action)[]
     ("Removed scene snapshots are rejected without compatibility conversion", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes();
         ulong revision = doc.Revision; Guid identity = doc.World.Identity;
-        var live = doc.World.GetObjects()[0];
-        string id = live.PersistentId.ToString();
+        global::Ncma.Runtime.Entity live = doc.World.GetEntities()[0];
+        string id = doc.World.GetUuid(live).ToString();
         var payloads = new[] {
             """{"version":6,"name":"Legacy","objects":[]}""",
             """{"version":1,"name":"Legacy","objects":[{"id":"OBJECT_ID","name":"Logic","language":0,"hasTransform":false,"transform":{},"bindings":[]}]}""".Replace("OBJECT_ID", id),
@@ -135,7 +135,7 @@ var cases = new (string, Action)[]
         foreach (string payload in payloads) {
             Reject(() => doc.RestoreBytes(Encoding.UTF8.GetBytes(payload)));
             Check(before.SequenceEqual(doc.CaptureBytes()) && revision == doc.Revision && identity == doc.World.Identity);
-            Check(live.Name == "Logic"); // Failed legacy input does not invalidate live references.
+            Check(doc.World.GetName(live) == "Logic"); // Failed legacy input does not invalidate live references.
         }
         var assembly = typeof(SceneDocument).Assembly;
         Check(assembly.GetType("Ncma.Scene.SceneSnapshotCodec") is null);
@@ -150,13 +150,13 @@ var cases = new (string, Action)[]
         AtomicReject(doc, s with { Objects = Enumerable.Repeat(s.Objects[0], World.MaxObjects + 1).ToArray() });
     }),
     ("Bounded encoder rejects total size and oversized bindings before commit", () => {
-        var doc = new SceneDocument(); var a = doc.World.CreateObject("A"); var b = doc.World.CreateObject("B");
+        var doc = new SceneDocument(); global::Ncma.Runtime.Entity a = doc.World.CreateEntity("A"); global::Ncma.Runtime.Entity b = doc.World.CreateEntity("B");
         var properties = Enumerable.Range(0, 1024).Select(i => new ExportData(i.ToString() + new string('x', 120), ExportKind.Double, 1)).ToArray();
         var values = Enumerable.Range(0, 12).Select(_ => new BehaviourBindingData(Guid.NewGuid(), "Type", false, properties)).ToArray();
-        doc.SetBindings(a.PersistentId, values);
+        doc.SetBindings(doc.World.GetUuid(a), values);
         byte[] before = doc.CaptureBytes(); ulong rev = doc.Revision;
         var more = Enumerable.Range(0, 24).Select(_ => new BehaviourBindingData(Guid.NewGuid(), "Type", false, properties)).ToArray();
-        Reject(() => doc.SetBindings(b.PersistentId, more));
+        Reject(() => doc.SetBindings(doc.World.GetUuid(b), more));
         Check(before.SequenceEqual(doc.CaptureBytes()) && rev == doc.Revision);
     }),
     ("Validator-normalized payload and total document size stay bounded", () => {
@@ -190,12 +190,12 @@ var cases = new (string, Action)[]
         var registry = ComponentRegistry.CreateDefault();
         registry.Register<Health>("game.health", 1, """{"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}""", value => {
             if (armed) {
-                try { doc!.World.CreateObject("Reentrant"); } catch (InvalidOperationException) { blocked++; }
-                try { doc!.SetBindings(doc.World.GetObjects()[0].PersistentId, []); } catch (InvalidOperationException) { blocked++; }
+                try { doc!.World.CreateEntity("Reentrant"); } catch (InvalidOperationException) { blocked++; }
+                try { doc!.SetBindings(doc.World.GetUuid(doc.World.GetEntities()[0]), []); } catch (InvalidOperationException) { blocked++; }
             }
             return value;
         });
-        doc = new("Protected", registry); var obj = doc.World.CreateObject("Hero"); obj.Set(new Health(1));
+        doc = new("Protected", registry); global::Ncma.Runtime.Entity obj = doc.World.CreateEntity("Hero"); doc.World.Set(obj, new Health(1));
         var snapshot = doc.CaptureSnapshot(); armed = true; doc.RestoreSnapshot(snapshot);
         Check(blocked == 2 && doc.World.Count == 1);
     }),
@@ -205,9 +205,9 @@ var cases = new (string, Action)[]
         SceneDocumentFiles.Save(doc, path);
         var clone = new SceneDocument("Clone", Registry()); SceneDocumentFiles.Load(clone, path);
         Check(before.SequenceEqual(File.ReadAllBytes(path)) && before.SequenceEqual(clone.CaptureBytes()));
-        Check(clone.World.GetObjects()[0].Get<Health>().Points == 100 && !clone.World.GetObjects()[0].Has<TransformData>());
-        clone.World.GetObjects()[0].Set(new Health(7)); SceneDocumentFiles.Save(clone, path);
-        SceneDocumentFiles.Load(doc, path); Check(doc.World.GetObjects()[0].Get<Health>().Points == 7);
+        Check(clone.World.Get<Health>(clone.World.GetEntities()[0]).Points == 100 && !clone.World.Has<TransformData>(clone.World.GetEntities()[0]));
+        clone.World.Set(clone.World.GetEntities()[0], new Health(7)); SceneDocumentFiles.Save(clone, path);
+        SceneDocumentFiles.Load(doc, path); Check(doc.World.Get<Health>(doc.World.GetEntities()[0]).Points == 7);
         Check(!Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.tmp").Any());
     }),
     ("Unsupported text and document versions have no migration path", () => {
@@ -245,7 +245,7 @@ var cases = new (string, Action)[]
     }),
     ("Save failure preserves target and leaves no temporary files", () => {
         var doc = Populated(); var path = AssetPath("Locked.ncmascene"); SceneDocumentFiles.Save(doc, path);
-        byte[] before = File.ReadAllBytes(path); doc.World.GetObjects()[0].Set(new Health(2));
+        byte[] before = File.ReadAllBytes(path); doc.World.Set(doc.World.GetEntities()[0], new Health(2));
         using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)) {
             Reject(() => SceneDocumentFiles.Save(doc, path));
         }
@@ -254,9 +254,9 @@ var cases = new (string, Action)[]
     }),
     ("Complete snapshot cloning keeps edit/play isolated", () => {
         var edit = Populated(); byte[] before = edit.CaptureBytes(); var play = new SceneDocument("Play", Registry());
-        play.RestoreBytes(before); play.World.GetObjects()[0].Set(new Health(2));
-        var id = play.World.GetObjects()[0].PersistentId; play.SetBindings(id, []);
-        Check(before.SequenceEqual(edit.CaptureBytes()) && edit.World.GetObjects()[0].Get<Health>().Points == 100);
+        play.RestoreBytes(before); play.World.Set(play.World.GetEntities()[0], new Health(2));
+        var id = play.World.GetUuid(play.World.GetEntities()[0]); play.SetBindings(id, []);
+        Check(before.SequenceEqual(edit.CaptureBytes()) && edit.World.Get<Health>(edit.World.GetEntities()[0]).Points == 100);
     })
 };
 int failures = 0;

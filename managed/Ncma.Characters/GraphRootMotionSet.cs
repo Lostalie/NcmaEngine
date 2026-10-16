@@ -30,11 +30,11 @@ internal sealed class GraphRootMotionSet : IDisposable
         _animators = animators;
         var tracks = new Dictionary<(Guid, int), RootMotionTrack>(); int keys = 0;
         try {
-            foreach (var obj in world.GetObjects().Where(o => o.Has<RootMotionData>() && o.Has<AnimatorData>())) {
+            foreach (global::Ncma.Runtime.Entity obj in world.GetEntities().Where(o => world.Has<RootMotionData>(o) && world.Has<AnimatorData>(o))) {
                 if (assets is null || animators is null) throw new ArgumentException("Graph root requires the shared prepared Animator host.");
                 _lease ??= assets.Assets.AcquireLease();
-                var source = obj.Get<AnimatorData>(); var skin = obj.Get<SkinnedMeshData>(); var root = obj.Get<RootMotionData>();
-                var program = animators.PreparedProgram(obj.PersistentId, _lease);
+                var source = world.Get<AnimatorData>(obj); var skin = world.Get<SkinnedMeshData>(obj); var root = world.Get<RootMotionData>(obj);
+                var program = animators.PreparedProgram(world.GetUuid(obj), _lease);
                 var graph = (RuntimeAnimationGraphAsset)_lease.Require(source.GraphId, AssetKind.AnimationGraph);
                 var d = graph.CopyDefinition(); var rig = (RuntimeDataAsset)_lease.Require(source.SkeletonId, AssetKind.Skeleton);
                 var model = (RuntimeDataAsset)_lease.Require(skin.CharacterId, AssetKind.Character); var mesh = _lease.RequireMesh(skin.MeshId, AssetKind.SkinnedMesh);
@@ -54,7 +54,7 @@ internal sealed class GraphRootMotionSet : IDisposable
                     if (anchor is not null && !Same(anchor.InitialPlanar, track.InitialPlanar)) throw new ArgumentException("Graph root clips must share their initial planar anchor.");
                     anchor ??= track; selected.Add(id, track);
                 }
-                _entries.Add(obj.PersistentId, new(obj.PersistentId, new(selected, program.MaximumPlanInstructions,program), anchor!, program.MaximumPlanInstructions,program.Montage is not null));
+                _entries.Add(world.GetUuid(obj), new(world.GetUuid(obj), new(selected, program.MaximumPlanInstructions,program), anchor!, program.MaximumPlanInstructions,program.Montage is not null));
             }
         } catch { Dispose(); throw; }
     }
@@ -82,7 +82,7 @@ internal sealed class GraphRootMotionSet : IDisposable
         foreach (var e in _entries.Values) {
             var frame = _animators!.ReadFrame(e.Id);
             if (frame.Context.Tick != world.Tick || frame.Context != e.Pending.Context || frame.InstanceId != e.Pending.InstanceId) throw new InvalidOperationException("Graph root commit identity mismatch.");
-            e.Accepted = world.FindObject(e.Id).Get<TransformData>().Position - e.Start;
+            e.Accepted = world.Get<TransformData>(world.FindEntity(e.Id)).Position - e.Start;
             e.Committed = new(e.Id, world.Tick, Guid.Empty, 0, e.Desired, e.Yaw, e.Accepted); // Composite graph has no single clip clock.
         }
     }

@@ -52,7 +52,7 @@ internal static unsafe partial class Program
         Check(edit.Invoke(settings,permission).Changed,"Configure via Core.");
         byte[] saved=owner.Document.CaptureBytes();
         var copy=new SceneDocument("Copy",RenderConfiguration.CreateRegistry());copy.RestoreBytes(saved);
-        Check(copy.World.FindObject(objectId).Get<RenderConfiguration>()==config,"Persisted configuration value/UUID.");
+        Check(copy.World.Get<RenderConfiguration>(copy.World.FindEntity(objectId))==config,"Persisted configuration value/UUID.");
         using var service=new RenderPipelineService(renderer);service.Configure(config,256,256);
         var generation=service.Generation;service.Configure(config,256,256);Check(service.Generation==generation,"Unchanged plan not reused.");
         RenderingEditorAdapter.RegisterInspections(edit,service,renderer);
@@ -400,8 +400,8 @@ internal static unsafe partial class Program
             var frameView=new RenderFrameView(Guid.NewGuid(),1,Guid.NewGuid(),new Ncma.Runtime.TransformData(new(1,2,3),System.Numerics.Quaternion.Identity,new(2,3,4)));
             Span<float> matrix=stackalloc float[16];frameView.CopyColumnMajorModel(matrix);
             Check(matrix[0]==2 && matrix[5]==3 && matrix[10]==4 && matrix[12]==1 && matrix[13]==2 && matrix[14]==3,"Matrix ABI transpose/translation.");
-            var emptyWorld=new Ncma.Runtime.World();var nonSpatial=emptyWorld.CreateObject("Empty");
-            Check(!RenderFrameView.Capture(emptyWorld,nonSpatial.PersistentId).HasReferenceModel,"Empty object silently gained a transform.");
+            var emptyWorld=new Ncma.Runtime.World();global::Ncma.Runtime.Entity nonSpatial=emptyWorld.CreateEntity("Empty");
+            Check(!RenderFrameView.Capture(emptyWorld,emptyWorld.GetUuid(nonSpatial)).HasReferenceModel,"Empty object silently gained a transform.");
             var caps=RenderCapabilities.ReferenceDx11;
             var graph=new ReferencePreviewPipeline().Build(256,256);var compiled=graph.Compile(caps);
             Check(ReferenceEquals(compiled,graph.Compile(caps)) && compiled.PassCount==3,"Cached default graph");

@@ -35,11 +35,11 @@ internal static unsafe partial class Program
         }
         internal (SceneDocument Document,Guid Camera,Guid Ground,Guid Caster) Scene() {
             var d=new SceneDocument("Scene GPU",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
-            var ground=d.World.CreateObject("Ground");ground.Set(TransformData.Identity with{Position=new(0,0,-4.5f),Scale=new(4,4,1)});ground.Set(new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
-            var caster=d.World.CreateObject("Off-camera caster");caster.Set(TransformData.Identity with{Position=new(3,0,-.5f)});caster.Set(new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
-            var camera=d.World.CreateObject("Explicit camera");camera.Set(TransformData.Identity);camera.Set(CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
-            var light=d.World.CreateObject("Primary light");light.Set(TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,MathF.PI/4)});light.Set(DirectionalLightData.Default);
-            d.ValidateAuthoring();return(d,camera.PersistentId,ground.PersistentId,caster.PersistentId);
+            global::Ncma.Runtime.Entity ground=d.World.CreateEntity("Ground");d.World.Set(ground, TransformData.Identity with{Position=new(0,0,-4.5f),Scale=new(4,4,1)});d.World.Set(ground, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
+            global::Ncma.Runtime.Entity caster=d.World.CreateEntity("Off-camera caster");d.World.Set(caster, TransformData.Identity with{Position=new(3,0,-.5f)});d.World.Set(caster, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
+            global::Ncma.Runtime.Entity camera=d.World.CreateEntity("Explicit camera");d.World.Set(camera, TransformData.Identity);d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
+            global::Ncma.Runtime.Entity light=d.World.CreateEntity("Primary light");d.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,MathF.PI/4)});d.World.Set(light, DirectionalLightData.Default);
+            d.ValidateAuthoring();return(d,d.World.GetUuid(camera),d.World.GetUuid(ground),d.World.GetUuid(caster));
         }
     }
     private static bool PinLocked(string path) { try{using var file=new FileStream(path,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite|FileShare.Delete);return false;}catch(IOException){return true;} }
@@ -58,19 +58,19 @@ internal static unsafe partial class Program
             ulong pickFrame=frame-1;Guid pickView=edit.View.FrameIdentity;
             Reject(()=>edit.Pick(pickFrame+1,pickView,.5f,.5f));Reject(()=>edit.Pick(pickFrame,Guid.NewGuid(),.5f,.5f));
             ulong resources=renderer.ResourceStats.Creates,plans=renderer.PipelineStats.Creates;
-            var cameraData=editor.Document.World.FindObject(camera).Get<CameraData>();
-            editor.Document.World.FindObject(camera).Set(cameraData with{ViewportX=.5f,ViewportWidth=.5f});
+            var cameraData=editor.Document.World.Get<CameraData>(editor.Document.World.FindEntity(camera));
+            editor.Document.World.Set(editor.Document.World.FindEntity(camera), cameraData with{ViewportX=.5f,ViewportWidth=.5f});
             Reject(()=>edit.Pick(pickFrame,pickView,.5f,.5f)); // Old pixels/Undo-like revision cannot select a current World.
             edit.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();
             Check(changed[(128*256+64)*4]==0&&changed[(64*256+192)*4]>0,"Normalized camera viewport/offscreen letterbox not deterministic");
-            editor.Document.World.FindObject(camera).Set(cameraData);edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
+            editor.Document.World.Set(editor.Document.World.FindEntity(camera), cameraData);edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
             for(int i=0;i<8;i++) {
                 var play=editor.StartPlay();
                 using(var session=new SceneRenderSession(renderer,cache,play.Document.World)) {session.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot());
                     Check(renderer.ResourceStats.Creates==resources,"Edit/Play failed to share immutable GPU resources");
                     session.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original),"Play/Editor source parity");
-                    var objectTransform=play.Document.World.FindObject(ground).Get<TransformData>();
-                    play.Document.World.FindObject(ground).Set(objectTransform with{Position=new(1,0,-4.5f),Scale=new(2,1,1)});
+                    var objectTransform=play.Document.World.Get<TransformData>(play.Document.World.FindEntity(ground));
+                    play.Document.World.Set(play.Document.World.FindEntity(ground), objectTransform with{Position=new(1,0,-4.5f),Scale=new(2,1,1)});
                     session.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(!changed.SequenceEqual(original),"Committed nonuniform object transform did not affect GPU scene");
                 }
                 editor.StopPlay();edit.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original),"Play/Stop mutated Edit");
@@ -113,8 +113,8 @@ internal static unsafe partial class Program
             var cam=new SceneCameraView(Guid.Empty,Matrix4x4.CreateOrthographic(4,4,.1f,1000),Vector3.Zero,CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
             int side=Math.Max(1,(int)Math.Ceiling(Math.Sqrt(count)));
             for(int i=0;i<count;i++) {
-                var obj=document.World.CreateObject("Instance "+i);obj.Set(TransformData.Identity with{Position=new(-1.9f+i%side*3.8f/side,-1.9f+i/side*3.8f/side,-4.5f),Scale=new(.018f,.018f,.018f)});
-                obj.Set(new StaticMeshData(fixture.Mesh,fixture.Set,true,true,uint.MaxValue));
+                global::Ncma.Runtime.Entity obj=document.World.CreateEntity("Instance "+i);document.World.Set(obj, TransformData.Identity with{Position=new(-1.9f+i%side*3.8f/side,-1.9f+i/side*3.8f/side,-4.5f),Scale=new(.018f,.018f,.018f)});
+                document.World.Set(obj, new StaticMeshData(fixture.Mesh,fixture.Set,true,true,uint.MaxValue));
             }
             using var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
             using var session=new SceneRenderSession(renderer,cache,document.World);session.Prepare(prepared,document.CaptureSnapshot());

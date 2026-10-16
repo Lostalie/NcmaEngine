@@ -13,8 +13,8 @@ internal static unsafe partial class Program
     {
         plugins=Path.GetFullPath(plugins);output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);
         var repo=new DirectoryInfo(plugins);while(!File.Exists(Path.Combine(repo.FullName,"Build.bat")))repo=repo.Parent??throw new Exception("Repo missing");
-        var fixture=new SkinFixture(output);var(document,camera,_)=fixture.Scene();var probe=document.World.CreateObject("Script lifetime probe");probe.Set(TransformData.Identity);
-        document.SetBindings(probe.PersistentId,[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture.RecoveryProbe",true,[])]);
+        var fixture=new SkinFixture(output);var(document,camera,_)=fixture.Scene();global::Ncma.Runtime.Entity probe=document.World.CreateEntity("Script lifetime probe");document.World.Set(probe, TransformData.Identity);
+        document.SetBindings(document.World.GetUuid(probe),[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture.RecoveryProbe",true,[])]);
         string configuration=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         string gameplay=Path.Combine(repo.FullName,"managed/Ncma.Gameplay.UiFixture/bin",configuration,"net8.0/Ncma.Gameplay.UiFixture.dll");
         File.Copy(gameplay,Path.Combine(fixture.Root,"gameplay.dll"));File.Copy(Path.ChangeExtension(gameplay,".deps.json"),Path.Combine(fixture.Root,"gameplay.deps.json"));
@@ -30,7 +30,7 @@ internal static unsafe partial class Program
             var play=captured=owner.StartPlay();app.Run(clock,host,18);if(paused)play.Pause();app.Run(clock,host,2);
             var world=play.Document.World;var status=play.Status;var history=owner.Edit.State;
             var animation=EnvironmentProductEvidence.Field<SceneRenderSession>(host,"_playScene").Animation!;
-            TransformData Probe()=>world.FindObject(probe.PersistentId).Get<TransformData>();
+            TransformData Probe()=>world.Get<TransformData>(world.FindEntity(document.World.GetUuid(probe)));
             Pass(Probe().Position.X==play.Tick&&Probe().Position.Z==1&&Probe().Scale.Y==2,$"original private script and lifecycle counters: tick={play.Tick}, value={Probe()}");
             var stale=host.ReviewGraphicsRecovery();if(paused){play.Resume();play.Pause();}else play.AdvanceFrame(.005);
             // Running changes debt; Paused Pause/Resume returns equal numerical status, so use

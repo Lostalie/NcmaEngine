@@ -21,8 +21,8 @@ internal static class GameplayUiCases
         internal readonly UiProbe Probe = new();
         internal Fixture(bool start = true)
         {
-            var obj = Document.World.CreateObject("Before");
-            Document.SetBindings(obj.PersistentId, [new(Guid.NewGuid(), "Test.UiProbe", true, [])]);
+            global::Ncma.Runtime.Entity obj = Document.World.CreateEntity("Before");
+            Document.SetBindings(Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Test.UiProbe", true, [])]);
             Play = new(Document, FrameTimePolicy.Strict);
             Play.RegisterUiAction("hud.activate", GameplayUiActionKind.Activate);
             Play.RegisterUiAction("hud.value", GameplayUiActionKind.ValueChanged);
@@ -80,11 +80,11 @@ internal static class GameplayUiCases
                 Check(f.Document.CaptureBytes().SequenceEqual(bytes) && f.Play.UiInput.Count == 0);
                 f.Probe.Fixed = () => {
                     Check(f.Probe.Context.UiInput[0] == action && f.Probe.Context.UiInput.Stamp == stamp);
-                    f.Probe.Context.Commands.Rename(f.Document.World.GetObjects()[0].PersistentId, "Accepted");
-                    Check(f.Document.World.GetObjects()[0].Name == "Before");
+                    f.Probe.Context.Commands.Rename(f.Document.World.GetUuid(f.Document.World.GetEntities()[0]), "Accepted");
+                    Check(f.Document.World.GetName(f.Document.World.GetEntities()[0]) == "Before");
                 };
                 f.Step(); var retained = f.Probe.Last!;
-                Check(f.Play.Tick == 1 && f.Document.World.GetObjects()[0].Name == "Accepted" && retained.Count == 1);
+                Check(f.Play.Tick == 1 && f.Document.World.GetName(f.Document.World.GetEntities()[0]) == "Accepted" && retained.Count == 1);
                 f.Probe.Fixed = null; f.Step(); Check(f.Probe.Last!.Count == 0 && retained[0] == action);
                 f.Play.Stop(); Check(f.Probe.OutsideEmpty && f.Play.UiInput.Count == 0 && retained.Stamp == stamp);
             }),
@@ -184,9 +184,9 @@ internal static class GameplayUiCases
             ("World or metadata revision change drops queued observations before fixed update", () => {
                 foreach (bool metadata in new[] { false, true }) {
                     using var f = new Fixture(); var stamp = f.Bind(); f.Play.SubmitUiActions(stamp, [Action()]);
-                    var obj = f.Document.World.GetObjects()[0];
-                    if (metadata) f.Document.SetBindings(obj.PersistentId, f.Document.GetBindings(obj.PersistentId));
-                    else obj.Name = "External";
+                    global::Ncma.Runtime.Entity obj = f.Document.World.GetEntities()[0];
+                    if (metadata) f.Document.SetBindings(f.Document.World.GetUuid(obj), f.Document.GetBindings(f.Document.World.GetUuid(obj)));
+                    else f.Document.World.Rename(obj, "External");
                     Check(f.Play.CurrentUiInputStamp.SceneRevision != stamp.SceneRevision);
                     Reject(() => f.Play.SubmitUiActions(stamp, [Action(2)]));
                     f.Step(); Check(f.Probe.Last!.Count == 0); Reject(() => _ = f.Play.CurrentUiInputStamp);
@@ -215,7 +215,7 @@ internal static class GameplayUiCases
                 f.Play.SubmitUiActions(stamp, [Action()]);
                 f.Probe.Fixed = () => {
                     Check(f.Probe.Context.UiInput.Count == 1);
-                    f.Probe.Context.Commands.Rename(f.Document.World.GetObjects()[0].PersistentId, "Must not commit");
+                    f.Probe.Context.Commands.Rename(f.Document.World.GetUuid(f.Document.World.GetEntities()[0]), "Must not commit");
                     throw new InvalidOperationException("gameplay failure");
                 };
                 f.Step(); Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 0 && f.Document.CaptureBytes().SequenceEqual(bytes));

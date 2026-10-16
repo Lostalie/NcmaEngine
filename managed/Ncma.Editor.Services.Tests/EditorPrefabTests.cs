@@ -27,11 +27,11 @@ internal static class EditorPrefabTests
         .AllowComponent("game.label", 1, []);
     private static (EditorWorkspace Ui, EditorPrefabWorkspace Flow, Guid[] Ids, Guid Asset) Setup(EditorSessionOwner owner)
     {
-        var a = owner.Document.World.CreateObject("Spatial");
-        var b = owner.Document.World.CreateObject("Empty");
-        Guid asset = Guid.NewGuid(); a.Set(TransformData.Identity); a.Set(new AssetValue(asset));
+        global::Ncma.Runtime.Entity a = owner.Document.World.CreateEntity("Spatial");
+        global::Ncma.Runtime.Entity b = owner.Document.World.CreateEntity("Empty");
+        Guid asset = Guid.NewGuid(); owner.Document.World.Set(a, TransformData.Identity); owner.Document.World.Set(a, new AssetValue(asset));
         owner.ActivateEditor(); var ui = new EditorWorkspace(owner);
-        return (ui, new(ui, Policy(owner.Document.World.Components)), [a.PersistentId, b.PersistentId], asset);
+        return (ui, new(ui, Policy(owner.Document.World.Components)), [owner.Document.World.GetUuid(a), owner.Document.World.GetUuid(b)], asset);
     }
     private static PrefabDocument Extract(EditorPrefabWorkspace flow, EditorWorkspace ui, Guid[] ids) =>
         flow.Extract(ui.Stamp, ids, Guid.NewGuid(), "Hero", new(1, 2, 3));
@@ -41,7 +41,7 @@ internal static class EditorPrefabTests
             using var owner = new EditorSessionOwner("Prefab", activateEditor: false, components: Registry());
             var (ui, flow, ids, asset) = Setup(owner); ui.Select(ui.Stamp, ids[0]);
             byte[] before = owner.Document.CaptureBytes(); var state = owner.Edit!.State;
-            var reference = owner.Document.World.FindObject(ids[0]).Entity;
+            var reference = owner.Document.World.FindEntity(ids[0]);
             var prefab = Extract(flow, ui, ids); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components));
             var plan = flow.InspectPlacement(ui.Stamp, bytes, 1, new(10, 20, 30), d => d == new PrefabDependency(asset, "StaticMesh"));
             Check(plan.Stamp == ui.Stamp && plan.WorldId == owner.Document.World.Identity && plan.TemplateHash.Length == 64);
@@ -52,7 +52,7 @@ internal static class EditorPrefabTests
             plan.Preview.Objects[0] = plan.Preview.Objects[0] with { Name = "Caller tamper" };
             var second = flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => true);
             Check(second.Preview.Objects.All(o => o.Name != "Caller tamper") && second.Preview.InstanceId != plan.Preview.InstanceId);
-            Check(owner.Edit.State == state && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Document.World.FindObject(ids[0]).Entity == reference);
+            Check(owner.Edit.State == state && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Document.World.FindEntity(ids[0]) == reference);
             Check(!owner.Edit.Describe().Any(d => d.Name.Contains("prefab", StringComparison.OrdinalIgnoreCase)));
         });
         yield return ("M3.7 editor rejects stale/draft/Play/frozen/foreign registry and thread", () => {
@@ -66,7 +66,7 @@ internal static class EditorPrefabTests
             owner.Edit!.SetFrozen(true); Reject(() => Extract(flow, ui, ids)); owner.Edit.SetFrozen(false);
             Reject(() => new EditorPrefabWorkspace(ui, Policy(Registry())));
             Task.Run(() => Reject(() => Extract(flow, ui, ids))).GetAwaiter().GetResult();
-            owner.Document.World.FindObject(ids[0]).Name = "External change"; Reject(() => Extract(flow, ui, ids));
+            owner.Document.World.Rename(owner.Document.World.FindEntity(ids[0]), "External change"); Reject(() => Extract(flow, ui, ids));
         });
         yield return ("M3.7 editor dependency/type identity/base version and callback guards", () => {
             using var owner = new EditorSessionOwner("Prefab", activateEditor: false, components: Registry());
@@ -74,7 +74,7 @@ internal static class EditorPrefabTests
             byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components)); byte[] before = owner.Document.CaptureBytes();
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 2, new(0, 0, 0), _ => true));
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => false));
-            Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { owner.Document.World.CreateObject("Callback write"); return true; }));
+            Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { owner.Document.World.CreateEntity("Callback write"); return true; }));
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { Extract(flow, ui, ids); return true; }));
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { owner.Edit!.SetFrozen(true); return true; })); owner.Edit!.SetFrozen(false);
             var collision = prefab with { AssetId = ids[0] };
@@ -89,7 +89,7 @@ internal static class EditorPrefabTests
                 Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.World.Count == 2);
             }
             using (var owner = new EditorSessionOwner("Full", activateEditor: false)) {
-                for (int i = 0; i < World.MaxObjects; i++) owner.Document.World.CreateObject("Empty");
+                for (int i = 0; i < World.MaxObjects; i++) owner.Document.World.CreateEntity("Empty");
                 owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var flow = new EditorPrefabWorkspace(ui, new(owner.Document.World.Components));
                 Guid id = owner.Document.CaptureSnapshot().Objects[0].Id;
                 var prefab = Extract(flow, ui, [id]); byte[] bytes = PrefabDocumentCodec.Encode(prefab, new(owner.Document.World.Components)); var stamp = ui.Stamp;
@@ -99,7 +99,7 @@ internal static class EditorPrefabTests
         yield return ("M3.7 editor complete scene byte budget rejects otherwise valid small template", () => {
             using var owner = new EditorSessionOwner("Bytes", activateEditor: false, components: Registry());
             var ids = new List<Guid>(); string text = new('x', 60000);
-            for (int i = 0; i < 65; i++) { var obj = owner.Document.World.CreateObject("Large value"); obj.Set(new Label(text)); if (i < 5) ids.Add(obj.PersistentId); }
+            for (int i = 0; i < 65; i++) { global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Large value"); owner.Document.World.Set(obj, new Label(text)); if (i < 5) ids.Add(owner.Document.World.GetUuid(obj)); }
             owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var flow = new EditorPrefabWorkspace(ui, Policy(owner.Document.World.Components));
             var prefab = Extract(flow, ui, ids.ToArray()); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components));
             Check(bytes.Length < World.MaxSnapshotBytes && owner.Document.CaptureBytes().Length < World.MaxSnapshotBytes); var stamp = ui.Stamp;
@@ -115,8 +115,8 @@ internal static class EditorPrefabTests
             using var owner = new EditorSessionOwner("Operations", activateEditor: false, components: registry);
             var ids = new List<Guid>();
             for (int i = 0; i < 16; i++) {
-                var obj = owner.Document.World.CreateObject("Values"); ids.Add(obj.PersistentId);
-                obj.Set(new C0()); obj.Set(new C1()); obj.Set(new C2()); obj.Set(new C3()); obj.Set(new C4()); obj.Set(new C5()); obj.Set(new C6());
+                global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Values"); ids.Add(owner.Document.World.GetUuid(obj));
+                owner.Document.World.Set(obj, new C0()); owner.Document.World.Set(obj, new C1()); owner.Document.World.Set(obj, new C2()); owner.Document.World.Set(obj, new C3()); owner.Document.World.Set(obj, new C4()); owner.Document.World.Set(obj, new C5()); owner.Document.World.Set(obj, new C6());
             }
             owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var policy = new PrefabPolicy(registry);
             for (int i = 0; i < 7; i++) policy.AllowComponent("game.c" + i, 1, []);

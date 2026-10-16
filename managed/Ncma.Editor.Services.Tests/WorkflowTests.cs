@@ -25,7 +25,7 @@ internal static class WorkflowTests
         public void After(Guid connection, CapabilityRequest request, CapabilityResult result)
         {
             if (!result.Changed) return;
-            try { edit.Document.World.CreateObject("Forbidden observer write"); } catch (InvalidOperationException) { WriteBlocked = true; }
+            try { edit.Document.World.CreateEntity("Forbidden observer write"); } catch (InvalidOperationException) { WriteBlocked = true; }
             NestedBlocked = edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))).Code == "edit_busy";
             throw new InvalidOperationException("Injected receipt observer failure after commit.");
         }
@@ -204,7 +204,7 @@ internal static class WorkflowTests
         });
         yield return ("M6.9 owner/monitor observation forbids live writes/nested invocation and preserves editor-only registration", () => {
             using var owner = new EditorSessionOwner("Observe"); var edit = owner.Edit!; ulong revision = edit.Revision;
-            Reject(() => edit.ObserveReadOnly(() => owner.Document.World.CreateObject("Forbidden")));
+            Reject(() => edit.ObserveReadOnly(() => owner.Document.World.CreateEntity("Forbidden")));
             var nested = edit.ObserveReadOnly(() => edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))));
             Check(nested.Code == "edit_busy" && owner.Document.World.Count == 0 && edit.Revision == revision);
             var direct = edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, EditorWorkflows.Capability, JsonSerializer.SerializeToElement(new { op = "next", workflowId = Guid.NewGuid() })));

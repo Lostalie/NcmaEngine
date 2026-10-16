@@ -64,8 +64,8 @@ var cases = new (string, Action)[]
     ("Editor Play is isolated and stopping restores editing", () => {
         using var owner = new EditorSessionOwner("Edit");
         owner.LoadGameplay(assembly);
-        var obj = owner.Document.World.CreateObject("Character"); obj.Set(TransformData.Identity);
-        owner.Document.SetBindings(obj.PersistentId, [new(Guid.NewGuid(), "Ncma.Gameplay.Sample.RotatorBehaviour", true, [])]);
+        global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Character"); owner.Document.World.Set(obj, TransformData.Identity);
+        owner.Document.SetBindings(owner.Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Ncma.Gameplay.Sample.RotatorBehaviour", true, [])]);
         owner.Edit!.Resynchronize();
         byte[] before = owner.Document.CaptureBytes();
         var play = owner.StartPlay();
@@ -80,8 +80,8 @@ var cases = new (string, Action)[]
         using var owner = new EditorSessionOwner("Edit");
         owner.LoadGameplay(assembly);
         Guid generation = owner.Catalog.Snapshot.Generation;
-        var obj = owner.Document.World.CreateObject("Bad");
-        owner.Document.SetBindings(obj.PersistentId, [new(Guid.NewGuid(), "Missing.Type", true, [])]);
+        global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Bad");
+        owner.Document.SetBindings(owner.Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Missing.Type", true, [])]);
         Reject(() => owner.LoadGameplay(assembly));
         Check(owner.Catalog.Snapshot.Generation == generation);
         Reject(() => owner.StartPlay()); Check(owner.Play is null && !owner.Edit!.State.Frozen);

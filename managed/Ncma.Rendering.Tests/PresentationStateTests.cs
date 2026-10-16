@@ -36,7 +36,7 @@ internal static unsafe partial class Program
                 var blocks=DerivedAssetCodec.Decode(fixture.Plan.DerivedBytes);
                 var animated=fixture.Manifest.Clips.Select(id=>(Id:id,Clip:ModelPayloadCodec.DecodeClip(blocks.Single(b=>b.AssetId==id).Data).Clip))
                     .OrderByDescending(c=>c.Clip.Tracks.Sum(t=>t.Keys.Count(k=>k.Value!=t.Keys[0].Value))).First();
-                document.World.FindObject(objects[0]).Set(document.World.FindObject(objects[0]).Get<Ncma.Animation.ClipPlaybackData>() with{ClipId=animated.Id});
+                document.World.Set(document.World.FindEntity(objects[0]), document.World.Get<Ncma.Animation.ClipPlaybackData>(document.World.FindEntity(objects[0])) with{ClipId=animated.Id});
                 using var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
                 using var play=new PlaySession(document);play.Start(_=>throw new Exception("No behaviour factory expected"));
                 RendererSession renderer=new(native,window,256,256);RenderResourceCache cache=new(renderer);

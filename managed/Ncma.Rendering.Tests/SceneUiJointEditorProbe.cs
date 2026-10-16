@@ -25,7 +25,7 @@ internal static class SceneUiJointEditorProbe
                 var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;
                 e.Pass(renderer.SkinStats.Meshes>0&&renderer.SkinStats.Batches>0&&renderer.PipelineStats.GeometryDraws>0&&renderer.PipelineStats.ShadowDraws>0&&renderer.EnvironmentStats.Live>0&&renderer.PostStats.Bindings==1&&renderer.UiTargetStats.Targets==1,"all real FBX skin geometry shadow IBL Bloom HUD subsystems live");
                 if(high){
-                    var selected=owner.Document.World.GetObjects().Single(o=>o.Has<SceneShadowData>());Guid shadowId=selected.PersistentId;
+                    global::Ncma.Runtime.Entity selected=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<SceneShadowData>(o));Guid shadowId=owner.Document.World.GetUuid(selected);
                     var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=shadowId,typeId=SceneShadowData.TypeId,version=1,data=owner.Document.World.Components.Encode(new SceneShadowData(1,Ncma.Assets.SceneShadowQuality.Off))}}}));
                     e.Pass(edit.Invoke(command).Status=="denied","joint shadow default Agent denied");
                     e.Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[shadowId],componentScope:[SceneShadowData.TypeId])).Changed,"joint scoped shadow Off");
@@ -33,11 +33,11 @@ internal static class SceneUiJointEditorProbe
                     workspace.History(workspace.Stamp,false);e.Pass(Draw().SequenceEqual(baseline),"High exact joint Undo");
                     workspace.History(workspace.Stamp,true);e.Pass(Draw().SequenceEqual(off),"Off exact joint Redo");workspace.History(workspace.Stamp,false);Draw();
                 }
-                var post=owner.Document.World.GetObjects().Single(o=>o.Has<PostProcessData>());Guid id=post.PersistentId;var original=post.Get<PostProcessData>();
+                global::Ncma.Runtime.Entity post=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<PostProcessData>(o));Guid id=owner.Document.World.GetUuid(post);var original=owner.Document.World.Get<PostProcessData>(post);
                 void Set(PostProcessData value){var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=id,typeId=PostProcessData.TypeId,version=1,data=owner.Document.World.Components.Encode(value)}}}));e.Pass(edit.Invoke(command).Status=="denied","default Agent cannot mutate");e.Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[id],componentScope:[PostProcessData.TypeId])).Changed,"original scoped joint command");}
                 Set(original with{ExposureEv=-1});var changed=Draw();Hud(changed);e.Pass(!changed.SequenceEqual(baseline),"scene exposure changes without re-toning HUD");
                 workspace.History(workspace.Stamp,false);e.Pass(Draw().SequenceEqual(baseline),"exact joint Undo");workspace.History(workspace.Stamp,true);e.Pass(Draw().SequenceEqual(changed),"exact joint Redo");Set(original);e.Pass(Draw().SequenceEqual(baseline),"joint restore");
-                var hudObject=owner.Document.World.GetObjects().Single(o=>o.Has<SceneUiData>());Guid hudId=hudObject.PersistentId;
+                global::Ncma.Runtime.Entity hudObject=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<SceneUiData>(o));Guid hudId=owner.Document.World.GetUuid(hudObject);
                 var nextHud=SceneUiState.Read(Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(Path.Combine(context.Root,"next-ui.ncmascene"))))!.Value;
                 var hudCommand=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=hudId,typeId=SceneUiData.TypeId,version=1,data=owner.Document.World.Components.Encode(nextHud)}}}));
                 e.Pass(edit.Invoke(hudCommand).Status=="denied","joint HUD change default denied");e.Pass(edit.Invoke(hudCommand,new(["ncma.scene.transaction"],objectScope:[hudId],componentScope:[SceneUiData.TypeId])).Changed,"joint explicit prepublished HUD generation3");

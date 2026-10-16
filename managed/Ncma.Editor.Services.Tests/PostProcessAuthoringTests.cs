@@ -36,7 +36,7 @@ internal static class PostProcessAuthoringTests
                 new{op="set_component",objectId=mesh,typeId=StaticMeshData.TypeId,version=1,data=Owner.Document.World.Components.Encode(new StaticMeshData(Guid.NewGuid(),Guid.NewGuid(),true,true,1))}]);}
             Id=Workspace.CreateObject(Workspace.Stamp);View=new(Workspace,null,Root,workspaceStyle:true);Build();Click("添加后处理配置（关闭）");
         }
-        internal PostProcessData Value=>Owner.Document.World.FindObject(Id).Get<PostProcessData>();
+        internal PostProcessData Value=>Owner.Document.World.Get<PostProcessData>(Owner.Document.World.FindEntity(Id));
         internal void Build()=>View.Build(++_frame,1280,720);
         internal GuiItem Item(string name){var found=View.Items.ToArray().Where(i=>Encoding.UTF8.GetString(View.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))==name).ToArray();if(found.Length!=1)throw new Exception("Missing/duplicate GUI item: "+name+"; "+Encoding.UTF8.GetString(View.Text));return found[0];}
         internal GuiEvent Event(string name,uint phase=3,double value=0){var i=Item(name);var f=View.Frame;return new(){Kind=i.Kind,WidgetHigh=i.WidgetHigh,WidgetLow=i.WidgetLow,Phase=phase,Value=value,Frame=f.Frame,ViewGeneration=f.ViewGeneration,DocumentGeneration=f.DocumentGeneration,Revision=f.Revision};}

@@ -4,7 +4,6 @@ using Ncma.Runtime;
 
 namespace Ncma.Scene.Rendering;
 using Vector3 = System.Numerics.Vector3;
-using GameObject = Ncma.Runtime.GameObject;
 
 // Copied immutable values only. These records contain no World, GameObject, lease or native address.
 public readonly record struct SceneCameraView(Guid ObjectId, Matrix4x4 ViewProjection, Vector3 Position, CameraData Data);
@@ -56,8 +55,8 @@ public sealed class RenderSceneExtractor
         if (_cached is not null && _cached.WorldId == worldId && _cached.Revision == revision && _assets == assets.Identity &&
             _camera == cameraObject && _browser == browserCamera && _width == width && _height == height && _skin == gpuSkin && ReferenceEquals(_presentationTransforms,presentationTransforms)) return _cached;
         using var read = _world.ReadOnly();
-        var objects = _world.GetObjects(); var diagnostics = new List<SceneRenderDiagnostic>();
-        TransformData Transform(GameObject obj)=>presentationTransforms is not null && presentationTransforms.TryGetValue(obj.PersistentId,out var t) ? t : obj.Get<TransformData>();
+        var objects = _world.GetEntities(); var diagnostics = new List<SceneRenderDiagnostic>();
+        TransformData Transform(global::Ncma.Runtime.Entity obj)=>presentationTransforms is not null && presentationTransforms.TryGetValue(_world.GetUuid(obj),out var t) ? t : _world.Get<TransformData>(obj);
         SceneCameraView? camera = browserCamera;
         if (camera is { } provided && (provided.ObjectId != Guid.Empty || !SceneRenderValidation.Finite(provided.ViewProjection) ||
             !Matrix4x4.Invert(provided.ViewProjection, out var inverseCamera) || !SceneRenderValidation.Finite(inverseCamera) || !PreparedSceneAssets.Finite(provided.Position)))
@@ -65,50 +64,50 @@ public sealed class RenderSceneExtractor
         if (camera is { } b) _ = CameraData.Validate(b.Data);
         if (camera is null && cameraObject != Guid.Empty)
         {
-            GameObject? selected = null;
-            foreach (var item in objects) if (item.PersistentId == cameraObject) { selected = item; break; }
-            if (selected is null || !selected.Has<CameraData>() || !selected.Has<TransformData>()) diagnostics.Add(new(cameraObject, "camera_missing"));
-            else try { camera = CreateCamera(cameraObject, Transform(selected), selected.Get<CameraData>(), width, height); }
+            global::Ncma.Runtime.Entity? selected = null;
+            foreach (global::Ncma.Runtime.Entity item in objects) if (_world.GetUuid(item) == cameraObject) { selected = item; break; }
+            if (selected is not { } selectedEntity || !_world.Has<CameraData>(selectedEntity) || !_world.Has<TransformData>(selectedEntity)) diagnostics.Add(new(cameraObject, "camera_missing"));
+            else try { camera = CreateCamera(cameraObject, Transform(selectedEntity), _world.Get<CameraData>(selectedEntity), width, height); }
                 catch (ArgumentException) { diagnostics.Add(new(cameraObject, "camera_invalid")); }
         }
         else if (camera is null) diagnostics.Add(new(Guid.Empty, "camera_selection_required"));
         SceneLightView? light = null; int primaryLights = 0;
-        foreach (var obj in objects)
+        foreach (global::Ncma.Runtime.Entity obj in objects)
         {
-            if (!obj.Has<DirectionalLightData>()) continue;
-            var data = obj.Get<DirectionalLightData>(); if (!data.IsPrimary) continue;
-            if (++primaryLights > 1) { diagnostics.Add(new(obj.PersistentId, "multiple_primary_lights")); continue; }
+            if (!_world.Has<DirectionalLightData>(obj)) continue;
+            var data = _world.Get<DirectionalLightData>(obj); if (!data.IsPrimary) continue;
+            if (++primaryLights > 1) { diagnostics.Add(new(_world.GetUuid(obj), "multiple_primary_lights")); continue; }
             try
             {
                 _ = DirectionalLightData.Validate(data);
-                if (!obj.Has<TransformData>()) throw new ArgumentException();
+                if (!_world.Has<TransformData>(obj)) throw new ArgumentException();
                 var t = Transform(obj); _ = SceneRenderValidation.Model(t);
-                light = new(obj.PersistentId, Vector3.Transform(-Vector3.UnitZ, t.Rotation), data);
+                light = new(_world.GetUuid(obj), Vector3.Transform(-Vector3.UnitZ, t.Rotation), data);
             }
-            catch (ArgumentException) { diagnostics.Add(new(obj.PersistentId, "light_invalid")); }
+            catch (ArgumentException) { diagnostics.Add(new(_world.GetUuid(obj), "light_invalid")); }
         }
         if (primaryLights > 1) light = null; // Never silently select the first light in an invalid committed World.
         var geometry = new List<SceneDrawItem>(); var casters = new List<SceneDrawItem>(); var indices = new Dictionary<Guid, int>();
-        foreach (var obj in objects)
+        foreach (global::Ncma.Runtime.Entity obj in objects)
         {
-            Guid id = obj.PersistentId;
-            if (obj.Has<StaticMeshData>() && obj.Has<SkinnedMeshData>()) { diagnostics.Add(new(id, "geometry_conflict")); continue; }
-            bool skin = obj.Has<SkinnedMeshData>();
+            Guid id = _world.GetUuid(obj);
+            if (_world.Has<StaticMeshData>(obj) && _world.Has<SkinnedMeshData>(obj)) { diagnostics.Add(new(id, "geometry_conflict")); continue; }
+            bool skin = _world.Has<SkinnedMeshData>(obj);
             if (skin && !gpuSkin) { diagnostics.Add(new(id, "skinning_unprepared")); continue; }
-            if (!skin && !obj.Has<StaticMeshData>()) continue;
-            var s = skin ? SkinnedMeshData.Validate(obj.Get<SkinnedMeshData>()) : default;
-            var mesh = skin ? new StaticMeshData(s.MeshId,s.MaterialSetId,s.Visible,s.CastShadow,s.LayerMask) : obj.Get<StaticMeshData>(); if (!mesh.Visible) continue;
+            if (!skin && !_world.Has<StaticMeshData>(obj)) continue;
+            var s = skin ? SkinnedMeshData.Validate(_world.Get<SkinnedMeshData>(obj)) : default;
+            var mesh = skin ? new StaticMeshData(s.MeshId,s.MaterialSetId,s.Visible,s.CastShadow,s.LayerMask) : _world.Get<StaticMeshData>(obj); if (!mesh.Visible) continue;
             try
             {
                 _ = StaticMeshData.Validate(mesh);
-                if (!obj.Has<TransformData>()) { diagnostics.Add(new(id, "transform_missing")); continue; }
+                if (!_world.Has<TransformData>(obj)) { diagnostics.Add(new(id, "transform_missing")); continue; }
                 var model = SceneRenderValidation.Model(Transform(obj));
                 if (!assets.TryFind(mesh.MeshId, out var info)) { diagnostics.Add(new(id, "asset_missing", mesh.MeshId)); continue; }
                 if (info!.Kind != (skin ? AssetKind.SkinnedMesh : AssetKind.StaticMesh)) { diagnostics.Add(new(id, "asset_kind_mismatch", mesh.MeshId)); continue; }
                 if (!assets.TryFind(mesh.MaterialSetId, out var material)) diagnostics.Add(new(id, "asset_missing", mesh.MaterialSetId));
                 else if (material!.Kind != AssetKind.MaterialSet || material.MaterialSlots < Math.Max(1, info.MaterialSlots))
                 { diagnostics.Add(new(id, "material_set_invalid", mesh.MaterialSetId)); continue; }
-                MaterialOverrideData? overridden = obj.Has<MaterialOverrideData>() ? MaterialOverrideData.Validate(obj.Get<MaterialOverrideData>()) : null;
+                MaterialOverrideData? overridden = _world.Has<MaterialOverrideData>(obj) ? MaterialOverrideData.Validate(_world.Get<MaterialOverrideData>(obj)) : null;
                 if (overridden is { MaterialId: var materialId } && materialId != Guid.Empty)
                 {
                     if (!assets.TryFind(materialId, out var overrideInfo)) diagnostics.Add(new(id, "asset_missing", materialId));

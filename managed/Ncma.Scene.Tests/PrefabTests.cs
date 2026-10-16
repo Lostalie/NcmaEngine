@@ -16,13 +16,13 @@ internal static class PrefabTests
         var registry=ComponentRegistry.CreateDefault();
         registry.Register<Link>("game.link",1,"""{"type":"object","additionalProperties":false,"required":["target","asset","label"],"properties":{"target":{"type":"string"},"asset":{"type":"string"},"label":{"type":"string"}}}""",v=>v);
         registry.Register<RuntimeOnly>("game.runtime_only",1,"""{"type":"object","additionalProperties":false,"required":["handle"],"properties":{"handle":{"type":"integer"}}}""",v=>v);
-        var scene=new SceneDocument("Source",registry);var a=scene.World.CreateObject("A");var b=scene.World.CreateObject("B");var empty=scene.World.CreateObject("Empty");Guid asset=Guid.NewGuid();
-        a.Set(new TransformData(new(3,4,5),Quaternion.CreateFromYawPitchRoll(.4f,.2f,-.3f),new(2,.5f,3)));b.Set(new TransformData(new(-2,7,1),Quaternion.Identity,Vector3.One));
-        a.Set(new Link(b.PersistentId,asset,b.PersistentId.ToString("D")));
-        scene.SetBindings(a.PersistentId,[new(Guid.NewGuid(),"Game.Known",true,[new("Speed",ExportKind.Float,.75)])]);
+        var scene=new SceneDocument("Source",registry);global::Ncma.Runtime.Entity a=scene.World.CreateEntity("A");global::Ncma.Runtime.Entity b=scene.World.CreateEntity("B");global::Ncma.Runtime.Entity empty=scene.World.CreateEntity("Empty");Guid asset=Guid.NewGuid();
+        scene.World.Set(a, new TransformData(new(3,4,5),Quaternion.CreateFromYawPitchRoll(.4f,.2f,-.3f),new(2,.5f,3)));scene.World.Set(b, new TransformData(new(-2,7,1),Quaternion.Identity,Vector3.One));
+        scene.World.Set(a, new Link(scene.World.GetUuid(b),asset,scene.World.GetUuid(b).ToString("D")));
+        scene.SetBindings(scene.World.GetUuid(a),[new(Guid.NewGuid(),"Game.Known",true,[new("Speed",ExportKind.Float,.75)])]);
         var policy=new PrefabPolicy(registry,trusted??(binding=>binding.TypeName=="Game.Known"&&binding.Exports.Length==1&&binding.Exports[0].Name=="Speed"&&binding.Exports[0].Kind==ExportKind.Float))
             .AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object),new("/asset",PrefabReferenceRole.Asset,"StaticMesh")]);
-        Guid[] ids=[a.PersistentId,b.PersistentId,empty.PersistentId];return new(scene,ids,policy,new(scene,ids,()=>true),asset);
+        Guid[] ids=[scene.World.GetUuid(a),scene.World.GetUuid(b),scene.World.GetUuid(empty)];return new(scene,ids,policy,new(scene,ids,()=>true),asset);
     }
     private static PrefabDocument Extract(Fixture f)=>PrefabTemplates.Extract(f.Scene,f.Ids,f.Scope,f.Policy,Guid.NewGuid(),"Template",new(1,2,3),f.Scene.Revision,f.Scene.World.Identity);
     public static IEnumerable<(string,Action)> Cases()
@@ -42,12 +42,12 @@ internal static class PrefabTests
             Reject(()=>Run(f.Ids,new(f.Scene,[f.Ids[0]],()=>true),rev,world));Reject(()=>Run(f.Ids,new(f.Scene,f.Ids,()=>false),rev,world));
             Reject(()=>Run(f.Ids,new(new SceneDocument(),f.Ids,()=>true),rev,world));Reject(()=>Run(f.Ids,f.Scope,rev+1,world));Reject(()=>Run(f.Ids,f.Scope,rev,Guid.NewGuid()));
             Reject(()=>Run([f.Ids[0],f.Ids[0]],f.Scope,rev,world));Reject(()=>Run([],f.Scope,rev,world));Reject(()=>Run([Guid.Empty],f.Scope,rev,world));
-            Reject(()=>Run(f.Ids,new(f.Scene,f.Ids,()=>{f.Scene.World.CreateObject("Callback mutation");return true;}),rev,world));
+            Reject(()=>Run(f.Ids,new(f.Scene,f.Ids,()=>{f.Scene.World.CreateEntity("Callback mutation");return true;}),rev,world));
             Task.Run(()=>Reject(()=>Run(f.Ids,f.Scope,rev,world))).GetAwaiter().GetResult();Check(before.SequenceEqual(f.Scene.CaptureBytes()));
         });
         yield return("M3.7-A outside references, unknown components and untrusted behaviours rejected",()=> {
             var f=Make();Reject(()=>PrefabTemplates.Extract(f.Scene,[f.Ids[0]],f.Scope,f.Policy,Guid.NewGuid(),"Template",new(0,0,0),f.Scene.Revision,f.Scene.World.Identity));
-            f.Scene.World.FindObject(f.Ids[2]).Set(new RuntimeOnly(123));Reject(()=>Extract(f));
+            f.Scene.World.Set(f.Scene.World.FindEntity(f.Ids[2]), new RuntimeOnly(123));Reject(()=>Extract(f));
             var noBindings=Make();var policy=new PrefabPolicy(noBindings.Scene.World.Components).AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object),new("/asset",PrefabReferenceRole.Asset,"StaticMesh")]);
             Reject(()=>PrefabTemplates.Extract(noBindings.Scene,noBindings.Ids,noBindings.Scope,policy,Guid.NewGuid(),"Template",new(0,0,0),noBindings.Scene.Revision,noBindings.Scene.World.Identity));
             Fixture? mutating=null;mutating=Make(_=>{mutating!.Scene.SetBindings(mutating.Ids[0],[]);return true;});byte[] before=mutating.Scene.CaptureBytes();Reject(()=>Extract(mutating));Check(before.SequenceEqual(mutating.Scene.CaptureBytes()));
@@ -76,12 +76,12 @@ internal static class PrefabTests
             Check(preview.InstanceId!=second.InstanceId&&!preview.Objects.Select(o=>o.Id).Intersect(second.Objects.Select(o=>o.Id)).Any());
             Check(preview.Objects.All(o=>!prefab.Objects.Any(t=>t.Id==o.Id))&&preview.Objects.Single(o=>o.Name=="Empty").Components.Length==0);
             var a=preview.Objects.Single(o=>o.Name=="A");var b=preview.Objects.Single(o=>o.Name=="B");Check(f.Policy.Components.Decode<Link>(a.Components.Single(c=>c.TypeId=="game.link")).Target==b.Id);
-            var original=f.Scene.World.FindObject(f.Ids[0]).Get<TransformData>();var placed=f.Policy.Components.Decode<TransformData>(a.Components.Single(c=>c.TypeId=="ncma.transform"));
+            var original=f.Scene.World.Get<TransformData>(f.Scene.World.FindEntity(f.Ids[0]));var placed=f.Policy.Components.Decode<TransformData>(a.Components.Single(c=>c.TypeId=="ncma.transform"));
             Check(placed.Position==new Vector3(12,22,32)&&placed.Scale==original.Scale&&placed.Rotation==original.Rotation);
             Matrix4x4 Matrix(TransformData t)=>Matrix4x4.CreateScale(t.Scale)*Matrix4x4.CreateFromQuaternion(t.Rotation)*Matrix4x4.CreateTranslation(t.Position);
             var expected=Vector3.Transform(new(2,-3,4),Matrix(original)*Matrix4x4.CreateTranslation(new Vector3(9,18,27)));
             Check(Vector3.Distance(expected,Vector3.Transform(new(2,-3,4),Matrix(placed)))<1e-4,"Template * translation matrix order");
-            var expanded=new SceneDocument("Preview",f.Policy.Components);expanded.RestoreSnapshot(new(1,"Preview",preview.Objects));expanded.World.FindObject(a.Id).Destroy();Check(expanded.World.Count==2&&expanded.World.FindObject(b.Id).PersistentId==b.Id,"Flat deletion unexpectedly removed a related object");
+            var expanded=new SceneDocument("Preview",f.Policy.Components);expanded.RestoreSnapshot(new(1,"Preview",preview.Objects));expanded.World.Destroy(expanded.World.FindEntity(a.Id));Check(expanded.World.Count==2&&expanded.World.GetUuid(expanded.World.FindEntity(b.Id))==b.Id,"Flat deletion unexpectedly removed a related object");
             Check(f.Scene.World.Count==3&&preview.OperationCount==7); // create3 + Transform2 + link1 + bindings1
         });
         yield return("M3.7-A owned codec/preview copies and stable cold bytes",()=> {
@@ -110,8 +110,8 @@ internal static class PrefabTests
             _=PrefabDocumentCodec.Decode(Encoding.UTF8.GetBytes(node.ToJsonString()),checking);
         });
         yield return("M3.7-A empty-container templates do not require Transform registration",()=> {
-            var registry=new ComponentRegistry();var scene=new SceneDocument("Empty",registry);var obj=scene.World.CreateObject("Logic container");var policy=new PrefabPolicy(registry);
-            var prefab=PrefabTemplates.Extract(scene,[obj.PersistentId],new(scene,[obj.PersistentId],()=>true),policy,Guid.NewGuid(),"Empty template",new(0,0,0),scene.Revision,scene.World.Identity);
+            var registry=new ComponentRegistry();var scene=new SceneDocument("Empty",registry);global::Ncma.Runtime.Entity obj=scene.World.CreateEntity("Logic container");var policy=new PrefabPolicy(registry);
+            var prefab=PrefabTemplates.Extract(scene,[scene.World.GetUuid(obj)],new(scene,[scene.World.GetUuid(obj)],()=>true),policy,Guid.NewGuid(),"Empty template",new(0,0,0),scene.Revision,scene.World.Identity);
             var preview=PrefabTemplates.PreviewExpansion(prefab,policy,new(10,20,30),[]);Check(preview.OperationCount==1&&preview.Objects[0].Components.Length==0);
         });
         yield return("M3.7-A object, operation and placement budgets reject detached partial plans",()=> {

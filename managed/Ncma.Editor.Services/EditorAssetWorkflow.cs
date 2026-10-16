@@ -156,24 +156,24 @@ public sealed class EditorAssetWorkflow : IDisposable
     }
     public void Assign(EditorViewStamp stamp,Guid objectId,Guid assetId,AssetKind kind)
     {
-        Writable(stamp);var root=Inspect(assetId,kind);var obj=_workspace.Owner.Document.World.FindObject(objectId);
+        Writable(stamp);var root=Inspect(assetId,kind);global::Ncma.Runtime.Entity obj=_workspace.Owner.Document.World.FindEntity(objectId);
         if(!root.Subassets.Any(s=>s.AssetId==assetId&&s.Kind==kind&&!s.Tombstone)&&kind!=AssetKind.MaterialSet)throw new EditRejectedException("typed_subasset_required");
         var registry=_workspace.Owner.Document.World.Components;object operation;
         if(kind==AssetKind.Clip) {
-            if(!obj.Has<SkinnedMeshData>()||obj.Get<SkinnedMeshData>().CharacterId!=root.AssetId)throw new EditRejectedException("clip_rig_mismatch");
-            var value=obj.Has<Ncma.Animation.ClipPlaybackData>()?obj.Get<Ncma.Animation.ClipPlaybackData>():new(assetId,true,true,1,0);
+            if(!_workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)||_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).CharacterId!=root.AssetId)throw new EditRejectedException("clip_rig_mismatch");
+            var value=_workspace.Owner.Document.World.Has<Ncma.Animation.ClipPlaybackData>(obj)?_workspace.Owner.Document.World.Get<Ncma.Animation.ClipPlaybackData>(obj):new(assetId,true,true,1,0);
             operation=Set(Ncma.Animation.ClipPlaybackData.TypeId,registry.Encode(value with{ClipId=assetId}));
-        } else if(kind==AssetKind.StaticMesh&&obj.Has<StaticMeshData>()) {
+        } else if(kind==AssetKind.StaticMesh&&_workspace.Owner.Document.World.Has<StaticMeshData>(obj)) {
             var part=Assets.Imports.Generations.CopyManifest(root).Meshes.Single(m=>m.Mesh==assetId);
-            operation=Set(StaticMeshData.TypeId,registry.Encode(obj.Get<StaticMeshData>() with{MeshId=assetId,MaterialSetId=part.Materials}));
+            operation=Set(StaticMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<StaticMeshData>(obj) with{MeshId=assetId,MaterialSetId=part.Materials}));
         }
-        else if(kind==AssetKind.SkinnedMesh&&obj.Has<SkinnedMeshData>()) {
-            if(obj.Get<SkinnedMeshData>().CharacterId!=root.AssetId)throw new EditRejectedException("asset_character_mismatch");
+        else if(kind==AssetKind.SkinnedMesh&&_workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)) {
+            if(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).CharacterId!=root.AssetId)throw new EditRejectedException("asset_character_mismatch");
             var part=Assets.Imports.Generations.CopyManifest(root).Meshes.Single(m=>m.Mesh==assetId);
             var skeleton=root.Subassets.Single(s=>s.Kind==AssetKind.Skeleton&&!s.Tombstone);
-            operation=Set(SkinnedMeshData.TypeId,registry.Encode(obj.Get<SkinnedMeshData>() with{CharacterId=root.AssetId,MeshId=assetId,SkeletonId=skeleton.AssetId,MaterialSetId=part.Materials}));
-        } else if(kind==AssetKind.MaterialSet&&obj.Has<StaticMeshData>()) {RequireCoverage(obj.Get<StaticMeshData>().MeshId,AssetKind.StaticMesh);operation=Set(StaticMeshData.TypeId,registry.Encode(obj.Get<StaticMeshData>() with{MaterialSetId=assetId}));}
-        else if(kind==AssetKind.MaterialSet&&obj.Has<SkinnedMeshData>()) {RequireCoverage(obj.Get<SkinnedMeshData>().MeshId,AssetKind.SkinnedMesh);operation=Set(SkinnedMeshData.TypeId,registry.Encode(obj.Get<SkinnedMeshData>() with{MaterialSetId=assetId}));}
+            operation=Set(SkinnedMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj) with{CharacterId=root.AssetId,MeshId=assetId,SkeletonId=skeleton.AssetId,MaterialSetId=part.Materials}));
+        } else if(kind==AssetKind.MaterialSet&&_workspace.Owner.Document.World.Has<StaticMeshData>(obj)) {RequireCoverage(_workspace.Owner.Document.World.Get<StaticMeshData>(obj).MeshId,AssetKind.StaticMesh);operation=Set(StaticMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<StaticMeshData>(obj) with{MaterialSetId=assetId}));}
+        else if(kind==AssetKind.MaterialSet&&_workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)) {RequireCoverage(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).MeshId,AssetKind.SkinnedMesh);operation=Set(SkinnedMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj) with{MaterialSetId=assetId}));}
         else throw new EditRejectedException("asset_component_kind_mismatch");
         _workspace.Transaction(stamp,"Assign typed asset",[operation],objectId);
         object Set(string type,JsonElement data)=>new{op="set_component",objectId,typeId=type,version=1,data};
@@ -184,10 +184,10 @@ public sealed class EditorAssetWorkflow : IDisposable
     {
         Verify();if(Prepared?.Ticket!=prepared.Ticket)throw new EditRejectedException("asset_import_ticket_mismatch");
         var ids=prepared.Record.Subassets.Select(s=>s.AssetId).Append(prepared.Record.AssetId).ToHashSet();
-        return _workspace.Owner.Document.World.GetObjects().Where(obj=>
-            obj.Has<StaticMeshData>()&&(ids.Contains(obj.Get<StaticMeshData>().MeshId)||ids.Contains(obj.Get<StaticMeshData>().MaterialSetId))||
-            obj.Has<SkinnedMeshData>()&&(ids.Contains(obj.Get<SkinnedMeshData>().CharacterId)||ids.Contains(obj.Get<SkinnedMeshData>().MeshId)||ids.Contains(obj.Get<SkinnedMeshData>().MaterialSetId))||
-            obj.Has<Ncma.Animation.ClipPlaybackData>()&&ids.Contains(obj.Get<Ncma.Animation.ClipPlaybackData>().ClipId)).Select(obj=>obj.PersistentId).ToArray();
+        return _workspace.Owner.Document.World.GetEntities().Where(obj=>
+            _workspace.Owner.Document.World.Has<StaticMeshData>(obj)&&(ids.Contains(_workspace.Owner.Document.World.Get<StaticMeshData>(obj).MeshId)||ids.Contains(_workspace.Owner.Document.World.Get<StaticMeshData>(obj).MaterialSetId))||
+            _workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)&&(ids.Contains(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).CharacterId)||ids.Contains(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).MeshId)||ids.Contains(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).MaterialSetId))||
+            _workspace.Owner.Document.World.Has<Ncma.Animation.ClipPlaybackData>(obj)&&ids.Contains(_workspace.Owner.Document.World.Get<Ncma.Animation.ClipPlaybackData>(obj).ClipId)).Select(obj=>_workspace.Owner.Document.World.GetUuid(obj)).ToArray();
     }
     public void Dispose()
     {

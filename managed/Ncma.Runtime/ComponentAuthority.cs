@@ -43,9 +43,9 @@ public sealed partial class World
         Guid[] owned = objects.ToArray();
         var unique = new HashSet<Guid>();
         foreach (Guid uuid in owned)
-            if (!unique.Add(uuid) || !FindObject(uuid).Has<T>() || _authorities.ContainsKey((uuid, typeof(T))))
+            if (!unique.Add(uuid) || !Has<T>(FindEntity(uuid)) || _authorities.ContainsKey((uuid, typeof(T))))
                 throw new ArgumentException("Duplicate, missing or already owned component authority.");
-        if (freezeMembership && GetObjects().Count(o => o.Has<T>()) != owned.Length)
+        if (freezeMembership && GetEntities().Count(o => Has<T>(o)) != owned.Length)
             throw new ArgumentException("Frozen component membership must cover every existing target.");
         var authority = new ComponentAuthority(this, _identity, typeof(T), owned, publishRequired, freezeMembership);
         foreach (Guid uuid in owned)
@@ -67,7 +67,7 @@ public sealed partial class World
                 authority.Released || !authority.PublishRequired || authority.Component != typeof(T) ||
                 !_authorities.TryGetValue((uuid, typeof(T)), out var owner) || owner != authority)
                 throw new InvalidOperationException("Expired or foreign component write authority.");
-            SetCore(FindObject(uuid).Entity, value, authority);
+            SetCore(FindEntity(uuid), value, authority);
             _authorityWrites.Add((uuid, typeof(T)));
             return _stepStorage!.Get<T>(StepEntry(uuid).Entry.Slot);
         }

@@ -48,7 +48,7 @@ public sealed partial class World
     internal bool IsCommittedBoundary { get { VerifyAccess(); return !_updating && !_preparing; } }
     public int Count { get { VerifyAccess(); return _objects.Count; } }
 
-    public GameObject CreateObject(string name, Guid? persistentId = null)
+    public Entity CreateEntity(string name, Guid? persistentId = null)
     {
         VerifyStructuralAccess();
         ValidateName(name);
@@ -60,7 +60,7 @@ public sealed partial class World
         _uuidIndex.EnsureCapacity(_uuidIndex.Count + 1);
         var (slot, generation) = _generations.Reserve(_slots);
         var entry = new Entry(uuid, name, slot, generation, _nextOrdinal++);
-        var result = new GameObject(this, new(_identity, slot, generation));
+        var result = new Entity(_identity, slot, generation);
         _objects.Add(slot, entry);
         _uuidIndex.Add(uuid, slot);
         _slots[slot] = true;
@@ -68,17 +68,17 @@ public sealed partial class World
         return result;
     }
 
-    public GameObject FindObject(Guid uuid)
+    public Entity FindEntity(Guid uuid)
     {
         VerifyAccess();
         if (!_uuidIndex.TryGetValue(uuid, out int slot)) throw new ArgumentException("Unknown object UUID.");
-        return new GameObject(this, IdentityOf(_objects[slot]));
+        return IdentityOf(_objects[slot]);
     }
 
-    public IReadOnlyList<GameObject> GetObjects()
+    public IReadOnlyList<Entity> GetEntities()
     {
         VerifyAccess();
-        return _objects.Values.OrderBy(e => e.CreationOrdinal).Select(e => new GameObject(this, IdentityOf(e))).ToArray();
+        return _objects.Values.OrderBy(e => e.CreationOrdinal).Select(IdentityOf).ToArray();
     }
 
     public WorldSnapshot CaptureSnapshot()
@@ -419,18 +419,4 @@ public sealed partial class World
         if (string.IsNullOrWhiteSpace(name) || name.Length > 256 || name.Any(char.IsControl))
             throw new ArgumentException("Names must be nonempty, <=256 characters and contain no control characters.");
     }
-}
-
-public sealed class GameObject
-{
-    internal GameObject(World world, Entity entity) { World = world; Entity = entity; }
-    public World World { get; }
-    public Entity Entity { get; }
-    public Guid PersistentId => World.GetUuid(Entity);
-    public string Name { get => World.GetName(Entity); set => World.Rename(Entity, value); }
-    public bool Has<T>() where T : struct, IComponent => World.Has<T>(Entity);
-    public T Get<T>() where T : struct, IComponent => World.Get<T>(Entity);
-    public void Set<T>(T value) where T : struct, IComponent => World.Set(Entity, value);
-    public bool Remove<T>() where T : struct, IComponent => World.Remove<T>(Entity);
-    public void Destroy() => World.Destroy(Entity);
 }

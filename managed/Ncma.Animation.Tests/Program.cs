@@ -34,7 +34,7 @@ MontageIntervalWeightTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));
- var world=new World(components:ClipPlaybackData.Register(ComponentRegistry.CreateDefault()));var obj=world.CreateObject("clip");Guid objectId=obj.PersistentId;obj.Set(settings);string bytes=world.SerializeSnapshot();world.LoadSnapshot(bytes);Check(world.FindObject(objectId).Get<ClipPlaybackData>()==settings);Reject(()=>ClipPlaybackData.Validate(settings with{Speed=double.NaN}));Reject(()=>ClipPlaybackData.Validate(settings with{ClipId=Guid.Empty}));
+ var world=new World(components:ClipPlaybackData.Register(ComponentRegistry.CreateDefault()));global::Ncma.Runtime.Entity obj=world.CreateEntity("clip");Guid objectId=world.GetUuid(obj);world.Set(obj, settings);string bytes=world.SerializeSnapshot();world.LoadSnapshot(bytes);Check(world.Get<ClipPlaybackData>(world.FindEntity(objectId))==settings);Reject(()=>ClipPlaybackData.Validate(settings with{Speed=double.NaN}));Reject(()=>ClipPlaybackData.Validate(settings with{ClipId=Guid.Empty}));
 }));
 cases.Add(("Clock follows successful ticks; failed step does not advance",()=>{
  var world=new World();var clock=new ClipClock(world,settings,1);var runner=new WorldRunner(world,.1);runner.AddCommittedObserver(new Observer((w,h)=>clock.ObserveCommitted(w,settings,1,h)));
@@ -46,9 +46,9 @@ cases.Add(("Clock rejects attempted observation inside an uncommitted step",()=>
  Reject(()=>runner.Advance(.1));Check(world.Tick==0&&clock.CommittedTick==0&&clock.UnwrappedTime==0);
 }));
 cases.Add(("Post-commit observers cannot mutate World; successful tick remains",()=>{
- var world=new World();var obj=world.CreateObject("readonly");obj.Set(TransformData.Identity);var runner=new WorldRunner(world,.1);
- runner.AddCommittedObserver(new Observer((w,h)=>w.FindObject(obj.PersistentId).Set(TransformData.Identity with{Position=Vector3.One})));
- Reject(()=>runner.Advance(.1));Check(world.Tick==1&&runner.LastStepsExecuted==1&&obj.Get<TransformData>().Position==Vector3.Zero&&runner.IsFaulted);
+ var world=new World();global::Ncma.Runtime.Entity obj=world.CreateEntity("readonly");world.Set(obj, TransformData.Identity);var runner=new WorldRunner(world,.1);
+ runner.AddCommittedObserver(new Observer((w,h)=>w.Set(w.FindEntity(world.GetUuid(obj)), TransformData.Identity with{Position=Vector3.One})));
+ Reject(()=>runner.Advance(.1));Check(world.Tick==1&&runner.LastStepsExecuted==1&&world.Get<TransformData>(obj).Position==Vector3.Zero&&runner.IsFaulted);
 }));
 cases.Add(("30/60/144Hz render has identical committed time",()=>{
  foreach(int hz in new[]{30,60,144}){var w=new World();var clock=new ClipClock(w,settings,2);var runner=new WorldRunner(w);runner.AddCommittedObserver(new Observer((v,h)=>clock.ObserveCommitted(v,settings,2,h)));

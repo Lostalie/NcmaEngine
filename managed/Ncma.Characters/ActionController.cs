@@ -44,13 +44,13 @@ internal sealed class ActionController
     internal ActionController(World world,RootMotionSet roots)
     {
         _roots=roots;
-        foreach(var obj in world.GetObjects().OrderBy(o=>o.PersistentId)) {
-            if(obj.Has<HealthData>())_startupHealth.Add(obj.PersistentId,obj.Get<HealthData>());
-            if(!obj.Has<ActionDefinitionData>())continue;
-            var d=obj.Get<ActionDefinitionData>();_=ActionDefinitionData.Validate(d);
-            if(!_roots.Contains(obj.PersistentId))throw new ArgumentException("Actions require a pinned root-motion character.");
-            foreach(Guid clip in new[]{d.IdleClip,d.RunClip,d.AttackClip,d.DodgeClip})_=roots.Duration(obj.PersistentId,clip);
-            _actors.Add(obj.PersistentId,new(obj.PersistentId,d));
+        foreach(global::Ncma.Runtime.Entity obj in world.GetEntities().OrderBy(o=>world.GetUuid(o))) {
+            if(world.Has<HealthData>(obj))_startupHealth.Add(world.GetUuid(obj),world.Get<HealthData>(obj));
+            if(!world.Has<ActionDefinitionData>(obj))continue;
+            var d=world.Get<ActionDefinitionData>(obj);_=ActionDefinitionData.Validate(d);
+            if(!_roots.Contains(world.GetUuid(obj)))throw new ArgumentException("Actions require a pinned root-motion character.");
+            foreach(Guid clip in new[]{d.IdleClip,d.RunClip,d.AttackClip,d.DodgeClip})_=roots.Duration(world.GetUuid(obj),clip);
+            _actors.Add(world.GetUuid(obj),new(world.GetUuid(obj),d));
         }
         if(_actors.Count>32)throw new ArgumentException("Action actor budget is 32 (at most 256 committed events per step).");
     }
@@ -125,7 +125,7 @@ internal sealed class ActionController
     internal void BeginStep()
     {
         if(_world!.Tick!=_tick)throw new InvalidOperationException("Action clock lost its committed quantum.");
-        _events.Clear();foreach(var pair in _startupHealth)_health[pair.Key]=_world.FindObject(pair.Key).Get<HealthData>();
+        _events.Clear();foreach(var pair in _startupHealth)_health[pair.Key]=_world.Get<HealthData>(_world.FindEntity(pair.Key));
     }
     internal void StageHits(Func<Guid,float,uint,Guid> query)
     {

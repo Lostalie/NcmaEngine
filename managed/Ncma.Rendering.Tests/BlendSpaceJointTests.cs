@@ -16,13 +16,13 @@ internal static unsafe partial class Program
     {
         var results=new List<object>();var outcomes=new List<Vector3>();
         foreach(int hz in new[]{30,60,144,0}) {
-            var d=create(1,true);Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
+            var d=create(1,true);Guid id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o)));
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:hz==0?PlayAdvanceMode.FixedSteps:PlayAdvanceMode.Frames);
             using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));
             try {
                 for(int i=0;i<(hz==0?120:hz*2);i++)Check((hz==0?play.AdvanceFixedStep():play.AdvanceFrame(1d/hz)).State==PlayState.Running,"Space schedule: "+play.Fault?.Code);
-                var position=d.World.FindObject(id).Get<TransformData>().Position;outcomes.Add(position);
+                var position=d.World.Get<TransformData>(d.World.FindEntity(id)).Position;outcomes.Add(position);
                 var debug=runtime.Animators!.ReadDebug(id);var rows=debug.Instructions.Where(r=>r.Operation==AnimationPoseOperation.Clip).ToArray();
                 Check(play.Tick==120&&debug.Frame.Context.Tick==120&&runtime.Characters!.Status.CommittedSequence==120,"Space phase and unique solver share fixed tick");
                 Check(rows.All(r=>Math.Abs(r.Current/r.Duration-2)<1e-10)&&Math.Abs(position.X-2)<1e-4,"Independent2s phase/root oracle: "+position);
@@ -38,7 +38,7 @@ internal static unsafe partial class Program
         }
         Check(outcomes.All(p=>Vector3.Distance(p,outcomes[0])<1e-5),"30/60/144 frame accumulation and Headless fixed-step parity");
         foreach(bool late in new[]{false,true}) {
-            var d=create(1,true);Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
+            var d=create(1,true);Guid id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o)));
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
             bool fail=false;play.AddSystem(new GraphFailure(_=>{

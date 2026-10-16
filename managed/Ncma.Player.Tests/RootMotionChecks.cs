@@ -60,9 +60,9 @@ internal static class RootMotionChecks
         var record=new AssetRecord(1,model,AssetKind.Character,"assets/model.fbx",sourceHash,"ufbx",1,settings,
             [new(mesh,AssetKind.SkinnedMesh,"mesh/0","Character",false),new(rig,AssetKind.Skeleton,"rig/0","Rig",false),new(slots,AssetKind.MaterialSet,"materials/0","Slots",false),new(clip,AssetKind.Clip,"clip/0","Run",false),new(other,AssetKind.Clip,"clip/1","Turn",false)],[],new(1,hash,relative));
         string metadata=Path.Combine(root,"assets/model.fbx.ncmeta");File.WriteAllBytes(metadata,AssetRecordCodec.Encode(record));
-        var doc=CharacterHostChecks.Fixture();var actor=doc.World.GetObjects().Single(o=>o.Has<CharacterData>());Guid actorId=actor.PersistentId;
-        actor.Set(new SkinnedMeshData(model,mesh,rig,slots,true,true,uint.MaxValue));actor.Set(new ClipPlaybackData(clip,true,true,1,0));actor.Set(new RootMotionData(0));
-        var light=doc.World.CreateObject("Light");light.Set(TransformData.Identity);light.Set(DirectionalLightData.Default);
+        var doc=CharacterHostChecks.Fixture();global::Ncma.Runtime.Entity actor=doc.World.GetEntities().Single(o=>doc.World.Has<CharacterData>(o));Guid actorId=doc.World.GetUuid(actor);
+        doc.World.Set(actor, new SkinnedMeshData(model,mesh,rig,slots,true,true,uint.MaxValue));doc.World.Set(actor, new ClipPlaybackData(clip,true,true,1,0));doc.World.Set(actor, new RootMotionData(0));
+        global::Ncma.Runtime.Entity light=doc.World.CreateEntity("Light");doc.World.Set(light, TransformData.Identity);doc.World.Set(light, DirectionalLightData.Default);
         using var assets=SceneAssetPreparation.Prepare(root,project,doc.CaptureSnapshot(),true);
         using var physics=new PhysicsService(plugins,characterSupport:true);
         var outcomes=new List<TransformData>();
@@ -72,7 +72,7 @@ internal static class RootMotionChecks
             // D input MUST NOT add locomotion on top of authored diagonal root motion.
             CharacterHostChecks.Input(play,1);
             for(int i=0;i<(hz==0?120:hz*2);i++)Check((hz==0?play.AdvanceFixedStep():play.AdvanceFrame(1d/hz)).State==PlayState.Running,"actual root collision step");
-            var result=copy.World.FindObject(actorId).Get<TransformData>();var status=runtime.InspectRootMotion(actorId);
+            var result=copy.World.Get<TransformData>(copy.World.FindEntity(actorId));var status=runtime.InspectRootMotion(actorId);
             Check(play.Tick==120 && status.Tick==120 && Math.Abs(status.Time-2)<1e-10,"sole clock matches committed ticks");
             Check(result.Position.X>1.45f&&result.Position.X<1.51f&&result.Position.Z>1.9f&&result.Position.Z<2.1f,"wall blocks X while desired Z slides");
             Check(status.DesiredDisplacement.X>.04f&&status.AcceptedDisplacement.X<.001f,"separate desired and blocked actual displacement");
@@ -86,7 +86,7 @@ internal static class RootMotionChecks
         passed.Add("K4 actual Jolt wall/sliding/root replaces input, 30/60/144/headless shared clock, speed/pause/switch/end");
         foreach(bool late in new[]{false,true}) {
             var copy=doc.CreateIsolatedCopy();using var play=new PlaySession(copy,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=CharacterPlayRuntime.Compose(play,physics,assets)!;
-            play.AddSystem(new StepAction(w=>{if(late){var pending=play.Commands.SpawnEmpty("late");play.Commands.AttachBehaviour(pending.ObjectId,new(Guid.NewGuid(),"Missing",true,[]));}else {try{w.FindObject(actorId).Set(new ClipPlaybackData(clip,true,true,8,0));}catch(InvalidOperationException){}}}));
+            play.AddSystem(new StepAction(w=>{if(late){var pending=play.Commands.SpawnEmpty("late");play.Commands.AttachBehaviour(pending.ObjectId,new(Guid.NewGuid(),"Missing",true,[]));}else {try{w.Set(w.FindEntity(actorId), new ClipPlaybackData(clip,true,true,8,0));}catch(InvalidOperationException){}}}));
             byte[] before=copy.CaptureBytes();play.Start(_=>throw new Exception("injected factory"));Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==0,"root failed step not committed");
             Check(runtime.Status.NumericalExecutionStarted==late && before.SequenceEqual(copy.CaptureBytes()),"before/after solver fault boundary");Reject(()=>runtime.InspectRootMotion(actorId));play.Stop();
         }
@@ -111,7 +111,7 @@ internal static class RootMotionChecks
             string kernelPath=Path.Combine(plugins,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(kernelPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(kernelPath))));
             var copy=doc.CreateIsolatedCopy();using var play=new PlaySession(copy,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=CharacterPlayRuntime.Compose(play,physics,assets)!;play.Start(_=>throw new Exception("no behaviours"));
             try { using(var scene=new SceneRenderSession(renderer,cache,copy.World)) {scene.Prepare(assets,copy.CaptureSnapshot(),poseKernel:kernel,play:play,interpolateTransforms:true,rootMotion:runtime);
-                var captured=new byte[3*48];Guid camera=copy.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+                var captured=new byte[3*48];Guid camera=copy.World.GetUuid(copy.World.GetEntities().Single(o=>copy.World.Has<CameraData>(o)));
                 for(ulong frame=1;frame<=6;frame++) {
                     for(int i=0;i<20;i++)play.AdvanceFixedStep();scene.Submit(frame,320,240,camera);renderer.Present();scene.CaptureCharacterVertices(actorId,captured);
                     var floats=System.Runtime.InteropServices.MemoryMarshal.Cast<byte,float>(captured);Check(Math.Abs(floats[0]+.3f)<1e-4f&&Math.Abs(floats[2])<1e-4f,"GPU visual root remains in-place through wall/loops");
@@ -125,7 +125,7 @@ internal static class RootMotionChecks
         // Formal Player entries and NCP1 use the same policy, with no pose/GPU initialization in Headless.
         string assembly=Assembly.GetExecutingAssembly().Location;File.Copy(assembly,Path.Combine(root,"gameplay.dll"));File.Copy(Path.ChangeExtension(assembly,".deps.json"),Path.Combine(root,"gameplay.deps.json"));
         SceneDocumentFiles.Save(doc,Path.Combine(root,"start.ncmascene"));
-        var config=new ProjectConfiguration(1,project,"Root Player","start.ncmascene","gameplay.dll","Direct3D11",[],true,doc.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId);
+        var config=new ProjectConfiguration(1,project,"Root Player","start.ncmascene","gameplay.dll","Direct3D11",[],true,doc.World.GetUuid(doc.World.GetEntities().Single(o=>doc.World.Has<CameraData>(o))));
         File.WriteAllBytes(Path.Combine(root,"assets/game.ncpak"),SceneAssetPreparation.CreateRuntimePackage(root,project,doc.CaptureSnapshot(),[]));
         foreach(bool packed in new[]{false,true})foreach(bool headless in new[]{false,true}) {
 

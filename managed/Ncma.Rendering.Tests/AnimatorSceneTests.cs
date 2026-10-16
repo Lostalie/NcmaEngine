@@ -38,8 +38,8 @@ internal static unsafe partial class Program
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
         var f=new SkinFixture(output);var graph=AnimatorGraph(f);string graphPath=Path.Combine(f.Root,"assets/character.ncmaanim");
         File.WriteAllBytes(graphPath,AnimationGraphCodec.Encode(graph));var (document,camera,ids)=f.Scene();
-        var obj=document.World.FindObject(ids[0]);obj.Remove<ClipPlaybackData>();obj.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));document.ValidateAuthoring();
-        obj.Set(new ClipPlaybackData(f.Manifest.Clips[0],true,true,1,0));Reject(document.ValidateAuthoring);obj.Remove<ClipPlaybackData>();
+        global::Ncma.Runtime.Entity obj=document.World.FindEntity(ids[0]);document.World.Remove<ClipPlaybackData>(obj);document.World.Set(obj, new AnimatorData(graph.AssetId,graph.SkeletonId));document.ValidateAuthoring();
+        document.World.Set(obj, new ClipPlaybackData(f.Manifest.Clips[0],true,true,1,0));Reject(document.ValidateAuthoring);document.World.Remove<ClipPlaybackData>(obj);
         using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,document.CaptureSnapshot(),true);
         var retained=(RuntimeAnimationGraphAsset)assets.Assets.Require(graph.AssetId,AssetKind.AnimationGraph);
         var copy=retained.CopyDefinition();copy.Nodes[0]=copy.Nodes[0] with{Name="mutated"};Check(retained.CopyDefinition().Nodes.All(n=>n.Name!="mutated"),"Graph publication leaked authoring data");
@@ -75,7 +75,7 @@ internal static unsafe partial class Program
         }
         foreach(int count in new[]{32,33}) {
             var (many,_,actors)=f.Scene(count);
-            foreach(Guid id in actors){var actor=many.World.FindObject(id);actor.Remove<ClipPlaybackData>();actor.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));}
+            foreach(Guid id in actors){global::Ncma.Runtime.Entity actor=many.World.FindEntity(id);many.World.Remove<ClipPlaybackData>(actor);many.World.Set(actor, new AnimatorData(graph.AssetId,graph.SkeletonId));}
             using var host=new RuntimeSessionOwner(many);SceneAnimatorRuntime? animator=null;
             if(count==33){Reject(()=>host.StartPlay(compose:p=>SceneAnimatorRuntime.Compose(p,packed)));continue;}
             var play=host.StartPlay(compose:p=>animator=SceneAnimatorRuntime.Compose(p,packed));
@@ -125,7 +125,7 @@ internal static unsafe partial class Program
             SceneAnimatorRuntime? failed=null;
             var failedPlay=host.StartPlay(compose:p=>{
                 failed=SceneAnimatorRuntime.Compose(p,assets);
-                p.AddSystem(new GraphFailure(w=>{if(fault!=0){try{if(fault==1)w.FindObject(ids[0]).Set(new AnimatorData(graph.AssetId,graph.SkeletonId));else failed!.SetFloat(ids[0],graph.Parameters[0].Id,.5);}catch(InvalidOperationException){}}else throw new InvalidOperationException("prepared failure");}));return failed;
+                p.AddSystem(new GraphFailure(w=>{if(fault!=0){try{if(fault==1)w.Set(w.FindEntity(ids[0]), new AnimatorData(graph.AssetId,graph.SkeletonId));else failed!.SetFloat(ids[0],graph.Parameters[0].Id,.5);}catch(InvalidOperationException){}}else throw new InvalidOperationException("prepared failure");}));return failed;
             });
             var old=failed!.ReadFrame(ids[0]);failedPlay.Pause();Check(failedPlay.Step().State==PlayState.Faulted && failedPlay.Tick==old.Context.Tick,"Failed graph quantum published time or caught write was not poisoned");
             Reject(()=>failed.ReadFrame(ids[0]));host.StopPlay();

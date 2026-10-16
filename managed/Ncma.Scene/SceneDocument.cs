@@ -26,7 +26,7 @@ public sealed class SceneDocument
         _revision = checked(_revision + 1);
         _knownWorldRevision = World.Revision;
         // Runtime gameplay can destroy objects. Forget only metadata of no-longer-live UUIDs.
-        var live = World.GetObjects().Select(o => o.PersistentId).ToHashSet();
+        var live = World.GetEntities().Select(o => World.GetUuid(o)).ToHashSet();
         foreach (Guid id in _bindings.Keys.Where(id => !live.Contains(id)).ToArray()) _bindings.Remove(id);
     }
     private void VerifyMutation()
@@ -110,12 +110,12 @@ public sealed class SceneDocument
     public BehaviourBindingData[] GetBindings(Guid objectId)
     {
         VerifyAccess(); ObserveWorld();
-        _ = World.FindObject(objectId);
+        _ = World.FindEntity(objectId);
         return CopyBindings(_bindings.GetValueOrDefault(objectId, []));
     }
     public void SetBindings(Guid objectId, BehaviourBindingData[] values)
     {
-        VerifyMutation(); _ = World.FindObject(objectId);
+        VerifyMutation(); _ = World.FindEntity(objectId);
         var identities = _bindings.Where(p => p.Key != objectId).SelectMany(p => p.Value).Select(b => b.Id).ToHashSet();
         SceneDocumentValidator.ValidateBindings(values, identities, "bindings");
         var owned = CopyBindings(values);

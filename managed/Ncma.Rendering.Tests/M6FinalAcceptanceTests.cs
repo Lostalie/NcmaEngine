@@ -73,11 +73,11 @@ internal static unsafe partial class Program
         graph=AddMontage(graph,original.Montage!);
         graph=graph with{Nodes=graph.Nodes.Select((n,i)=>n with{X=100+i*20,Y=70-i*10}).ToArray()};
         File.WriteAllBytes(Path.Combine(fixture.Root,"assets/m6-final.ncmaanim"),AnimationGraphCodec.Encode(graph));
-        SceneDocument Document(int count,bool root){var d=create(count,root);int n=0;foreach(var o in d.World.GetObjects().Where(o=>o.Has<AnimatorData>())){
-                o.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));o.Set(TransformData.Identity with{Position=new((n%8-3.5f)*2,0,-(n/8)*2)});n++;}
+        SceneDocument Document(int count,bool root){var d=create(count,root);int n=0;foreach(global::Ncma.Runtime.Entity o in d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o))){
+                d.World.Set(o, new AnimatorData(graph.AssetId,graph.SkeletonId));d.World.Set(o, TransformData.Identity with{Position=new((n%8-3.5f)*2,0,-(n/8)*2)});n++;}
             return d;}
-        var startup=Document(1,true);Guid actor=startup.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
-        Guid camera=startup.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+        var startup=Document(1,true);Guid actor=startup.World.GetUuid(startup.World.GetEntities().Single(o=>startup.World.Has<AnimatorData>(o)));
+        Guid camera=startup.World.GetUuid(startup.World.GetEntities().Single(o=>startup.World.Has<CameraData>(o)));
         byte[] package=SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,startup.CaptureSnapshot(),[]);
         Check(package.SequenceEqual(SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,startup.CaptureSnapshot(),[])),"M6 final package deterministic");
         var semantic=graph with{Nodes=graph.Nodes.Select(n=>n with{X=0,Y=0}).ToArray()};
@@ -142,7 +142,7 @@ internal static unsafe partial class Program
                 play.Start(_=>throw new Exception("No behaviours"));
                 try{for(int i=0;i<(hz==0?120:hz*2);i++){
                         Check((hz==0?play.AdvanceFixedStep():play.AdvanceFrame(1d/hz)).State==PlayState.Running,"M6 combined schedule "+hz+": "+play.Fault?.Code);}
-                    var debug=runtime.Animators!.ReadDebug(actor);var position=d.World.FindObject(actor).Get<TransformData>().Position;var currentSlot=runtime.Animators.ReadMontageSlot(actor,slot);
+                    var debug=runtime.Animators!.ReadDebug(actor);var position=d.World.Get<TransformData>(d.World.FindEntity(actor)).Position;var currentSlot=runtime.Animators.ReadMontageSlot(actor,slot);
                     Check(play.Tick==120&&debug.Frame.Context.Tick==120&&runtime.Animators.ReadMontageFrame(actor).Context==debug.Frame.Context&&runtime.Characters!.Status.CommittedSequence==120,"All combined fixed-step owners share tick120");
                     expectedPosition??=position;expectedPlan??=debug.Instructions.ToArray();expectedSlot??=currentSlot;
                     Check(Vector3.Distance(expectedPosition.Value,position)<1e-5&&expectedPlan.SequenceEqual(debug.Instructions)&&expectedSlot==currentSlot,"M6 30/60/144/fixed combined root/pose/Slot parity");
@@ -194,7 +194,7 @@ internal static unsafe partial class Program
         using(var unlocked=new FileStream(packPath,FileMode.Open,FileAccess.ReadWrite,FileShare.None))Check(unlocked.Length==package.Length,"M6 final runtime package pin released");
         Check(!Directory.Exists(Path.Combine(moved,"out"))&&Directory.GetFiles(Path.Combine(moved,"assets")).Length==1,"M6 relocated fixture uses only runtime package");
         foreach(int count in new[]{0,1,8,32}){
-            var d=Document(count,count>0);var ids=d.World.GetObjects().Where(o=>o.Has<AnimatorData>()).Select(o=>o.PersistentId).ToArray();Guid view=d.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+            var d=Document(count,count>0);var ids=d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o)).Select(o=>d.World.GetUuid(o)).ToArray();Guid view=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<CameraData>(o)));
             byte[] bytes=SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,d.CaptureSnapshot(),[]);
             string root=Path.Combine(evidence,"workload-"+count);Directory.CreateDirectory(Path.Combine(root,"assets"));File.WriteAllBytes(Path.Combine(root,"assets/game.ncpak"),bytes);
             using var assets=SceneAssetPreparation.Prepare(root,fixture.Project,d.CaptureSnapshot(),true,"assets/game.ncpak");

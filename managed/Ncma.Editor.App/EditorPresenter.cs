@@ -146,7 +146,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         {
             if (_lastSelection != _page.State.Selection || _lastDocument != _page.Stamp.Generation)
             { _componentOffset = 0; _bindingOffset = 0; _exportOffsets.Clear(); _jsonPageOffsets.Clear(); _jsonEdit = null; }
-            var alive = workspace.Owner.Document.World.GetObjects().Select(o => o.PersistentId).ToHashSet();
+            var alive = workspace.Owner.Document.World.GetEntities().Select(o => workspace.Owner.Document.World.GetUuid(o)).ToHashSet();
             foreach (var id in _rowIds.Keys.Where(id => !alive.Contains(id)).ToArray()) _rowIds.Remove(id);
             _generation = checked(_generation + 1); _deleteConfirmation = ""; _jsonPageCache.Clear();
             _lastRevision = _page.Stamp.Revision; _lastDocument = _page.Stamp.Generation; _lastSelection = _page.State.Selection; _lastCatalog = catalog.Generation;

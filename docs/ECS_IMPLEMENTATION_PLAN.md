@@ -84,4 +84,4 @@ E1 分两个可独立回归的实施片，整体门禁不变：
 
 E1-A 已实现并通过同源码双配置各 89 项 CTest 及补充验证，提交 `92a1b3084736a20ae45db6310d511b0786c3621f` 与远端一致，见 `ECS_E1_A_DELIVERY.md`。
 
-E1-B 正在分增量实施：第一增量实现 Entity 代次、失败候选烧号/溢出退役、两种旧 ObjectReference 移除、信号/批次完整身份和用户侧 GameObject 去除二次包装，已通过同一冻结源码双配置各 89 项 CTest、补充冒烟/Python 和最终文件核验，见 `ECS_E1_B_DELIVERY.md`。低层 Runtime.GameObject 及 Create/Find/GetObjects 消费者迁移删除仍未完成，不把第一增量当作 E1-B 收尾，不为旧类型新增兼容入口。E2–E5 和 M8.3 未开始。候选构建不部署，保留正式 M8.2 EXE。
+E1-B 已完成两个增量：第一增量 `0fa22943ae8e955ebd3e67a44ac51a0ad580c9e1` 引入 Entity 代次、失败候选烧号/退役、两种旧 ObjectReference 移除及信号/批次完整身份；第二增量迁移所有低层消费者到 World.CreateEntity/FindEntity/GetEntities 和显式组件访问，删除 Runtime.GameObject 与旧签名，仅保留共享同一存储的 Ncma.GameObject 高层门面。第二增量同一 913 文件冻结通过 Debug/Release 各 89 项 CTest、补充冒烟/Python 与最终文件核验，身份测试 15/15；失败修复和全部证据见 `ECS_E1_B_DELIVERY.md`。未保留兼容壳。下一步 E2；E2–E5 和 M8.3 尚未开始。候选构建不部署，正式 M8.2 EXE、E0 原始基线和独立人工/目标机/自包含/完整性能/长稳门禁保留。

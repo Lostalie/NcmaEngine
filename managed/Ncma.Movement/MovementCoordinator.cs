@@ -31,7 +31,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     {
         Verify();ArgumentNullException.ThrowIfNull(source);
         if(_play.State!=PlayState.Stopped||objects.IsEmpty||objects.Length>MaxTargets)throw new ArgumentException("Register bounded managed publication before Start.");
-        Guid[] ids=objects.ToArray();if(ids.Distinct().Count()!=ids.Length||ids.Any(id=>!World.FindObject(id).Has<T>()))throw new ArgumentException("Duplicate/missing publication target.");
+        Guid[] ids=objects.ToArray();if(ids.Distinct().Count()!=ids.Length||ids.Any(id=>!World.Has<T>(World.FindEntity(id))))throw new ArgumentException("Duplicate/missing publication target.");
         if(!_publicationTypes.Add(typeof(T)))throw new ArgumentException("Register one complete publication set per component type.");
         _publications.Add(new Publication<T>(this,ids,source));
     }
@@ -51,7 +51,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         if (_play.State != PlayState.Stopped || objects.Length > MaxTargets)
             throw new ArgumentException("Freeze a bounded configuration set before Start.");
         Guid[] ids = objects.ToArray();
-        foreach (Guid id in ids) if (!World.FindObject(id).Has<T>()) throw new ArgumentException("Missing frozen configuration.");
+        foreach (Guid id in ids) if (!World.Has<T>(World.FindEntity(id))) throw new ArgumentException("Missing frozen configuration.");
         _frozenFactories.Add(() => World.ClaimComponents<T>(ids, publishRequired: false, freezeMembership: freezeMembership));
     }
     private MovementStepStamp _stamp;
@@ -67,7 +67,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
             throw new ArgumentException("Movement composition requires stopped Play and a bounded nonempty target set.");
         _play = play; _factory = factory; _stageManaged=stageManaged;_targets = targets.ToArray(); _index = [];
         for (int i = 0; i < _targets.Length; i++)
-            if (!_index.TryAdd(_targets[i], i) || !World.FindObject(_targets[i]).Has<TransformData>())
+            if (!_index.TryAdd(_targets[i], i) || !World.Has<TransformData>(World.FindEntity(_targets[i])))
                 throw new ArgumentException("Duplicate or missing movement target.");
         _inputs = new NumericMovementInput[_targets.Length]; _results = new NumericMovementResult[_targets.Length];
         _committed = new NumericMovementResult[_targets.Length]; _submitted = new bool[_targets.Length];
@@ -230,7 +230,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     {
         for (int i = 0; i < _targets.Length; i++)
         {
-            TransformData start = World.FindObject(_targets[i]).Get<TransformData>(); ValidateTransform(start);
+            TransformData start = World.Get<TransformData>(World.FindEntity(_targets[i])); ValidateTransform(start);
             _inputs[i] = new(_targets[i], start, V3.Zero, 0);
         }
     }

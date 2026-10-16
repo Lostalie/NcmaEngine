@@ -46,9 +46,9 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
             _assets = assets.Assets.AcquireLease();
             var programs = new Dictionary<Guid, AnimationProgram>(); var actors = new List<Actor>(); int bones = 0;
             var poseSources=new Dictionary<Guid,GraphPoseSnapshotSource>();int poseScratch=0;
-            foreach (var obj in World.GetObjects().Where(o => o.Has<AnimatorData>()).OrderBy(o => o.PersistentId)) {
+            foreach (global::Ncma.Runtime.Entity obj in World.GetEntities().Where(o => World.Has<AnimatorData>(o)).OrderBy(o => World.GetUuid(o))) {
                 if (actors.Count >= 32) throw new ArgumentException("Animator actor budget is 32.");
-                var source = obj.Get<AnimatorData>(); var skin = obj.Get<SkinnedMeshData>();
+                var source = World.Get<AnimatorData>(obj); var skin = World.Get<SkinnedMeshData>(obj);
                 var graph = (RuntimeAnimationGraphAsset)_assets.Require(source.GraphId, AssetKind.AnimationGraph);
                 if (graph.CopyDefinition().SkeletonId != source.SkeletonId || skin.SkeletonId != source.SkeletonId) throw new ArgumentException("Animator graph/skin skeleton mismatch.");
                 if (!programs.TryGetValue(graph.Id, out var program)) programs.Add(graph.Id, program = graph.PrepareProgram(_assets));
@@ -63,7 +63,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
                 var proofs=_assets.List().Where(a=>required.Contains(a.Id)).Select(a=>new AnimatorResourceIdentity(a.Id,a.Kind.ToString(),a.Generation.ToString(System.Globalization.CultureInfo.InvariantCulture),a.ContentHash)).OrderBy(a=>a.Id).ToArray();
                 if(proofs.Length!=required.Count)throw new ArgumentException("Animator complete resource identity closure missing.");
                 GraphPoseSnapshotSource? poseSource=null;if((interruptTransitions||program.InterruptTransitions) && !poseSources.TryGetValue(graph.Id,out poseSource)){poseSource=GraphPoseSnapshotPreparation.Prepare(program,_assets);poseScratch=checked(poseScratch+poseSource.ScratchTransforms);if(poseScratch>262144)throw new ArgumentException("Scene interruption numeric scratch budget.");poseSources.Add(graph.Id,poseSource);}
-                actors.Add(new(obj.PersistentId, source, program){Binding=new(obj.PersistentId,source.GraphId,source.SkeletonId,_assets.Identity,program.ContentHash,Array.AsReadOnly(proofs)),PoseSource=poseSource});
+                actors.Add(new(World.GetUuid(obj), source, program){Binding=new(World.GetUuid(obj),source.GraphId,source.SkeletonId,_assets.Identity,program.ContentHash,Array.AsReadOnly(proofs)),PoseSource=poseSource});
             }
             if (bones > 32768) throw new ArgumentException("Animator scene bone budget.");
             _actors = actors.ToArray();
@@ -76,7 +76,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
         if (_claims.Count != 0) throw new InvalidOperationException("Close previous Animator ownership before Start.");
         _session = _play.SessionId; _world = World.Identity;
         foreach (var actor in _actors) {
-            if (World.FindObject(actor.Id).Get<AnimatorData>() != actor.Source) throw new ArgumentException("Animator startup binding changed.");
+            if (World.Get<AnimatorData>(World.FindEntity(actor.Id)) != actor.Source) throw new ArgumentException("Animator startup binding changed.");
             actor.Instance = new(actor.Program, new(_session, _world, World.Tick),actor.PoseSource,_interruptions); actor.Pending = null;
         }
         _claims.Add(World.ClaimComponents<AnimatorData>(_actors.Select(a => a.Id).ToArray(), publishRequired: false, freezeMembership: true));

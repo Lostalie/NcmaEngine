@@ -73,9 +73,20 @@ internal static class ManagedWorldAccessTests
         Check(reused.LocalTransform.Position.X == 0, "Foreign full identity allowed prefix publication.");
         Check(typeof(SceneWorld).Assembly.GetType("Ncma.ObjectReference") is null &&
             typeof(Ncma.Runtime.World).Assembly.GetType("Ncma.Runtime.ObjectReference") is null &&
+            typeof(Ncma.Runtime.World).Assembly.GetType("Ncma.Runtime.GameObject") is null &&
             typeof(GameObject).GetFields(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                .All(f => f.FieldType != typeof(Ncma.Runtime.GameObject)), "Removed references or double wrapper survived.");
+                .All(f => f.FieldType == typeof(Ncma.Runtime.Entity) || f.FieldType == typeof(SceneWorld)), "Removed references or double wrapper survived.");
         Check(!restored.Equals(null), "A valid facade compared equal to null.");
+        var entityOnly = world.Runtime.CreateEntity("Entity first");
+        var lazyFacade = world.GetObjects().Single(o => o.Entity == entityOnly);
+        Check(!lazyFacade.HasTransform, "Entity creation unexpectedly installed a component.");
+        world.Runtime.Set(entityOnly, Ncma.Runtime.TransformData.Identity);
+        Check(lazyFacade.HasTransform, "Facade did not observe Entity component storage.");
+        lazyFacade.LocalTransform = one;
+        Check(world.Runtime.Get<Ncma.Runtime.TransformData>(entityOnly).Position.X == 11, "Facade wrote a second store.");
+        world.Runtime.Remove<Ncma.Runtime.TransformData>(entityOnly);
+        Check(!lazyFacade.HasTransform, "Entity removal did not reach the facade.");
+        world.Runtime.Destroy(entityOnly); Reject(() => _ = lazyFacade.Name);
         Console.WriteLine("Managed World access: atomic batches, limits, abort/commit, FIFO and stale references passed.");
     }
 }

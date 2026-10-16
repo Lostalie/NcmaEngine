@@ -78,8 +78,8 @@ internal sealed class AnimationRuntimeInspectionService(EditorSessionOwner owner
         if(s.Play.State==PlayState.Faulted)return Result(false,"play_faulted",null);
         var binding=s.Graphs.DescribeBindings().SingleOrDefault(b=>b.ObjectId==actor)??throw Invalid();
         var debug=s.Graphs.ReadDebug(actor);if(!debug.SnapshotValid||debug.CommittedSequence>9007199254740991)return Result(false,"snapshot_invalid",null);
-        object? root=null;var obj=s.Play.Document.World.FindObject(actor);
-        if(obj.Has<RootMotionData>()) {
+        object? root=null;global::Ncma.Runtime.Entity obj=s.Play.Document.World.FindEntity(actor);
+        if(s.Play.Document.World.Has<RootMotionData>(obj)) {
             if(s.Runtime.Characters is not {} characters||!characters.Status.SnapshotValid)return Result(false,"movement_invalid",null);
             var motion=characters.InspectRootMotion(actor);if(motion.Tick!=s.Play.Tick||characters.Status.CommittedSequence>9007199254740991)return Result(false,"movement_invalid",null);
             root=new{desired=motion.DesiredDisplacement,accepted=motion.AcceptedDisplacement,yaw=motion.DesiredYaw,numericalEpoch=characters.NumericalEpoch,numericalSequence=characters.Status.CommittedSequence};

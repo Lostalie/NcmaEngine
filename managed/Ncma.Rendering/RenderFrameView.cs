@@ -20,7 +20,7 @@ public readonly record struct RenderFrameView(Guid WorldId,ulong Revision,Guid O
     }
     public static RenderFrameView Capture(World world,Guid objectId)
     {
-        var item=world.FindObject(objectId);
-        return new(world.Identity,world.Revision,objectId,item.Has<TransformData>()?item.Get<TransformData>():null);
+        global::Ncma.Runtime.Entity item=world.FindEntity(objectId);
+        return new(world.Identity,world.Revision,objectId,world.Has<TransformData>(item)?world.Get<TransformData>(item):null);
     }
 }

@@ -19,13 +19,13 @@ static SceneDocument Document(int objects = 1, bool spatial = true)
     var doc = new SceneDocument("Play fixture");
     for (int i = 0; i < objects; i++)
     {
-        var obj = doc.World.CreateObject("Object " + i, Guid.Parse($"00000000-0000-0000-0000-{i + 1:D12}"));
-        if (spatial) obj.Set(TransformData.Identity);
-        doc.SetBindings(obj.PersistentId, [new(Guid.Parse($"10000000-0000-0000-0000-{i + 1:D12}"), "Test.Probe", true, [])]);
+        global::Ncma.Runtime.Entity obj = doc.World.CreateEntity("Object " + i, Guid.Parse($"00000000-0000-0000-0000-{i + 1:D12}"));
+        if (spatial) doc.World.Set(obj, TransformData.Identity);
+        doc.SetBindings(doc.World.GetUuid(obj), [new(Guid.Parse($"10000000-0000-0000-0000-{i + 1:D12}"), "Test.Probe", true, [])]);
     }
     return doc;
 }
-static Ncma.Runtime.GameObject Object(SceneDocument doc) => doc.World.GetObjects()[0];
+static global::Ncma.Runtime.Entity Object(SceneDocument doc) => doc.World.GetEntities()[0];
 static double EqualTime(int fps)
 {
     var doc = Document(); var probe = new Probe();
@@ -38,7 +38,7 @@ static double EqualTime(int fps)
     for (int i = 0; i < fps; i++) play.AdvanceFrame(1.0 / fps);
     Check(play.Status.Tick == 60 && probe.FixedCount == 60 && probe.UpdateCount == fps);
     Check(Math.Abs(probe.Elapsed - 1) < 1e-10);
-    return Object(doc).Get<TransformData>().Position.X;
+    return doc.World.Get<TransformData>(Object(doc)).Position.X;
 }
 [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
 static WeakReference[] DisposedPlay()
@@ -65,10 +65,10 @@ var cases = new (string Name, Action Run)[]
     ("Reload rebuilds private instances clears commands input and systems without resetting World", () => {
         var doc = Document(); var old = new Probe(); var fresh = new Probe(); int systems = 0; using var play = new PlaySession(doc);
         play.AddSystem(new TestSystem((_, _) => systems++)); play.Start(_ => old); play.AdvanceFrame(1.0 / 60);
-        var reference = Object(doc).Entity; var world = doc.World.Identity; var tick = play.Tick; var epoch = play.SessionId;
+        var reference = Object(doc); var world = doc.World.Identity; var tick = play.Tick; var epoch = play.SessionId;
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2));
         play.Reload(_ => fresh); Check(play.State == PlayState.Paused && play.SessionId != epoch && play.Tick == tick);
-        Check(Object(doc).Entity == reference && doc.World.Identity == world && old.Destroyed == 1 && fresh.Created == 1 && fresh.FixedCount == 0);
+        Check(Object(doc) == reference && doc.World.Identity == world && old.Destroyed == 1 && fresh.Created == 1 && fresh.FixedCount == 0);
         Check(!play.Input.Pressed(1) && play.Status.Accumulator == 0); play.Resume(); play.AdvanceFrame(1.0 / 60);
         Check(fresh.FixedCount == 1 && systems == 1);
     }),
@@ -87,24 +87,24 @@ var cases = new (string Name, Action Run)[]
     ("Runtime pending lifecycle is cleaned by Stop without a following step", () => {
         var doc = Document(); var first = new Probe(); var second = new Probe(); using var play = new PlaySession(doc);
         first.Fixed = _ => {
-            first.Context.Commands.AttachBehaviour(Object(doc).PersistentId, new(Guid.NewGuid(), "Test.Pending", true, []));
-            first.Context.Commands.RemoveBehaviour(Object(doc).PersistentId, Guid.Parse("10000000-0000-0000-0000-000000000001"));
+            first.Context.Commands.AttachBehaviour(doc.World.GetUuid(Object(doc)), new(Guid.NewGuid(), "Test.Pending", true, []));
+            first.Context.Commands.RemoveBehaviour(doc.World.GetUuid(Object(doc)), Guid.Parse("10000000-0000-0000-0000-000000000001"));
         };
         play.Start(b => b.TypeName == "Test.Pending" ? second : first); play.AdvanceFrame(1.0 / 60); play.Stop();
         Check(first.Disabled == 1 && first.Destroyed == 1 && second.Created == 0);
     }),
     ("Runtime create configure is atomic and keeps surviving handles", () => {
-        var doc = Document(); var original = Object(doc); var originalId = original.Entity; var identity = doc.World.Identity;
+        var doc = Document(); global::Ncma.Runtime.Entity original = Object(doc); var originalId = original; var identity = doc.World.Identity;
         var probe = new Probe(); PendingObject? pending = null; using var play = new PlaySession(doc);
         probe.Fixed = _ => {
             if (play.Tick != 0) return;
             pending = probe.Context.Commands.SpawnEmpty("Spawned"); probe.Context.Commands.Rename(pending.ObjectId, "Configured");
             probe.Context.Commands.AddComponent(pending.ObjectId, new("ncma.transform", 1, doc.World.Components.Encode(TransformData.Identity)));
-            Reject(() => doc.World.FindObject(pending.ObjectId)); Reject(() => probe.Context.Commands.GetReceipt(pending.Token));
+            Reject(() => doc.World.FindEntity(pending.ObjectId)); Reject(() => probe.Context.Commands.GetReceipt(pending.Token));
         };
         play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
-        Check(doc.World.Count == 2 && doc.World.Identity == identity && original.Entity == originalId && original.Name == "Object 0");
-        Check(doc.World.FindObject(pending!.ObjectId).Name == "Configured" && doc.World.FindObject(pending.ObjectId).Has<TransformData>());
+        Check(doc.World.Count == 2 && doc.World.Identity == identity && original == originalId && doc.World.GetName(original) == "Object 0");
+        Check(doc.World.GetName(doc.World.FindEntity(pending!.ObjectId)) == "Configured" && doc.World.Has<TransformData>(doc.World.FindEntity(pending.ObjectId)));
         Check(play.Commands.GetReceipt(pending.Token).Tick == 1 && play.RenderView.Objects.Length == 2);
         var token = pending.Token; play.Stop(); Reject(() => play.Commands.GetReceipt(token));
     }),
@@ -113,8 +113,8 @@ var cases = new (string Name, Action Run)[]
             var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
             probe.Fixed = _ => {
                 probe.Context.Commands.SpawnEmpty("Never installed");
-                if (command) { try { probe.Context.Commands.AddComponent(Object(doc).PersistentId, new("ncma.transform", 1, default)); } catch (InvalidOperationException) { } }
-                else { var t = TransformData.Identity with { Position = new System.Numerics.Vector3(float.NaN, 0, 0) }; Reject(() => Object(doc).Set(t)); }
+                if (command) { try { probe.Context.Commands.AddComponent(doc.World.GetUuid(Object(doc)), new("ncma.transform", 1, default)); } catch (InvalidOperationException) { } }
+                else { var t = TransformData.Identity with { Position = new System.Numerics.Vector3(float.NaN, 0, 0) }; Reject(() => doc.World.Set(Object(doc), t)); }
             };
             play.Start(_ => probe); byte[] before = doc.CaptureBytes(); play.AdvanceFrame(1.0 / 60);
             Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureBytes().SequenceEqual(before));
@@ -123,7 +123,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Later invalid runtime command aborts structure components metadata input and receipts", () => {
         var doc = Document(); var probe = new Probe(); PendingObject? pending = null; using var play = new PlaySession(doc);
-        var before = doc.CaptureBytes(); var reference = Object(doc).Entity; var revision = doc.Revision;
+        var before = doc.CaptureBytes(); var reference = Object(doc); var revision = doc.Revision;
         probe.Fixed = _ => {
             pending = probe.Context.Commands.SpawnEmpty("Transient");
             var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t;
@@ -133,14 +133,14 @@ var cases = new (string Name, Action Run)[]
         play.Start(_ => probe); before = doc.CaptureBytes(); revision = doc.Revision;
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2)); play.AdvanceFrame(1.0 / 60);
         Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureBytes().SequenceEqual(before) && doc.Revision == revision);
-        Check(Object(doc).Entity == reference && play.Input.Pressed(1)); Reject(() => play.Commands.GetReceipt(pending!.Token));
+        Check(Object(doc) == reference && play.Input.Pressed(1)); Reject(() => play.Commands.GetReceipt(pending!.Token));
     }),
     ("Runtime conflict order rejects duplicate create double delete and modifications after delete", () => {
         foreach (var conflict in new[] { "create", "delete", "rename", "add" }) {
             var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
             probe.Fixed = _ => {
                 if (conflict == "create") { var id = Guid.NewGuid(); probe.Context.Commands.SpawnEmpty("A", id); probe.Context.Commands.SpawnEmpty("B", id); }
-                else { var id = Object(doc).PersistentId; probe.Context.Commands.Destroy(id);
+                else { var id = doc.World.GetUuid(Object(doc)); probe.Context.Commands.Destroy(id);
                     if (conflict == "delete") probe.Context.Commands.Destroy(id);
                     else if (conflict == "rename") probe.Context.Commands.Rename(id, "Bad");
                     else probe.Context.Commands.AddComponent(id, new("ncma.transform", 1, doc.World.Components.Encode(TransformData.Identity))); }
@@ -165,18 +165,18 @@ var cases = new (string Name, Action Run)[]
             var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
             probe.Fixed = _ => {
                 if (!after) { var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t; }
-                probe.Context.Commands.RemoveComponent(Object(doc).PersistentId, "ncma.transform");
+                probe.Context.Commands.RemoveComponent(doc.World.GetUuid(Object(doc)), "ncma.transform");
                 if (after) probe.GameObject.LocalTransform = Transform.Identity;
             };
             play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
-            Check(after ? play.State == PlayState.Faulted && Object(doc).Has<TransformData>() : play.Tick == 1 && !Object(doc).Has<TransformData>());
+            Check(after ? play.State == PlayState.Faulted && doc.World.Has<TransformData>(Object(doc)) : play.Tick == 1 && !doc.World.Has<TransformData>(Object(doc)));
         }
         var existing = Document(); var p = new Probe(); using var session = new PlaySession(existing);
-        p.Fixed = _ => p.Context.Commands.AddComponent(Object(existing).PersistentId, new("ncma.transform", 1, existing.World.Components.Encode(TransformData.Identity)));
+        p.Fixed = _ => p.Context.Commands.AddComponent(existing.World.GetUuid(Object(existing)), new("ncma.transform", 1, existing.World.Components.Encode(TransformData.Identity)));
         session.Start(_ => p); session.AdvanceFrame(1.0 / 60); Check(session.State == PlayState.Faulted);
     }),
     ("Runtime attach enable disable remove lifecycle waits for safe boundary", () => {
-        var doc = Document(); var first = new Probe(); var second = new Probe(); var id = Object(doc).PersistentId; var binding = Guid.NewGuid();
+        var doc = Document(); var first = new Probe(); var second = new Probe(); var id = doc.World.GetUuid(Object(doc)); var binding = Guid.NewGuid();
         using var play = new PlaySession(doc);
         first.Fixed = _ => {
             if (play.Tick == 0) first.Context.Commands.AttachBehaviour(id, new(binding, "Test.Other", false, []));
@@ -192,12 +192,12 @@ var cases = new (string Name, Action Run)[]
         play.AdvanceFrame(1.0 / 60); Check(second.Destroyed == 1); play.Stop(); Check(second.Disabled == 1 && second.Destroyed == 1);
     }),
     ("Destroyed object cleanup uses tombstone context and surviving handles remain valid", () => {
-        var doc = Document(2); var first = new Probe(); var second = new Probe(); var dead = doc.World.GetObjects()[0]; var survivor = doc.World.GetObjects()[1];
-        using var play = new PlaySession(doc); first.Fixed = _ => first.Context.Commands.Destroy(dead.PersistentId);
+        var doc = Document(2); var first = new Probe(); var second = new Probe(); global::Ncma.Runtime.Entity dead = doc.World.GetEntities()[0]; global::Ncma.Runtime.Entity survivor = doc.World.GetEntities()[1];
+        using var play = new PlaySession(doc); first.Fixed = _ => first.Context.Commands.Destroy(doc.World.GetUuid(dead));
         first.Disable = () => { Check(first.Cleanup!.ObjectId == Guid.Parse("00000000-0000-0000-0000-000000000001")); Reject(() => _ = first.GameObject.Name); };
         play.Start(b => b.Id == Guid.Parse("10000000-0000-0000-0000-000000000001") ? first : second);
-        play.AdvanceFrame(1.0 / 60); Check(play.BehaviourCount == 1 && doc.World.Count == 1 && survivor.Name == "Object 1");
-        Reject(() => _ = dead.Name); play.AdvanceFrame(1.0 / 60); Check(first.Disabled == 1 && first.Destroyed == 1 && second.FixedCount == 2);
+        play.AdvanceFrame(1.0 / 60); Check(play.BehaviourCount == 1 && doc.World.Count == 1 && doc.World.GetName(survivor) == "Object 1");
+        Reject(() => _ = doc.World.GetName(dead)); play.AdvanceFrame(1.0 / 60); Check(first.Disabled == 1 && first.Destroyed == 1 && second.FixedCount == 2);
     }),
     ("Runtime factory prepare failure leaves complete state and signal consumption intact", () => {
         var doc = Document(); var first = new Probe(); using var play = new PlaySession(doc);
@@ -214,9 +214,9 @@ var cases = new (string Name, Action Run)[]
     ("Runtime command and receipt capacity is bounded", () => {
         foreach (int count in new[] { 1024, 1025 }) {
             var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); CommandToken first = default, last = default;
-            probe.Fixed = _ => { for (int i = 0; i < count; i++) { var token = probe.Context.Commands.Rename(Object(doc).PersistentId, "Name " + i); if (i == 0) first = token; last = token; } };
+            probe.Fixed = _ => { for (int i = 0; i < count; i++) { var token = probe.Context.Commands.Rename(doc.World.GetUuid(Object(doc)), "Name " + i); if (i == 0) first = token; last = token; } };
             play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
-            Check(count == 1024 ? play.Tick == 1 && Object(doc).Name == "Name 1023" : play.Tick == 0 && play.State == PlayState.Faulted);
+            Check(count == 1024 ? play.Tick == 1 && doc.World.GetName(Object(doc)) == "Name 1023" : play.Tick == 0 && play.State == PlayState.Faulted);
             if (count == 1024) { Check(play.Commands.GetReceipt(first).Tick == 1); var oldToken = first; play.AdvanceFrame(1.0 / 60); Reject(() => play.Commands.GetReceipt(oldToken)); Check(play.Commands.GetReceipt(last).Tick == 2); }
         }
     }),
@@ -261,14 +261,14 @@ var cases = new (string Name, Action Run)[]
         play.Start(_ => probe); play.AdvanceFrame(1.5 / 60); var revision = doc.Revision;
         var view = play.RenderView; Check(view.Objects.Length == 1 && Math.Abs(view.Objects[0].Transform.Position.X - 5) < 1e-5);
         Check(Math.Abs(view.Objects[0].Transform.Scale.X - 2) < 1e-5 && Math.Abs(view.Objects[0].Transform.Rotation.LengthSquared() - 1) < 1e-5);
-        Check(Object(doc).Get<TransformData>().Position.X == 10 && doc.Revision == revision);
-        view.Objects[0] = new(Guid.NewGuid(), TransformData.Identity); Check(play.RenderView.Objects[0].ObjectId == Object(doc).PersistentId);
+        Check(doc.World.Get<TransformData>(Object(doc)).Position.X == 10 && doc.Revision == revision);
+        view.Objects[0] = new(Guid.NewGuid(), TransformData.Identity); Check(play.RenderView.Objects[0].ObjectId == doc.World.GetUuid(Object(doc)));
         play.Pause(); Check(play.RenderView.Objects[0].Transform.Position.X == 10); play.Step();
         Check(play.RenderView.Objects[0].Transform.Position.X == 20);
     }),
     ("Render view omits nonspatial objects and clears after Stop", () => {
         var doc = Document(spatial: false); using var play = new PlaySession(doc); play.Start(_ => new Probe());
-        Check(play.RenderView.Objects.Length == 0); play.Stop(); Check(play.RenderView.Objects.Length == 0 && !Object(doc).Has<TransformData>());
+        Check(play.RenderView.Objects.Length == 0); play.Stop(); Check(play.RenderView.Objects.Length == 0 && !doc.World.Has<TransformData>(Object(doc)));
     }),
     ("Signal receive consumption rolls back and sends have monotonic epoch identity", () => {
         var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
@@ -297,18 +297,18 @@ var cases = new (string Name, Action Run)[]
     ("Non spatial Behaviour does not acquire Transform", () => {
         var doc = Document(spatial: false); var probe = new Probe();
         using var play = new PlaySession(doc); play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
-        Check(!Object(doc).Has<TransformData>() && probe.FixedCount == 1);
+        Check(!doc.World.Has<TransformData>(Object(doc)) && probe.FixedCount == 1);
     }),
     ("Disabled binding created but never updated", () => {
-        var doc = Document(); var obj = Object(doc); var b = doc.GetBindings(obj.PersistentId)[0];
-        doc.SetBindings(obj.PersistentId, [b with { Enabled = false }]);
+        var doc = Document(); global::Ncma.Runtime.Entity obj = Object(doc); var b = doc.GetBindings(doc.World.GetUuid(obj))[0];
+        doc.SetBindings(doc.World.GetUuid(obj), [b with { Enabled = false }]);
         var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
         play.AdvanceFrame(1.0 / 60); play.Stop();
         Check(probe.Created == 1 && probe.Enabled == 0 && probe.FixedCount == 0 && probe.UpdateCount == 0 &&
             probe.Disabled == 0 && probe.Destroyed == 1);
     }),
     ("Binding UUID orders instances deterministically", () => {
-        var doc = Document(); var id = Object(doc).PersistentId; var a = Guid.Parse("20000000-0000-0000-0000-000000000001");
+        var doc = Document(); var id = doc.World.GetUuid(Object(doc)); var a = Guid.Parse("20000000-0000-0000-0000-000000000001");
         var b = Guid.Parse("20000000-0000-0000-0000-000000000002"); var order = new List<Guid>();
         doc.SetBindings(id, [new(b, "Test.Probe", true, []), new(a, "Test.Probe", true, [])]);
         using var play = new PlaySession(doc);
@@ -319,14 +319,14 @@ var cases = new (string Name, Action Run)[]
         var doc = Document(); var probe = new Probe();
         probe.Create = () => { var t = probe.GameObject.LocalTransform; t.Position.X = 7; probe.GameObject.LocalTransform = t; };
         using var play = new PlaySession(doc); play.Start(_ => probe);
-        Check(play.Status.Tick == 0 && Object(doc).Get<TransformData>().Position.X == 7);
+        Check(play.Status.Tick == 0 && doc.World.Get<TransformData>(Object(doc)).Position.X == 7);
     }),
     ("Failed initialization aborts writes and cleans attempted lifecycle", () => {
         var doc = Document(); var probe = new Probe();
         probe.Create = () => { var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t; throw new InvalidOperationException("Create failure"); };
         using var play = new PlaySession(doc); Reject(() => play.Start(_ => probe));
         Check(play.State == PlayState.Faulted && play.Fault!.Phase == "create");
-        Check(Object(doc).Get<TransformData>().Position.X == 0 && doc.World.Tick == 0);
+        Check(doc.World.Get<TransformData>(Object(doc)).Position.X == 0 && doc.World.Tick == 0);
         Check(probe.Created == 1 && probe.Destroyed == 1 && play.BehaviourCount == 0);
     }),
     ("Factory failure does not publish partial instances", () => {
@@ -351,28 +351,28 @@ var cases = new (string Name, Action Run)[]
             readCommitted = probe.GameObject.LocalTransform.Position.X == 0;
         };
         using var play = new PlaySession(doc); play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
-        Check(readCommitted && Object(doc).Get<TransformData>().Position.X == 11);
+        Check(readCommitted && doc.World.Get<TransformData>(Object(doc)).Position.X == 11);
     }),
     ("OnUpdate World write faults after successful step", () => {
         var doc = Document(); var probe = new Probe();
         probe.Update = _ => { var t = probe.GameObject.LocalTransform; t.Position.X = 99; probe.GameObject.LocalTransform = t; };
         using var play = new PlaySession(doc); play.Start(_ => probe); var result = play.AdvanceFrame(1.0 / 60);
         Check(result.State == PlayState.Faulted && result.Tick == 1 && result.Fault!.Phase == "update");
-        Check(Object(doc).Get<TransformData>().Position.X == 0); Reject(() => play.Resume());
+        Check(doc.World.Get<TransformData>(Object(doc)).Position.X == 0); Reject(() => play.Resume());
     }),
     ("Read-only blocks structure restore and signal mutations", () => {
         var doc = Document(); var probe = new Probe(); var snapshot = doc.World.CaptureSnapshot();
         probe.Update = _ => {
-            Reject(() => doc.World.CreateObject("Illegal")); Reject(() => Object(doc).Name = "Illegal");
-            Reject(() => Object(doc).Remove<TransformData>()); Reject(() => Object(doc).Destroy());
+            Reject(() => doc.World.CreateEntity("Illegal")); Reject(() => doc.World.Rename(Object(doc), "Illegal"));
+            Reject(() => doc.World.Remove<TransformData>(Object(doc))); Reject(() => doc.World.Destroy(Object(doc)));
             Reject(() => doc.World.RestoreSnapshot(snapshot));
-            Reject(() => doc.SetBindings(Object(doc).PersistentId, []));
+            Reject(() => doc.SetBindings(doc.World.GetUuid(Object(doc)), []));
             Reject(() => probe.GameObject.World.Dispose());
             Reject(() => probe.GameObject.World.SendSignal(probe.GameObject, probe.GameObject, 1));
             Reject(() => probe.GameObject.World.ReceiveSignals(probe.GameObject, new GameplaySignal[1]));
         };
         using var play = new PlaySession(doc); play.Start(_ => probe); play.AdvanceFrame(0);
-        Check(play.State == PlayState.Running && doc.World.Count == 1 && Object(doc).Name == "Object 0");
+        Check(play.State == PlayState.Running && doc.World.Count == 1 && doc.World.GetName(Object(doc)) == "Object 0");
     }),
     ("Invalid time rejects without changing status", () => {
         var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
@@ -409,8 +409,8 @@ var cases = new (string Name, Action Run)[]
         };
         using var play = new PlaySession(doc); play.Start(_ => probe); var result = play.AdvanceFrame(4.0 / 60);
         Check(result.State == PlayState.Faulted && result.Tick == 2 && result.StepsExecuted == 2);
-        Check(Object(doc).Get<TransformData>().Position.X == 2 && probe.FixedCount == 3);
-        Check(result.Fault!.ObjectId == Object(doc).PersistentId && result.Fault.BindingId is not null);
+        Check(doc.World.Get<TransformData>(Object(doc)).Position.X == 2 && probe.FixedCount == 3);
+        Check(result.Fault!.ObjectId == doc.World.GetUuid(Object(doc)) && result.Fault.BindingId is not null);
         Reject(() => play.AdvanceFrame(0));
     }),
     ("Single step failure enters Faulted without Tick", () => {
@@ -438,7 +438,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Initialization factory cannot mutate World", () => {
         var doc = Document(); using var play = new PlaySession(doc);
-        Reject(() => play.Start(_ => { doc.World.CreateObject("Illegal"); return new Probe(); }));
+        Reject(() => play.Start(_ => { doc.World.CreateEntity("Illegal"); return new Probe(); }));
         Check(doc.World.Count == 1 && play.State == PlayState.Faulted);
     }),
     ("Stop performs at-most-once cleanup even when callbacks fail", () => {
@@ -454,7 +454,7 @@ var cases = new (string Name, Action Run)[]
         probe.Fixed = _ => { var t = probe.GameObject.LocalTransform; t.Position.X = 123; probe.GameObject.LocalTransform = t; };
         using var play = new PlaySession(clone); play.Start(_ => probe); play.AdvanceFrame(1.0 / 60); play.Stop();
         Check(before.SequenceEqual(edit.CaptureBytes()) && session.State == state);
-        Check(clone.World.Identity != edit.World.Identity && Object(clone).PersistentId == Object(edit).PersistentId);
+        Check(clone.World.Identity != edit.World.Identity && clone.World.GetUuid(Object(clone)) == edit.World.GetUuid(Object(edit)));
     }),
     ("Stopped session and invalid policy reject controls", () => {
         var doc = Document(); using var play = new PlaySession(doc);
@@ -504,7 +504,7 @@ if (args.Contains("--benchmark"))
     foreach (int steps in new[] { 0, 1, 8 })
     foreach (int commands in new[] { 0, 64, 1024 })
     {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); var id = Object(doc).PersistentId;
+        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); var id = doc.World.GetUuid(Object(doc));
         probe.Fixed = _ => { for (int i = 0; i < commands; i++) probe.Context.Commands.Rename(id, "Profile " + i); };
         play.Start(_ => probe); var times = new List<double>(); var allocations = new List<long>();
         for (int iteration = 0; iteration < 40; iteration++)

@@ -35,9 +35,9 @@ public sealed partial class ScenePipelineStartup : IDisposable
         if(shadowSelection!=SceneShadowState.Read(scene))throw new ArgumentException("Stale pipeline startup shadow selection.");
         if (factory is null&&shadowSelection is null) return;
         if (!ScenePostProcessPreflight.HasGeometry(scene)) return;
-        var settings = world.GetObjects().Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
+        var settings = world.GetEntities().Where(o => world.Has<RenderConfiguration>(o)).Take(2).ToArray();
         if (settings.Length > 1) throw new ArgumentException("Ambiguous render configuration.");
-        var config = settings.Length == 0 ? RenderConfiguration.Default(Guid.Empty) : settings[0].Get<RenderConfiguration>();
+        var config = settings.Length == 0 ? RenderConfiguration.Default(Guid.Empty) : world.Get<RenderConfiguration>(settings[0]);
         var value = ScenePostProcessState.Read(world, world.Identity);
         if (value != ScenePostProcessState.Read(scene)) throw new ArgumentException("Stale pipeline startup post settings.");
         bool environment = SceneEnvironmentState.Read(world, world.Identity).Enabled;

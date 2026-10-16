@@ -271,11 +271,11 @@ var tests = new (string Name, Action Run)[]
         var create = Element(new { operations = new[] { new { op = "create", objectId = id, name = "Object" } } });
         Check(session.Invoke(Request(session, "ncma.scene.transaction", create), Permissions()).Changed);
         Check(session.Invoke(Request(session, AssetMetadataCommands.CapabilityName, Command(commands, r)), Permissions()).Changed);
-        Check(session.State.UndoCount == 2 && session.Document.World.GetObjects().Count() == 1);
+        Check(session.State.UndoCount == 2 && session.Document.World.GetEntities().Count() == 1);
         Check(session.Invoke(Request(session, "ncma.history.undo", Raw("{}")), Permissions()).Changed);
-        Check(session.Document.World.GetObjects().Count() == 1);
+        Check(session.Document.World.GetEntities().Count() == 1);
         Check(session.Invoke(Request(session, "ncma.history.undo", Raw("{}")), Permissions()).Changed);
-        Check(session.Document.World.GetObjects().Count() == 0);
+        Check(session.Document.World.GetEntities().Count() == 0);
     }),
     ("Default read-only, stale revisions, frozen session, changed UUID and grants reject", () => {
         string root = TestRoot(); var r = Record(); bool current = true; var (session, commands) = Setup(root, r, () => current);
@@ -344,10 +344,10 @@ var tests = new (string Name, Action Run)[]
     }),
     ("Participant cannot mutate live World from prepare and requires owner-thread calls", () => {
         var session = new EditSession(new SceneDocument());
-        var participant = new ProbeParticipant(() => session.Document.World.CreateObject("forbidden"));
+        var participant = new ProbeParticipant(() => session.Document.World.CreateEntity("forbidden"));
         session.RegisterCommandParticipant(AssetMetadataCommands.Descriptor, participant);
         Check(!session.Invoke(Request(session, AssetMetadataCommands.CapabilityName, Raw("{}")), Permissions()).Changed);
-        Check(session.Document.World.GetObjects().Count() == 0 && session.State.UndoCount == 0);
+        Check(session.Document.World.GetEntities().Count() == 0 && session.State.UndoCount == 0);
         var r = Record(); var (_, commands) = Setup(TestRoot(), r);
         Task.Run(() => Reject(() => commands.Prepare(Command(commands, r)))).GetAwaiter().GetResult();
     }),

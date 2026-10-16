@@ -17,8 +17,8 @@ static void Reject(Action action)
 static SceneDocument Fixture(int fail = 0, bool updateFails = false, bool createFails = false, bool closeFails = false)
 {
     var doc = new SceneDocument("Player fixture");
-    var item = doc.World.CreateObject("Character", Guid.Parse("11111111-1111-1111-1111-111111111111")); item.Set(TransformData.Identity);
-    doc.SetBindings(item.PersistentId, [new(Guid.Parse("22222222-2222-2222-2222-222222222222"), "PlayerProbe", true,
+    global::Ncma.Runtime.Entity item = doc.World.CreateEntity("Character", Guid.Parse("11111111-1111-1111-1111-111111111111")); doc.World.Set(item, TransformData.Identity);
+    doc.SetBindings(doc.World.GetUuid(item), [new(Guid.Parse("22222222-2222-2222-2222-222222222222"), "PlayerProbe", true,
         [new("FailAt", ExportKind.Integer, fail), new("UpdateFails", ExportKind.Boolean, updateFails ? 1 : 0),
          new("CreateFails", ExportKind.Boolean, createFails ? 1 : 0), new("CloseFails", ExportKind.Boolean, closeFails ? 1 : 0)])]);
     return doc;
@@ -122,14 +122,14 @@ var cases = new (string Name, Action Run)[] {
         byte[] before = doc.CaptureBytes();
         Reject(() => owner.StartPlay(factory: d => { owner.StartPlay(); return new PlaySession(d); }));
         Check(owner.Play is null && before.SequenceEqual(doc.CaptureBytes()));
-        Reject(() => owner.StartPlay(factory: d => { d.World.CreateObject("Forbidden"); return new PlaySession(d); }));
+        Reject(() => owner.StartPlay(factory: d => { d.World.CreateEntity("Forbidden"); return new PlaySession(d); }));
         Check(owner.Play is null && before.SequenceEqual(doc.CaptureBytes()));
         owner.StartPlay(); owner.StopPlay();
     }),
     ("Runtime composition rejects startup writes and retains failed close ownership for retry",()=>{
         using(var owner=new RuntimeSessionOwner(Fixture())) {
             owner.LoadGameplay(Path.Combine(projectRoot,"gameplay.dll"));byte[] before=owner.Document.CaptureBytes();
-            Reject(()=>owner.StartPlay(compose:p=>{p.Document.World.CreateObject("Forbidden composition mutation");return null;}));
+            Reject(()=>owner.StartPlay(compose:p=>{p.Document.World.CreateEntity("Forbidden composition mutation");return null;}));
             Check(owner.Play is null && before.SequenceEqual(owner.Document.CaptureBytes()));
             var close=new RetryComposition();owner.StartPlay(compose:_=>close);
             Reject(owner.StopPlay);Check(owner.Play is {State:PlayState.Stopped} && close.Attempts==1);Reject(owner.Catalog.Clear);
@@ -182,7 +182,7 @@ var cases = new (string Name, Action Run)[] {
     ("Unknown bindings/schema reject without losing source assets", () => {
 
         using var playerRunOwner10 = new Ncma.Player.App.PlayerRunner();
-        var doc = Fixture(); var item = doc.World.GetObjects()[0]; doc.SetBindings(item.PersistentId, [new(Guid.NewGuid(), "Missing.Behaviour", true, [])]);
+        var doc = Fixture(); global::Ncma.Runtime.Entity item = doc.World.GetEntities()[0]; doc.SetBindings(doc.World.GetUuid(item), [new(Guid.NewGuid(), "Missing.Behaviour", true, [])]);
         SaveScene(doc); byte[] source = File.ReadAllBytes(scenePath);
         Check(playerRunOwner10.Run(Options()).ExitCode != 0 && source.SequenceEqual(File.ReadAllBytes(scenePath))); Scene();
         Reject(() => { using var owner = new RuntimeSessionOwner(Fixture()); owner.LoadGameplay(Path.Combine(output, "missing.dll")); });
@@ -197,8 +197,8 @@ var cases = new (string Name, Action Run)[] {
 
         using var playerRunOwner12 = new Ncma.Player.App.PlayerRunner();
         var doc = new SceneDocument("Null scene", Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(), Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
-        var obj = doc.World.CreateObject("Missing mesh"); obj.Set(TransformData.Identity);
-        obj.Set(new Ncma.Scene.Rendering.StaticMeshData(Guid.NewGuid(), Guid.NewGuid(), true, true, uint.MaxValue));
+        global::Ncma.Runtime.Entity obj = doc.World.CreateEntity("Missing mesh"); doc.World.Set(obj, TransformData.Identity);
+        doc.World.Set(obj, new Ncma.Scene.Rendering.StaticMeshData(Guid.NewGuid(), Guid.NewGuid(), true, true, uint.MaxValue));
         SaveScene(doc); var report = playerRunOwner12.Run(Options(1), pluginRoot: Path.Combine(output, "no-native"));
         Check(report.ExitCode == 0 && report.Tick == 1 && report.Modules.Length == 0 && report.RenderedFrames == 0);
         Scene();

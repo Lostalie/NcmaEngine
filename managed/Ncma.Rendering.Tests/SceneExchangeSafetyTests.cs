@@ -22,9 +22,9 @@ internal static unsafe partial class Program
         using var cook=new EnvironmentCookService(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),()=>true);
         var package=cook.Cook(Guid.NewGuid(),1,HdrEnvironmentSource.Neutral(Guid.NewGuid()),new(8,4,8,64));
         var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
-        var light=document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());
-        light.Set(light.Get<DirectionalLightData>() with{CastShadow=false});
-        var environment=document.World.CreateObject("Environment");environment.Set(new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true));
+        global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));
+        document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
+        global::Ncma.Runtime.Entity environment=document.World.CreateEntity("Environment");document.World.Set(environment, new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true));
         var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,package);string path=Path.Combine(fixture.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path,package.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/environment.ncenv"),descriptor.Encode());
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
@@ -65,10 +65,10 @@ internal static unsafe partial class Program
             scene.Dispose();Pass(renderer.PipelineStats.Pipelines==0&&renderer.EnvironmentStats.Live==0,"explicit close retry drains failed candidate and installed pipeline");
             // Promote an existing plain scene: candidate owns a NEW environment
             // GPU lease and CPU asset pin, not just a borrowed installed binding.
-            var enabled=environment.Get<EnvironmentLightingData>();environment.Set(EnvironmentLightingData.Off);fault=false;
+            var enabled=document.World.Get<EnvironmentLightingData>(environment);document.World.Set(environment, EnvironmentLightingData.Off);fault=false;
             using(var plain=new SceneRenderSession(renderer,cache,document.World)) {plain.Prepare(assets,document.CaptureSnapshot(),environmentPreparationAllowed:Approved);
                 Pass(plain.Submit(frame++,64,64,camera,target:target),"plain scene before promotion");renderer.Present();
-                environment.Set(enabled);fault=true;fired=false;AggregateException? failure=null;
+                document.World.Set(environment, enabled);fault=true;fired=false;AggregateException? failure=null;
                 try{plain.RefreshEnvironment(assets,Approved);}catch(AggregateException error){failure=error;}
                 Pass(failure?.InnerExceptions.Count==2&&plain.ResourceExchangeStatus is{RecoveryRequired:true,CandidateRetained:true,EnvironmentGpuRetained:true,EnvironmentAssetsRetained:true},"promotion failure retains complete candidate GPU/CPU bundle");
                 Pass(plain.PreparedEnvironment==EnvironmentLightingData.Off&&renderer.EnvironmentStats.Live==1&&PinLocked(fixture.GenerationPath),"failed promotion retains old committed selection and pinned assets");
@@ -104,8 +104,8 @@ internal static unsafe partial class Program
         bool Approved(){if(fault&&!fired&&renderer.PipelineStats.Pipelines==faultPipelineCount){fired=true;renderer.SubmitResources(frame++,[],new(0,0,64,64),Vector4.Zero,new(Vector3.Zero,Vector3.UnitY,Vector4.Zero));pendingFrame=true;return false;}return true;}
         using var runtime=new PostProcessRuntime(renderer,files,library,PostProcessModules.Official(),Approved);
         var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
-        var light=document.World.GetObjects().Single(o=>o.Has<DirectionalLightData>());light.Set(light.Get<DirectionalLightData>() with{CastShadow=false});
-        var settings=document.World.CreateObject("Post");settings.Set(PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.8f))])});
+        global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
+        global::Ncma.Runtime.Entity settings=document.World.CreateEntity("Post");document.World.Set(settings, PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.8f))])});
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(64,64);
         using var scene=new SceneRenderSession(renderer,cache,document.World);scene.Prepare(assets,document.CaptureSnapshot(),postProcessing:runtime);

@@ -9,9 +9,9 @@ public static class ScenePostProcessState
     {
         SceneEnvironmentState.VerifyBoundary(world, expectedWorld);
         var value = PostProcessData.Off; int count = 0;
-        foreach (var obj in world.GetObjects()) if (obj.Has<PostProcessData>()) {
+        foreach (global::Ncma.Runtime.Entity obj in world.GetEntities()) if (world.Has<PostProcessData>(obj)) {
             if (++count > 1) throw new ArgumentException("One scene post-process configuration required, including Off.");
-            value = PostProcessData.Validate(obj.Get<PostProcessData>());
+            value = PostProcessData.Validate(world.Get<PostProcessData>(obj));
         }
         return value;
     }

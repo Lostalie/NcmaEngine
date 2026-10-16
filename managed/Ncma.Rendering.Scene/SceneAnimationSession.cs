@@ -9,7 +9,6 @@ using Ncma.Scene;
 using Ncma.Scene.Rendering;
 namespace Ncma.Rendering.Scene;
 using Vector3 = System.Numerics.Vector3;
-using GameObject = Ncma.Runtime.GameObject;
 
 public readonly record struct AnimationSceneCosts(int Characters,int Bones,int PaletteEntries,double SampleMilliseconds,double PaletteMilliseconds,ulong PoseGeneration);
 // Application-owned derived state: immutable NCA leases, per-object C# clocks and bounded pose buffers.
@@ -18,15 +17,15 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
 {
     internal sealed class Character
     {
-        internal readonly Guid Id;internal readonly GameObject Object;internal readonly SkinnedMeshData Source;
+        internal readonly Guid Id;internal readonly global::Ncma.Runtime.Entity Object;internal readonly SkinnedMeshData Source;
         internal readonly PoseRig Rig;internal readonly MeshBindingPalette Bindings;internal readonly SkinUploadData Upload;
         internal readonly SkinInfluenceBounds InfluenceBounds;
         internal readonly int BoneOffset;internal readonly Vector3 BindRoot;
         internal ClipClock? Clock;internal bool Active;internal Vector3 RootDisplacement;
         internal AnimationGraphPose? GraphPose; internal AnimationGraphInstance? PreviewGraph;
         internal AnimatorData? AnimatorSource;
-        internal Character(GameObject obj,SkinnedMeshData source,PoseRig rig,SkeletonPayload skeleton,MeshPayload mesh,int offset)
-        {Id=obj.PersistentId;Object=obj;Source=source;Rig=rig;Bindings=new(mesh,rig.BoneCount);Upload=SkinUploadData.Prepare(mesh);InfluenceBounds=new(mesh);BoneOffset=offset;BindRoot=skeleton.Bones[0].BindLocal.Position;}
+        internal Character(World world,Entity obj,SkinnedMeshData source,PoseRig rig,SkeletonPayload skeleton,MeshPayload mesh,int offset)
+        {Id=world.GetUuid(obj);Object=obj;Source=source;Rig=rig;Bindings=new(mesh,rig.BoneCount);Upload=SkinUploadData.Prepare(mesh);InfluenceBounds=new(mesh);BoneOffset=offset;BindRoot=skeleton.Bones[0].BindLocal.Position;}
     }
     private readonly int _owner=Environment.CurrentManagedThreadId;
     private readonly ScenePreparationLifetime _lifetime = new();
@@ -86,9 +85,9 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                         if(data.ModelId!=source.CharacterId||data.SkeletonId!=source.SkeletonId||data.Generation!=mesh.Generation)throw new ArgumentException("Clip generation/model mismatch.");
                         var clip=kernel.CreateClip(nativeRig,ModelPayloadCodec.DecodeClip(data.CopyData()));_leases.Add(clip);_clips.Add(id,clip);}
                 }
-                var live=world.FindObject(obj.Id);var instance=new Character(live,source,rig.Rig,rig.Skeleton,mesh.CopyPayload(),bones);
-                if (live.Has<AnimatorData>()) {
-                    var settings = live.Get<AnimatorData>(); var graph = (Ncma.Assets.Runtime.RuntimeAnimationGraphAsset)_assets.Require(settings.GraphId,AssetKind.AnimationGraph);
+                Entity live=world.FindEntity(obj.Id);var instance=new Character(world,live,source,rig.Rig,rig.Skeleton,mesh.CopyPayload(),bones);
+                if (world.Has<AnimatorData>(live)) {
+                    var settings = world.Get<AnimatorData>(live); var graph = (Ncma.Assets.Runtime.RuntimeAnimationGraphAsset)_assets.Require(settings.GraphId,AssetKind.AnimationGraph);
                     if (settings.SkeletonId != graph.CopyDefinition().SkeletonId || settings.SkeletonId != source.SkeletonId) throw new ArgumentException("Graph presentation skeleton mismatch.");
                     var program = graph.PrepareProgram(_assets);
                     GraphPoseSnapshotSource? previewSource=null;
@@ -99,7 +98,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
                     }
                     instance.AnimatorSource = settings; instance.GraphPose = new(program,rig.Rig,_clips,kernel); instance.PreviewGraph = animators is null?new(program,new(Guid.NewGuid(),WorldId,0),previewSource,enablePreviewInterruptions):null;
                 }
-                if(live.Has<ClipPlaybackData>() && (rootMotion is null || !live.Has<RootMotionData>())){var settings=live.Get<ClipPlaybackData>();instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
+                if(world.Has<ClipPlaybackData>(live) && (rootMotion is null || !world.Has<RootMotionData>(live))){var settings=world.Get<ClipPlaybackData>(live);instance.Clock=new(world,settings,RequireClip(instance,settings).Duration);}
                 _characters.Add(instance);bones=checked(bones+rig.Rig.BoneCount);palettes=checked(palettes+instance.Bindings.BindingCount);
             }
             if(bones>32768||palettes>32768)throw new ArgumentException("Scene pose/palette capacity.");
@@ -113,8 +112,8 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     private bool Live(Character c)
     {
         try{
-            if(!c.Object.Has<SkinnedMeshData>())return false;var current=c.Object.Get<SkinnedMeshData>();
-            if(c.Object.Has<AnimatorData>() != c.AnimatorSource.HasValue || c.AnimatorSource is { } source && c.Object.Get<AnimatorData>() != source) throw new InvalidOperationException("Animator references changed; explicit preparation required.");
+            if(!_world.Has<SkinnedMeshData>(c.Object))return false;var current=_world.Get<SkinnedMeshData>(c.Object);
+            if(_world.Has<AnimatorData>(c.Object) != c.AnimatorSource.HasValue || c.AnimatorSource is { } source && _world.Get<AnimatorData>(c.Object) != source) throw new InvalidOperationException("Animator references changed; explicit preparation required.");
             if(current.CharacterId!=c.Source.CharacterId||current.MeshId!=c.Source.MeshId||current.SkeletonId!=c.Source.SkeletonId||current.MaterialSetId!=c.Source.MaterialSetId)throw new InvalidOperationException("Animation asset references changed; explicit off-frame preparation required.");
             return true;
         }catch(InvalidOperationException){throw;}catch(ArgumentException){return false;}
@@ -124,12 +123,12 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         Verify();ArgumentNullException.ThrowIfNull(play);if(_play is not null||play.Document.World!=_world)throw new ArgumentException("Attach animation at its prepared committed Play boundary.");
         if (_characters.Any(c=>c.GraphPose is not null) && _animators is null) throw new ArgumentException("Graph presentation requires the shared committed Animator runtime.");
         play.AddCommittedObserver(this);_play=play;
-        if(_characters.Any(c=>c.Object.Has<RootMotionData>()) && _rootMotion is null)throw new ArgumentException("Root motion Play presentation requires its sole committed motion source.");
+        if(_characters.Any(c=>_world.Has<RootMotionData>(c.Object)) && _rootMotion is null)throw new ArgumentException("Root motion Play presentation requires its sole committed motion source.");
     }
     public void StepCommitted(World world,double fixedDeltaSeconds)
     {
         Verify();if(world!=_world)throw new ArgumentException("Animation World owner mismatch.");
-        foreach(var c in _characters){if(!Live(c)||!c.Object.Has<ClipPlaybackData>()||c.Object.Has<RootMotionData>())continue;var settings=c.Object.Get<ClipPlaybackData>();var clip=RequireClip(c,settings);
+        foreach(var c in _characters){if(!Live(c)||!_world.Has<ClipPlaybackData>(c.Object)||_world.Has<RootMotionData>(c.Object))continue;var settings=_world.Get<ClipPlaybackData>(c.Object);var clip=RequireClip(c,settings);
             c.Clock??=new(world,settings,clip.Duration);c.Clock.ObserveCommitted(world,settings,clip.Duration,fixedDeltaSeconds);}
     }
     public void ResynchronizeAfterReload(PlaySession play)
@@ -137,8 +136,8 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         Verify();if(_play!=play||play.Document.World!=_world)throw new ArgumentException("Reload must retain the original animation World and leases.");
         // Reload changes Play identity but not its successful tick count. Retain elapsed clocks/resources;
         // reconcile only explicitly changed persistent settings at this trusted committed boundary.
-        foreach(var c in _characters)if(Live(c)&&c.Object.Has<ClipPlaybackData>()) {
-            var settings=c.Object.Get<ClipPlaybackData>();var clip=RequireClip(c,settings);
+        foreach(var c in _characters)if(Live(c)&&_world.Has<ClipPlaybackData>(c.Object)) {
+            var settings=_world.Get<ClipPlaybackData>(c.Object);var clip=RequireClip(c,settings);
             c.Clock??=new(_world,settings,clip.Duration);c.Clock.ObserveCommitted(_world,settings,clip.Duration,play.FixedDeltaSeconds);
         }
     }
@@ -167,9 +166,9 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         Verify();if(!float.IsFinite(alpha)||alpha is <0 or >1)throw new ArgumentException("Animation alpha range.");long start=Stopwatch.GetTimestamp();int active=0;
         for(int i=0;i<_characters.Count;i++){
             var c=_characters[i];c.Active=Live(c);if(c.Active)active++;PoseClip? clip=null;ClipSampleTimes times=new(0,0,1);
-            if(c.Active&&c.Object.Has<ClipPlaybackData>()){
-                var settings=_play is not null && c.Object.Has<RootMotionData>() ? _rootMotion!.Playback(c.Id) : c.Object.Get<ClipPlaybackData>();clip=RequireClip(c,settings);
-                if(_play is not null && c.Object.Has<RootMotionData>())times=_rootMotion!.Sample(c.Id,alpha,paused);
+            if(c.Active&&_world.Has<ClipPlaybackData>(c.Object)){
+                var settings=_play is not null && _world.Has<RootMotionData>(c.Object) ? _rootMotion!.Playback(c.Id) : _world.Get<ClipPlaybackData>(c.Object);clip=RequireClip(c,settings);
+                if(_play is not null && _world.Has<RootMotionData>(c.Object))times=_rootMotion!.Sample(c.Id,alpha,paused);
                 else if(_play is not null){if(c.Clock is null||c.Clock.CommittedTick!=_world.Tick)throw new InvalidOperationException("Animation missed its committed-step observer.");times=c.Clock.Sample(alpha,paused);}
                 else {double time=settings.StartTime+(settings.Playing?_previewSeconds*settings.Speed:0);time=settings.Loop?time%clip.Duration:Math.Min(time,clip.Duration);times=new(time,time,1);}
             }
@@ -190,7 +189,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         double sampled=Stopwatch.GetElapsedTime(start).TotalMilliseconds;start=Stopwatch.GetTimestamp();int offset=0;
         foreach(var c in _characters)if(c.Active){
             c.RootDisplacement=_models[c.BoneOffset].Translation-c.BindRoot;
-            if(_play is not null && c.Object.Has<RootMotionData>())_rootMotion!.RemoveRoot(c.Id,_models.AsSpan(c.BoneOffset,c.Rig.BoneCount));
+            if(_play is not null && _world.Has<RootMotionData>(c.Object))_rootMotion!.RemoveRoot(c.Id,_models.AsSpan(c.BoneOffset,c.Rig.BoneCount));
             c.Bindings.Compose(_models.AsSpan(c.BoneOffset,c.Rig.BoneCount),_bindingMatrices.AsSpan(offset,c.Bindings.BindingCount));
             for(int i=0;i<c.Bindings.BindingCount;i++)_palette[offset+i]=GpuSkinPalette.Create(_bindingMatrices[offset+i]);offset+=c.Bindings.BindingCount;
             // Authored visual displacement preserved; no GameObject position/physics authority is changed.

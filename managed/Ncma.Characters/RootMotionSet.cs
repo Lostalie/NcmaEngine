@@ -31,10 +31,10 @@ internal sealed class RootMotionSet : IDisposable
     internal RootMotionSet(World world,PreparedSceneAssetLease? assets)
     {
         try {
-            foreach(var obj in world.GetObjects().Where(o=>o.Has<RootMotionData>()&&!o.Has<AnimatorData>())) {
+            foreach(global::Ncma.Runtime.Entity obj in world.GetEntities().Where(o=>world.Has<RootMotionData>(o)&&!world.Has<AnimatorData>(o))) {
                 if(assets is null)throw new ArgumentException("Root motion requires off-frame immutable asset preparation, including Headless.");
                 _lease??=assets.Assets.AcquireLease();
-                var skin=obj.Get<SkinnedMeshData>();var settings=obj.Get<ClipPlaybackData>();var root=obj.Get<RootMotionData>();
+                var skin=world.Get<SkinnedMeshData>(obj);var settings=world.Get<ClipPlaybackData>(obj);var root=world.Get<RootMotionData>(obj);
                 var mesh=_lease.RequireMesh(skin.MeshId,AssetKind.SkinnedMesh);
                 var rig=(RuntimeDataAsset)_lease.Require(skin.SkeletonId,AssetKind.Skeleton);
                 var model=(RuntimeDataAsset)_lease.Require(skin.CharacterId,AssetKind.Character);
@@ -56,7 +56,7 @@ internal sealed class RootMotionSet : IDisposable
                     tracks.Add(id,track);
                 }
                 if(!tracks.ContainsKey(settings.ClipId))throw new ArgumentException("Root playback is not in the pinned model generation.");
-                _entries.Add(obj.PersistentId,new(obj.PersistentId,settings,tracks));
+                _entries.Add(world.GetUuid(obj),new(world.GetUuid(obj),settings,tracks));
             }
         }catch{Dispose();throw;}
     }
@@ -98,7 +98,7 @@ internal sealed class RootMotionSet : IDisposable
         foreach(var e in _entries.Values) {
             e.Clock!.ObserveCommitted(world,e.Prepared,e.Tracks[e.Prepared.ClipId].Duration,h,e.PreparedRestart);
             e.Restart=e.PreparedRestart=false;
-            e.Committed=e.Prepared;e.Accepted=world.FindObject(e.Id).Get<TransformData>().Position-e.Start;
+            e.Committed=e.Prepared;e.Accepted=world.Get<TransformData>(world.FindEntity(e.Id)).Position-e.Start;
         }
     }
     internal ClipPlaybackData Playback(Guid id)=>_entries[id].Committed;

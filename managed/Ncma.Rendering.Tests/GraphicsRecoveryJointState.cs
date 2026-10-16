@@ -23,6 +23,6 @@ internal static class GraphicsRecoveryJointState
             shadows.Length==1&&shadows[0].Width==resolution&&shadows[0].Height==resolution&&scene.Costs.ShadowDraws>0&&renderer.PipelineStats.ShadowDraws>0,"actual submitted shadow graph resolution/presence "+quality);
     }
     internal static Guid Slider(UiRuntime runtime)=>runtime.CaptureDefinition().Elements.Single(e=>e.Kind==UiKind.Slider).Id;
-    internal static bool PrivateProgress(PlaySession play){var value=play.Document.World.GetObjects().Single(o=>o.Name=="Private recovery state").Get<TransformData>();return value.Position.X==play.Tick&&value.Position.Z==1&&value.Scale.Y==2;}
-    internal static float GameplayValue(PlaySession play)=>play.Document.World.GetObjects().Single(o=>o.Name=="HUD recovery state").Get<TransformData>().Position.Y;
+    internal static bool PrivateProgress(PlaySession play){var value=play.Document.World.Get<TransformData>(play.Document.World.GetEntities().Single(o=>play.Document.World.GetName(o)=="Private recovery state"));return value.Position.X==play.Tick&&value.Position.Z==1&&value.Scale.Y==2;}
+    internal static float GameplayValue(PlaySession play)=>play.Document.World.Get<TransformData>(play.Document.World.GetEntities().Single(o=>play.Document.World.GetName(o)=="HUD recovery state")).Position.Y;
 }

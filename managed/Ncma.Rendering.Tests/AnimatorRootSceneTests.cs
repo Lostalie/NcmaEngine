@@ -24,27 +24,27 @@ internal static unsafe partial class Program
         SceneDocument Document(int count=1,bool wall=true) {
             var d=new SceneDocument("Graph root",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
             for(int i=0;i<count;i++) {
-                var obj=d.World.CreateObject("Graph root actor");obj.Set(TransformData.Identity with{Position=new(0,0,i*3)});
-                obj.Set(new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
-                obj.Set(new AnimatorData(graph.AssetId,graph.SkeletonId));obj.Set(new RootMotionData(0));obj.Set(CharacterData.Default with{Controlled=i==0});
+                global::Ncma.Runtime.Entity obj=d.World.CreateEntity("Graph root actor");d.World.Set(obj, TransformData.Identity with{Position=new(0,0,i*3)});
+                d.World.Set(obj, new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
+                d.World.Set(obj, new AnimatorData(graph.AssetId,graph.SkeletonId));d.World.Set(obj, new RootMotionData(0));d.World.Set(obj, CharacterData.Default with{Controlled=i==0});
             }
-            var floor=d.World.CreateObject("Ground");floor.Set(TransformData.Identity with{Position=new(0,-.2f,0)});floor.Set(new BoxColliderData(100,.2f,100,1000,1,false));
-            if(wall){var block=d.World.CreateObject("Wall");block.Set(TransformData.Identity with{Position=new(.8f,1,0)});block.Set(new BoxColliderData(.1f,1,100,1000,1,false));}
-            var camera=d.World.CreateObject("Camera");camera.Set(TransformData.Identity with{Position=new(0,0,5)});camera.Set(CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
-            var light=d.World.CreateObject("Light");light.Set(TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.3f,-.5f,0)});light.Set(DirectionalLightData.Default);
+            global::Ncma.Runtime.Entity floor=d.World.CreateEntity("Ground");d.World.Set(floor, TransformData.Identity with{Position=new(0,-.2f,0)});d.World.Set(floor, new BoxColliderData(100,.2f,100,1000,1,false));
+            if(wall){global::Ncma.Runtime.Entity block=d.World.CreateEntity("Wall");d.World.Set(block, TransformData.Identity with{Position=new(.8f,1,0)});d.World.Set(block, new BoxColliderData(.1f,1,100,1000,1,false));}
+            global::Ncma.Runtime.Entity camera=d.World.CreateEntity("Camera");d.World.Set(camera, TransformData.Identity with{Position=new(0,0,5)});d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
+            global::Ncma.Runtime.Entity light=d.World.CreateEntity("Light");d.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.3f,-.5f,0)});d.World.Set(light, DirectionalLightData.Default);
             return d;
         }
         var document=Document();using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,document.CaptureSnapshot(),true);
         string plugins=Path.Combine(native,"m2/plugins");using var physics=new PhysicsService(plugins,characterSupport:true);
         var outcomes=new List<Vector3>();
         foreach(int hz in new[]{30,60,144,0}) {
-            var d=document.CreateIsolatedCopy();Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
+            var d=document.CreateIsolatedCopy();Guid id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o)));
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:hz==0?PlayAdvanceMode.FixedSteps:PlayAdvanceMode.Frames);
             using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));
             var held=new ulong[InputState.WordCount];held[65/64]=1UL<<(65%64);
             play.SubmitInput(new(play.SessionId,1,true,held,new ulong[InputState.WordCount],new ulong[InputState.WordCount])); // A is held; graph root moves right.
             for(int i=0;i<(hz==0?120:hz*2);i++)Check((hz==0?play.AdvanceFixedStep():play.AdvanceFrame(1d/hz)).State==PlayState.Running,"Graph/Jolt quantum failed: "+play.Fault?.Code);
-            var position=d.World.FindObject(id).Get<TransformData>().Position;var root=runtime.Characters!.InspectRootMotion(id);
+            var position=d.World.Get<TransformData>(d.World.FindEntity(id)).Position;var root=runtime.Characters!.InspectRootMotion(id);
             Check(play.Tick==120&&position.X>.3f&&position.X<.41f&&Math.Abs(position.Z)<.001f,"Root input replacement/wall collision: "+position);
             Check(root.Tick==play.Tick&&root.DesiredDisplacement.X>.008f&&root.AcceptedDisplacement.X<.001f,"Graph desired and collided movement separated");
             var current=runtime.Animators!.ReadFrame(id);Check(current.Context.Tick==120&&runtime.Characters.Status.CommittedSequence==120,"One graph clock and one numerical step");
@@ -58,16 +58,16 @@ internal static unsafe partial class Program
         }
         Check(outcomes.All(p=>Vector3.Distance(p,outcomes[0])<1e-5f),"Graph root render schedules/headless parity");
         foreach(int mutation in new[]{0,1,2}) {
-            var d=document.CreateIsolatedCopy();var id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
+            var d=document.CreateIsolatedCopy();var id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o)));
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
-            play.AddSystem(new GraphFailure(w=>{try {var actor=w.FindObject(id);if(mutation==0)actor.Set(new RootMotionData(1));else if(mutation==1)actor.Remove<RootMotionData>();else actor.Set(actor.Get<SkinnedMeshData>() with{CastShadow=false});}catch(InvalidOperationException){}}));
+            play.AddSystem(new GraphFailure(w=>{try {global::Ncma.Runtime.Entity actor=w.FindEntity(id);if(mutation==0)w.Set(actor, new RootMotionData(1));else if(mutation==1)w.Remove<RootMotionData>(actor);else w.Set(actor, w.Get<SkinnedMeshData>(actor) with{CastShadow=false});}catch(InvalidOperationException){}}));
             byte[] before=d.CaptureBytes();play.Start(_=>throw new Exception("No behaviours"));try {
                 Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==0&&runtime.Characters!.Status.CommittedSequence==0,"Caught graph root/binding mutation must poison before numerical execution");
                 Check(before.SequenceEqual(d.CaptureBytes()),"Graph root membership/binding rejection preserves committed World");
             }finally{play.Stop();}
         }
         foreach(bool late in new[]{false,true}) {
-            var d=document.CreateIsolatedCopy();Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
+            var d=document.CreateIsolatedCopy();Guid id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o)));
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
             play.AddSystem(new GraphFailure(w=>{if(late){var created=play.Commands.SpawnEmpty("injected late");play.Commands.AttachBehaviour(created.ObjectId,new(Guid.NewGuid(),"Missing",true,[]));}
                 else {try{runtime.Animators!.SetFloat(id,graph.Parameters[0].Id,1);}catch(InvalidOperationException){}}}));
@@ -79,7 +79,7 @@ internal static unsafe partial class Program
             var d=Document(count,wall:false);if(count==33){Reject(d.ValidateAuthoring);continue;}
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
             using var runtime=ScenePlayRuntime.Compose(play,physics,prepared);play.Start(_=>throw new Exception("No behaviours"));Check(play.AdvanceFixedStep().State==PlayState.Running,"Bounded graph root actors");
-            foreach(var actor in d.World.GetObjects().Where(o=>o.Has<AnimatorData>()))Check(runtime.Animators!.ReadFrame(actor.PersistentId).Context.Tick==1&&Math.Abs(runtime.Characters!.InspectRootMotion(actor.PersistentId).DesiredDisplacement.X-1f/120)<1e-5f,"Shared graph instance root isolation");
+            foreach(global::Ncma.Runtime.Entity actor in d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o)))Check(runtime.Animators!.ReadFrame(d.World.GetUuid(actor)).Context.Tick==1&&Math.Abs(runtime.Characters!.InspectRootMotion(d.World.GetUuid(actor)).DesiredDisplacement.X-1f/120)<1e-5f,"Shared graph instance root isolation");
             play.Stop();Check(physics.Inspect().Worlds==0,"Many graph root close baseline");
         }
         // State transition blends feed THIS pending output, including target reentry; no extra root clock.
@@ -90,8 +90,8 @@ internal static unsafe partial class Program
             Links=[new(Guid.NewGuid(),machine.Id,"pose",graph.Nodes[4].Id,"pose")],States=[stateA,stateB],
             Transitions=[new(Guid.NewGuid(),stateA.Id,stateB.Id,0,.2,null,[new(switchParameter.Id,AnimationComparison.Equal,0,0,true)]),new(Guid.NewGuid(),stateB.Id,stateA.Id,0,.2,null,[new(switchParameter.Id,AnimationComparison.Equal,0,0,false)])]};
         File.WriteAllBytes(Path.Combine(f.Root,"assets/state-root.ncmaanim"),AnimationGraphCodec.Encode(stateGraph));
-        var transitionDocument=Document(wall:false);var transitionActor=transitionDocument.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
-        transitionDocument.World.FindObject(transitionActor).Set(new AnimatorData(stateGraph.AssetId,stateGraph.SkeletonId));
+        var transitionDocument=Document(wall:false);var transitionActor=transitionDocument.World.GetUuid(transitionDocument.World.GetEntities().Single(o=>transitionDocument.World.Has<AnimatorData>(o)));
+        transitionDocument.World.Set(transitionDocument.World.FindEntity(transitionActor), new AnimatorData(stateGraph.AssetId,stateGraph.SkeletonId));
         using(var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,transitionDocument.CaptureSnapshot(),true))using(var play=new PlaySession(transitionDocument,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps))using(var runtime=ScenePlayRuntime.Compose(play,physics,prepared)) {
             play.Start(_=>throw new Exception("No behaviours"));try {
                 runtime.Animators!.SetBool(transitionActor,switchParameter.Id,true);Check(play.AdvanceFixedStep().State==PlayState.Running,"First transition root quantum");
@@ -122,7 +122,7 @@ internal static unsafe partial class Program
             return oracleMesh.Vertices.Select(v=>Vector3.Transform(v.Position,palette[v.Joints.X])*v.Weights.X+Vector3.Transform(v.Position,palette[v.Joints.Y])*v.Weights.Y).ToArray();
         }
         for(int cycle=0;cycle<8;cycle++) {
-            var d=document.CreateIsolatedCopy();Guid id=d.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId,camera=d.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+            var d=document.CreateIsolatedCopy();Guid id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o))),camera=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<CameraData>(o)));
             using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));play.Pause();
             try{using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,d.World))using(var target=renderer.CreateViewTarget(256,256)) {scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
                 var captured=new byte[4*48];
@@ -147,29 +147,29 @@ internal static unsafe partial class Program
         }
         Check(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"Graph root DX11 validation");
         foreach(int count in new[]{0,8,32}) {
-            var d=Document(count,wall:false);int index=0;foreach(var actor in d.World.GetObjects().Where(o=>o.Has<AnimatorData>())){actor.Set(TransformData.Identity with{Position=new((index%8-3.5f)*2,0,-(index/8)*2)});index++;}
-            var camera=d.World.GetObjects().Single(o=>o.Has<CameraData>());camera.Set(CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=24});
+            var d=Document(count,wall:false);int index=0;foreach(global::Ncma.Runtime.Entity actor in d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o))){d.World.Set(actor, TransformData.Identity with{Position=new((index%8-3.5f)*2,0,-(index/8)*2)});index++;}
+            global::Ncma.Runtime.Entity camera=d.World.GetEntities().Single(o=>d.World.Has<CameraData>(o));d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=24});
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,prepared);
             play.Start(_=>throw new Exception("No behaviours"));try {
                 Check(play.AdvanceFixedStep().State==PlayState.Running,"0/8/32 graph GPU quantum");
                 using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(prepared,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);using var target=renderer.CreateViewTarget(256,256);
-                bool submitted=scene.Submit(frame++,256,256,camera.PersistentId,target:target);if(submitted)renderer.Present();
+                bool submitted=scene.Submit(frame++,256,256,d.World.GetUuid(camera),target:target);if(submitted)renderer.Present();
                 Check(submitted==(count>0)&&scene.Costs.GeometryDraws==count&&scene.Costs.ShadowDraws==count,"Actual 0/8/32 graph skin geometry/shadow count");
                 var stamp=scene.ReadAnimationPresentation();Check(count==0?stamp is null:stamp is {} p&&p.Tick==play.Tick&&p.PublicationId==prepared.Assets.Identity&&p.PoseGeneration>0,"Copied exact submission identity");
                 if(count>0){Check(play.AdvanceFixedStep().State==PlayState.Running,"Advance invalidates submitted pose tick");Check(scene.ReadAnimationPresentation() is null,"Cannot label last tick skin submission current");}
             }finally{play.Stop();}
             Check(kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&renderer.SkinStats.Meshes==0&&physics.Inspect().Worlds==0,"Joint count resources drain");
         }
-        var slopeDocument=Document(wall:false);var slopeActor=slopeDocument.World.GetObjects().Single(o=>o.Has<AnimatorData>()).PersistentId;
-        var floorObject=slopeDocument.World.GetObjects().Single(o=>o.Name=="Ground");floorObject.Set(floorObject.Get<TransformData>() with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitZ,.1f)});
+        var slopeDocument=Document(wall:false);var slopeActor=slopeDocument.World.GetUuid(slopeDocument.World.GetEntities().Single(o=>slopeDocument.World.Has<AnimatorData>(o)));
+        global::Ncma.Runtime.Entity floorObject=slopeDocument.World.GetEntities().Single(o=>slopeDocument.World.GetName(o)=="Ground");slopeDocument.World.Set(floorObject, slopeDocument.World.Get<TransformData>(floorObject) with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitZ,.1f)});
         using(var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,slopeDocument.CaptureSnapshot(),true))using(var play=new PlaySession(slopeDocument,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps))using(var runtime=ScenePlayRuntime.Compose(play,physics,prepared)) {
             play.Start(_=>throw new Exception("No behaviours"));try {
                 play.SubmitInput(new(play.SessionId,1,true,new ulong[InputState.WordCount],new ulong[InputState.WordCount],new ulong[InputState.WordCount]));
                 for(int i=0;i<30;i++)Check(play.AdvanceFixedStep().State==PlayState.Running,"Graph slope root quantum");
                 Check(runtime.Characters!.ReadDebugFrame().Characters.Single().Ground=="Ground","Graph root ground support on slope");
                 var pressed=new ulong[InputState.WordCount];pressed[0]=1UL<<32;play.SubmitInput(new(play.SessionId,2,true,new ulong[InputState.WordCount],pressed,new ulong[InputState.WordCount]));
-                float startHeight=slopeDocument.World.FindObject(slopeActor).Get<TransformData>().Position.Y,maximum=0,firstHeight=0;
-                for(int i=0;i<60;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Graph root jumping quantum");float height=slopeDocument.World.FindObject(slopeActor).Get<TransformData>().Position.Y;if(i==0)firstHeight=height;maximum=Math.Max(maximum,height);}
+                float startHeight=slopeDocument.World.Get<TransformData>(slopeDocument.World.FindEntity(slopeActor)).Position.Y,maximum=0,firstHeight=0;
+                for(int i=0;i<60;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Graph root jumping quantum");float height=slopeDocument.World.Get<TransformData>(slopeDocument.World.FindEntity(slopeActor)).Position.Y;if(i==0)firstHeight=height;maximum=Math.Max(maximum,height);}
                 Check(firstHeight>startHeight+.04f&&maximum>startHeight+.8f,$"Graph horizontal root must preserve Character jump/gravity authority: start={startHeight} first={firstHeight} max={maximum}");
             }finally{play.Stop();}
         }
@@ -177,12 +177,12 @@ internal static unsafe partial class Program
         foreach(bool invalidAnchor in new[]{false,true}) {
             var source=SyntheticModel();var changed=source with{Clips=source.Clips.Select((c,index)=>c with{Tracks=c.Tracks.Select(t=>t.Bone==0?t with{Keys=t.Keys.Select((k,key)=>k with{Value=k.Value with{Position=invalidAnchor&&index==1&&key==0?new(.1f,0,0):k.Value.Position,Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,key==0?0:(index==0?.6f:-.6f))}}).ToArray()}:t).ToArray()}).ToArray()};
             var twist=new SkinFixture(output,changed);var twistGraph=AnimatorGraph(twist);File.WriteAllBytes(Path.Combine(twist.Root,"assets/twist.ncmaanim"),AnimationGraphCodec.Encode(twistGraph));
-            var d=Document(wall:false);var actor=d.World.GetObjects().Single(o=>o.Has<AnimatorData>());actor.Set(new SkinnedMeshData(twist.Model,twist.Manifest.Meshes[0].Mesh,twistGraph.SkeletonId,twist.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));actor.Set(new AnimatorData(twistGraph.AssetId,twistGraph.SkeletonId));
+            var d=Document(wall:false);global::Ncma.Runtime.Entity actor=d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o));d.World.Set(actor, new SkinnedMeshData(twist.Model,twist.Manifest.Meshes[0].Mesh,twistGraph.SkeletonId,twist.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.World.Set(actor, new AnimatorData(twistGraph.AssetId,twistGraph.SkeletonId));
             using var prepared=SceneAssetPreparation.Prepare(twist.Root,twist.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
             if(invalidAnchor){Reject(()=>ScenePlayRuntime.Compose(play,physics,prepared));Check(physics.Inspect().Worlds==0,"Rejected anchor must not start solver");continue;}
             using var runtime=ScenePlayRuntime.Compose(play,physics,prepared);play.Start(_=>throw new Exception("No behaviours"));try {
-                for(int i=0;i<120;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Graph yaw quantum");Check(Math.Abs(runtime.Characters!.InspectRootMotion(actor.PersistentId).DesiredYaw-.005f)<1e-5f,"Independent shortest yaw blend interval oracle");}
-                var rotation=d.World.FindObject(actor.PersistentId).Get<TransformData>().Rotation;Check(Math.Abs(2*Math.Atan2(rotation.Y,rotation.W)-.6)<1e-4,"Graph yaw reaches unique numerical movement result");
+                for(int i=0;i<120;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Graph yaw quantum");Check(Math.Abs(runtime.Characters!.InspectRootMotion(d.World.GetUuid(actor)).DesiredYaw-.005f)<1e-5f,"Independent shortest yaw blend interval oracle");}
+                var rotation=d.World.Get<TransformData>(d.World.FindEntity(d.World.GetUuid(actor))).Rotation;Check(Math.Abs(2*Math.Atan2(rotation.Y,rotation.W)-.6)<1e-4,"Graph yaw reaches unique numerical movement result");
             }finally{play.Stop();}
         }
         ScenePlayRuntime? editorRuntime=null;SceneRenderSession? editorScene=null;bool failClose=false;
@@ -191,7 +191,7 @@ internal static unsafe partial class Program
             editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(f.Root,f.Project);byte[] edit=editor.Document.CaptureBytes();Guid editWorld=editor.Document.World.Identity;
             using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
             for(int cycle=0;cycle<8;cycle++) {
-                var play=editor.StartPlay();play.Pause();var camera=play.Document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+                var play=editor.StartPlay();play.Pause();var camera=play.Document.World.GetUuid(play.Document.World.GetEntities().Single(o=>play.Document.World.Has<CameraData>(o)));
                 editorScene=new(renderer,cache,play.Document.World);editorScene.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:editorRuntime!.Characters,animators:editorRuntime.Animators);
                 Check(play.Step().State==PlayState.Paused&&editorScene.Submit(frame++,256,256,camera,target:target),"Formal Editor graph root scene");renderer.Present();
                 if(cycle==0){failClose=true;Reject(editor.StopPlay);Check(editor.Play==play&&editor.PlayRenderAssets is not null&&kernel.Statistics.Rigs==1,"Close failure retains graph/pose/asset ownership");failClose=false;}
@@ -205,7 +205,7 @@ internal static unsafe partial class Program
         string packageDirectory=Path.Combine(f.Root,"packed-player");Directory.CreateDirectory(Path.Combine(packageDirectory,"assets"));
         File.WriteAllBytes(Path.Combine(packageDirectory,"assets/game.ncpak"),SceneAssetPreparation.CreateRuntimePackage(f.Root,f.Project,document.CaptureSnapshot(),[]));
         SceneDocumentFiles.Save(document,Path.Combine(packageDirectory,"start.ncmascene"));File.Copy(Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),Path.Combine(packageDirectory,"gameplay.dll"));
-        Guid cameraId=document.World.GetObjects().Single(o=>o.Has<CameraData>()).PersistentId;
+        Guid cameraId=document.World.GetUuid(document.World.GetEntities().Single(o=>document.World.Has<CameraData>(o)));
         var configuration=new Ncma.Application.ProjectConfiguration(1,f.Project,"Graph root Player","start.ncmascene","gameplay.dll","Direct3D11",[],true,cameraId,AssetPackage:"assets/game.ncpak");
         string project=Path.Combine(packageDirectory,"root.ncmaproject");File.WriteAllBytes(project,JsonSerializer.SerializeToUtf8Bytes(configuration,new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
         foreach(bool headless in new[]{true,false}) {

@@ -16,9 +16,9 @@ public static class SceneEnvironmentState
     {
         VerifyBoundary(world, expectedWorld);
         var value=EnvironmentLightingData.Off; int count=0;
-        foreach(var obj in world.GetObjects()) if(obj.Has<EnvironmentLightingData>()) {
+        foreach(global::Ncma.Runtime.Entity obj in world.GetEntities()) if(world.Has<EnvironmentLightingData>(obj)) {
             if(++count>1)throw new ArgumentException("One scene environment configuration required.");
-            value=EnvironmentLightingData.Validate(obj.Get<EnvironmentLightingData>());
+            value=EnvironmentLightingData.Validate(world.Get<EnvironmentLightingData>(obj));
         }
         return value;
     }

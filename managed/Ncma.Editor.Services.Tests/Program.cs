@@ -138,10 +138,10 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         string path=Path.Combine(root,"out/managed/Ncma.Gameplay.Sample.dll");
         using var owner=new EditorSessionOwner("Direct host semantics",activateEditor:false);
         var document=owner.Document;owner.LoadGameplay(path);var type=owner.Catalog.Snapshot.Types.Single();
-        Guid fast=document.World.CreateObject("Fast").PersistentId,slow=document.World.CreateObject("Slow").PersistentId,
-             disabled=document.World.CreateObject("Disabled").PersistentId,unattached=document.World.CreateObject("No script").PersistentId,
-             logic=document.World.CreateObject("Non-spatial disabled").PersistentId;
-        foreach(var id in new[]{fast,slow,disabled,unattached})document.World.FindObject(id).Set(TransformData.Identity);
+        Guid fast=document.World.GetUuid(document.World.CreateEntity("Fast")),slow=document.World.GetUuid(document.World.CreateEntity("Slow")),
+             disabled=document.World.GetUuid(document.World.CreateEntity("Disabled")),unattached=document.World.GetUuid(document.World.CreateEntity("No script")),
+             logic=document.World.GetUuid(document.World.CreateEntity("Non-spatial disabled"));
+        foreach(var id in new[]{fast,slow,disabled,unattached})document.World.Set(document.World.FindEntity(id), TransformData.Identity);
         BehaviourBindingData Binding(float degrees,int multiplier=1,bool clockwise=true,bool enabled=true)=>new(Guid.NewGuid(),type.TypeName,enabled,[
             new("DegreesPerSecond",ExportKind.Float,degrees),new("Multiplier",ExportKind.Integer,multiplier),new("Clockwise",ExportKind.Boolean,clockwise?1:0)]);
         document.SetBindings(fast,[Binding(90,2,false)]);document.SetBindings(slow,[Binding(30)]);
@@ -149,13 +149,13 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         owner.ActivateEditor();byte[] editBefore=document.CaptureBytes();var play=owner.StartPlay();
         for(int i=0;i<30;i++)play.AdvanceFrame(1.0/60);
         var runtime=play.Document.World;
-        Check(Math.Abs(runtime.FindObject(fast).Get<TransformData>().Rotation.Y+Math.Sqrt(.5))<.0001);
-        Check(Math.Abs(runtime.FindObject(slow).Get<TransformData>().Rotation.Y-Math.Sin(Math.PI/24))<.0001);
-        Check(runtime.FindObject(disabled).Get<TransformData>()==TransformData.Identity &&
-              runtime.FindObject(unattached).Get<TransformData>()==TransformData.Identity &&
-              !runtime.FindObject(logic).Has<TransformData>());
+        Check(Math.Abs(runtime.Get<TransformData>(runtime.FindEntity(fast)).Rotation.Y+Math.Sqrt(.5))<.0001);
+        Check(Math.Abs(runtime.Get<TransformData>(runtime.FindEntity(slow)).Rotation.Y-Math.Sin(Math.PI/24))<.0001);
+        Check(runtime.Get<TransformData>(runtime.FindEntity(disabled))==TransformData.Identity &&
+              runtime.Get<TransformData>(runtime.FindEntity(unattached))==TransformData.Identity &&
+              !runtime.Has<TransformData>(runtime.FindEntity(logic)));
         Check(editBefore.SequenceEqual(document.CaptureBytes()) && play.Tick==30);
-        byte[] committed=play.Document.CaptureBytes();var reference=runtime.FindObject(fast).Entity;
+        byte[] committed=play.Document.CaptureBytes();var reference=runtime.FindEntity(fast);
         for(int cycle=0;cycle<12;cycle++) {
             var epoch=play.SessionId;var generation=owner.Catalog.Snapshot.Generation;ulong tick=play.Tick;
             var weak=CurrentCatalogContext(owner.Catalog,document.GetBindings(fast).Single());
@@ -164,7 +164,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
                   owner.Catalog.Snapshot.Generation==generation && committed.SequenceEqual(play.Document.CaptureBytes()));
             Check(owner.ReloadGameplay(path)==1);
             Check(play.State==Ncma.Gameplay.PlayState.Paused && play.SessionId!=epoch && play.Tick==tick &&
-                  runtime.FindObject(fast).Entity==reference && committed.SequenceEqual(play.Document.CaptureBytes()));
+                  runtime.FindEntity(fast)==reference && committed.SequenceEqual(play.Document.CaptureBytes()));
             Reject(()=>play.SubmitInput(new(epoch,1,true,new ulong[8],new ulong[8],new ulong[8],0,0)));
             using(var lease=owner.Catalog.AcquireLease())Reject(owner.Catalog.Clear);
             for(int pass=0;pass<10 && weak.IsAlive;pass++){GC.Collect();GC.WaitForPendingFinalizers();GC.Collect();}
@@ -196,7 +196,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         var rows=new List<object>();
         foreach(int count in new[]{0,256,4096}) {
             using var owner=new EditorSessionOwner("Measurement",activateEditor:false);
-            for(int i=0;i<count;i++)owner.Document.World.CreateObject("Object"+i).Set(TransformData.Identity);
+            for(int i=0;i<count;i++)owner.Document.World.Set(owner.Document.World.CreateEntity("Object"+i), TransformData.Identity);
             owner.ActivateEditor();var ui=new EditorWorkspace(owner);
             foreach(string workload in new[]{"snapshot_copy","cached_list_32"}) {
                 void Run() {if(workload=="snapshot_copy")_ = owner.Document.CaptureBytes();else _ = ui.Capture();}
@@ -221,7 +221,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
     ("Frozen scene reference uses direct managed commands without old bridge process", () => {
         string baseline=Path.Combine(output,"frozen.ncmascene");
         var document=new SceneDocument("Baseline");
-        document.World.CreateObject("Original",Guid.Parse("11111111-1111-1111-1111-111111111111")).Set(TransformData.Identity);
+        document.World.Set(document.World.CreateEntity("Original",Guid.Parse("11111111-1111-1111-1111-111111111111")), TransformData.Identity);
         SceneDocumentFiles.Save(document,baseline);
         using var reference=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(root,"tests/assets/m2/scene-command-reference.json")));
         AssertSceneSequence(reference.RootElement,baseline,Path.Combine(output,"frozen.saved.ncmascene"));
@@ -257,10 +257,10 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         string scene=Path.Combine(output,"picker.ncmascene");string? selection=scene;
         var view=new EditorPresenter(ui,null,filePicker:kind=>selection);view.Build(1,1280,720);view.Apply([Event(view,41)],[]);
         Check(File.Exists(scene) && !owner.Edit!.State.Dirty);
-        Check(!view.Shortcut(90,true,false,true,true));Check(!view.Shortcut(90,true,false,false,false));Check(owner.Document.World.GetObjects().Count==1);
+        Check(!view.Shortcut(90,true,false,true,true));Check(!view.Shortcut(90,true,false,false,false));Check(owner.Document.World.GetEntities().Count==1);
         ui.BeginDraft(ui.Stamp,id,"Draft");Check(!view.Shortcut(90,true,false,false,true));ui.CancelDraft();
-        Check(view.Shortcut(90,true,false,false,true) && owner.Document.World.GetObjects().Count==0);
-        Check(view.Shortcut(89,true,false,false,true) && owner.Document.World.GetObjects().Count==1);
+        Check(view.Shortcut(90,true,false,false,true) && owner.Document.World.GetEntities().Count==0);
+        Check(view.Shortcut(89,true,false,false,true) && owner.Document.World.GetEntities().Count==1);
         selection=null;byte[] before=owner.Document.CaptureBytes();view.Build(2,1280,720);view.Apply([Event(view,40)],[]);Check(before.SequenceEqual(owner.Document.CaptureBytes()));
         selection=Path.Combine(output,"missing.ncmascene");view.Build(3,1280,720);view.Apply([Event(view,40)],[]);Check(before.SequenceEqual(owner.Document.CaptureBytes()));
     }),
@@ -292,7 +292,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         byte[] before=owner.Document.CaptureBytes();var view=new EditorPresenter(ui,null);view.Build(1,1280,720);
         var item=view.Items.ToArray().Single(i=>Encoding.UTF8.GetString(view.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))=="Directional shadows");
         view.Apply([Event(view,item.WidgetLow,1),Event(view,item.WidgetLow,2,0),Event(view,item.WidgetLow,3,0)],[]);
-        Check(!owner.Document.World.FindObject(id).Get<RenderConfiguration>().ShadowEnabled);ui.History(ui.Stamp,false);Check(before.SequenceEqual(owner.Document.CaptureBytes()));
+        Check(!owner.Document.World.Get<RenderConfiguration>(owner.Document.World.FindEntity(id)).ShadowEnabled);ui.History(ui.Stamp,false);Check(before.SequenceEqual(owner.Document.CaptureBytes()));
         Reject(()=>RenderConfiguration.Validate(initial with {ShadowFilter=3}));Reject(()=>RenderConfiguration.Validate(initial with {LightIntensity=float.NaN}));
         Reject(()=>RenderConfiguration.Validate(initial with {ContactSteps=33}));
         using var loader=new PluginLoader();loader.Load(args[1],[
@@ -360,7 +360,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         view.Apply([Event(view, item.WidgetLow, 1), Event(view, item.WidgetLow, 2, textBytes: bytes.Length)], bytes);
         Check(ui.HasDraft && before.SequenceEqual(owner.Document.CaptureBytes()));
         view.Build(2, 1280, 720); view.Apply([Event(view, item.WidgetLow, 3, textBytes: bytes.Length)], bytes);
-        Check(!ui.HasDraft && owner.Document.World.FindObject(id).Get<EditorJsonLabel>().Value.Length < 1023);
+        Check(!ui.HasDraft && owner.Document.World.Get<EditorJsonLabel>(owner.Document.World.FindEntity(id)).Value.Length < 1023);
         ui.History(ui.Stamp, false); Check(before.SequenceEqual(owner.Document.CaptureBytes()));
     }),
     ("Dedicated reference-render controls validate, commit once and preserve identity", () => {
@@ -373,14 +373,14 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         view.Apply([Event(view, roughness, 1), Event(view, roughness, 2, .5)], []);
         Check(before.SequenceEqual(owner.Document.CaptureBytes()));
         view.Build(2, 1280, 720); view.Apply([Event(view, roughness, 3, .5)], []);
-        var result = owner.Document.World.FindObject(id).Get<RenderConfiguration>();
+        var result = owner.Document.World.Get<RenderConfiguration>(owner.Document.World.FindEntity(id));
         Check(result.Roughness == .5f && result.ConfigurationId == initial.ConfigurationId && result.PipelineType == initial.PipelineType && owner.Edit.State.UndoCount == history + 1);
         ui.History(ui.Stamp, false); Check(before.SequenceEqual(owner.Document.CaptureBytes()));
         view.Build(3, 1280, 720); roughness = Widget("Reference roughness"); view.Apply([Event(view, roughness, 1), Event(view, roughness, 3, 0)], []);
         Check(!ui.HasDraft && before.SequenceEqual(owner.Document.CaptureBytes()));
         view.Build(4, 1280, 720); ulong toggle = Widget("Replace tone stage");
         view.Apply([Event(view, toggle, 1), Event(view, toggle, 2, 1), Event(view, toggle, 3, 1)], []);
-        Check(owner.Document.World.FindObject(id).Get<RenderConfiguration>().ReplaceToneStage);
+        Check(owner.Document.World.Get<RenderConfiguration>(owner.Document.World.FindEntity(id)).ReplaceToneStage);
         ui.History(ui.Stamp, false); Check(before.SequenceEqual(owner.Document.CaptureBytes()));
     }),
     ("Unicode-safe JSON paging preserves whole text and enforces replacement budgets", () => {
@@ -413,10 +413,10 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         Check(ui.HasDraft && before.SequenceEqual(owner.Document.CaptureBytes()));
         view.Build(2, 1280, 720); view.Apply([Event(view, textItem.WidgetLow, 3, textBytes: bytes.Length)], bytes);
         Check(!ui.HasDraft && owner.Edit.State.UndoCount == history + 1);
-        string value = owner.Document.World.FindObject(id).Get<EditorJsonLabel>().Value;
+        string value = owner.Document.World.Get<EditorJsonLabel>(owner.Document.World.FindEntity(id)).Value;
         Check(value.Contains('B') && value.Length > 2500);
         ui.History(ui.Stamp, false); Check(before.SequenceEqual(owner.Document.CaptureBytes()));
-        ui.History(ui.Stamp, true); Check(owner.Document.World.FindObject(id).Get<EditorJsonLabel>().Value == value);
+        ui.History(ui.Stamp, true); Check(owner.Document.World.Get<EditorJsonLabel>(owner.Document.World.FindEntity(id)).Value == value);
     }),
     ("Paged JSON invalid commit and navigation cancel drafts without damaging document", () => {
         var registry = ComponentRegistry.CreateDefault();
@@ -598,7 +598,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         ui.Transaction(ui.Stamp,"Transform",[new {op="set_component",objectId=id,typeId="ncma.transform",version=1,data=owner.Document.World.Components.Encode(TransformData.Identity)}],id);
         var view=new EditorPresenter(ui,null); view.Build(1,1280,720); byte[] before=owner.Document.CaptureBytes();
         view.Apply([Event(view,100,1),Event(view,100,2,3)],[]); Check(before.SequenceEqual(owner.Document.CaptureBytes()));
-        view.Build(2,1280,720); view.Apply([Event(view,100,3,3)],[]); Check(owner.Document.World.FindObject(id).Get<TransformData>().Position.X==3);
+        view.Build(2,1280,720); view.Apply([Event(view,100,3,3)],[]); Check(owner.Document.World.Get<TransformData>(owner.Document.World.FindEntity(id)).Position.X==3);
         before=owner.Document.CaptureBytes(); view.Build(3,1280,720); view.Apply([Event(view,106,1,1),Event(view,106,2,0)],[]);
         Check(ui.HasDraft); view.Apply([Event(view,106,3,0)],[]); Check(!ui.HasDraft && before.SequenceEqual(owner.Document.CaptureBytes()));
         view.Build(4,1280,720); view.Apply([Event(view,100,1),Event(view,100,2,double.NaN)],[]); Check(!ui.HasDraft && before.SequenceEqual(owner.Document.CaptureBytes()));
@@ -726,17 +726,17 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
                 new([AssetMetadataCommands.CapabilityName])).Changed);
             var ui = new EditorWorkspace(owner); ui.History(ui.Stamp, false); Check(!File.Exists(Path.Combine(directory, "assets/Hero.ncmeta")));
             ui.History(ui.Stamp, true); Check(owner.RefreshAssets(true) && owner.Assets.Snapshot.Catalog.Count == 1);
-            Check(owner.Document.World.GetObjects().Count() == 0 && owner.Edit.State.UndoCount == 1);
+            Check(owner.Document.World.GetEntities().Count() == 0 && owner.Edit.State.UndoCount == 1);
         }
         using var reopened = new EditorSessionOwner("Reopened assets"); reopened.ConfigureAssets(directory, project, 3);
         Check(reopened.Assets!.Snapshot.Catalog.List()[0].AssetId == record.AssetId);
     }),
     ("Scene camera selection and resource refresh are explicit local presentation intents", () => {
         using var owner=new EditorSessionOwner("Camera UI",components:Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(),validateComposition:Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
-        var camera=owner.Document.World.CreateObject("Camera");camera.Set(TransformData.Identity);camera.Set(Ncma.Scene.Rendering.CameraData.Default);
-        owner.Edit!.Resynchronize();var workspace=new EditorWorkspace(owner);workspace.Select(workspace.Stamp,camera.PersistentId);
+        global::Ncma.Runtime.Entity camera=owner.Document.World.CreateEntity("Camera");owner.Document.World.Set(camera, TransformData.Identity);owner.Document.World.Set(camera, Ncma.Scene.Rendering.CameraData.Default);
+        owner.Edit!.Resynchronize();var workspace=new EditorWorkspace(owner);workspace.Select(workspace.Stamp,owner.Document.World.GetUuid(camera));
         var presenter=new EditorPresenter(workspace,null,root);presenter.Build(1,1280,720);byte[] before=owner.Document.CaptureBytes();ulong revision=owner.Document.Revision;
-        presenter.Apply([Event(presenter,2,domain:14)],[]);Check(presenter.SceneCamera==camera.PersistentId);
+        presenter.Apply([Event(presenter,2,domain:14)],[]);Check(presenter.SceneCamera==owner.Document.World.GetUuid(camera));
         presenter.Build(2,1280,720);presenter.Apply([Event(presenter,1,domain:14)],[]);Check(presenter.SceneCamera==Guid.Empty);
         presenter.Build(3,1280,720);presenter.Apply([Event(presenter,3,domain:14)],[]);Check(presenter.ConsumeRenderAssetRefresh()&&!presenter.ConsumeRenderAssetRefresh());
         Check(revision==owner.Document.Revision&&before.SequenceEqual(owner.Document.CaptureBytes()));
@@ -771,10 +771,10 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         var denied = owner.Edit.Invoke(RenderingEditorAdapter.EnvironmentRequest(owner.Edit,id,active,owner.Edit.Revision));
         Check(!denied.Changed && denied.Status == "denied" && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Edit.State.UndoCount == undo);
         Check(owner.Edit.Invoke(RenderingEditorAdapter.EnvironmentRequest(owner.Edit,id,active,owner.Edit.Revision),permissions).Changed);
-        Check(owner.Document.World.FindObject(id).Get<Ncma.Scene.Rendering.EnvironmentLightingData>() == active && owner.Edit.State.UndoCount==undo+1);
+        Check(owner.Document.World.Get<Ncma.Scene.Rendering.EnvironmentLightingData>(owner.Document.World.FindEntity(id)) == active && owner.Edit.State.UndoCount==undo+1);
         CapabilityRequest History(string capability)=>new(EditSession.ContractVersion,Guid.NewGuid(),owner.Edit.SessionId,owner.Edit.Revision,capability,JsonSerializer.SerializeToElement(new{}));
-        Check(owner.Edit.Invoke(History("ncma.history.undo"),permissions).Changed&&owner.Document.World.FindObject(id).Get<Ncma.Scene.Rendering.EnvironmentLightingData>()==off);
-        Check(owner.Edit.Invoke(History("ncma.history.redo"),permissions).Changed&&owner.Document.World.FindObject(id).Get<Ncma.Scene.Rendering.EnvironmentLightingData>()==active);
+        Check(owner.Edit.Invoke(History("ncma.history.undo"),permissions).Changed&&owner.Document.World.Get<Ncma.Scene.Rendering.EnvironmentLightingData>(owner.Document.World.FindEntity(id))==off);
+        Check(owner.Edit.Invoke(History("ncma.history.redo"),permissions).Changed&&owner.Document.World.Get<Ncma.Scene.Rendering.EnvironmentLightingData>(owner.Document.World.FindEntity(id))==active);
     }),
     ("Optional Physics project bootstrap without scene coupling", () => {
         string dir=Path.Combine(output,"physics-project");Directory.CreateDirectory(dir);

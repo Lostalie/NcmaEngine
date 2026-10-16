@@ -137,15 +137,15 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     {
         var renderer=_renderer??throw new InvalidOperationException("Player presentation is not started.");
         if (!_windowSurface!.Prepare(_state)) { _window!.Wait(.01); return; }
-        var objects = play.Document.World.GetObjects();
-        var configurations = objects.Where(o => o.Has<RenderConfiguration>()).Take(2).ToArray();
+        var objects = play.Document.World.GetEntities();
+        var configurations = objects.Where(o => play.Document.World.Has<RenderConfiguration>(o)).Take(2).ToArray();
         if (configurations.Length > 1) throw new ArgumentException("ambiguous_render_configuration");
-        var config = configurations.Length == 1 ? configurations[0].Get<RenderConfiguration>() : RenderConfiguration.Default(play.SessionId);
+        var config = configurations.Length == 1 ? play.Document.World.Get<RenderConfiguration>(configurations[0]) : RenderConfiguration.Default(play.SessionId);
         ulong frame = ++_frame;
         var follow=Ncma.Characters.CharacterPlayRuntime.FollowView(play,_camera,_state.FramebufferWidth,_state.FramebufferHeight);
-        var environments=objects.Where(o=>o.Has<Ncma.Scene.Rendering.EnvironmentLightingData>()).Take(2).ToArray();
+        var environments=objects.Where(o=>play.Document.World.Has<Ncma.Scene.Rendering.EnvironmentLightingData>(o)).Take(2).ToArray();
         if(environments.Length>1)throw new ArgumentException("ambiguous_environment_configuration");
-        var environment=environments.Length==1?environments[0].Get<Ncma.Scene.Rendering.EnvironmentLightingData>():Ncma.Scene.Rendering.EnvironmentLightingData.Off;
+        var environment=environments.Length==1?play.Document.World.Get<Ncma.Scene.Rendering.EnvironmentLightingData>(environments[0]):Ncma.Scene.Rendering.EnvironmentLightingData.Off;
         try {
             _ui?.PrepareView(new(_state.FramebufferWidth,_state.FramebufferHeight,_state.ScaleX,default));
             if(_scene!.PreparedEnvironment!=environment)_scene.RefreshEnvironment(_assets!,()=>!_disposed);

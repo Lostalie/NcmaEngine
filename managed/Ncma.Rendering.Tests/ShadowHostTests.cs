@@ -28,7 +28,7 @@ internal static unsafe partial class Program
         void Pass(bool ok,string label){Check(ok,"M7.5 shadow hosts: "+label);cases++;}
         var repo=new DirectoryInfo(Path.GetFullPath(plugins));while(!File.Exists(Path.Combine(repo.FullName,"Build.bat")))repo=repo.Parent??throw new Exception("Repo missing");string build=new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         using var staged=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repo.FullName,"out/verification/m2-7",build,"packages.json")));string deployed=staged.RootElement.GetProperty("editor").GetString()!;DeploymentManifest.Validate(deployed);
-        var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();var policy=document.World.CreateObject("Shadow configuration");policy.Set(new SceneShadowData(1,SceneShadowQuality.High));Guid id=policy.PersistentId;
+        var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();global::Ncma.Runtime.Entity policy=document.World.CreateEntity("Shadow configuration");document.World.Set(policy, new SceneShadowData(1,SceneShadowQuality.High));Guid id=document.World.GetUuid(policy);
         var shaders=ShaderPackageSelection.Decode(File.ReadAllBytes(Path.Combine(deployed,RuntimeShaderFileSet.DefaultSelectionPath)));
         byte[] highIndex=File.ReadAllBytes(Path.Combine(deployed,ShadowLibrarySelection.IndexPath));var high=ShadowLibrarySelection.Decode(highIndex);
         foreach(string path in shaders.Packages.Select(p=>p.Path).Concat(high.Programs.Select(p=>p.Path)).Append(ShadowLibrarySelection.IndexPath)){
@@ -41,9 +41,9 @@ internal static unsafe partial class Program
         PlayerOptions Options(bool cpu=false)=>new(projectPath,cpu,null,3,1d/60,30,Path.Combine(output,Guid.NewGuid()+".json"),false,false);
         byte[]? highImage=null;var report=playerRunOwner0.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>highImage??=image);
         Pass(report.ExitCode==0&&report.Tick>=3&&highImage is not null&&report.ShutdownErrors.Length==0&&report.ValidationErrors==0&&report.ValidationWarnings==0,"formal Player High before gameplay preflight and actual render");
-        policy.Set(new SceneShadowData(1,SceneShadowQuality.Off));SceneDocumentFiles.Save(document,scenePath);byte[]? offImage=null;report=playerRunOwner1.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>offImage??=image);
+        document.World.Set(policy, new SceneShadowData(1,SceneShadowQuality.Off));SceneDocumentFiles.Save(document,scenePath);byte[]? offImage=null;report=playerRunOwner1.RunForVerification(Options(),Path.GetFullPath(plugins),(image,w,h)=>offImage??=image);
         Pass(report.ExitCode==0&&offImage is not null&&!offImage.SequenceEqual(highImage!)&&report.ShutdownErrors.Length==0,"Player Off removes visible shadow");
-        policy.Set(new SceneShadowData(1,SceneShadowQuality.High));SceneDocumentFiles.Save(document,scenePath);
+        document.World.Set(policy, new SceneShadowData(1,SceneShadowQuality.High));SceneDocumentFiles.Save(document,scenePath);
         Project(config with{ShadowLibrary=new(1,new string('0',64))});report=playerRunOwner2.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false);
         Pass(report.ExitCode==3&&report.Tick==0&&report.SessionId==Guid.Empty&&report.Modules.Length==0&&report.ShutdownErrors.Length==0,"bad explicit high index rejected before native/gameplay, no fallback");
         var cpu=playerRunOwner3.Run(Options(true),pluginRoot:Path.GetFullPath(plugins),visible:false);Pass(cpu.ExitCode==0&&cpu.Tick==3&&cpu.Modules.Length==0&&cpu.RenderedFrames==0,"Null only validates scene values, no GPU package dependency");Project(config);

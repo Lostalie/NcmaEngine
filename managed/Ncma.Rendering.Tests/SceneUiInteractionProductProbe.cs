@@ -56,7 +56,7 @@ internal static unsafe class SceneUiInteractionPlayerProbe
         if(headless){e.Pass(accepted.Tick==2&&accepted.Modules.Length==0&&accepted.RenderedFrames==0&&!Directory.Exists(e.Plugins),"Null exact ticks no plugins");e.Finish([]);return;}
         var document=new SceneDocument(context.Configuration.Name,Ncma.Characters.CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),Ncma.Characters.CharacterComponents.RequireComposition);
         SceneDocumentFiles.Load(document,context.StartupScenePath);
-        Guid target=document.World.GetObjects().Single(o=>o.Name=="HUD target").PersistentId;
+        Guid target=document.World.GetUuid(document.World.GetEntities().Single(o=>document.World.GetName(o)=="HUD target"));
         string[] native;
         using(var package=RuntimeUiPackage.Open(context.Root,context.Configuration.ProjectId,context.Configuration.UiPackage!))
         using(var assets=SceneAssetPreparation.Prepare(context.Root,context.Configuration.ProjectId,document.CaptureSnapshot(),true,context.Configuration.AssetPackage))
@@ -68,7 +68,7 @@ internal static unsafe class SceneUiInteractionPlayerProbe
             state.Focused=1;state.InputReset=state.Overflow=0;state.Sequence=0;ulong sequence=0;
             InputEvent Pointer(uint action,double x,double y)=>new(){Kind=2,Action=action,Sequence=++sequence,X=x,Y=y};
             void Input(InputEvent[] events,double dt=1d/60){state.Sequence=sequence;player.ProcessInput(play,state,events);play.AdvanceFrame(dt);e.Pass(play.State==PlayState.Running,"Player running after input");player.Present(play);}
-            Vector3 Position()=>play.Document.World.FindObject(target).Get<TransformData>().Position;
+            Vector3 Position()=>play.Document.World.Get<TransformData>(play.Document.World.FindEntity(target)).Position;
             Input([]);Input([Pointer(1,20,20),Pointer(0,20,20)]);e.Pass(Position()==new Vector3(1,0,0),"click consumed once by C# not physical input");
             Input([new(){Kind=1,Key=32,Action=1,Sequence=++sequence}]);e.Pass(Position()==new Vector3(2,0,0),"Space consumed once");
             Input([Pointer(1,20,60),Pointer(0,20,60),new(){Kind=5,Codepoint='A',Sequence=++sequence}]);e.Pass(Position()==new Vector3(2,0,1),"text in fixed step");

@@ -75,7 +75,7 @@ public sealed partial class EditSession
     {
         _document.VerifyAccess();
         if (_invoking || InteractionBusy) throw new InvalidOperationException("Finish the interaction before selecting.");
-        if (objectId is Guid id) _ = _document.World.FindObject(id);
+        if (objectId is Guid id) _ = _document.World.FindEntity(id);
         _selection = objectId;
     }
     public void SetFrozen(bool frozen)

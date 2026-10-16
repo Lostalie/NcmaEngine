@@ -43,7 +43,7 @@ internal static class EnvironmentEditorProductProbe
         using(var editor=new CandidatePresentation(Path.Combine(root,"plugins"),context,true,false,false)){
             editor.Start();ulong frame=0;
             byte[] Draw(bool capture=true,double delta=0){byte[]? pixels=null;if(capture)editor.CaptureNextViewportForVerification((p,w,h)=>pixels=p);if(!editor.PumpPlatform())throw new Exception("Window closed");var f=new FrameContext(++frame,delta);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);return pixels??[];}
-            var baseline=Draw();var size=editor.VerificationViewport;var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var initial=owner.Document.World.FindObject(environment).Get<EnvironmentLightingData>();
+            var baseline=Draw();var size=editor.VerificationViewport;var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var initial=owner.Document.World.Get<EnvironmentLightingData>(owner.Document.World.FindEntity(environment));
             evidence.Capture(baseline,size.Width,size.Height,"default",oracle);File.WriteAllBytes(Path.Combine(output,"baseline.rgba"),baseline);
             evidence.Check(editor.VerificationPresenter.EnvironmentPreparationStatus.Contains("就绪"),"prepared current product environment");
             void Set(EnvironmentLightingData value){var edit=owner.Edit!;var request=RenderingEditorAdapter.EnvironmentRequest(edit,environment,value,edit.Revision);var result=edit.Invoke(request,new(["ncma.scene.transaction"],objectScope:[environment],componentScope:[EnvironmentLightingData.TypeId]));evidence.Check(result.Changed,"committed environment operation: "+JsonSerializer.Serialize(result));}
@@ -62,8 +62,8 @@ internal static class EnvironmentEditorProductProbe
                 evidence.Check(!denied.Changed&&denied.Status=="error"&&Draw().SequenceEqual(rotated),"bad generation command rejected without changing image");
                 // Separate fault injection from ordinary commands: emulate a trusted extension
                 // corrupting live state. This is not an editor/Agent mutation capability.
-                owner.Document.World.FindObject(environment).Set(initial with{Generation=999});var failed=Draw();evidence.Check(failed.Where((b,i)=>b!=failed[i%4]).Any()==false&&editor.VerificationPresenter.EnvironmentPreparationStatus.Contains("失败"),"externally corrupted generation themed clear and error");
-                owner.Document.World.FindObject(environment).Set(initial with{Generation=d.Generation,ContentHash=d.ContentHash});evidence.Check(Draw().SequenceEqual(changed),"recover valid generation");baseline=changed;oracle=nextOracle;
+                owner.Document.World.Set(owner.Document.World.FindEntity(environment), initial with{Generation=999});var failed=Draw();evidence.Check(failed.Where((b,i)=>b!=failed[i%4]).Any()==false&&editor.VerificationPresenter.EnvironmentPreparationStatus.Contains("失败"),"externally corrupted generation themed clear and error");
+                owner.Document.World.Set(owner.Document.World.FindEntity(environment), initial with{Generation=d.Generation,ContentHash=d.ContentHash});evidence.Check(Draw().SequenceEqual(changed),"recover valid generation");baseline=changed;oracle=nextOracle;
             }
             // Resize the actual viewport through the existing workspace splitter contract.
             var view=editor.VerificationPresenter;view.AttachLayout(new(Path.Combine(output,"workspace.json")));Draw();var splitter=view.Items.ToArray().Single(i=>i.Kind==(uint)GuiItemKind.Splitter&&i.WidgetHigh==32&&i.WidgetLow==1);var vf=view.Frame;

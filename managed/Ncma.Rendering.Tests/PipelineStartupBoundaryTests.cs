@@ -22,7 +22,7 @@ internal static unsafe partial class Program
         Build();Pass(calls==1,"exact committed callback");
         foreach(bool build in new[]{false,true}){
             inBuild=build;
-            foreach(Action action in new Action[]{()=>document.World.CreateObject("illegal"),()=>renderer.Dispose(),Build}){
+            foreach(Action action in new Action[]{()=>document.World.CreateEntity("illegal"),()=>renderer.Dispose(),Build}){
                 callback=action;Bad(Build);callback=null;Build();Pass(document.World.Count==0,"factory and Build failure atomic World/renderer/reentry");
             }
         }

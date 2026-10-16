@@ -38,14 +38,14 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
         _play = play;_profileEnabled=profile;
         _roots=new(play.Document.World,assets);
         try{_graphRoots=new(play.Document.World,assets,animators,128-_roots.TrackCount,262144-_roots.RetainedKeyCount);try{_actions=new(play.Document.World,_roots);}catch{_graphRoots.Dispose();throw;}}catch{_roots.Dispose();throw;}
-        _bindings = play.Document.World.GetObjects().Where(o => o.Has<CharacterData>() || o.Has<BoxColliderData>()).OrderBy(o => o.PersistentId)
-            .Select(o => new Binding(o.PersistentId, o.Has<CharacterData>() ? o.Get<CharacterData>() : null, o.Has<BoxColliderData>() ? o.Get<BoxColliderData>() : null)).ToArray();
+        _bindings = play.Document.World.GetEntities().Where(o => play.Document.World.Has<CharacterData>(o) || play.Document.World.Has<BoxColliderData>(o)).OrderBy(o => play.Document.World.GetUuid(o))
+            .Select(o => new Binding(play.Document.World.GetUuid(o), play.Document.World.Has<CharacterData>(o) ? play.Document.World.Get<CharacterData>(o) : null, play.Document.World.Has<BoxColliderData>(o) ? play.Document.World.Get<BoxColliderData>(o) : null)).ToArray();
         _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => {
             _profileTick=0;_roots.Initialize(play.Document.World);_graphRoots.Initialize(play.Document.World);_actions.Initialize(play.Document.World,play.SessionId);return _domain = new Domain(physics, _bindings);
         },StageCombat);
         Guid[] chars = _bindings.Where(b => b.Character is not null).Select(b => b.Id).ToArray();
         Guid[] boxes = _bindings.Where(b => b.Box is not null).Select(b => b.Id).ToArray();
-        Guid[] cameras = play.Document.World.GetObjects().Where(o => o.Has<FollowCameraData>()).Select(o => o.PersistentId).ToArray();
+        Guid[] cameras = play.Document.World.GetEntities().Where(o => play.Document.World.Has<FollowCameraData>(o)).Select(o => play.Document.World.GetUuid(o)).ToArray();
         // Freeze complete membership, including an empty set: runtime attachment must not
         // silently create metadata with no corresponding numerical/presentation owner.
         _coordinator.FreezeConfiguration<CharacterData>(chars);
@@ -80,7 +80,7 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
             if (_actions.Alive(binding.Id) && data.Controlled && input.Focused && input.Pressed(32) && state.Ground == GroundState.Ground) vertical = data.JumpSpeed;
             V3 velocity = direction * data.Speed + new V3(0, vertical, 0);
             if (state.Ground == GroundState.Ground) velocity += new V3(state.GroundVelocity.X, 0, state.GroundVelocity.Z);
-            var start = world.FindObject(binding.Id).Get<TransformData>(); float turn = 0;
+            var start = world.Get<TransformData>(world.FindEntity(binding.Id)); float turn = 0;
             if(_graphRoots.Contains(binding.Id)) {
                 long rootTime=ProfileTime;var root=_graphRoots.Prepare(binding.Id,start,_play.SessionId,world,delta);_rootMs+=ProfileElapsed(rootTime);
                 velocity=new V3(root.Translation.X/h,vertical,root.Translation.Z/h);
@@ -125,12 +125,12 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
         bool valid=_play.State is PlayState.Running or PlayState.Paused && Status.SnapshotValid;
         var rows=new List<CharacterDebugRow>(32);
         if(valid)foreach(var binding in _bindings.Where(b=>b.Character is not null)) {
-            var obj=_play.Document.World.FindObject(binding.Id);int index=Array.IndexOf(_bindings,binding);
+            global::Ncma.Runtime.Entity obj=_play.Document.World.FindEntity(binding.Id);int index=Array.IndexOf(_bindings,binding);
             var numeric=_domain!.Character(index);bool graphRoot=_graphRoots.Contains(binding.Id),root=_roots.Contains(binding.Id)||graphRoot;
             var motion=graphRoot?_graphRoots.Inspect(binding.Id):root?_roots.Inspect(binding.Id):default;
             var action=_actions.Owns(binding.Id)?_actions.Inspect(binding.Id):default;
-            HealthData? hp=obj.Has<HealthData>()?obj.Get<HealthData>():null;
-            rows.Add(new(binding.Id,obj.Get<TransformData>().Position,numeric.Ground.ToString(),_domain.ContactCount(index),root,motion.Time,motion.DesiredDisplacement,motion.AcceptedDisplacement,
+            HealthData? hp=_play.Document.World.Has<HealthData>(obj)?_play.Document.World.Get<HealthData>(obj):null;
+            rows.Add(new(binding.Id,_play.Document.World.Get<TransformData>(obj).Position,numeric.Ground.ToString(),_domain.ContactCount(index),root,motion.Time,motion.DesiredDisplacement,motion.AcceptedDisplacement,
                 _actions.Owns(binding.Id)?action.State.ToString():"None",action.Instance,hp?.Current,hp?.Maximum));
         }
         return new(_play.SessionId,_play.Document.World.Identity,_play.Tick,_play.State.ToString(),valid,valid?"none":_play.State==PlayState.Faulted?"play_faulted":"snapshot_invalid",rows.ToArray(),valid?_actions.Events():[]);
@@ -157,14 +157,14 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     public static SceneCameraView? FollowView(PlaySession play, Guid camera, uint width, uint height)
     {
         if (camera == Guid.Empty || play.State == PlayState.Faulted) return null;
-        var obj = play.Document.World.GetObjects().FirstOrDefault(o => o.PersistentId == camera);
-        if (obj is null || !obj.Has<FollowCameraData>() || !obj.Has<CameraData>()) return null;
-        var data = obj.Get<FollowCameraData>(); var target = play.RenderView.Objects.FirstOrDefault(o => o.ObjectId == data.Target);
+        global::Ncma.Runtime.Entity obj = play.Document.World.GetEntities().FirstOrDefault(o => play.Document.World.GetUuid(o) == camera);
+        if (obj == default || !play.Document.World.Has<FollowCameraData>(obj) || !play.Document.World.Has<CameraData>(obj)) return null;
+        var data = play.Document.World.Get<FollowCameraData>(obj); var target = play.RenderView.Objects.FirstOrDefault(o => o.ObjectId == data.Target);
         if (target is null) return null;
         var position = target.Transform.Position + new V3(data.OffsetX, data.OffsetY, data.OffsetZ);
         var view = M4.CreateLookAt(position, target.Transform.Position + new V3(0, data.LookHeight, 0), V3.UnitY);
         if (!M4.Invert(view, out var cameraWorld) || !M4.Decompose(cameraWorld, out _, out var rotation, out _)) throw new ArgumentException("Invalid follow view.");
-        return RenderSceneExtractor.CreateCamera(Guid.Empty, new(position, Q.Normalize(rotation), V3.One), obj.Get<CameraData>(), width, height);
+        return RenderSceneExtractor.CreateCamera(Guid.Empty, new(position, Q.Normalize(rotation), V3.One), play.Document.World.Get<CameraData>(obj), width, height);
     }
     public void Dispose()
     {

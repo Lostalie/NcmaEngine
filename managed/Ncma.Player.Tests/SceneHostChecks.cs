@@ -27,12 +27,12 @@ internal static class SceneHostChecks
         File.WriteAllBytes(Path.Combine(root,"assets/model.fbx.ncmeta"),AssetRecordCodec.Encode(new(1,model,AssetKind.StaticMesh,"assets/model.fbx",sourceHash,"ufbx",1,settings,
             [new(mesh,AssetKind.StaticMesh,"mesh/0","Triangle",false),new(slots,AssetKind.MaterialSet,"materials/0","Slots",false)],[],new(1,hash,relative))));
         var document=new SceneDocument("Actual static Player",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);
-        var item=document.World.CreateObject("Mesh");item.Set(TransformData.Identity with{Position=new(0,0,-4)});item.Set(new StaticMeshData(mesh,slots,true,true,uint.MaxValue));
-        var camera=document.World.CreateObject("Explicit camera");camera.Set(TransformData.Identity);camera.Set(CameraData.Default);
-        var light=document.World.CreateObject("Primary light");light.Set(TransformData.Identity);light.Set(DirectionalLightData.Default);
+        global::Ncma.Runtime.Entity item=document.World.CreateEntity("Mesh");document.World.Set(item, TransformData.Identity with{Position=new(0,0,-4)});document.World.Set(item, new StaticMeshData(mesh,slots,true,true,uint.MaxValue));
+        global::Ncma.Runtime.Entity camera=document.World.CreateEntity("Explicit camera");document.World.Set(camera, TransformData.Identity);document.World.Set(camera, CameraData.Default);
+        global::Ncma.Runtime.Entity light=document.World.CreateEntity("Primary light");document.World.Set(light, TransformData.Identity);document.World.Set(light, DirectionalLightData.Default);
         string scene=Path.Combine(root,"start.ncmascene"),projectFile=Path.Combine(root,"scene.ncmaproject");SceneDocumentFiles.Save(document,scene);byte[] saved=File.ReadAllBytes(scene);
         string assembly=Assembly.GetExecutingAssembly().Location;File.Copy(assembly,Path.Combine(root,"gameplay.dll"));File.Copy(Path.ChangeExtension(assembly,".deps.json"),Path.Combine(root,"gameplay.deps.json"));
-        var config=new ProjectConfiguration(1,project,"Actual scene","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera.PersistentId);
+        var config=new ProjectConfiguration(1,project,"Actual scene","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:document.World.GetUuid(camera));
         var json=new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase};File.WriteAllBytes(projectFile,JsonSerializer.SerializeToUtf8Bytes(config,json));
         for(int i=0;i<3;i++) {
 
