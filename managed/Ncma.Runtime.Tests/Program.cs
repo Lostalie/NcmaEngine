@@ -141,6 +141,7 @@ foreach (var test in cases)
 Console.WriteLine($"Ncma managed headless: {cases.Length - failures}/{cases.Length} passed (no native DLL/Python).");
 failures += EcsStorageTests.Run();
 failures += EntityIdentityTests.Run();
+failures += EntityQueryTests.Run();
 return failures == 0 ? 0 : 1;
 
 readonly record struct Health(int Points) : IComponent;

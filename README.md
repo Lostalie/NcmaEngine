@@ -2,9 +2,9 @@
 
 面向模型与动画驱动动作游戏的引擎：**C# 主引擎与游戏逻辑 + C++ 性能插件 + 可选 Python 专长模块**。
 
-更新：2026-10-16。当前是持续开发中的可验证候选，不是生产就绪版本。M8.2 已通过同源码完整 Debug/Release 自动回归与受检部署；**ECS E0、E1-A 已交付；E1-B 身份与单一门面迁移已完成并通过双配置各 89 项 CTest，下一阶段为 E2，M8.3 未开始**。范围及证据见 [E1-B 记录](docs/ECS_E1_B_DELIVERY.md)。人工、目标机、自包含和完整性能/长稳验收仍开放。
+更新：2026-10-16。当前是持续开发中的可验证候选，不是生产就绪版本。M8.2 已通过同源码完整 Debug/Release 自动回归与受检部署；**ECS E0、E1 和 E2-A 查询基础已完成自动门禁；E2-A 最终 Debug/Release 各 89 项 CTest 通过，下一步 E2-B 有界结构批次，M8.3 未开始**。查询契约、首轮文件替换失败与复测证据见 [ECS 实施记录](docs/ECS_IMPLEMENTATION_PLAN.md#8-e2-分片与-query-契约)。人工、目标机、自包含和完整性能/长稳验收仍开放。
 
-最新目标顺序：**M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**。源码已采用唯一 World 的强类型池与代次 Entity，删除两种旧 ObjectReference、Runtime.GameObject 和低层旧创建/查找/枚举入口；低层消费者使用 World + Entity，用户侧仅保留 Ncma.GameObject 高层门面，共享同一份组件存储。Query 和增量提交仍未完成，不代表整个 ECS 完成。正式 EXE 仍为 M8.2。详见 [路线图](docs/ROADMAP.md) 与 [ECS 实施合同](docs/ECS_IMPLEMENTATION_PLAN.md)。
+最新目标顺序：**M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**。源码已采用唯一 World 的强类型池与代次 Entity，删除两种旧 ObjectReference、Runtime.GameObject 和低层旧创建/查找/枚举入口；低层消费者使用 World + Entity，用户侧仅保留 Ncma.GameObject 高层门面，共享同一份组件存储。E2-A 提供有界 All/None、常见类型组合、确定性成员缓存及受检迭代；结构批次和增量提交尚未完成，不代表整个 ECS 完成。正式 EXE 已按用户要求更新为通过完整 Release 构建与受检部署的 E1-B，本次 E2-A 只生成候选包、不部署。详见 [路线图](docs/ROADMAP.md) 与 [ECS 实施合同](docs/ECS_IMPLEMENTATION_PLAN.md)。
 
 M8.2 交付的是可选本机工具模块，不是模型推理服务；worker 开发环境须单独准备，不随默认 Editor/Player 部署。范围、测试与剩余门禁见 [M8.2 交付记录](docs/M8_2_DELIVERY_REPORT.md)。ECS 的实施边界、分片与验收见 [详细合同](docs/ECS_IMPLEMENTATION_PLAN.md) 和 [E0 基线记录](docs/ECS_E0_BASELINE.md)。
 

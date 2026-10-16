@@ -5,6 +5,8 @@ namespace Ncma.Runtime;
 // Internal bounded storage slots, not public identities. World validates handles before access.
 internal interface IComponentPool
 {
+    int Count { get; }
+    int SlotAt(int index);
     bool Has(int slot);
     IComponentPool Clone();
     void Remove(int slot);
@@ -29,6 +31,8 @@ internal sealed class ComponentPool<T> : IComponentPool where T : struct, ICompo
     }
 
     public bool Has(int slot) => (uint)slot < (uint)_sparse.Length && _sparse[slot] != 0;
+    public int Count => _count;
+    public int SlotAt(int index) => (uint)index < (uint)_count ? _slots[index] : throw new ArgumentOutOfRangeException(nameof(index));
     internal T Get(int slot) => Has(slot) ? _values[_sparse[slot] - 1] :
         throw new ArgumentException("Component is not attached.");
 
@@ -92,6 +96,7 @@ internal sealed class ComponentStorage
     }
 
     internal bool Has(int slot, Type type) => _pools.TryGetValue(type, out var pool) && pool.Has(slot);
+    internal IComponentPool? FindPool(Type type) => _pools.GetValueOrDefault(type);
     internal T Get<T>(int slot) where T : struct, IComponent =>
         _pools.TryGetValue(typeof(T), out var pool) ? ((ComponentPool<T>)pool).Get(slot) :
             throw new ArgumentException("Component is not attached.");

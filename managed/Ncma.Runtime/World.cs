@@ -27,6 +27,8 @@ public sealed partial class World
     private Exception? _stepError;
     private Guid _identity = Guid.NewGuid();
     private ulong _nextOrdinal = 1, _revision, _tick;
+    private ulong _membershipVersion;
+    private bool _stepMembershipChanged;
     private bool _updating, _preparing, _initializing;
     private int _readOnlyDepth;
     private string _name;
@@ -43,6 +45,8 @@ public sealed partial class World
     public string Name { get { VerifyAccess(); return _name; } }
     public Guid Identity { get { VerifyAccess(); return _identity; } }
     public ulong Revision { get { VerifyAccess(); return _revision; } }
+    // Revision is the data/commit stamp (including empty ticks); membership changes independently.
+    public ulong MembershipVersion { get { VerifyAccess(); return _membershipVersion; } }
     public ulong Tick { get { VerifyAccess(); return _tick; } }
     internal bool IsUpdating { get { VerifyAccess(); return _updating; } }
     internal bool IsCommittedBoundary { get { VerifyAccess(); return !_updating && !_preparing; } }
@@ -65,6 +69,7 @@ public sealed partial class World
         _uuidIndex.Add(uuid, slot);
         _slots[slot] = true;
         _revision = revision;
+        _membershipVersion = revision;
         return result;
     }
 
@@ -172,6 +177,7 @@ public sealed partial class World
                 _name = name;
                 _identity = identity;
                 _revision = revision;
+                _membershipVersion = revision;
             };
         }
         finally { _preparing = false; }
@@ -247,6 +253,7 @@ public sealed partial class World
         _uuidIndex.Remove(entry.PersistentId);
         _slots[entry.Slot] = false;
         _revision = revision;
+        _membershipVersion = revision;
     }
     public bool Has<T>(Entity entity) where T : struct, IComponent => _storage.Has(Require(entity).Slot, typeof(T));
     public T Get<T>(Entity entity) where T : struct, IComponent => _storage.Get<T>(Require(entity).Slot);
@@ -278,8 +285,10 @@ public sealed partial class World
             if (!_storage.Has(entry.Slot, type) && _storage.Count(entry.Slot) >= MaxComponentsPerObject)
                 throw new InvalidOperationException("Component capacity exceeded.");
             ulong revision = checked(_revision + 1);
+            bool added = !_storage.Has(entry.Slot, type);
             _storage.Set(entry.Slot, validated);
             _revision = revision;
+            if (added) _membershipVersion = revision;
         }
     }
     public bool Remove<T>(Entity entity) where T : struct, IComponent
@@ -292,6 +301,7 @@ public sealed partial class World
         ulong revision = checked(_revision + 1);
         _storage.Remove(entry.Slot, typeof(T));
         _revision = revision;
+        _membershipVersion = revision;
         return true;
     }
     internal void RejectStep(Exception error) { VerifyAccess(); if (_updating) _stepError ??= error; }
@@ -316,6 +326,7 @@ public sealed partial class World
         var entry = new Entry(uuid, name, slot, generation, _nextOrdinal++);
         _stepObjects.Add(slot, entry); _stepUuids.Add(uuid, slot);
         _stepSlots![slot] = true;
+        _stepMembershipChanged = true;
     }
     internal void StageDestroy(Guid uuid)
     {
@@ -324,6 +335,7 @@ public sealed partial class World
         _stepStorage!.RemoveAll(target.Entry.Slot);
         _stepObjects!.Remove(target.Id); _stepUuids!.Remove(uuid);
         _stepSlots![target.Entry.Slot] = false;
+        _stepMembershipChanged = true;
     }
     internal void StageRename(Guid uuid, string name)
     {
@@ -342,6 +354,7 @@ public sealed partial class World
         if (_stepStorage!.Has(target.Entry.Slot, type)) throw new ArgumentException("Component already attached.");
         if (_stepStorage.Count(target.Entry.Slot) >= MaxComponentsPerObject) throw new ArgumentException("Component capacity exceeded.");
         _stepStorage.SetDecoded(target.Entry.Slot, decoded, Components);
+        _stepMembershipChanged = true;
     }
     internal void StageRemove(Guid uuid, string typeId)
     {
@@ -351,6 +364,7 @@ public sealed partial class World
         if (type is null) throw new ArgumentException("Component is not attached.");
         VerifyComponentTopology(type);
         _stepStorage.Remove(target.Entry.Slot, type);
+        _stepMembershipChanged = true;
     }
     internal void RequireCommandTarget(Guid uuid) { VerifyCommandAccess(); _ = StepEntry(uuid); }
     internal void BeginStep(bool initialization = false)
@@ -365,6 +379,7 @@ public sealed partial class World
         _authorityWrites.EnsureCapacity(_authorities.Count);
         _authorityWrites.Clear();
         _stepObjects = objects; _stepUuids = uuids; _stepError = null;
+        _stepMembershipChanged = false;
         _stepSlots = slots; _stepStorage = storage;
         _initializing = initialization;
         _updating = true;
@@ -384,7 +399,7 @@ public sealed partial class World
             _ = SceneJson.EncodeBounded(candidate, MaxSnapshotBytes);
             inspect?.Invoke(candidate);
             if (_stepError is not null) throw new InvalidOperationException("Candidate validation rejected; step must abort.", _stepError);
-            return () => { _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _revision++; if (!_initializing) _tick++; AbortStep(); };
+            return () => { _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _revision++; if (_stepMembershipChanged) _membershipVersion = _revision; if (!_initializing) _tick++; AbortStep(); };
         }
         finally { _preparing = false; }
     }
@@ -401,6 +416,7 @@ public sealed partial class World
         _authorityWrites.Clear();
         _updating = false;
         _initializing = false;
+        _stepMembershipChanged = false;
     }
     public Entity Resolve(Entity entity) { _ = Require(entity); return entity; }
     internal void FixedStep(Action update)
