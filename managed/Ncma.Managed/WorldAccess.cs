@@ -71,7 +71,7 @@ public sealed partial class SceneWorld
             var target = Resolve(writes[i].Object);
             Runtime.VerifyUnownedComponentWrite(target.Reference, typeof(Ncma.Runtime.TransformData));
             if (!targets.Add(target.Reference.Id) || !target.Has<Ncma.Runtime.TransformData>()) throw new ArgumentException("Duplicate target or missing Transform.");
-            staged[i] = (target, (Ncma.Runtime.TransformData)Runtime.Components.Validate(ToData(writes[i].Value)));
+            staged[i] = (target, Runtime.Components.Validate(ToData(writes[i].Value)));
         }
         foreach (var (target, value) in staged) target.Set(value);
     }

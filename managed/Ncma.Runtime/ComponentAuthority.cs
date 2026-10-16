@@ -69,7 +69,7 @@ public sealed partial class World
                 throw new InvalidOperationException("Expired or foreign component write authority.");
             SetCore(FindObject(uuid).Reference, value, authority);
             _authorityWrites.Add((uuid, typeof(T)));
-            return (T)StepEntry(uuid).Entry.Components[typeof(T)];
+            return _stepStorage!.Get<T>(StepEntry(uuid).Entry.Slot);
         }
         catch (Exception error) { RejectStep(error); throw; }
     }

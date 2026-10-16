@@ -75,4 +75,11 @@ E0 不修改正式存储或部署 EXE。后续运行时代码改动必须建立�
 
 ## 7. 实施状态
 
-E0 合同/自动基线门禁完成，Git 交付以本片提交及远端核验为准；E1–E5 未开始。原实现基线工具位于 `managed/Ncma.Gameplay.Tests/EcsBaseline.cs`；详细证据、时间噪声和仍开放的正式性能门禁见 `ECS_E0_BASELINE.md`。本片不改变生产 World 或 EXE。
+E0 合同/自动基线门禁完成并已提交推送 `936b51f7f38e072fb554be9c820ddf24752cb3ba`。原实现基线工具位于 `managed/Ncma.Gameplay.Tests/EcsBaseline.cs`；详细证据、时间噪声和仍开放的正式性能门禁见 `ECS_E0_BASELINE.md`。
+
+E1 分两个可独立回归的实施片，整体门禁不变：
+
+- **E1-A 强类型存储**：在唯一 World 内替换逐对象 `Dictionary<Type, object>`，建立按类型 dense 值数组/slot 数组及有界 sparse 索引；保留现行公共身份和完整快照事务。内部 slot 不是公开 Entity，不能序列化或用于绕过 World 校验。整池首次写复制是此片的过渡提交策略，不是 E3 的分页/增量实现。
+- **E1-B 身份与单一门面**：引入 WorldIdentity/Index/Generation、代次溢出退役、失败候选句柄永不复活、确定性创建序号；迁移所有消费者和两种 ObjectReference；用户侧 GameObject 直接访问同一 Entity，删除被替代的 Runtime.GameObject，不添加旧 API 转发壳。信号/批次目标同样校验完整身份；注册/序列化负例覆盖组件内嵌套运行时 Entity，不能因为它是值类型便允许持久化句柄。代次保留/烧号不能随候选回滚而使旧候选引用复活。
+
+E1-A 已实现并通过同源码双配置各 89 项 CTest 及补充验证，Git 交付以本片提交与远端核验为准，见 `ECS_E1_A_DELIVERY.md`；E1-B、E2–E5 和 M8.3 未开始。E1-A 只改变源码/候选包，保留正式 M8.2 EXE；不得因此宣称整个 E1 或 ECS 重构完成。

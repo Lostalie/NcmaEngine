@@ -1,5 +1,7 @@
 # NcmaEngine 引擎架构
 
+2026-10-16 ECS 增量：E1-A 源码中的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典，候选整池首次写复制；完整快照验证仍保留。Debug/Release 各 89 项 CTest 和补充验证通过；本片没有无 Skip 构建/部署，正式 EXE 仍为 M8.2。代次 Entity、两个 ObjectReference 收敛、单一 GameObject、Query/增量 tick 尚待 E1-B–E5，不宣称完整高性能 ECS。见 [E1-A 记录](ECS_E1_A_DELIVERY.md)；下文旧存储描述为此前状态。
+
 2026-10-16 当前模块/顺序更新：M8.2 已有独立可选本机 TLS gRPC 工具 worker、进程审批/故障保留与客户端受检搬移，实际范围及最终门禁状态见 [M8.2 契约](M8_2_RUNTIME_CONTRACT.md)。正式 Editor/Player 模块接线、模型推理、pythonnet/ZeroMQ 仍未实现；下文早期“全部传输未实现”为历史状态。用户已确认 **M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**，ECS 目标为 C# 唯一存储、GameObject 封装同一 Entity，当前尚未实现；具体门禁见 [路线图](ROADMAP.md)。
 
 2026-10-05 更新：正式应用入口改为 C# apphost → Application/Editor.Services →
@@ -72,7 +74,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 |---|---|---|
 | Application / Services | Editor、Player、Headless 入口和服务生命周期 | C# apphost 与共享运行服务已实现；默认 Editor 已切换，部署/恢复自动回归通过；自包含/人工待验 |
 | World / GameObject | 扁平对象存储、UUID、运行时引用、创建/销毁 | C# World 已接管编辑器和 Play，C++ 只持有不透明会话令牌 |
-| Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | 托管类型/schema 注册和组件存储已实现基础；类型池/通用查询未实现 |
+| Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | E1-A 类型池已接入源码并通过双配置候选验证；既有 schema/预算保留；通用 Query 与增量提交未实现 |
 | Behaviour Host | C# 生命周期、实例绑定、Export、程序集加载/重载 | 已接入托管 World；私有状态迁移、自动重建未实现 |
 | WorldRunner / Systems | 固定步、呈现步、依赖和结构命令提交 | PlaySession 固定步/顺序 Systems 已接入编辑器；输入/插值/运行结构命令已实现基础 |
 | SceneAsset / Serialization | 通用组件记录、资产引用、版本迁移 | C# `.ncmascene` JSON v1 通用组件读写/原子保存已实现；旧 .ncscene 不兼容；资产引用/迁移流水线未实现 |
@@ -301,7 +303,7 @@ Ncma.Editor.Core.Tests → 共享命令 / 完整历史 / 草稿 / 文件状态�
 
 已完成首切片：独立 C# headless World/组件、固定步、快照和 AI/编辑器共用事务基础。
 本次已接管编辑器/Play 的 World、Behaviour 与完整新场景文档，不保留 C++ World。M1.2 已将场景命令/历史迁入 C# Editor.Core，删除原生撤销栈。M1.3-A/B 已接入固定步与运行控制；下一切片为输入/插值、运行结构命令、信号/生命周期/重载安全边界，随后 live MCP；之后反转主入口并逐个插件化渲染/物理。
-新的字典/装箱存储尚未性能优化，不能宣称类型池/ECS 或完整托管游戏运行时完成。
+以上为早期迁移次序。当前 E1-A 源码已替换逐对象字典/装箱值存储为强类型池；完整快照/JSON、旧身份和双门面仍待后续片迁移，性能尚未经过新旧成对验收，不能宣称整个 ECS 完成。当前顺序以文首及路线图为准。
 AI 的分域权限、能力状态与闭环见 [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)。
 动作游戏功能优先打通 FBX 场景角色 → GPU 蒙皮 → Animator/CharacterMotor →
 碰撞感知 Root Motion/通知 → 动画图与 Montage 编辑。

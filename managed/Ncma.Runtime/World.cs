@@ -14,13 +14,16 @@ public sealed partial class World
     public const int MaxObjects = 4096;
     public const int MaxComponentsPerObject = 64;
     public const int MaxSnapshotBytes = 4 * 1024 * 1024;
-    private sealed record Entry(Guid PersistentId, string Name, Dictionary<Type, object> Components);
+    private sealed record Entry(Guid PersistentId, string Name, int Slot);
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     private Dictionary<ulong, Entry> _objects = new();
     private Dictionary<Guid, ulong> _uuidIndex = new();
     private Dictionary<ulong, Entry>? _stepObjects;
     private Dictionary<Guid, ulong>? _stepUuids;
-    private readonly HashSet<ulong> _touched = [];
+    private ComponentStorage _storage = new();
+    private ComponentStorage? _stepStorage;
+    private bool[] _slots = new bool[MaxObjects];
+    private bool[]? _stepSlots;
     private ulong _stepNextId;
     private Exception? _stepError;
     private Guid _identity = Guid.NewGuid();
@@ -55,8 +58,13 @@ public sealed partial class World
         if (_objects.Count >= MaxObjects || _nextId == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
         ulong revision = checked(_revision + 1);
         ulong id = _nextId;
-        _objects.Add(id, new Entry(uuid, name, new()));
+        int slot = FreeSlot(_slots);
+        var entry = new Entry(uuid, name, slot);
+        _objects.EnsureCapacity(_objects.Count + 1);
+        _uuidIndex.EnsureCapacity(_uuidIndex.Count + 1);
+        _objects.Add(id, entry);
         _uuidIndex.Add(uuid, id);
+        _slots[slot] = true;
         _nextId++;
         _revision = revision;
         return new GameObject(this, new(_identity, id));
@@ -78,11 +86,17 @@ public sealed partial class World
     public WorldSnapshot CaptureSnapshot()
     {
         VerifyAccess();
-        return new(1, _name, _objects.OrderBy(pair => pair.Key).Select(pair => new ObjectSnapshot(
-            pair.Value.PersistentId, pair.Value.Name, pair.Value.Components.Values
-                .OrderBy(value => Components.Describe(value.GetType()).TypeId, StringComparer.Ordinal)
-                .Select(value => new ComponentSnapshot(Components.Describe(value.GetType()).TypeId,
-                    Components.Describe(value.GetType()).Version, Components.EncodeObject(value))).ToArray())).ToArray());
+        return Capture(_name, _objects, _storage);
+    }
+
+    private WorldSnapshot Capture(string name, Dictionary<ulong, Entry> objects, ComponentStorage storage) =>
+        new(1, name, objects.OrderBy(pair => pair.Key).Select(pair => new ObjectSnapshot(
+            pair.Value.PersistentId, pair.Value.Name, storage.Capture(pair.Value.Slot, Components))).ToArray());
+
+    private static int FreeSlot(bool[] slots)
+    {
+        int slot = Array.IndexOf(slots, false);
+        return slot >= 0 ? slot : throw new InvalidOperationException("Object capacity exceeded.");
     }
 
     public string SerializeSnapshot()
@@ -122,27 +136,27 @@ public sealed partial class World
             ulong nextId = _nextId;
             var objects = new Dictionary<ulong, Entry>();
             var uuids = new Dictionary<Guid, ulong>();
+            var storage = new ComponentStorage();
+            var slots = new bool[MaxObjects];
             foreach (var item in snapshot.Objects)
             {
                 if (item is null || item.PersistentId == Guid.Empty || uuids.ContainsKey(item.PersistentId) ||
                     item.Components is null || item.Components.Length > MaxComponentsPerObject || nextId == ulong.MaxValue)
                     throw new ArgumentException("Invalid object record, duplicate UUID or capacity exceeded.");
                 ValidateName(item.Name);
-                var values = new Dictionary<Type, object>();
+                int slot = objects.Count;
                 foreach (var component in item.Components)
                 {
                     if (component is null) throw new ArgumentException("Missing component record.");
                     object value = Components.Decode(component);
-                    if (!values.TryAdd(value.GetType(), value)) throw new ArgumentException("Duplicate component type.");
+                    if (storage.Has(slot, value.GetType())) throw new ArgumentException("Duplicate component type.");
+                    storage.SetDecoded(slot, value, Components);
                 }
-                objects.Add(nextId, new Entry(item.PersistentId, item.Name, values));
+                slots[slot] = true;
+                objects.Add(nextId, new Entry(item.PersistentId, item.Name, slot));
                 uuids.Add(item.PersistentId, nextId++);
             }
-            var normalized = new WorldSnapshot(1, snapshot.Name, objects.Select(pair => new ObjectSnapshot(
-                pair.Value.PersistentId, pair.Value.Name, pair.Value.Components.Values
-                    .OrderBy(value => Components.Describe(value.GetType()).TypeId, StringComparer.Ordinal)
-                    .Select(value => new ComponentSnapshot(Components.Describe(value.GetType()).TypeId,
-                        Components.Describe(value.GetType()).Version, Components.EncodeObject(value))).ToArray())).ToArray());
+            var normalized = Capture(snapshot.Name, objects, storage);
             _ = SceneJson.EncodeBounded(normalized, MaxSnapshotBytes);
             validateCandidate?.Invoke(normalized);
             if (_revision != revision - 1)
@@ -156,6 +170,8 @@ public sealed partial class World
                 if (_revision != revision - 1) throw new InvalidOperationException("World changed after preparing restore.");
                 _objects = objects;
                 _uuidIndex = uuids;
+                _storage = storage;
+                _slots = slots;
                 _nextId = nextId;
                 _name = name;
                 _identity = identity;
@@ -228,42 +244,43 @@ public sealed partial class World
         VerifyStructuralAccess();
         Entry entry = Require(reference);
         ulong revision = checked(_revision + 1);
+        _storage.RemoveAll(entry.Slot);
         _objects.Remove(reference.Id);
         _uuidIndex.Remove(entry.PersistentId);
+        _slots[entry.Slot] = false;
         _revision = revision;
     }
-    internal bool Has<T>(ObjectReference reference) where T : struct, IComponent => Require(reference).Components.ContainsKey(typeof(T));
-    internal T Get<T>(ObjectReference reference) where T : struct, IComponent =>
-        Require(reference).Components.TryGetValue(typeof(T), out var value) ? (T)value : throw new ArgumentException("Component is not attached.");
-    internal void Set(ObjectReference reference, object value)
+    internal bool Has<T>(ObjectReference reference) where T : struct, IComponent => _storage.Has(Require(reference).Slot, typeof(T));
+    internal T Get<T>(ObjectReference reference) where T : struct, IComponent => _storage.Get<T>(Require(reference).Slot);
+    internal void Set<T>(ObjectReference reference, T value) where T : struct, IComponent
     {
         VerifyAccess();
         try { SetCore(reference, value); }
         catch (Exception error) { if (_updating) _stepError ??= error; throw; }
     }
-    private void SetCore(ObjectReference reference, object value, ComponentAuthority? authority = null)
+    private void SetCore<T>(ObjectReference reference, T value, ComponentAuthority? authority = null) where T : struct, IComponent
     {
         VerifyWriteAccess();
         if (_preparing) throw new InvalidOperationException("Mutation during restore preparation.");
         Entry entry = Require(reference);
-        VerifyComponentAuthority(entry.PersistentId, value.GetType(), authority);
-        if (!entry.Components.ContainsKey(value.GetType())) { VerifyObjectStructure(entry.PersistentId); VerifyComponentTopology(value.GetType()); }
-        object validated;
+        Type type = typeof(T);
+        VerifyComponentAuthority(entry.PersistentId, type, authority);
+        if (!_storage.Has(entry.Slot, type)) { VerifyObjectStructure(entry.PersistentId); VerifyComponentTopology(type); }
+        T validated;
         _preparing = true;
         try { validated = Components.Validate(value); } finally { _preparing = false; }
-        Type type = validated.GetType();
         if (_updating)
         {
             var candidate = StepEntry(entry.PersistentId);
-            if (!candidate.Entry.Components.ContainsKey(type)) throw new InvalidOperationException("Component was removed or is not attached.");
-            Touch(candidate.Id).Components[type] = validated;
+            if (!_stepStorage!.Has(candidate.Entry.Slot, type)) throw new InvalidOperationException("Component was removed or is not attached.");
+            _stepStorage.Set(candidate.Entry.Slot, validated);
         }
         else
         {
-            if (!entry.Components.ContainsKey(type) && entry.Components.Count >= MaxComponentsPerObject)
+            if (!_storage.Has(entry.Slot, type) && _storage.Count(entry.Slot) >= MaxComponentsPerObject)
                 throw new InvalidOperationException("Component capacity exceeded.");
             ulong revision = checked(_revision + 1);
-            entry.Components[type] = validated;
+            _storage.Set(entry.Slot, validated);
             _revision = revision;
         }
     }
@@ -273,9 +290,9 @@ public sealed partial class World
         VerifyComponentTopology(typeof(T));
         VerifyStructuralAccess();
         Entry entry = Require(reference);
-        if (!entry.Components.ContainsKey(typeof(T))) return false;
+        if (!_storage.Has(entry.Slot, typeof(T))) return false;
         ulong revision = checked(_revision + 1);
-        entry.Components.Remove(typeof(T));
+        _storage.Remove(entry.Slot, typeof(T));
         _revision = revision;
         return true;
     }
@@ -290,25 +307,27 @@ public sealed partial class World
         if (_stepUuids is null || !_stepUuids.TryGetValue(uuid, out ulong id)) throw new ArgumentException("Unknown or destroyed command object.");
         return (id, _stepObjects![id]);
     }
-    private Entry Touch(ulong id)
-    {
-        var entry = _stepObjects![id];
-        if (_touched.Add(id)) _stepObjects[id] = entry = entry with { Components = new(entry.Components) };
-        return entry;
-    }
     internal void StageCreate(Guid uuid, string name)
     {
         VerifyCommandAccess(); ValidateName(name);
         if (uuid == Guid.Empty || _stepUuids!.ContainsKey(uuid) || _uuidIndex.ContainsKey(uuid)) throw new ArgumentException("Duplicate or invalid object UUID.");
         if (_stepObjects!.Count >= MaxObjects || _stepNextId == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
-        ulong id = _stepNextId++;
-        _stepObjects.Add(id, new(uuid, name, new())); _stepUuids.Add(uuid, id); _touched.Add(id);
+        ulong id = _stepNextId;
+        int slot = FreeSlot(_stepSlots!);
+        var entry = new Entry(uuid, name, slot);
+        _stepObjects.EnsureCapacity(_stepObjects.Count + 1);
+        _stepUuids.EnsureCapacity(_stepUuids.Count + 1);
+        _stepObjects.Add(id, entry); _stepUuids.Add(uuid, id);
+        _stepSlots![slot] = true;
+        _stepNextId++;
     }
     internal void StageDestroy(Guid uuid)
     {
         VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
+        _stepStorage!.RemoveAll(target.Entry.Slot);
         _stepObjects!.Remove(target.Id); _stepUuids!.Remove(uuid);
+        _stepSlots![target.Entry.Slot] = false;
     }
     internal void StageRename(Guid uuid, string name)
     {
@@ -324,18 +343,18 @@ public sealed partial class World
         Type type = decoded.GetType();
         Components.VerifyRuntimeAttachment(type);
         VerifyComponentTopology(type);
-        if (target.Entry.Components.ContainsKey(type)) throw new ArgumentException("Component already attached.");
-        if (target.Entry.Components.Count >= MaxComponentsPerObject) throw new ArgumentException("Component capacity exceeded.");
-        Touch(target.Id).Components.Add(type, decoded);
+        if (_stepStorage!.Has(target.Entry.Slot, type)) throw new ArgumentException("Component already attached.");
+        if (_stepStorage.Count(target.Entry.Slot) >= MaxComponentsPerObject) throw new ArgumentException("Component capacity exceeded.");
+        _stepStorage.SetDecoded(target.Entry.Slot, decoded, Components);
     }
     internal void StageRemove(Guid uuid, string typeId)
     {
         VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
-        Type? type = target.Entry.Components.Keys.FirstOrDefault(t => Components.Describe(t).TypeId == typeId);
+        Type? type = _stepStorage!.FindType(target.Entry.Slot, typeId, Components);
         if (type is null) throw new ArgumentException("Component is not attached.");
         VerifyComponentTopology(type);
-        Touch(target.Id).Components.Remove(type);
+        _stepStorage.Remove(target.Entry.Slot, type);
     }
     internal void RequireCommandTarget(Guid uuid) { VerifyCommandAccess(); _ = StepEntry(uuid); }
     internal void BeginStep(bool initialization = false)
@@ -345,9 +364,12 @@ public sealed partial class World
         if (!initialization) _ = checked(_tick + 1);
         var objects = new Dictionary<ulong, Entry>(_objects);
         var uuids = new Dictionary<Guid, ulong>(_uuidIndex);
+        var slots = (bool[])_slots.Clone();
+        var storage = _storage.Fork();
         _authorityWrites.EnsureCapacity(_authorities.Count);
         _authorityWrites.Clear();
-        _stepObjects = objects; _stepUuids = uuids; _stepNextId = _nextId; _stepError = null; _touched.Clear();
+        _stepObjects = objects; _stepUuids = uuids; _stepNextId = _nextId; _stepError = null;
+        _stepSlots = slots; _stepStorage = storage;
         _initializing = initialization;
         _updating = true;
     }
@@ -361,15 +383,12 @@ public sealed partial class World
             if (_stepError is not null) throw new InvalidOperationException("Runtime command rejected; step must abort.", _stepError);
             if (requireAuthorityWrites) VerifyAuthorityWrites();
             var objects = _stepObjects!; var uuids = _stepUuids!; ulong nextId = _stepNextId;
-            var candidate = new WorldSnapshot(1, _name, objects.Select(pair => new ObjectSnapshot(
-                pair.Value.PersistentId, pair.Value.Name, pair.Value.Components.Values
-                .OrderBy(value => Components.Describe(value.GetType()).TypeId, StringComparer.Ordinal)
-                .Select(value => new ComponentSnapshot(Components.Describe(value.GetType()).TypeId,
-                    Components.Describe(value.GetType()).Version, Components.EncodeObject(value))).ToArray())).ToArray());
+            var storage = _stepStorage!; var slots = _stepSlots!;
+            var candidate = Capture(_name, objects, storage);
             _ = SceneJson.EncodeBounded(candidate, MaxSnapshotBytes);
             inspect?.Invoke(candidate);
             if (_stepError is not null) throw new InvalidOperationException("Candidate validation rejected; step must abort.", _stepError);
-            return () => { _objects = objects; _uuidIndex = uuids; _nextId = nextId; _revision++; if (!_initializing) _tick++; AbortStep(); };
+            return () => { _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _nextId = nextId; _revision++; if (!_initializing) _tick++; AbortStep(); };
         }
         finally { _preparing = false; }
     }
@@ -382,7 +401,7 @@ public sealed partial class World
     internal void AbortStep()
     {
         VerifyAccess();
-        _stepObjects = null; _stepUuids = null; _touched.Clear(); _stepError = null;
+        _stepObjects = null; _stepUuids = null; _stepStorage = null; _stepSlots = null; _stepError = null;
         _authorityWrites.Clear();
         _updating = false;
         _initializing = false;

@@ -27,8 +27,20 @@ public sealed record ComponentDescriptor(string TypeId, int Version, JsonElement
 public sealed class ComponentRegistry
 {
     public const int MaxPayloadBytes = 65536;
-    private sealed record Registration(Type Type, ComponentDescriptor Descriptor,
-        Func<object, object> Validate, Func<JsonElement, object> Decode, bool RuntimeAttachable);
+    private abstract class Registration(ComponentDescriptor descriptor, bool runtimeAttachable)
+    {
+        internal ComponentDescriptor Descriptor { get; } = descriptor;
+        internal bool RuntimeAttachable { get; } = runtimeAttachable;
+        internal abstract object Decode(JsonElement data);
+        internal abstract IComponentPool CreatePool();
+    }
+    private sealed class Registration<T>(ComponentDescriptor descriptor, Func<T, T> validate, bool runtimeAttachable)
+        : Registration(descriptor, runtimeAttachable) where T : struct, IComponent
+    {
+        internal T Validate(T value) => validate(value);
+        internal override object Decode(JsonElement data) => validate(data.Deserialize<T>(SceneJson.Options));
+        internal override IComponentPool CreatePool() => new ComponentPool<T>();
+    }
     private readonly Dictionary<string, Registration> _byId = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, Registration> _byType = new();
     private bool _frozen;
@@ -63,8 +75,7 @@ public sealed class ComponentRegistry
         if (document.RootElement.ValueKind != JsonValueKind.Object)
             throw new ArgumentException("Component schema must be an object.");
         var descriptor = new ComponentDescriptor(typeId, version, document.RootElement.Clone());
-        var registration = new Registration(typeof(T), descriptor, value => validate((T)value),
-            value => validate(value.Deserialize<T>(SceneJson.Options)), runtimeAttachable);
+        var registration = new Registration<T>(descriptor, validate, runtimeAttachable);
         _byId.Add(typeId, registration);
         _byType.Add(typeof(T), registration);
     }
@@ -72,7 +83,7 @@ public sealed class ComponentRegistry
     public IReadOnlyList<ComponentDescriptor> Describe() => _byId.Values.Select(r => r.Descriptor)
         .OrderBy(d => d.TypeId, StringComparer.Ordinal).ToArray();
 
-    public JsonElement Encode<T>(T value) where T : struct, IComponent => EncodeObject(Validate(value));
+    public JsonElement Encode<T>(T value) where T : struct, IComponent => JsonSerializer.SerializeToElement(Validate(value), SceneJson.Options);
     public T Decode<T>(ComponentSnapshot component) where T : struct, IComponent
     {
         ArgumentNullException.ThrowIfNull(component);
@@ -87,10 +98,11 @@ public sealed class ComponentRegistry
     {
         if (!Require(type).RuntimeAttachable) throw new InvalidOperationException("This component requires authoring/startup composition; runtime attachment is not supported.");
     }
-    internal object Validate(object value)
+    internal IComponentPool CreatePool(Type type) => Require(type).CreatePool();
+    internal T Validate<T>(T value) where T : struct, IComponent
     {
-        object validated = Require(value.GetType()).Validate(value);
-        CheckPayload(EncodeObject(validated));
+        T validated = ((Registration<T>)Require(typeof(T))).Validate(value);
+        CheckPayload(JsonSerializer.SerializeToElement(validated, SceneJson.Options));
         return validated;
     }
     internal JsonElement EncodeObject(object value) => JsonSerializer.SerializeToElement(value, value.GetType(), SceneJson.Options);
