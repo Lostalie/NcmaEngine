@@ -1,264 +1,99 @@
 # NcmaEngine
 
-2026-10-05 入口调整：完整 `Build.bat` 自动回归通过后部署 C# apphost 到
-`out/bin/NcmaEngine.exe`，C++ ImGui 保留为原生插件，不再使用旧 C++ EXE/CLR 桥。
-`LaunchEditor.cmd` 是统一启动路由；失败部署通过 `scripts/Recover-Editor.bat` 恢复。
-人工 UI/MCP、自包含目标环境和长稳验收仍待完成，未因本次切换标记通过。
+面向模型与动画驱动动作游戏的引擎：**C# 主引擎与游戏逻辑 + C++ 性能插件 + 可选 Python 专长模块**。
 
-## 当前目标：C# 主运行时、独立 Python 模块、C++ 性能插件
+更新：2026-10-16。当前是持续开发中的可验证候选，不是生产就绪版本。按用户要求，在下一阶段开始前暂停推进，先完成架构核对；**M8.3 尚未开始**。M8.2 仍需完成最终双配置交付门禁，不把定向测试通过等同于阶段交付。
 
-游戏方向仍是模型/动画驱动的动作游戏，场景仍采用扁平 GameObject + 行为组件，
-不恢复 Godot Node、Actor 网络复制或对象父子变换继承。
+本次仅发布 README 更新：下文 M8.2 能力、客户端依赖和 worker 构建要求描述的是**本地尚未提交的候选工作**，不表示克隆当前仓库就能使用；已提交的模块基线仍是 M8.1。路线图的本地重整也尚未随本次提交发布。
 
-- C# 承担游戏逻辑，并拥有 World/组件、System 调度、场景/资产元数据、序列化、编辑器业务与 Undo。
-- Python 为独立 AI/推理/训练、数据分析、内容生成与工具模块，不再作为 GameObject/Behaviour 语言。
-- C++ 仅用于渲染、物理和有性能依据的骨骼/导入/计算等原生插件，通过版本化批量 C ABI 接入。
-- Python 通信建议先做异步 gRPC worker；pythonnet 可信进程内适配、ZeroMQ 批量消息适配按需求增加。
-  三种传输均未实现，AI 结果由 C# 校验并在安全边界应用，不阻塞游戏 tick。
-- 网络继续是独立服务，目标由 C# 组装，不添加组件 RPC、复制标记或网络角色。
+## 架构
 
-A 方案已确认：C# 主引擎 + C++ 性能插件，AI 深度参与场景、动画、UI、工具与引擎扩展。
-Python 游戏脚本特性已移除；C# World、Editor.Core 场景事务/唯一 Undo 和 M1.3 固定步/输入/插值/运行命令/安全重载及 M1.4 活动场景 MCP已接入当前编辑器。C++ SceneWorld 已移除，C# 主入口及 M2 编辑器业务迁移已落地，人工验收尚未完成。
-目前 out/bin/NcmaEngine.exe 是 C# apphost，场景权威存储由 C# Runtime.World 拥有，C++ ImGui 仅作原生表现插件。
-C++ SceneWorld、对象/组件索引、原生 World 导出和旧 hostfxr/场景桥源码已删除。Python 游戏宿主、SDK、示例、编辑器挂载与重载入口已删除。
-Ncma.Gameplay.PlaySession 统一 OnFixedUpdate、只读 OnUpdate、Pause/Resume/Step 与故障状态；C++ 不再拥有 Begin/Commit 阶段。输入快照/插值/运行命令、事务信号、安全重载与本地 scoped MCP 已实现基础。独立 Renderer/Physics 插件已实现有限切片；Python AI worker 未实现，人工客户端/UI 验收待完成。
-新的 Ncma.Runtime 已接管编辑器/隔离 Play，不维护两份 live 权威 World；M1.2 的 Ncma.Editor.Core 已接管 ImGui 的场景命令与唯一 Undo/Redo；原生命令栈已删除，交互草稿不修改已提交场景。Ncma.Scene 完整组件/脚本快照用于托管历史与隔离 Play；C# `.ncmascene` JSON v1 保存全部注册组件与脚本配置，并原子替换文件。
-旧 `.ncscene` v1-v6 格式及其兼容/迁移入口已删除，不再可读。默认场景为 `assets/scenes/EditorScene.ncmascene`；新格式支持空容器与可选 Transform，加载失败保留原文件和当前场景。
+```text
+C# Editor.App                         C# Player.App / Headless
+  Editor.Services / Editor.Core         Application.Runtime
+       唯一 EditSession / Undo          Gameplay / Scripting
+                    Scene / Runtime
+           World + 扁平 GameObject + Component + Systems
+                  /                         \
+ C# 渲染/物理/动画/UI 高层服务          可选 Modules 异步契约
+       版本化批量 C ABI                  Modules.Grpc → Python worker
+ C++ 渲染/物理/数值内核/ImGui             有界复制结果，不直接修改 World
+```
 
-已实现基线：D3D11 PBR/阴影预览（Vulkan 绘制未实现）、FBX 导入/CPU 蒙皮线框、
-独立动作动画实验室与 stdio MCP、C# Behaviour/Exports/隔离 Play/手动重载、
-托管 World Access 批量 Transform/安全引用/信号邮箱。以上不是完整场景角色或整个 M2 验收已完成的证明。
+- C# 拥有对象与组件存储、游戏规则、调度、场景/资产元数据、序列化、编辑器业务、权限和事务。
+- 场景是扁平对象列表，GameObject 是空容器，Transform 可选；没有场景父子树或变换继承。骨骼、动画图和 UI 文档内部层级独立。
+- C++ 执行性能关键工作；保留原生 Dear ImGui 表现插件，不恢复 C++ World、旧 Editor 主入口或 hostfxr 游戏桥。
+- Python 只用于独立工具、AI 或其他专长模块，不是 Behaviour 语言。默认 Editor/Player 不依赖 Python、Modules 或 gRPC 客户端。
+- AI 与人工编辑共用经授权、可撤销的领域命令。模型返回提案，不能自行批准、写 live World/GPU 或在 tick 内同步等待。
+- 游戏网络是独立可选服务，不向组件加入 RPC、复制标记或网络所有权；Python 模块通信不是游戏联网系统。
 
-构建仍使用 Build.bat，输出 out/bin/NcmaEngine.exe；迁移采用独立可验证切片。
+[架构合同及历史增量](docs/ARCHITECTURE.md) · [路线图与阶段记录](docs/ROADMAP.md)
 
-- [目标架构与当前模块缺口](docs/ARCHITECTURE.md)
-- [迁移顺序与兼容门槛](docs/FRAMEWORK_REFACTOR.md)
-- [独立 Python 模块与通信选型](docs/PYTHON_MODULES.md)
-- [AI 深度开发契约与已实现 headless 能力](docs/AI_DEVELOPMENT.md)
-- [最新路线图](docs/ROADMAP.md)
-- [M5.1至M5.6 UI基础方案](docs/M5_1_6_IMPLEMENTATION_PLAN.md)
-- [UI文档、DX11、字体与控件交付记录](docs/M5_1_6_DELIVERY_REPORT.md)
-- [M3 资产与真实 FBX 场景角色分阶段方案](docs/M3_IMPLEMENTATION_PLAN.md)
-- [M3.2 持久 FBX 导入与 G2 验证记录](docs/M3_2_DELIVERY_REPORT.md)
-- [M1 自动交付与剩余人工验收](docs/M1_DELIVERY_REPORT.md)
-- [活动编辑器 MCP 使用与授权](docs/EDITOR_MCP.md)
-- [M1.1 完整托管场景文档与清理记录](docs/M1_1_SCENE_DOCUMENT.md)
-- [构建与当前运行方式](docs/BUILDING.md)
-- [动作动画](docs/ANIMATION.md)
-- [FBX 导入](docs/FBX_IMPORT.md)
-- [隔离动画 MCP](docs/ANIMATION_MCP.md)
-- [独立网络约束](docs/NETWORKING.md)
-- [C# 托管 World 与编辑器宿主边界](docs/WORLD_ACCESS.md)
+## 当前能力与边界
+
+“已实现”仅指列出的代码和测试切片；“候选”不代表人工、目标环境或完整性能验收通过。
+
+| 模块 | 当前能力 | 仍需完成 |
+| --- | --- | --- |
+| Runtime / C# 游戏逻辑 | 扁平 World、UUID、组件、固定步 Systems、Behaviour、输入/信号/运行命令、隔离 Play、暂停/单步/重载 | 大规模场景与低分配性能验证；不承诺任意私有脚本状态迁移 |
+| 场景与编辑器 | C# 主入口；唯一场景事务/Undo；场景、资产、动画、UI 工作区；原生 ImGui 呈现 | 真实输入法/DPI/窗口与第三方 MCP 人工验收、部分制作闭环 |
+| 资产与角色 | 持久异步 FBX 导入、UUID/代次、受检 NCA、重导入/引用、DX11 场景 GPU 蒙皮；Player 使用运行包而非解析 FBX | 完整 Prefab 保存/实例/覆盖/恢复、缩略图与材质浏览、冷启动 cook、用户 DCC/素材覆盖 |
+| 动作与动画 | 托管图与节点制作、执行/混合/动作序列等已交付切片，角色运动/碰撞约束根运动与战斗候选 | 完整动作游戏人工试玩、真实素材/性能验收；不声称 UE5 全功能等价 |
+| 渲染 | 当前只实现 DX11；场景 PBR、GPU 蒙皮、阴影、IBL、Tone/Bloom、公开 C# 管线定制及图像/资源/恢复测试切片 | 真实设备故障、用户素材、完整性能/长稳验收；Vulkan/OpenGL 绘制留后续版本 |
+| 2D / UI / HUD | 独立 UI 文档、布局/控件、字体与 2D 绘制、作者工作区、受检 HUD 包、Editor/Player 交互和可撤销选择发布 | 完整 IME/复杂文字与通用 2D 应用覆盖、人工操作及目标性能验收 |
+| 物理 | Box2D/Jolt 薄插件，C# 高层服务、固定步运动权威与角色接线 | 通用游戏碰撞事件/武器连续 hitbox 等制作需求和联合验收；不默认启用所有物理功能 |
+| AI / 特殊模块 | 已有 scoped MCP、提案/权限/事务工具；M8.1 有界异步契约已交付；M8.2 实际本机 gRPC/Python 工具 worker 与搬移测试为候选 | 正式宿主模块入口、真实模型推理、领域提案整合和自动化工作流；pythonnet/ZeroMQ 未实现 |
+| 发布 | 受检 Editor/Player 包、清单/hash、搬移与恢复测试基础 | M9 正式 Windows 游戏导出/发布闭环；微信小游戏、Android、iOS 后续版本 |
+| 网络 | 独立服务边界已确定 | 正式游戏网络服务未实现 |
+
+M1–M7 的自动候选交付不关闭历史人工、目标机器、自包含、完整性能或一小时长稳门禁。
+详细功能债务见路线图；M8.2 的确定性 `ncma.tools.text_stats` 工具**不是 AI 推理服务**。
+
+## 构建与运行（Windows）
+
+需要 Visual Studio 2022 C++ 工具链、.NET 8 SDK，以及构建文档列出的 Python 工具/可选 worker 测试环境。使用仓库根目录的规范入口：
+
+```bat
+Build.bat -Configuration Debug
+Build.bat -Configuration Release
+LaunchEditor.cmd
+```
+
+- 正式编辑器：`out/bin/NcmaEngine.exe`（C# apphost）。
+- `Build.bat` 初始化 VS 环境；不要在普通终端直接运行未初始化的 Ninja。
+- 完整构建执行原生/托管/Python 测试、严格格式拒绝、包检查和审计，通过后受检部署整包。
+- Skip 参数仅用于开发检查，**不部署正式 EXE**。最新部署配置替换上一配置；备份和日志保留在 `out/deployment`。
+- 部署中断用 `scripts/Recover-Editor.bat` 显式恢复，不删除日志或强制覆盖绕过检查。
+- M8.2 完整开发回归需要预先准备锁定依赖的 `out/modules/python312` 环境；不会自动安装 Python、pip 包或模型。可选 .NET gRPC 客户端使用锁定 NuGet 依赖，首次还原需要可用包源/缓存。
+- 普通已发布 Editor/Player 不需要上述 worker 环境；可选模块客户端另行打包，尚未接入正式 AI 面板。
+
+[完整构建说明](docs/BUILDING.md) · [独立模块边界](docs/PYTHON_MODULES.md) · [M8 分阶段计划](docs/M8_IMPLEMENTATION_PLAN.md)
+
+## 源码导航
+
+| 路径 | 职责 |
+| --- | --- |
+| `managed/Ncma.Runtime`、`Ncma.Scene`、`Ncma.Gameplay` | 权威 World、场景文档、游戏生命周期 |
+| `managed/Ncma.Editor.Core`、`Ncma.Editor.Services`、`Ncma.Editor.App` | 编辑命令/历史、业务组装、正式入口 |
+| `managed/Ncma.Application.Runtime`、`Ncma.Player.App` | Editor/Player 共用运行服务和独立 Player |
+| `managed/Ncma.Assets*`、`Ncma.Asset.Import*` | 资产身份、作者流程、异步导入与运行资产 |
+| `managed/Ncma.Animation*`、`Ncma.Movement`、`Ncma.Characters` | 动画、运动与动作角色 |
+| `managed/Ncma.Rendering*`、`Ncma.Scene.Rendering`、`Ncma.Ui*` | 托管渲染组合、场景呈现、UI |
+| `managed/Ncma.Modules*`、`python/worker` | 可选异步模块与真实工具 worker，不是游戏脚本 |
+| `engine/source`、`engine/sdk` | 原生插件/内核及 Eigen、GLFW、ImGui、spdlog、Box2D、Jolt、ufbx |
+| `scripts`、`python/src/ncma_tools`、`docs` | 构建/验证/部署工具与合同/交付证据 |
+
+只接受 `.ncmascene` SceneDocument JSON v1；旧 `.ncscene`、旧 SceneSnapshot 兼容路径和 Python 游戏脚本入口不恢复。运行句柄不序列化，持久对象/资产使用 UUID。
 
 ## 设计参考
 
-| 参考 | 保留范围 |
-|---|---|
-| ProwlEngine / Unity | C# 组合式对象、编辑器/资产工作流 |
-| Unreal Engine 5 | 动作动画、状态机、Root Motion、通知与节点编辑 |
-| Infernux | Python 模块/工具分层，不再作为 Python 游戏脚本方向 |
-| [用户图1](docs/EDITOR_INTERFACE_REFERENCE.md) | 引擎编辑器视觉/工作区布局；不采用图中的Node场景树、品牌或未实现功能声明 |
+| 参考 | 借鉴范围 |
+| --- | --- |
+| ProwlEngine / Unity | C# 组合式对象和编辑器/资产工作流 |
+| Unreal Engine 5 | 动作动画、状态机、Root Motion、通知与节点制作 |
+| Infernux | Python 独立模块/工具分层，不再作为游戏脚本参考 |
+| [用户提供的编辑器图片](docs/EDITOR_INTERFACE_REFERENCE.md) | 深蓝统一工作区视觉，不采用图中 Node 场景树、品牌或未经实现的功能声明 |
 
-参考不作为运行依赖或资产兼容承诺；Eigen、GLFW、ImGui、spdlog、Box2D、Jolt、ufbx
-继续用于已有原生算法与后端，不扩展为托管运行时的通用依赖。
+不再以 Godot、Piccolo、Hazel 或类 Figma 编辑器为设计参考。参考不代表依赖、兼容或功能等价。
 
-## 以下为历史原型说明，不是新架构或已实现能力
-
-从零开始撸引擎
-
-## 写在开始之前
-
-Ncma Engine是一个自嗨用游戏引擎。
-参考 ProwlEngine、Infernux、虚幻引擎和 Unity 的设计，随缘写，随缘停。总之，这是一个坑。
-
-## 核心架构
-
-NcmaEngine 采用现代游戏引擎架构设计，参考UE的模块化系统。
-
-### 模块系统 (Module System)
-
-参考 UE 的 `IModuleInterface` 和 `FModuleManager`，实现了一套模块化加载/卸载系统：
-
-| 组件 | 描述 |
-|------|------|
-| **IModuleInterface** | 模块接口基类，定义 `StartupModule()` 和 `ShutdownModule()` |
-| **WindowModule** | 窗口模块，封装 GLFW 窗口管理和生命周期 |
-| **ModuleManager** | 模块管理器（规划中），负责模块的加载/卸载 |
-
-### 模块生命周期
-
-```
-StartupModule()  ->  模块加载时初始化
-      |
-      v
-  Running...
-      |
-ShutdownModule() ->  模块卸载时清理
-```
-
-### 核心层 (Core)
-
-| 模块 | 描述 |
-|------|------|
-| **Application** | 引擎主循环管理，控制程序的生命周期 |
-| **Layer & LayerStack** | 层级系统，支持Layer和Overlay的管理 |
-| **Window** | 窗口抽象层，支持GLFW窗口的创建和管理 |
-| **Events** | 类型安全的事件系统 |
-| **Timer** | 高精度计时器，支持DeltaTime计算 |
-| **Log** | 基于spdlog的日志系统 |
-
-### 事件系统
-
-支持以下事件类型：
-
-- `WindowCloseEvent` - 窗口关闭事件
-- `WindowResizeEvent` - 窗口大小改变事件
-- `KeyEvent` - 键盘事件（按下/释放/重复）
-- `MouseMoveEvent` - 鼠标移动事件
-- `MouseButtonEvent` - 鼠标按钮事件
-- `MouseScrollEvent` - 鼠标滚轮事件
-
-### 渲染架构
-
-- **RenderAPI** - 渲染API抽象层（支持DirectX 12和Vulkan）
-- **D3D12Renderer** - DirectX 12渲染器实现
-- **VulkanRenderer** - Vulkan渲染器实现（规划中）
-
-### 物理架构
-
-- **IPhysicsWorld** - 物理世界抽象接口
-- **Box2DWorld** - Box2D 2D物理引擎实现
-- **JoltPhysicsWorld** - Jolt Physics 3D物理引擎实现
-- **PhysicsLayer** - 物理层，负责每帧更新物理模拟
-- **PhysicsModule** - 物理模块，管理物理世界生命周期
-- **RigidBody2DComponent** - 2D刚体组件
-- **RigidBody3DComponent** - 3D刚体组件
-- **ColliderComponent** - 碰撞体组件
-
-### 游戏脚本
-
-仅支持 C# Behaviour。Python 仅保留为独立模块、插件和工具选项。
-
-### 第三方库
-
-| 库 | 用途 |
-|----|------|
-| **Eigen** | 数学库（header-only） |
-| **GLFW** | 窗口管理和输入处理 |
-| **ImGui** | UI和调试界面 |
-| **spdlog** | 高性能日志库 |
-| **DirectX 12** | 3D图形渲染 |
-| **Box2D** | 2D物理引擎 (v3.1.1) |
-| **Jolt Physics** | 3D物理引擎 (v5.5.0) |
-
-## 开发路线图
-
-### Phase 1: 核心框架 (已完成)
-
-- [x] 1.1 使用VS2022构建项目
-- [x] 1.2 WinMain入口点
-- [x] 1.3 ImGui集成
-- [x] 1.4 SPDLog日志系统
-- [x] 1.5 事件系统（类型安全的事件机制）
-- [x] 1.6 预编译头文件规范 (CoreMinimal.h)
-- [x] 1.7 GLFW窗口系统
-- [x] 1.8 模块化系统 (IModuleInterface, WindowModule)
-
-### Phase 2: 渲染层抽象 (进行中)
-
-- [x] 2.1 RenderAPI抽象接口
-- [x] 2.2 OpenGL渲染器实现
-- [x] 2.3 DirectX 12渲染器 (框架)
-- [x] 2.4 Vulkan渲染器 (框架)
-
-### Phase 3: 引擎核心完善
-
-- [x] 3.1 输入系统 (键盘、鼠标状态跟踪)
-- [x] 3.2 时间系统 (DeltaTime, FPS, TimeScale)
-- [x] 3.3 资源管理 (资源加载/卸载框架)
-- [x] 3.4 Sandbox应用层 (渲染测试)
-
-### Phase 4: 高级特性
-
-- [x] 4.1 场景图系统 (Entity-Component-System)
-- [x] 4.2 变换系统 (Transform 位置/旋转/缩放)
-- [x] 4.3 材质系统 (PBR 材质着色器)
-- [x] 4.4 物理引擎集成 (Box2D 2D物理 + Jolt Physics 3D物理)
-- [x] 4.5 脚本系统
-
-## 技术栈
-
-- **语言**: C++17
-- **平台**: Windows (x64)
-- **IDE**: Visual Studio 2022
-- **构建系统**: MSBuild
-- **图形API**: DirectX 12, Vulkan
-
-## 项目结构
-
-```
-engine/
-├── sdk/                 # 第三方库
-│   ├── eigen/          # 数学库
-│   ├── glfw/           # 窗口库
-│   ├── imgui/          # UI库
-│   ├── spdlog/         # 日志库
-│   ├── box2d/          # 2D物理引擎 (Box2D 3.1.1)
-│   └── JoltPhysics/    # 3D物理引擎 (Jolt Physics 5.5.0)
-└── source/
-    └── runtime/
-        ├── application/ # 应用层
-        │   ├── module/   # 模块系统
-        │   └── SandboxApp # 测试应用
-        ├── core/        # 核心层
-        │   ├── module/  # 模块接口
-        │   ├── event/   # 事件系统
-        │   └── time/    # 时间系统
-        ├── input/        # 输入系统
-        ├── renderer/     # 渲染层
-        │   ├── api/      # 渲染API抽象
-        │   │   ├── d3d12/ # DirectX 12实现
-        │   │   └── vulkan/ # Vulkan实现
-        │   ├── buffers/  # 顶点/索引缓冲区
-        │   └── shaders/  # 着色器
-        ├── physics/       # 物理引擎
-        │   ├── Interface/ # 物理世界接口
-        │   ├── Box2D/    # Box2D实现
-        │   ├── Jolt/     # Jolt Physics实现
-        │   ├── Components/ # 物理组件
-        │   └── Events/   # 物理事件
-        ├── scene/        # 场景系统
-        │   ├── entity/   # ECS实体
-        │   └── components/ # 组件 (Transform, Mesh)
-        ├── material/     # 材质系统
-        ├── resource/     # 资源管理
-        ├── script/       # C# hostfxr 游戏宿主
-        ├── engine/      # 引擎核心
-        ├── gui/         # GUI层
-        └── launch/      # 入口点
-
-scripts/               # 构建脚本
-```
-
-## 模块使用示例
-
-```cpp
-// 创建并启动窗口模块
-WindowModule* windowModule = new WindowModule();
-windowModule->StartupModule();
-
-// 创建窗口
-Window* window = windowModule->CreateEngineWindow(WindowProps("MyApp", 1280, 720));
-
-// 关闭模块
-windowModule->ShutdownModule();
-delete windowModule;
-```
-
-## 致谢
-
-- [ProwlEngine](https://github.com/ProwlEngine/Prowl) - C# 组件 API、编辑器与资产工作流设计参考
-- [Infernux](https://github.com/ChenlizheMe/Infernux) - 架构参考
-- [spdlog](https://github.com/gabime/spdlog) - 日志库
-- [GLFW](https://www.glfw.org/) - 窗口库
-- [Dear ImGui](https://github.com/ocornut/imgui) - UI库
+更多：[AI 开发接口](docs/AI_DEVELOPMENT.md) · [活动编辑器 MCP](docs/EDITOR_MCP.md) · [动画](docs/ANIMATION.md) · [FBX](docs/FBX_IMPORT.md) · [网络边界](docs/NETWORKING.md)
