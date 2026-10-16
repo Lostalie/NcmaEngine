@@ -522,6 +522,8 @@ if (args.Contains("--benchmark"))
     }
 }
 if (args.Contains("--pressure-benchmark")) PressureProfiles.Run();
+// Always validate the measurement fixtures; opt-in measurements leave existing benchmark output unchanged.
+EcsBaseline.Run(args.Contains("--ecs-baseline"));
 return 0;
 
 sealed class Probe : Behaviour
