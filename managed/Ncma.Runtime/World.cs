@@ -3,7 +3,6 @@ using System.Text.Json;
 
 namespace Ncma.Runtime;
 
-public readonly record struct ObjectReference(Guid WorldId, ulong Id);
 public sealed record ComponentSnapshot(string TypeId, int Version, JsonElement Data);
 public sealed record ObjectSnapshot(Guid PersistentId, string Name, ComponentSnapshot[] Components);
 public sealed record WorldSnapshot(int Version, string Name, ObjectSnapshot[] Objects);
@@ -14,20 +13,20 @@ public sealed partial class World
     public const int MaxObjects = 4096;
     public const int MaxComponentsPerObject = 64;
     public const int MaxSnapshotBytes = 4 * 1024 * 1024;
-    private sealed record Entry(Guid PersistentId, string Name, int Slot);
+    private sealed record Entry(Guid PersistentId, string Name, int Slot, ulong Generation, ulong CreationOrdinal);
     private readonly int _ownerThread = Environment.CurrentManagedThreadId;
-    private Dictionary<ulong, Entry> _objects = new();
-    private Dictionary<Guid, ulong> _uuidIndex = new();
-    private Dictionary<ulong, Entry>? _stepObjects;
-    private Dictionary<Guid, ulong>? _stepUuids;
+    private Dictionary<int, Entry> _objects = new();
+    private Dictionary<Guid, int> _uuidIndex = new();
+    private Dictionary<int, Entry>? _stepObjects;
+    private Dictionary<Guid, int>? _stepUuids;
     private ComponentStorage _storage = new();
     private ComponentStorage? _stepStorage;
     private bool[] _slots = new bool[MaxObjects];
     private bool[]? _stepSlots;
-    private ulong _stepNextId;
+    private EntityGenerations _generations = new();
     private Exception? _stepError;
     private Guid _identity = Guid.NewGuid();
-    private ulong _nextId = 1, _revision, _tick;
+    private ulong _nextOrdinal = 1, _revision, _tick;
     private bool _updating, _preparing, _initializing;
     private int _readOnlyDepth;
     private string _name;
@@ -55,32 +54,31 @@ public sealed partial class World
         ValidateName(name);
         Guid uuid = persistentId ?? Guid.NewGuid();
         if (uuid == Guid.Empty || _uuidIndex.ContainsKey(uuid)) throw new ArgumentException("Object UUID must be valid and unique.");
-        if (_objects.Count >= MaxObjects || _nextId == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
+        if (_objects.Count >= MaxObjects || _nextOrdinal == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
         ulong revision = checked(_revision + 1);
-        ulong id = _nextId;
-        int slot = FreeSlot(_slots);
-        var entry = new Entry(uuid, name, slot);
         _objects.EnsureCapacity(_objects.Count + 1);
         _uuidIndex.EnsureCapacity(_uuidIndex.Count + 1);
-        _objects.Add(id, entry);
-        _uuidIndex.Add(uuid, id);
+        var (slot, generation) = _generations.Reserve(_slots);
+        var entry = new Entry(uuid, name, slot, generation, _nextOrdinal++);
+        var result = new GameObject(this, new(_identity, slot, generation));
+        _objects.Add(slot, entry);
+        _uuidIndex.Add(uuid, slot);
         _slots[slot] = true;
-        _nextId++;
         _revision = revision;
-        return new GameObject(this, new(_identity, id));
+        return result;
     }
 
     public GameObject FindObject(Guid uuid)
     {
         VerifyAccess();
-        if (!_uuidIndex.TryGetValue(uuid, out ulong id)) throw new ArgumentException("Unknown object UUID.");
-        return new GameObject(this, new(_identity, id));
+        if (!_uuidIndex.TryGetValue(uuid, out int slot)) throw new ArgumentException("Unknown object UUID.");
+        return new GameObject(this, IdentityOf(_objects[slot]));
     }
 
     public IReadOnlyList<GameObject> GetObjects()
     {
         VerifyAccess();
-        return _objects.Keys.Order().Select(id => new GameObject(this, new(_identity, id))).ToArray();
+        return _objects.Values.OrderBy(e => e.CreationOrdinal).Select(e => new GameObject(this, IdentityOf(e))).ToArray();
     }
 
     public WorldSnapshot CaptureSnapshot()
@@ -89,15 +87,11 @@ public sealed partial class World
         return Capture(_name, _objects, _storage);
     }
 
-    private WorldSnapshot Capture(string name, Dictionary<ulong, Entry> objects, ComponentStorage storage) =>
-        new(1, name, objects.OrderBy(pair => pair.Key).Select(pair => new ObjectSnapshot(
+    private WorldSnapshot Capture(string name, Dictionary<int, Entry> objects, ComponentStorage storage) =>
+        new(1, name, objects.OrderBy(pair => pair.Value.CreationOrdinal).Select(pair => new ObjectSnapshot(
             pair.Value.PersistentId, pair.Value.Name, storage.Capture(pair.Value.Slot, Components))).ToArray());
 
-    private static int FreeSlot(bool[] slots)
-    {
-        int slot = Array.IndexOf(slots, false);
-        return slot >= 0 ? slot : throw new InvalidOperationException("Object capacity exceeded.");
-    }
+    private Entity IdentityOf(Entry entry) => new(_identity, entry.Slot, entry.Generation);
 
     public string SerializeSnapshot()
     {
@@ -133,18 +127,19 @@ public sealed partial class World
             ValidateName(snapshot.Name);
             _ = SceneJson.EncodeBounded(snapshot, MaxSnapshotBytes);
             ulong revision = checked(_revision + 1);
-            ulong nextId = _nextId;
-            var objects = new Dictionary<ulong, Entry>();
-            var uuids = new Dictionary<Guid, ulong>();
+            ulong nextOrdinal = 1;
+            var objects = new Dictionary<int, Entry>();
+            var uuids = new Dictionary<Guid, int>();
             var storage = new ComponentStorage();
             var slots = new bool[MaxObjects];
+            var generations = new EntityGenerations();
             foreach (var item in snapshot.Objects)
             {
                 if (item is null || item.PersistentId == Guid.Empty || uuids.ContainsKey(item.PersistentId) ||
-                    item.Components is null || item.Components.Length > MaxComponentsPerObject || nextId == ulong.MaxValue)
+                    item.Components is null || item.Components.Length > MaxComponentsPerObject)
                     throw new ArgumentException("Invalid object record, duplicate UUID or capacity exceeded.");
                 ValidateName(item.Name);
-                int slot = objects.Count;
+                var (slot, generation) = generations.Reserve(slots);
                 foreach (var component in item.Components)
                 {
                     if (component is null) throw new ArgumentException("Missing component record.");
@@ -153,8 +148,8 @@ public sealed partial class World
                     storage.SetDecoded(slot, value, Components);
                 }
                 slots[slot] = true;
-                objects.Add(nextId, new Entry(item.PersistentId, item.Name, slot));
-                uuids.Add(item.PersistentId, nextId++);
+                objects.Add(slot, new Entry(item.PersistentId, item.Name, slot, generation, nextOrdinal++));
+                uuids.Add(item.PersistentId, slot);
             }
             var normalized = Capture(snapshot.Name, objects, storage);
             _ = SceneJson.EncodeBounded(normalized, MaxSnapshotBytes);
@@ -172,7 +167,8 @@ public sealed partial class World
                 _uuidIndex = uuids;
                 _storage = storage;
                 _slots = slots;
-                _nextId = nextId;
+                _generations = generations;
+                _nextOrdinal = nextOrdinal;
                 _name = name;
                 _identity = identity;
                 _revision = revision;
@@ -216,53 +212,55 @@ public sealed partial class World
     {
         VerifyAccess(); var scope = new ReadScope(this); _readOnlyDepth++; return scope;
     }
-    internal ObjectReference CandidateReference(Guid uuid)
+    internal Entity CandidateEntity(Guid uuid)
     {
-        VerifyAccess(); var target = StepEntry(uuid); return new(_identity, target.Id);
+        VerifyAccess(); var target = StepEntry(uuid); return IdentityOf(target.Entry);
     }
-    private Entry Require(ObjectReference reference)
+    private Entry Require(Entity entity)
     {
         VerifyAccess();
-        if (reference.WorldId != _identity || !_objects.TryGetValue(reference.Id, out var entry))
-            throw new ArgumentException("Stale or foreign object reference.");
+        if (entity.WorldIdentity != _identity || entity.Generation == 0 ||
+            (uint)entity.Index >= MaxObjects || !_objects.TryGetValue(entity.Index, out var entry) ||
+            entry.Generation != entity.Generation)
+            throw new ArgumentException("Stale, invalid or foreign Entity.");
         return entry;
     }
-    internal Guid GetUuid(ObjectReference reference) => Require(reference).PersistentId;
-    internal string GetName(ObjectReference reference) => Require(reference).Name;
-    internal void Rename(ObjectReference reference, string name)
+    public Guid GetUuid(Entity entity) => Require(entity).PersistentId;
+    public string GetName(Entity entity) => Require(entity).Name;
+    public void Rename(Entity entity, string name)
     {
         VerifyStructuralAccess();
         ValidateName(name);
-        Entry entry = Require(reference);
+        Entry entry = Require(entity);
         ulong revision = checked(_revision + 1);
-        _objects[reference.Id] = entry with { Name = name };
+        _objects[entity.Index] = entry with { Name = name };
         _revision = revision;
     }
-    internal void Destroy(ObjectReference reference)
+    public void Destroy(Entity entity)
     {
-        VerifyObjectStructure(Require(reference).PersistentId);
+        VerifyObjectStructure(Require(entity).PersistentId);
         VerifyStructuralAccess();
-        Entry entry = Require(reference);
+        Entry entry = Require(entity);
         ulong revision = checked(_revision + 1);
         _storage.RemoveAll(entry.Slot);
-        _objects.Remove(reference.Id);
+        _objects.Remove(entity.Index);
         _uuidIndex.Remove(entry.PersistentId);
         _slots[entry.Slot] = false;
         _revision = revision;
     }
-    internal bool Has<T>(ObjectReference reference) where T : struct, IComponent => _storage.Has(Require(reference).Slot, typeof(T));
-    internal T Get<T>(ObjectReference reference) where T : struct, IComponent => _storage.Get<T>(Require(reference).Slot);
-    internal void Set<T>(ObjectReference reference, T value) where T : struct, IComponent
+    public bool Has<T>(Entity entity) where T : struct, IComponent => _storage.Has(Require(entity).Slot, typeof(T));
+    public T Get<T>(Entity entity) where T : struct, IComponent => _storage.Get<T>(Require(entity).Slot);
+    public void Set<T>(Entity entity, T value) where T : struct, IComponent
     {
         VerifyAccess();
-        try { SetCore(reference, value); }
+        try { SetCore(entity, value); }
         catch (Exception error) { if (_updating) _stepError ??= error; throw; }
     }
-    private void SetCore<T>(ObjectReference reference, T value, ComponentAuthority? authority = null) where T : struct, IComponent
+    private void SetCore<T>(Entity entity, T value, ComponentAuthority? authority = null) where T : struct, IComponent
     {
         VerifyWriteAccess();
         if (_preparing) throw new InvalidOperationException("Mutation during restore preparation.");
-        Entry entry = Require(reference);
+        Entry entry = Require(entity);
         Type type = typeof(T);
         VerifyComponentAuthority(entry.PersistentId, type, authority);
         if (!_storage.Has(entry.Slot, type)) { VerifyObjectStructure(entry.PersistentId); VerifyComponentTopology(type); }
@@ -284,12 +282,12 @@ public sealed partial class World
             _revision = revision;
         }
     }
-    internal bool Remove<T>(ObjectReference reference) where T : struct, IComponent
+    public bool Remove<T>(Entity entity) where T : struct, IComponent
     {
-        VerifyObjectStructure(Require(reference).PersistentId);
+        VerifyObjectStructure(Require(entity).PersistentId);
         VerifyComponentTopology(typeof(T));
         VerifyStructuralAccess();
-        Entry entry = Require(reference);
+        Entry entry = Require(entity);
         if (!_storage.Has(entry.Slot, typeof(T))) return false;
         ulong revision = checked(_revision + 1);
         _storage.Remove(entry.Slot, typeof(T));
@@ -302,24 +300,22 @@ public sealed partial class World
         VerifyWriteAccess();
         if (!_updating || _initializing || _preparing) throw new InvalidOperationException("Runtime commands require a fixed step.");
     }
-    private (ulong Id, Entry Entry) StepEntry(Guid uuid)
+    private (int Id, Entry Entry) StepEntry(Guid uuid)
     {
-        if (_stepUuids is null || !_stepUuids.TryGetValue(uuid, out ulong id)) throw new ArgumentException("Unknown or destroyed command object.");
+        if (_stepUuids is null || !_stepUuids.TryGetValue(uuid, out int id)) throw new ArgumentException("Unknown or destroyed command object.");
         return (id, _stepObjects![id]);
     }
     internal void StageCreate(Guid uuid, string name)
     {
         VerifyCommandAccess(); ValidateName(name);
         if (uuid == Guid.Empty || _stepUuids!.ContainsKey(uuid) || _uuidIndex.ContainsKey(uuid)) throw new ArgumentException("Duplicate or invalid object UUID.");
-        if (_stepObjects!.Count >= MaxObjects || _stepNextId == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
-        ulong id = _stepNextId;
-        int slot = FreeSlot(_stepSlots!);
-        var entry = new Entry(uuid, name, slot);
+        if (_stepObjects!.Count >= MaxObjects || _nextOrdinal == ulong.MaxValue) throw new InvalidOperationException("Object capacity exceeded.");
         _stepObjects.EnsureCapacity(_stepObjects.Count + 1);
         _stepUuids.EnsureCapacity(_stepUuids.Count + 1);
-        _stepObjects.Add(id, entry); _stepUuids.Add(uuid, id);
+        var (slot, generation) = _generations.Reserve(_stepSlots!);
+        var entry = new Entry(uuid, name, slot, generation, _nextOrdinal++);
+        _stepObjects.Add(slot, entry); _stepUuids.Add(uuid, slot);
         _stepSlots![slot] = true;
-        _stepNextId++;
     }
     internal void StageDestroy(Guid uuid)
     {
@@ -362,13 +358,13 @@ public sealed partial class World
         VerifyStructuralAccess();
         _ = checked(_revision + 1);
         if (!initialization) _ = checked(_tick + 1);
-        var objects = new Dictionary<ulong, Entry>(_objects);
-        var uuids = new Dictionary<Guid, ulong>(_uuidIndex);
+        var objects = new Dictionary<int, Entry>(_objects);
+        var uuids = new Dictionary<Guid, int>(_uuidIndex);
         var slots = (bool[])_slots.Clone();
         var storage = _storage.Fork();
         _authorityWrites.EnsureCapacity(_authorities.Count);
         _authorityWrites.Clear();
-        _stepObjects = objects; _stepUuids = uuids; _stepNextId = _nextId; _stepError = null;
+        _stepObjects = objects; _stepUuids = uuids; _stepError = null;
         _stepSlots = slots; _stepStorage = storage;
         _initializing = initialization;
         _updating = true;
@@ -382,13 +378,13 @@ public sealed partial class World
         {
             if (_stepError is not null) throw new InvalidOperationException("Runtime command rejected; step must abort.", _stepError);
             if (requireAuthorityWrites) VerifyAuthorityWrites();
-            var objects = _stepObjects!; var uuids = _stepUuids!; ulong nextId = _stepNextId;
+            var objects = _stepObjects!; var uuids = _stepUuids!;
             var storage = _stepStorage!; var slots = _stepSlots!;
             var candidate = Capture(_name, objects, storage);
             _ = SceneJson.EncodeBounded(candidate, MaxSnapshotBytes);
             inspect?.Invoke(candidate);
             if (_stepError is not null) throw new InvalidOperationException("Candidate validation rejected; step must abort.", _stepError);
-            return () => { _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _nextId = nextId; _revision++; if (!_initializing) _tick++; AbortStep(); };
+            return () => { _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _revision++; if (!_initializing) _tick++; AbortStep(); };
         }
         finally { _preparing = false; }
     }
@@ -406,7 +402,7 @@ public sealed partial class World
         _updating = false;
         _initializing = false;
     }
-    internal GameObject Resolve(ObjectReference reference) { _ = Require(reference); return new(this, reference); }
+    public Entity Resolve(Entity entity) { _ = Require(entity); return entity; }
     internal void FixedStep(Action update)
     {
         VerifyStructuralAccess();
@@ -427,14 +423,14 @@ public sealed partial class World
 
 public sealed class GameObject
 {
-    internal GameObject(World world, ObjectReference reference) { World = world; Reference = reference; }
+    internal GameObject(World world, Entity entity) { World = world; Entity = entity; }
     public World World { get; }
-    public ObjectReference Reference { get; }
-    public Guid PersistentId => World.GetUuid(Reference);
-    public string Name { get => World.GetName(Reference); set => World.Rename(Reference, value); }
-    public bool Has<T>() where T : struct, IComponent => World.Has<T>(Reference);
-    public T Get<T>() where T : struct, IComponent => World.Get<T>(Reference);
-    public void Set<T>(T value) where T : struct, IComponent => World.Set(Reference, value);
-    public bool Remove<T>() where T : struct, IComponent => World.Remove<T>(Reference);
-    public void Destroy() => World.Destroy(Reference);
+    public Entity Entity { get; }
+    public Guid PersistentId => World.GetUuid(Entity);
+    public string Name { get => World.GetName(Entity); set => World.Rename(Entity, value); }
+    public bool Has<T>() where T : struct, IComponent => World.Has<T>(Entity);
+    public T Get<T>() where T : struct, IComponent => World.Get<T>(Entity);
+    public void Set<T>(T value) where T : struct, IComponent => World.Set(Entity, value);
+    public bool Remove<T>() where T : struct, IComponent => World.Remove<T>(Entity);
+    public void Destroy() => World.Destroy(Entity);
 }

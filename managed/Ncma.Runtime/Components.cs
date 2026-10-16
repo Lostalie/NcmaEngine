@@ -165,6 +165,8 @@ public sealed class ComponentRegistry
     }
     private static void VerifyValueType(Type type, HashSet<Type> visited)
     {
+        if (type == typeof(Entity))
+            throw new ArgumentException("Persistent components cannot retain runtime Entity identities, including nested fields.");
         if (type == typeof(IntPtr) || type == typeof(UIntPtr) || type.IsPointer || type.IsFunctionPointer)
             throw new ArgumentException("Components cannot retain native addresses.");
         if (type == typeof(string) || type.IsPrimitive || type.IsEnum || type == typeof(decimal) || type == typeof(Guid)) return;

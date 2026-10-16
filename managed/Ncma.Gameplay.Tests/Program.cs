@@ -65,10 +65,10 @@ var cases = new (string Name, Action Run)[]
     ("Reload rebuilds private instances clears commands input and systems without resetting World", () => {
         var doc = Document(); var old = new Probe(); var fresh = new Probe(); int systems = 0; using var play = new PlaySession(doc);
         play.AddSystem(new TestSystem((_, _) => systems++)); play.Start(_ => old); play.AdvanceFrame(1.0 / 60);
-        var reference = Object(doc).Reference; var world = doc.World.Identity; var tick = play.Tick; var epoch = play.SessionId;
+        var reference = Object(doc).Entity; var world = doc.World.Identity; var tick = play.Tick; var epoch = play.SessionId;
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2));
         play.Reload(_ => fresh); Check(play.State == PlayState.Paused && play.SessionId != epoch && play.Tick == tick);
-        Check(Object(doc).Reference == reference && doc.World.Identity == world && old.Destroyed == 1 && fresh.Created == 1 && fresh.FixedCount == 0);
+        Check(Object(doc).Entity == reference && doc.World.Identity == world && old.Destroyed == 1 && fresh.Created == 1 && fresh.FixedCount == 0);
         Check(!play.Input.Pressed(1) && play.Status.Accumulator == 0); play.Resume(); play.AdvanceFrame(1.0 / 60);
         Check(fresh.FixedCount == 1 && systems == 1);
     }),
@@ -94,7 +94,7 @@ var cases = new (string Name, Action Run)[]
         Check(first.Disabled == 1 && first.Destroyed == 1 && second.Created == 0);
     }),
     ("Runtime create configure is atomic and keeps surviving handles", () => {
-        var doc = Document(); var original = Object(doc); var originalId = original.Reference; var identity = doc.World.Identity;
+        var doc = Document(); var original = Object(doc); var originalId = original.Entity; var identity = doc.World.Identity;
         var probe = new Probe(); PendingObject? pending = null; using var play = new PlaySession(doc);
         probe.Fixed = _ => {
             if (play.Tick != 0) return;
@@ -103,7 +103,7 @@ var cases = new (string Name, Action Run)[]
             Reject(() => doc.World.FindObject(pending.ObjectId)); Reject(() => probe.Context.Commands.GetReceipt(pending.Token));
         };
         play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
-        Check(doc.World.Count == 2 && doc.World.Identity == identity && original.Reference == originalId && original.Name == "Object 0");
+        Check(doc.World.Count == 2 && doc.World.Identity == identity && original.Entity == originalId && original.Name == "Object 0");
         Check(doc.World.FindObject(pending!.ObjectId).Name == "Configured" && doc.World.FindObject(pending.ObjectId).Has<TransformData>());
         Check(play.Commands.GetReceipt(pending.Token).Tick == 1 && play.RenderView.Objects.Length == 2);
         var token = pending.Token; play.Stop(); Reject(() => play.Commands.GetReceipt(token));
@@ -123,7 +123,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Later invalid runtime command aborts structure components metadata input and receipts", () => {
         var doc = Document(); var probe = new Probe(); PendingObject? pending = null; using var play = new PlaySession(doc);
-        var before = doc.CaptureBytes(); var reference = Object(doc).Reference; var revision = doc.Revision;
+        var before = doc.CaptureBytes(); var reference = Object(doc).Entity; var revision = doc.Revision;
         probe.Fixed = _ => {
             pending = probe.Context.Commands.SpawnEmpty("Transient");
             var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t;
@@ -133,7 +133,7 @@ var cases = new (string Name, Action Run)[]
         play.Start(_ => probe); before = doc.CaptureBytes(); revision = doc.Revision;
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2)); play.AdvanceFrame(1.0 / 60);
         Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureBytes().SequenceEqual(before) && doc.Revision == revision);
-        Check(Object(doc).Reference == reference && play.Input.Pressed(1)); Reject(() => play.Commands.GetReceipt(pending!.Token));
+        Check(Object(doc).Entity == reference && play.Input.Pressed(1)); Reject(() => play.Commands.GetReceipt(pending!.Token));
     }),
     ("Runtime conflict order rejects duplicate create double delete and modifications after delete", () => {
         foreach (var conflict in new[] { "create", "delete", "rename", "add" }) {

@@ -2,9 +2,9 @@
 
 面向模型与动画驱动动作游戏的引擎：**C# 主引擎与游戏逻辑 + C++ 性能插件 + 可选 Python 专长模块**。
 
-更新：2026-10-16。当前是持续开发中的可验证候选，不是生产就绪版本。M8.2 已通过同源码完整 Debug/Release 自动回归与受检部署；**ECS E0 已完成，E1-A 强类型组件池已接入唯一 World 并通过双配置各 89 项 CTest；E1-B 身份/门面迁移和 M8.3 未开始**。E1-A 不部署，人工、目标机、自包含和完整性能/长稳验收仍开放。
+更新：2026-10-16。当前是持续开发中的可验证候选，不是生产就绪版本。M8.2 已通过同源码完整 Debug/Release 自动回归与受检部署；**ECS E0、E1-A 已交付；E1-B 身份增量已通过双配置各 89 项 CTest，但剩余门面迁移尚未完成，M8.3 未开始**。候选源码已使用代次 Entity；范围及证据见 [E1-B 记录](docs/ECS_E1_B_DELIVERY.md)。人工、目标机、自包含和完整性能/长稳验收仍开放。
 
-最新目标顺序：**M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**。目标是 C# ECS 唯一存储，GameObject 为同一 Entity 的高层封装；源码已移除逐对象组件值字典，但代次 Entity、统一门面、Query 和增量提交尚未实现，不代表整个 ECS 完成。正式 EXE 仍为 M8.2。详见 [路线图](docs/ROADMAP.md) 与 [E1-A 交付记录](docs/ECS_E1_A_DELIVERY.md)。
+最新目标顺序：**M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**。源码已采用唯一 World 的强类型池与代次 Entity，删除两种旧 ObjectReference；用户侧 GameObject 直接访问 Entity。低层 Runtime.GameObject 消费者迁移/删除、Query 和增量提交仍未完成，不代表整个 ECS 完成。正式 EXE 仍为 M8.2。详见 [路线图](docs/ROADMAP.md) 与 [E1-A 交付记录](docs/ECS_E1_A_DELIVERY.md)。
 
 M8.2 交付的是可选本机工具模块，不是模型推理服务；worker 开发环境须单独准备，不随默认 Editor/Player 部署。范围、测试与剩余门禁见 [M8.2 交付记录](docs/M8_2_DELIVERY_REPORT.md)。ECS 的实施边界、分片与验收见 [详细合同](docs/ECS_IMPLEMENTATION_PLAN.md) 和 [E0 基线记录](docs/ECS_E0_BASELINE.md)。
 

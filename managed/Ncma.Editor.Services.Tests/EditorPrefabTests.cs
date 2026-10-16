@@ -41,7 +41,7 @@ internal static class EditorPrefabTests
             using var owner = new EditorSessionOwner("Prefab", activateEditor: false, components: Registry());
             var (ui, flow, ids, asset) = Setup(owner); ui.Select(ui.Stamp, ids[0]);
             byte[] before = owner.Document.CaptureBytes(); var state = owner.Edit!.State;
-            var reference = owner.Document.World.FindObject(ids[0]).Reference;
+            var reference = owner.Document.World.FindObject(ids[0]).Entity;
             var prefab = Extract(flow, ui, ids); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components));
             var plan = flow.InspectPlacement(ui.Stamp, bytes, 1, new(10, 20, 30), d => d == new PrefabDependency(asset, "StaticMesh"));
             Check(plan.Stamp == ui.Stamp && plan.WorldId == owner.Document.World.Identity && plan.TemplateHash.Length == 64);
@@ -52,7 +52,7 @@ internal static class EditorPrefabTests
             plan.Preview.Objects[0] = plan.Preview.Objects[0] with { Name = "Caller tamper" };
             var second = flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => true);
             Check(second.Preview.Objects.All(o => o.Name != "Caller tamper") && second.Preview.InstanceId != plan.Preview.InstanceId);
-            Check(owner.Edit.State == state && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Document.World.FindObject(ids[0]).Reference == reference);
+            Check(owner.Edit.State == state && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Document.World.FindObject(ids[0]).Entity == reference);
             Check(!owner.Edit.Describe().Any(d => d.Name.Contains("prefab", StringComparison.OrdinalIgnoreCase)));
         });
         yield return ("M3.7 editor rejects stale/draft/Play/frozen/foreign registry and thread", () => {

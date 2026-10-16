@@ -67,7 +67,7 @@ public sealed partial class World
                 authority.Released || !authority.PublishRequired || authority.Component != typeof(T) ||
                 !_authorities.TryGetValue((uuid, typeof(T)), out var owner) || owner != authority)
                 throw new InvalidOperationException("Expired or foreign component write authority.");
-            SetCore(FindObject(uuid).Reference, value, authority);
+            SetCore(FindObject(uuid).Entity, value, authority);
             _authorityWrites.Add((uuid, typeof(T)));
             return _stepStorage!.Get<T>(StepEntry(uuid).Entry.Slot);
         }
@@ -75,9 +75,9 @@ public sealed partial class World
     }
 
     // Batch callers preflight ALL targets before publishing any write, including outside a fixed step.
-    internal void VerifyUnownedComponentWrite(ObjectReference reference, Type component)
+    internal void VerifyUnownedComponentWrite(Entity entity, Type component)
     {
-        VerifyComponentAuthority(Require(reference).PersistentId, component, null);
+        VerifyComponentAuthority(Require(entity).PersistentId, component, null);
     }
 
     private void VerifyComponentAuthority(Guid uuid, Type component, ComponentAuthority? proof)

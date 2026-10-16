@@ -151,7 +151,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                     foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                     {
                         var behaviour = createBehaviour(binding) ?? throw new ArgumentException("Null Behaviour.");
-                        behaviour.GameObject = new(_facade, _document.World.FindObject(obj.Id));
+                        behaviour.GameObject = new(_facade, _document.World.FindObject(obj.Id).Entity);
                         prepared.Add(new(obj.Id, binding, behaviour));
                     }
             _instances = prepared.ToArray();
@@ -277,7 +277,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                 {
                     var behaviour = createBehaviour(binding) ?? throw new ArgumentException("Null Behaviour.");
-                    behaviour.GameObject = new(_facade, _document.World.FindObject(obj.Id));
+                    behaviour.GameObject = new(_facade, _document.World.FindObject(obj.Id).Entity);
                     prepared.Add(new(obj.Id, binding, behaviour));
                 }
         var instances = prepared.ToArray();
@@ -421,7 +421,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                     else
                     {
                         var behaviour = _factory!(binding) ?? throw new ArgumentException("Null Behaviour.");
-                        behaviour.GameObject = new(_facade, new Ncma.Runtime.GameObject(_document.World, _document.World.CandidateReference(obj.PersistentId)));
+                        behaviour.GameObject = new(_facade, _document.World.CandidateEntity(obj.PersistentId));
                         prepared.Add(new(obj.PersistentId, binding, behaviour));
                     }
                 }

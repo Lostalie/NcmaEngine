@@ -2,7 +2,7 @@ using System.Globalization;
 using Ncma.Runtime;
 namespace Ncma;
 
-// Compatibility gameplay facade. Storage, validation and handles belong to C# Runtime.World.
+// Gameplay services over the sole Runtime.World; never a second component store.
 public sealed partial class SceneWorld : IDisposable
 {
     internal World Runtime { get; }
@@ -13,19 +13,14 @@ public sealed partial class SceneWorld : IDisposable
     public GameObject CreateObject(string name)
     {
         Verify();
-        return new(this, Runtime.CreateObject(name)); // Empty container: Transform is optional.
+        return new(this, Runtime.CreateObject(name).Entity); // Empty container: Transform is optional.
     }
-    internal Ncma.Runtime.GameObject Resolve(ObjectReference reference)
+    internal Entity Resolve(Entity entity)
     {
         Verify();
-        return Runtime.Resolve(new(ToGuid(reference.WorldHigh, reference.WorldLow), reference.Id));
+        return Runtime.Resolve(entity);
     }
-    internal GameObject FindId(ulong id)
-    {
-        Verify();
-        return new(this, Runtime.Resolve(new(Runtime.Identity, id)));
-    }
-    public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetObjects().Select(o => new GameObject(this, o)).ToArray(); }
+    public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetObjects().Select(o => new GameObject(this, o.Entity)).ToArray(); }
     public void Dispose()
     {
         Runtime.VerifyAccess(); if (_disposed) return;
@@ -52,25 +47,26 @@ public sealed partial class SceneWorld : IDisposable
     };
 }
 
-public sealed class GameObject
+public sealed class GameObject : IEquatable<GameObject>
 {
-    private readonly Ncma.Runtime.GameObject _object;
-    internal GameObject(SceneWorld world, Ncma.Runtime.GameObject value)
+    internal GameObject(SceneWorld world, Entity entity)
     {
-        World = world; _object = value;
-        ObjectUuid uuid = SceneWorld.ToUuid(value.Reference.WorldId);
-        Reference = new(uuid.High, uuid.Low, value.Reference.Id);
+        World = world; Entity = entity;
     }
-    public ulong Id => Reference.Id;
-    public ObjectReference Reference { get; }
-    public ObjectUuid PersistentId { get { World.Verify(); return SceneWorld.ToUuid(_object.PersistentId); } }
+    public Entity Entity { get; }
+    public ObjectUuid PersistentId { get { World.Verify(); return SceneWorld.ToUuid(World.Runtime.GetUuid(Entity)); } }
     public SceneWorld World { get; }
-    public string Name { get { World.Verify(); return _object.Name; } set { World.Verify(); _object.Name = value; } }
-    public bool HasTransform { get { World.Verify(); return _object.Has<TransformData>(); } }
+    public string Name { get { World.Verify(); return World.Runtime.GetName(Entity); } set { World.Verify(); World.Runtime.Rename(Entity, value); } }
+    public bool HasTransform { get { World.Verify(); return World.Runtime.Has<TransformData>(Entity); } }
     public Transform LocalTransform
     {
-        get { World.Verify(); return SceneWorld.FromData(_object.Get<TransformData>()); }
-        set { World.Verify(); _object.Set(SceneWorld.ToData(value)); }
+        get { World.Verify(); return SceneWorld.FromData(World.Runtime.Get<TransformData>(Entity)); }
+        set { World.Verify(); World.Runtime.Set(Entity, SceneWorld.ToData(value)); }
     }
-    public bool Destroy() { World.Verify(); _object.Destroy(); World.Forget(Id); return true; }
+    public bool Destroy() { World.Verify(); World.Runtime.Destroy(Entity); World.Forget(Entity); return true; }
+    public bool Equals(GameObject? other) => other is not null && Entity == other.Entity;
+    public override bool Equals(object? other) => other is GameObject value && Equals(value);
+    public override int GetHashCode() => Entity.GetHashCode();
+    public static bool operator ==(GameObject? left, GameObject? right) => Equals(left, right);
+    public static bool operator !=(GameObject? left, GameObject? right) => !Equals(left, right);
 }

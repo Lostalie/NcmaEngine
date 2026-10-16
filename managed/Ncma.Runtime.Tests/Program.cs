@@ -39,7 +39,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("UUIDs and duplicate rejection", () => {
         var world = new World(); Guid id = Guid.NewGuid(); var a = world.CreateObject("A", id);
-        Check(world.FindObject(id).Reference == a.Reference);
+        Check(world.FindObject(id).Entity == a.Entity);
         Reject(() => world.CreateObject("Duplicate", id)); Reject(() => world.CreateObject("Empty", Guid.Empty));
         Check(world.Count == 1);
     }),
@@ -138,6 +138,7 @@ foreach (var test in cases)
 }
 Console.WriteLine($"Ncma managed headless: {cases.Length - failures}/{cases.Length} passed (no native DLL/Python).");
 failures += EcsStorageTests.Run();
+failures += EntityIdentityTests.Run();
 return failures == 0 ? 0 : 1;
 
 readonly record struct Health(int Points) : IComponent;

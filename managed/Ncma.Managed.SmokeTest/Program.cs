@@ -20,12 +20,12 @@ camera.LocalTransform = transform;
 if (camera.LocalTransform.Position.Y != 2.0f)
     throw new InvalidOperationException("Managed/native transform round-trip failed.");
 
-if (Marshal.SizeOf<ObjectReference>() != 24 || Marshal.SizeOf<TransformWrite>() != 64 ||
-    Marshal.SizeOf<GameplaySignal>() != 88 || Marshal.OffsetOf<GameplaySignal>("Value").ToInt32() != 56)
-    throw new InvalidOperationException("World access ABI layout mismatch.");
-if (world.FindObject(camera.PersistentId).Id != camera.Id)
+if (Marshal.SizeOf<Ncma.Runtime.Entity>() != 32 || Marshal.SizeOf<TransformWrite>() != 72 ||
+    Marshal.SizeOf<GameplaySignal>() != 104 || Marshal.OffsetOf<GameplaySignal>("Value").ToInt32() != 72)
+    throw new InvalidOperationException("Managed Entity batch layout mismatch (not a native World ABI).");
+if (world.FindObject(camera.PersistentId).Entity != camera.Entity)
     throw new InvalidOperationException("Persistent object lookup failed.");
-ObjectReference[] references = [root.Reference, camera.Reference];
+Ncma.Runtime.Entity[] references = [root.Entity, camera.Entity];
 Transform[] values = new Transform[2];
 world.ReadTransforms(references, values);
 Transform changed = values[1]; changed.Position.X = 42;
@@ -40,11 +40,11 @@ if (world.ReceiveSignals(camera, signals) != 0) throw new InvalidOperationExcept
 world.CommitPhase();
 world.ReadTransforms(references, values);
 if (values[1].Position.X != 42 || world.ReceiveSignals(camera, signals) != 1 ||
-    signals[0].Source.Id != root.Id || signals[0].Code != 17 || signals[0].Value != 12.5 || signals[0].Sequence != 1)
+    signals[0].Source != root.Entity || signals[0].Code != 17 || signals[0].Value != 12.5 || signals[0].Sequence != 1)
     throw new InvalidOperationException("Managed/native batch or signal round-trip failed.");
 using (SceneWorld foreign = new("Foreign"))
 {
-    ObjectReference[] wrong = [foreign.CreateObject("Foreign").Reference];
+    Ncma.Runtime.Entity[] wrong = [foreign.CreateObject("Foreign").Entity];
     try { world.ReadTransforms(wrong, values.AsSpan(0, 1)); throw new Exception("Foreign reference accepted."); }
     catch (ArgumentException) { }
 }
@@ -65,7 +65,7 @@ try { world.ReadTransforms(references, values); throw new Exception("Deleted ref
 catch (ArgumentException) { }
 
 ManagedWorldAccessTests.Run();
-Console.WriteLine($"Ncma managed scene smoke test passed (GameObject {camera.Id}; no native World API).");
+Console.WriteLine($"Ncma managed scene smoke test passed (Entity {camera.Entity}; no native World API).");
 
 using ActionAnimationSession animation = new();
 animation.TriggerAction("Attack");

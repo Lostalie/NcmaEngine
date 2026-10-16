@@ -155,7 +155,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
               runtime.FindObject(unattached).Get<TransformData>()==TransformData.Identity &&
               !runtime.FindObject(logic).Has<TransformData>());
         Check(editBefore.SequenceEqual(document.CaptureBytes()) && play.Tick==30);
-        byte[] committed=play.Document.CaptureBytes();var reference=runtime.FindObject(fast).Reference;
+        byte[] committed=play.Document.CaptureBytes();var reference=runtime.FindObject(fast).Entity;
         for(int cycle=0;cycle<12;cycle++) {
             var epoch=play.SessionId;var generation=owner.Catalog.Snapshot.Generation;ulong tick=play.Tick;
             var weak=CurrentCatalogContext(owner.Catalog,document.GetBindings(fast).Single());
@@ -164,7 +164,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
                   owner.Catalog.Snapshot.Generation==generation && committed.SequenceEqual(play.Document.CaptureBytes()));
             Check(owner.ReloadGameplay(path)==1);
             Check(play.State==Ncma.Gameplay.PlayState.Paused && play.SessionId!=epoch && play.Tick==tick &&
-                  runtime.FindObject(fast).Reference==reference && committed.SequenceEqual(play.Document.CaptureBytes()));
+                  runtime.FindObject(fast).Entity==reference && committed.SequenceEqual(play.Document.CaptureBytes()));
             Reject(()=>play.SubmitInput(new(epoch,1,true,new ulong[8],new ulong[8],new ulong[8],0,0)));
             using(var lease=owner.Catalog.AcquireLease())Reject(owner.Catalog.Clear);
             for(int pass=0;pass<10 && weak.IsAlive;pass++){GC.Collect();GC.WaitForPendingFinalizers();GC.Collect();}
