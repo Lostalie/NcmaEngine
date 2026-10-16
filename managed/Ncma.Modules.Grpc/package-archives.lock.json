@@ -1,0 +1,37 @@
+[
+  {
+    "id": "Grpc.Net.Client",
+    "version": "2.84.0",
+    "archiveSha512": "9TzKae17a8qdDKj7/fJenaoSSpe9CHuuNyDe2t9d3KxqAYkE2LQ2kGzVhBDGcHvxaLeNxr6dOWfW2JGvU+dtlw==",
+    "contentHash": "My6Fms2YCyAbihTBZZ3kLS39iTY2pkMAzGDBTC6XhPOujg70eB07AEJ7tPiW3tZ70bhFzHcc3+d4j3DaIPF3aA==",
+    "source": "https://api.nuget.org/v3-flatcontainer/grpc.net.client/2.84.0/grpc.net.client.2.84.0.nupkg"
+  },
+  {
+    "id": "Grpc.Core.Api",
+    "version": "2.84.0",
+    "archiveSha512": "si0QbNcAJm8BRBL5EK+owlkUdr0FhCP6T8gZ1D7k8fjZBSc2jKiks6HEtjjpDngXh4bGbQn085T7L+0VbbGjfw==",
+    "contentHash": "p2SOMl6q/GZ4/5MLkgboC/z55g4zKUEruRn/g46QgppjQBVnsLZVBU/9VO7n60ll38G3Eo8Zu9b7x+W01GKFVg==",
+    "source": "https://api.nuget.org/v3-flatcontainer/grpc.core.api/2.84.0/grpc.core.api.2.84.0.nupkg"
+  },
+  {
+    "id": "Grpc.Net.Common",
+    "version": "2.84.0",
+    "archiveSha512": "8oscwZdDPL6yU/ffrced0PPVQmLfEshoBMtd6xq/QxwszRyeIhkCVuDURzaRz9/j2eDI7BLdClrEcm8qZL6MMA==",
+    "contentHash": "DPxm/H8G/lDRrz997wM0M2zN/PGqVeZKDakhBbtABEbv6WIW4HI9g3BvntBQT6ZUROuGacMzfyyF9e5kiTVFfQ==",
+    "source": "https://api.nuget.org/v3-flatcontainer/grpc.net.common/2.84.0/grpc.net.common.2.84.0.nupkg"
+  },
+  {
+    "id": "Microsoft.Extensions.DependencyInjection.Abstractions",
+    "version": "8.0.1",
+    "archiveSha512": "gRjamTLaOCscIjefkWm+qTyrzxf11WwbZhb64jsb8UtKOFObf4QX9j8WGxQCHyY0355Pn6YvX8hGZwGKHZLJZw==",
+    "contentHash": "fGLiCRLMYd00JYpClraLjJTNKLmMJPnqxMaiRzEBIIvevlzxz33mXy39Lkd48hu1G+N21S7QpaO5ZzKsI6FRuA==",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.extensions.dependencyinjection.abstractions/8.0.1/microsoft.extensions.dependencyinjection.abstractions.8.0.1.nupkg"
+  },
+  {
+    "id": "Microsoft.Extensions.Logging.Abstractions",
+    "version": "8.0.1",
+    "archiveSha512": "yOD9sjDgEz8uPi+E8wAlj0NI/DSvI85ZfPEkRuDpFxHLTU0P7zMz3jrCOkngBqnu82uvldK1t0ScPXVabVXARQ==",
+    "contentHash": "RIFgaqoaINxkM2KTOw72dmilDmTrYA0ns2KW4lDz4gZ2+o6IQ894CzmdL3StM2oh7QQq44nCWiqKqc4qUI9Jmg==",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.extensions.logging.abstractions/8.0.1/microsoft.extensions.logging.abstractions.8.0.1.nupkg"
+  }
+]

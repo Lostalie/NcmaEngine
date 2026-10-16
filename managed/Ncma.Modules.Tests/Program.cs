@@ -35,7 +35,8 @@ static class Program
         Run("all exact context fields and generation identity", ContextFields);
         Run("completed replies remain within outstanding budget", CompletedBudget);
         Run("unclaimed proposal expires before delivery", UnclaimedDeadline);
-        Console.WriteLine($"Ncma.Modules: 16 groups, {checks} checks passed (CPU only; no transport/inference/World mutation).");
+        Run("transport dispatch receives only remaining budget", DispatchBudget);
+        Console.WriteLine($"Ncma.Modules: 17 groups, {checks} checks passed (CPU only; no transport/inference/World mutation).");
     }
 
     private static void Run(string name, Action test) { test(); Console.WriteLine($"PASS {name}"); }
@@ -356,25 +357,45 @@ static class Program
         Close(session);
     }
 
+    private static void DispatchBudget()
+    {
+        var clock = new Clock(); using var adapter = new Controlled();
+        var session = Session(adapter, clock, 1);
+        try
+        {
+            var first = Submit(session); var second = Submit(session);
+            session.Pump(Context); Wait(() => adapter.Requests.Count == 1);
+            Check(adapter.Requests[first].Budget == TimeSpan.FromMilliseconds(10_000));
+            clock.Advance(6000); adapter.Complete(first);
+            Check(Take(session, first).Status == ModuleOutcomeStatus.NeedsDomainValidation);
+            Wait(() => { session.Pump(Context); return adapter.Requests.Count == 2; });
+            Check(adapter.Requests[second].Budget == TimeSpan.FromMilliseconds(4000));
+            clock.Advance(4000);
+            Check(Take(session, second).Status == ModuleOutcomeStatus.TimedOut);
+            adapter.Complete(second);
+        }
+        finally { session.Stop(); adapter.ReleaseAll(); Close(session); }
+    }
+
     private sealed class Adapter(Func<ModuleRequest, Task<ModuleReply>> invoke) : IModuleAdapter
-    { public Task<ModuleReply> InvokeAsync(ModuleRequest request, CancellationToken cancellation) => invoke(request); }
+    { public Task<ModuleReply> InvokeAsync(ModuleRequest request, TimeSpan remainingBudget, CancellationToken cancellation) => invoke(request); }
     private sealed class TokenAdapter(Func<ModuleRequest, CancellationToken, Task<ModuleReply>> invoke) : IModuleAdapter
-    { public Task<ModuleReply> InvokeAsync(ModuleRequest request, CancellationToken cancellation) => invoke(request, cancellation); }
+    { public Task<ModuleReply> InvokeAsync(ModuleRequest request, TimeSpan remainingBudget, CancellationToken cancellation) => invoke(request, cancellation); }
     private sealed class Clock : TimeProvider
     {
         private long milliseconds;
         public override long TimestampFrequency => 1000;
-        public override long GetTimestamp() => milliseconds;
-        internal void Advance(long value) => milliseconds += value;
+        public override long GetTimestamp() => Interlocked.Read(ref milliseconds);
+        internal void Advance(long value) => Interlocked.Add(ref milliseconds, value);
     }
     private sealed class Controlled : IModuleAdapter, IDisposable
     {
-        internal ConcurrentDictionary<Guid, (ModuleRequest Request, TaskCompletionSource<ModuleReply> Completion)> Requests { get; } = new();
+        internal ConcurrentDictionary<Guid, (ModuleRequest Request, TaskCompletionSource<ModuleReply> Completion, TimeSpan Budget)> Requests { get; } = new();
         private volatile bool released;
-        public Task<ModuleReply> InvokeAsync(ModuleRequest request, CancellationToken cancellation)
+        public Task<ModuleReply> InvokeAsync(ModuleRequest request, TimeSpan remainingBudget, CancellationToken cancellation)
         {
             var source = new TaskCompletionSource<ModuleReply>(TaskCreationOptions.RunContinuationsAsynchronously);
-            Requests[request.RequestId] = (request, source);
+            Requests[request.RequestId] = (request, source, remainingBudget);
             if (released) source.TrySetResult(Reply(request));
             return source.Task;
         }

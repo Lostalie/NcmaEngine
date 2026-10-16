@@ -19,13 +19,15 @@ endif()
 
 option(NCMA_BUILD_TESTS "Build Ncma architecture tests" ON)
 option(NCMA_BUILD_MANAGED "Expose the managed build target when dotnet is available" ON)
+option(NCMA_VERIFY_MODULE_WORKER "Verify the optional local Python worker (requires explicitly prepared locked dependencies)" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Vendored dependencies. NcmaEngine never downloads build dependencies.
+# Vendored native dependencies; native configure/build never downloads these SDKs.
+# Optional managed gRPC uses its separate locked NuGet restore, not a native dependency.
 add_library(NcmaUfbx STATIC engine/sdk/ufbx/ufbx.c)
 target_include_directories(NcmaUfbx SYSTEM PUBLIC engine/sdk/ufbx)
 set_target_properties(NcmaUfbx PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -316,6 +318,9 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Tests/Ncma.Modules.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/Ncma.Modules.Grpc.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/Ncma.Runtime.Tests.csproj"
@@ -705,6 +710,22 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaModuleTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Tests.dll")
         set_tests_properties(NcmaModuleTests PROPERTIES TIMEOUT 60)
+        if(WIN32)
+            add_test(NAME NcmaModuleTests.NoPythonProducts COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
+                "${CMAKE_SOURCE_DIR}" --no-python-products "$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set_tests_properties(NcmaModuleTests.NoPythonProducts PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+            if(NCMA_VERIFY_MODULE_WORKER)
+                add_test(NAME NcmaModuleTests.Grpc COMMAND "${DOTNET_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
+                    "${CMAKE_SOURCE_DIR}")
+                set_tests_properties(NcmaModuleTests.Grpc PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
+                add_test(NAME NcmaModuleTests.RelocatedClient COMMAND "${DOTNET_EXECUTABLE}"
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
+                    "${CMAKE_SOURCE_DIR}" --relocated-client "$<IF:$<CONFIG:Debug>,Debug,Release>")
+                set_tests_properties(NcmaModuleTests.RelocatedClient PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+            endif()
+        endif()
         add_test(NAME NcmaManagedHeadlessTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Runtime.Tests.dll")
         set_tests_properties(NcmaManagedHeadlessTests PROPERTIES TIMEOUT 30)

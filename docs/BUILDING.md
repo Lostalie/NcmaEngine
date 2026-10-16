@@ -5,7 +5,8 @@ Complete Build.bat regression stages, verifies and deploys its entire framework-
 to out/bin, with a recoverable backup and maintenance journal in out/deployment.
 SkipTests/SkipManaged/SkipPython never deploy. LaunchEditor.cmd refuses interrupted deployment;
 use scripts/Recover-Editor.bat for explicit recovery, never silent runtime fallback.
-Old C++ Editor and custom CLR/scene bridges are removed. Python transports remain unimplemented.
+Old C++ Editor and custom CLR/scene bridges are removed. M8.2 adds an optional local gRPC tool
+worker library; it is not a default Editor/Player dependency or an inference service.
 Manual UI/MCP, self-contained target environment and long-run acceptance remain pending under
 the user's adjusted automatic-regression threshold. Older verification descriptions below are historical.
 See [FRAMEWORK_REFACTOR.md](FRAMEWORK_REFACTOR.md) for the staged migration.
@@ -57,9 +58,13 @@ Requirements:
 
 - Visual Studio 2022 with **Desktop development with C++**
 - .NET 8 runtime and .NET 8 SDK or newer
-- Python 3.10+ only for optional CLI/MCP/tool checks (`-SkipPython` omits them); no development headers, import library or interpreter DLL is required by native targets.
+- Python 3.10+ for CLI/MCP/tool checks; no Python development headers, import library or interpreter DLL is required by native targets.
+- Full M8.2 worker verification additionally requires an explicitly prepared Windows x64 CPython 3.12 venv at `out/modules/python312`, with the exact hashes/versions in `python/worker/requirements-win-py312.lock`. The test fixture prepares a separate pinned, isolated interpreter bundle from this development environment; the venv redirector is not the production worker executable. Build.bat does not create this environment, install pip packages or download models. Missing prerequisites fail verification.
+- `-SkipPython` omits Python tooling and actual worker/relocated-client tests, but retains the default-product independence test; any Skip build is not a full gate and never deploys the formal editor.
 
-Third-party engine libraries are vendored under `engine/sdk`; builds do not download packages. The active core stack is Eigen 3.4.0, GLFW 3.5.0, Dear ImGui 1.91.9b, spdlog 1.15.3, Box2D 3.1.1, Jolt Physics 5.5.0, and ufbx 0.23.0. Python gameplay embedding and interpreter DLL deployment have been removed. CMake builds the engine dependencies from SDK sources and uses the dynamic MSVC runtime.
+Native third-party engine libraries are vendored under `engine/sdk`. The active core stack is Eigen 3.4.0, GLFW 3.5.0, Dear ImGui 1.91.9b, spdlog 1.15.3, Box2D 3.1.1, Jolt Physics 5.5.0, and ufbx 0.23.0. Python gameplay embedding and interpreter DLL deployment have been removed. CMake builds the engine dependencies from SDK sources and uses the dynamic MSVC runtime.
+
+The optional .NET gRPC projects use locked NuGet restore from the configured official source into `out/modules/nuget`; an initial restore needs a reachable source or valid cache. `Package-ModuleClient.ps1` independently publishes and verifies the optional library/dependencies under `out/package/modules/<configuration>/<generation>/client`, indexed by `out/verification/m8-2/<configuration>/client-package.json`. This is not the default `out/bin` deployment and includes no Python interpreter or model. See [M8.2 contract](M8_2_RUNTIME_CONTRACT.md) for the strict installation, authorization and shutdown boundaries; pythonnet/ZeroMQ remain unimplemented.
 
 The `windows-msvc` CMake preset remains available for Visual Studio's native CMake integration. For command-line builds, use `Build.bat`; invoking the Ninja generator directly from a normal terminal does not initialize MSVC.
 
@@ -67,7 +72,7 @@ The `windows-msvc` CMake preset remains available for Visual Studio's native CMa
 
 C# is the only gameplay language. Python gameplay SDK/host, creation language picker and reload
 entries have been removed. Python remains optional for independent specialized modules and plugins;
-see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader is implemented yet.
+see [PYTHON_MODULES.md](PYTHON_MODULES.md). The optional M8.2 tool transport does not provide a general plugin loader or a formal editor AI connection.
 
 1. Select or create an object via + GameObject, then Inspector > C# Behaviours > + Add Behaviour.
 2. Choose `Ncma.Gameplay.Sample.RotatorBehaviour`. Speed, Clockwise and Multiplier are reflected
@@ -86,13 +91,13 @@ see [PYTHON_MODULES.md](PYTHON_MODULES.md). No module transport or plugin loader
 
 The full build updates the entire package, so close the editor before running a full build.
 GameplayOnly updates only the reloadable sample assembly in `out/managed`; it does not rebuild
-the engine/API or run the full verification suite. The current full build runs 24 CTest registrations (8 native then 16 managed/combinations, including kernel image and deployment fixtures), including
+the engine/API or run the full verification suite. The M8.2 full gate runs 13 native and 76 managed/product CTest registrations, including the optional real-worker, relocated-client and no-Python-product checks, plus 45 Python tests. The retained suite includes
 animation runtime/ABI, FBX import/reference skinning, direct C# service and hidden editor tests,
 including NcmaManagedHeadlessTests (independent C# World/Systems/transaction/permission cases)
 and NcmaSceneDocumentTests (complete components/Behaviour snapshots and failure guards),
 plus managed/native smoke tests and Python tooling/MCP/FBX/schema-v12 checks. Python gameplay
 removal is covered by rejecting language-tagged old scenes without modifying source
-files or destination Worlds. Passing this suite does not imply independent module transports exist.
+files or destination Worlds. The worker-specific tests prove the bounded local tool transport, not inference, formal AI-panel integration or clean-target acceptance.
 
 ## Action animation and AI controls
 
@@ -114,7 +119,7 @@ See [FBX_IMPORT.md](FBX_IMPORT.md) for import constraints and the read-only Pyth
 Target and implemented ownership remain separate: the EXE is the C# apphost with a native ImGui presentation plugin, while World/components and gameplay
 is actually C# only (`gameplay.csharp_only_runtime_enforced=true`). Python gameplay backend and
 object language selection are removed; `python_modules` preserves specialized-module/plugin options,
-with pythonnet/gRPC/ZeroMQ explicitly NOT implemented. Scene assets use only .ncmascene SceneDocument JSON v1,
+with the historical full-module-integration flags still false. These flags are not an inventory of the separate optional M8.2 library: local gRPC tool transport exists, but formal domain/host integration and inference do not; pythonnet/ZeroMQ remain unimplemented. Scene assets use only .ncmascene SceneDocument JSON v1,
 including all registered components and script configuration. Old .ncscene v1-v6 compatibility and migration are removed;
 unsupported input is rejected without rewriting it or mutating the live document. Native resource ABI is v2; World/GameObject exports and old Scene/Gameplay host bridges are removed. Current performance modules use versioned C ABIs. Rebuild old consumers; do not restore compatibility bridges.
 The MCP protocol version and animation-state JSON schema are unchanged.

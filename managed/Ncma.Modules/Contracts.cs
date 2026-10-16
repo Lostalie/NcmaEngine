@@ -131,7 +131,9 @@ public sealed record ModuleReply(int Version, Guid RequestId, Guid SessionId, lo
 /// <summary>Trusted adapter; called only on background workers. No host state is provided.</summary>
 public interface IModuleAdapter
 {
-    Task<ModuleReply> InvokeAsync(ModuleRequest request, CancellationToken cancellation);
+    // Queue and ThreadPool dispatch time have already been deducted. A transport must also
+    // deduct its own preparation time; the original operation timeout is not a new RPC budget.
+    Task<ModuleReply> InvokeAsync(ModuleRequest request, TimeSpan remainingBudget, CancellationToken cancellation);
 }
 
 public enum ModuleOutcomeStatus

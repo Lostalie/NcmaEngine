@@ -69,11 +69,12 @@ if ($CleanNative) {
     if ([IO.Path]::GetFullPath($buildDirectory) -ne $expectedBuildDirectory) { throw 'Unsafe native build path.' }
 }
 $cleanBuildOption = if ($CleanNative) { ' --clean-first' } else { '' }
+$moduleWorkerVerification = if ($SkipPython) { 'OFF' } else { 'ON' }
 $nativeCommand = @(
     'set "VSCMD_SKIP_SENDTELEMETRY=1"',
     ('call "{0}" >nul' -f $vcvars),
     'set "VSLANG=1033"',
-    ('"{0}" -S "{1}" -B "{2}" -G Ninja -DCMAKE_BUILD_TYPE={3} -DCMAKE_MAKE_PROGRAM="{4}" -DNCMA_BUILD_TESTS=ON -DNCMA_BUILD_MANAGED=ON' -f $cmake, $projectRoot, $buildDirectory, $Configuration, $ninja),
+    ('"{0}" -S "{1}" -B "{2}" -G Ninja -DCMAKE_BUILD_TYPE={3} -DCMAKE_MAKE_PROGRAM="{4}" -DNCMA_BUILD_TESTS=ON -DNCMA_BUILD_MANAGED=ON -DNCMA_VERIFY_MODULE_WORKER={5}' -f $cmake, $projectRoot, $buildDirectory, $Configuration, $ninja, $moduleWorkerVerification),
     ('"{0}" --build "{1}" --target NcmaCore NcmaNative NcmaArchitectureTests{2}' -f $cmake, $buildDirectory, $cleanBuildOption),
     ('"{0}" --build "{1}"' -f $cmake, $buildDirectory)
 ) -join ' && '
@@ -146,6 +147,9 @@ if (-not $SkipManaged) {
     if ($LASTEXITCODE -ne 0) { throw "Managed application service tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Modules.Tests\Ncma.Modules.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed module contract tests build failed with exit code $LASTEXITCODE." }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Modules.Grpc.Tests\Ncma.Modules.Grpc.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Optional module transport tests build failed with exit code $LASTEXITCODE." }
+    & (Join-Path $PSScriptRoot 'Package-ModuleClient.ps1') -Configuration $Configuration
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Runtime.Tests\Ncma.Runtime.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) {
         throw "Managed headless runtime build failed with exit code $LASTEXITCODE."

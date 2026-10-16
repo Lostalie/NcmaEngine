@@ -24,6 +24,7 @@ reply 必须匹配 version/request/session/epoch/fingerprint/output-schema、已
 - 1–4活跃 adapter 调用；4096终身 request ID，不驱逐去重记录。满后需明确结束会话，不自动重置。
 - 时限1–60000ms，单调时钟，从 Submit 算起，包括排队和完成后尚未领取的时间。
 - Submit 不执行 adapter；Pump 有界观察完成的 Task，再按空余槽位派发。GetResult 只用于 IsCompleted 的任务，不等待工作完成。
+- M8.2首个增量（2026-10-16）：adapter 的 `InvokeAsync` 显式接收 `remainingBudget`，在后台真正开始调用前扣除排队及ThreadPool等待；传输还须扣除自身准备时间，不能重新使用完整operation timeout。已移除旧双参数签名，不提供兼容转发；请求v1身份/指纹语义不变。自定义TimeProvider须支持并发单调时间读取。新增精确排队6000ms后只剩4000ms的双配置CPU测试；这不是实际RPC验收。
 - Cancel 在后台执行 CancellationToken 回调，主线程不执行可能阻塞/抛异常的回调。每个工作最多一个取消任务。
 - 超时/取消不能强停可信 adapter。旧工作/取消回调未完成时继续保留其活跃槽；不会自动重试、重启或并发补位，避免无界堆积。进程硬隔离与资源限制是后续 worker 的独立责任。
 - 错误只返回固定状态；异常文本、traceback、内部对象、路径或密钥不进入结果。

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
+    <RestoreSources>https://api.nuget.org/v3/index.json</RestoreSources>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)..\..\out\modules\nuget</RestorePackagesPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Ncma.Modules\Ncma.Modules.csproj" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.84.0" />
+  </ItemGroup>
+</Project>

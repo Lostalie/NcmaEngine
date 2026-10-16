@@ -1,5 +1,7 @@
 # NcmaEngine 引擎架构
 
+2026-10-16 当前模块/顺序更新：M8.2 已有独立可选本机 TLS gRPC 工具 worker、进程审批/故障保留与客户端受检搬移，实际范围及最终门禁状态见 [M8.2 契约](M8_2_RUNTIME_CONTRACT.md)。正式 Editor/Player 模块接线、模型推理、pythonnet/ZeroMQ 仍未实现；下文早期“全部传输未实现”为历史状态。用户已确认 **M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**，ECS 目标为 C# 唯一存储、GameObject 封装同一 Entity，当前尚未实现；具体门禁见 [路线图](ROADMAP.md)。
+
 2026-10-05 更新：正式应用入口改为 C# apphost → Application/Editor.Services →
 Editor.Core/Scene/Gameplay/Runtime；Platform/Gui/Renderer/Physics/FBX/动画通过原生插件接入。
 旧 C++ Editor、ManagedHost/ManagedSceneClient/DotNetGameplayRuntime 和 Ncma.Managed.Host
@@ -10,7 +12,7 @@ Editor.Core/Scene/Gameplay/Runtime；Platform/Gui/Renderer/Physics/FBX/动画通
 
 本文区分目标架构和实际实现。标记“已实现”只表示所述切片可运行，不代表整个系统完成。
 A 方案已确认，AI 深度参与场景、动画、UI、工具和引擎扩展。
-2026-10-16模块增量：独立纯BCL `Ncma.Modules` 已实现复制v1请求/提案、可信启动目录、有界异步owner inbox、身份/时限/撤销/背压与停止收敛，完整双配置自动门禁通过。结果仅为待领域验证的数据，不授予编辑权限；尚无正式宿主接线、RPC线协议、Python worker或推理。见[M8.1契约](M8_1_RUNTIME_CONTRACT.md)和[M8实施记录](M8_IMPLEMENTATION_PLAN.md)。
+2026-10-16模块增量：独立纯BCL `Ncma.Modules` 已实现复制v1请求/提案、可信启动目录、有界异步owner inbox、身份/时限/撤销/背压与停止收敛，M8.1 完整双配置自动门禁通过。M8.2 在独立可选库增加实际 gRPC 线协议与 Python 工具 worker。结果仅为待领域验证的数据，不授予编辑权限；尚无正式宿主接线或推理。见[M8.1契约](M8_1_RUNTIME_CONTRACT.md)和[M8实施记录](M8_IMPLEMENTATION_PLAN.md)。
 Python 游戏脚本已移除；托管 World/固定步/事务基础已实现，C++ SceneWorld 和原生 World 导出已删除。
 编辑器及隔离 Play 已接入 C# World；统一 Editor.Core/EditSession 编辑链路已实现；正式默认入口已切换为 C# apphost，保留明确的部署恢复。Platform/GUI/DX11 Renderer 与独立 Physics 插件及 M2.5 A–F 业务迁移已落地，人工验收未完成，见 [H5 记录](M2_5_H5_DELIVERY_REPORT.md)。
 
@@ -30,7 +32,7 @@ C# Runtime: World + GameObject + Component + Systems  [权威 World 已接入现
 版本化批量 C ABI    请求 / 观察 / 结果          应用同步适配
      |              |
 C++ Renderer       Python AI / 专长模块 / 插件
-C++ Physics        gRPC worker：建议默认，未实现
+C++ Physics        gRPC worker：可选工具链路已实现，无推理/正式宿主接线
 C++ 数值内核        pythonnet / ZeroMQ：可选，未实现
 ```
 
@@ -240,7 +242,7 @@ Python 游戏宿主、游戏 SDK、示例、GameObject 语言选择、挂载/Pla
 
 | 选项 | 定位 | 当前状态 |
 |---|---|---|
-| gRPC worker | 建议默认；独立进程、异步请求/结果 | 未实现 |
+| gRPC worker | 独立可选进程、异步请求/结果 | M8.2 工具实现；严格 JSON/TLS，正式宿主接线和推理未实现 |
 | pythonnet | 可信模块进程内互操作；单一解释器所有者/GIL 管理 | 未实现 |
 | ZeroMQ | 有测量需求时使用批量/流式消息 | 未实现 |
 

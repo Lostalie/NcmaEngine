@@ -1,0 +1,6 @@
+# Optional worker only; CPython 3.12 Windows x64, not a global ncma-tools dependency.
+# Official PyPI metadata checked 2026-10-16. Wheel-only installation, --require-hashes.
+# grpcio-1.84.0-cp312-cp312-win_amd64.whl (2026-09-14)
+grpcio==1.84.0 --hash=sha256:49717e857899f4136d7657bf5aded61ac479110a075438290923a4d86af7cd02
+# typing_extensions-4.16.0-py3-none-any.whl (2026-07-02)
+typing-extensions==4.16.0 --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8

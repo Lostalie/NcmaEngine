@@ -138,7 +138,16 @@ public sealed class ModuleSession
                 entry.Cancellation = new CancellationTokenSource();
                 var token = entry.Cancellation.Token;
                 // Even synchronous code before an adapter's first await is off the owner thread.
-                entry.Work = Task.Run(async () => await adapter.InvokeAsync(entry.Request, token).ConfigureAwait(false));
+                entry.Work = Task.Run(async () =>
+                {
+                    // Compute on dispatch, not when queued onto the ThreadPool. A supplied
+                    // TimeProvider must support concurrent monotonic timestamp reads.
+                    var remaining = TimeSpan.FromMilliseconds(entry.Request.Operation.TimeoutMilliseconds) -
+                        time.GetElapsedTime(entry.Started);
+                    if (remaining <= TimeSpan.Zero) throw new OperationCanceledException();
+                    token.ThrowIfCancellationRequested();
+                    return await adapter.InvokeAsync(entry.Request, remaining, token).ConfigureAwait(false);
+                });
                 active++;
             }
         }
