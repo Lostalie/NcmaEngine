@@ -90,7 +90,7 @@ E1-B 已完成两个增量：第一增量 `0fa22943ae8e955ebd3e67a44ac51a0ad580c
 
 ## 8. E2 分片与 Query 契约
 
-E2-A 查询基础与 E2-B 结构批次分别测试、交付；整个 E2 必须在两片完成后才关闭。E2-A 已实现，完整双配置自动回归及交付核验通过；E2-B、E3–E5、M8.3 尚未开始。本片只构建候选，不替换用户刚更新的正式 E1-B EXE。
+E2-A 查询基础与 E2-B 结构批次分别测试、交付。E2-A 已实现并提交推送 `5d46ef0596566cfff85370c84e3a36e5b84c58ca`，本片开始时精确核对本地与远端 main 一致。E2-B 已通过同源码完整双配置回归和最终交付核验，E2 自动候选门禁完成；E3–E5、M8.3 尚未开始。本片只构建候选，不替换用户刚更新的正式 E1-B EXE。
 
 ### E2-A 已实现的查询边界
 
@@ -113,9 +113,48 @@ foreach (Entity entity in moving)
 }
 ```
 
-### E2-B 后续范围（未实现）
+### E2-B 有界结构批次契约
 
-新增有界结构批次，覆盖创建/删除/增删组件、待提交句柄与回执，接入既有固定步和唯一 RuntimeCommandBuffer/SceneDocument 绑定生命周期，不引入独立 World 或第二提交器。保留现行单命令调用的合法业务语义；被替代入口与消费者必须同片迁移，不保留兼容空壳。先冻结重复目标和有依赖的创建后附加组件的具体规则，再实现全批预算/权限/目标/类型/引用预检。批次失败即使被调用者捕获也毒化整个候选步；不能提交前缀，不能提前发布句柄/回执。E3 再优化完整文档和整池复制，不在 E2 偷换现有验证。
+2026-10-18 实施。`IRuntimeCommands.SubmitBatch(ReadOnlySpan<StructuralCommand>)` 接入既有 RuntimeCommandBuffer，由同一个 PlaySession/World 固定步拥有最终提交权。声明式命令包括 Create/Destroy/Rename/Add/Remove/Attach/Detach/Enable；不是执行任意委托的公开 API，也不是新编辑历史、Agent 写入口或 Python 调度器。
+
+- **完整身份和创建依赖**：已有目标用 `StructuralTarget.Existing(Entity)`，校验完整 World/Index/Generation 后定位候选；不能用过期 Entity 命中复用槽位。`CreatedAt(i)` 只能指向当前批次中更早的 Create。`PendingCreation(handle)` 只能引用同一 session/generation/固定步 attempt 内已接收、尚未删除的创建；上一步已提交对象应通过 `Resolve(handle)` 获取 Entity，再用 Existing。
+- **重复/冲突**：同批按“对象 + 变更字段”去重，name、每个 component type、每个 binding UUID 各为一个字段。因而 Create → Rename/Add/Attach 是合法依赖，不被误判为重复对象；同一组件 Remove+Add、同一 binding Enable+Detach、两次 Rename 拒绝。Destroy 在同批内对整个对象独占；创建后删除可在两个有序批次中执行。跨批以提交调用顺序执行，改名 last-write-wins，组件/绑定仍须满足每一步前置条件。
+- **共享预算**：每固定步所有单命令与批次累计最多 1024 条、1 MiB 命令 payload；不能通过拆批重置预算。空批、超限、序号溢出拒绝。新批次每条额外计入 128 字节预算，字符串按 UTF-8，组件和绑定使用有界 JSON 编码；组件按原始/归一化后批次编码总量中较大者计费。单组件 64 KiB、每对象 64 组件、4096 对象、绑定/Export 容量和完整 World/SceneDocument 4 MiB 验证不放宽。输入 JsonElement、绑定 Export 数组复制；输出数组不暴露。
+- **全批准备**：先做输入预算/目标/依赖/冲突预检，再在同一个 World 的当前 step 上建立 metadata/slot/组件池 COW 候选分支。逐条执行现有 Stage 权限、类型/schema、归一化、runtime-attachable 和冻结成员检查，最后执行完整 World/SceneDocument 编码及 binding 全局验证。所有可能失败的复制/回执队列分配发生在接入 step 候选之前；失败恢复此前候选根和绑定表，不能留下批次前缀。代次预约、创建序号、已预约 token 不回滚，避免失败身份复活。
+- **失败仍毒化整个 step**：拒绝后即使调用者 catch，也不能提交此前其他单命令、组件写入或批次。输入/信号消费、tick、公开查询成员和成功回执只在原有最终提交点发布。后续 Behaviour factory、跨域最终准备仍可能拒绝已接收的批次；`StructuralSubmission` 不是成功回执。私有脚本状态、外部 IO 不回滚，原生物理仍遵守 fail-stop。
+- **待提交句柄**：删除旧 `PendingObject` 及其消费者声明，使用不公开候选 Entity 的 `PendingEntity`，包含只读 ObjectId/Token 与内部 attempt/完整 Entity。旧单命令 SpawnEmpty 同样返回此类型，保留其余单命令现行业务语义，不增加旧类型兼容壳。该句柄不授予实时 World 写权限，不能通过普通 World.Resolve 提前获得实体。
+- **回执生命周期**：`CommandReceipt` 增加完整 `Entity?` 和 WorldIdentity，成功 step 后才可 GetReceipt。创建同一步又删除得到 removed/null；只有 committed 且完整身份匹配的创建可 Resolve。删除/槽位复用、恢复 World、Stop/Reload、错误 session/generation、失败 step、淘汰回执均不能重新解析旧创建；缓存仍只保留最近 1024 条，不持久化运行时身份。
+- **保留边界**：owner-thread-only；OnUpdate/只读准备拒绝写入；可信 validator 重入被拒绝且无法通过 catch 绕过毒化。Runtime 不依赖 Gameplay/Managed。组件读写仍经过 World 权限，没有直接池写、裸指针、不受限 ref 或多线程写入。
+
+```csharp
+// 仅所属 PlaySession 的固定步回调；组件值是受注册 schema 约束的副本。
+StructuralSubmission batch = commands.SubmitBatch([
+    new StructuralCommand.Create(Guid.NewGuid(), "Projectile"),
+    new StructuralCommand.Add(StructuralTarget.CreatedAt(0), transformSnapshot)
+]);
+PendingEntity pending = batch.Created(0); // 尚不能 Resolve/GetReceipt
+```
+
+保存该句柄，在**整个固定步成功提交之后**的 owner-thread 回调中读取（不是在上述提交回调中紧接着执行）：
+
+```csharp
+Entity entity = commands.Resolve(pending);
+CommandReceipt receipt = commands.GetReceipt(batch[0]);
+```
+
+此片仍保留全量快照验证和整池首次写复制；每批额外准备全量候选有成本，不声称它比逐条命令更快。E3 才处理增量写集/编码缓存；E5 才给出新旧配对性能结论。
+
+### E2-B 验证与交付记录
+
+- 新增 `StructuralCandidateTests` 8 组：候选根/池值无前缀、失败代次保留、提交前不可见、元数据失败、权限与冻结成员、多批 COW 隔离、捕获验证器写入、完整 4 MiB 世界预算、失效准备动作；`StructuralBatchCases` 26 组覆盖创建依赖、全部结构/绑定命令、重复/冲突、空/默认/外来/过期输入、原始/归一化/聚合预算、1024/1025 边界、迟发 factory 失败、输入回滚、回执淘汰、删除/复用/Stop/恢复/重试、复制输入、重入及 owner/read-only/序号溢出。
+- 定向 Debug 最终 `out/ecs-e2b-runtime-debug-first.log` 和 `out/ecs-e2b-gameplay-debug-sixth.log` 通过：Runtime 13、storage 14、identity 15、Query 17、新候选 8；Gameplay 53、新批次 26、Movement 38、UI 18、E0 fixtures 11。Movement 此处仍是确定性 fake，不是新 Jolt 角色验收。
+- 定向失败保留：Gameplay Debug second 是新增测试误用 InputFrame 参数类型导致编译失败；third 为首次获取焦点会按原契约丢弃按键边沿，而测试未先建立焦点，修正为先聚焦再提交边沿；fifth 是新增 fixture 两处 nullable 编译错误，改为明确检查已产生的提交。没有削弱产品输入规则、断言或预算；原日志全部保留。
+- 全回归源码冻结 `out/verification/ecs-e2b/source-freeze-first.json`：920 文件，SHA256 `B6D3B8393373F18FDB94A6520ABAC211A87E5DB8A9BB983742D5E97BB6CD3BC7`。顺序执行两配置 Build.bat -SkipTests（不部署）后各完整 89 项 CTest，再做托管/原生冒烟、Python 45/inspect 和包/正式安装/备份/E0 原始程序集核验。
+- Debug/Release 第一轮标准构建均零编译警告，完整 CTest 分别 **89/89，1057.84 秒**、**89/89，935.32 秒**。两配置新候选 8/8、新批次 26/26、原 Runtime 13/storage 14/identity 15/Query 17/Gameplay 53/Movement 38/UI 18/E0 fixtures 11 全通过；smoke/Python 45/inspect 全通过，构建前后均核验同一 920 文件冻结。顺序会话 23322 已终止 exit 0，没有待轮询构建或测试。
+- 日志 `out/ecs-e2b-build-{debug,release}-first.log`、`out/ecs-e2b-ctest-{debug,release}-first.log`、`out/ecs-e2b-ctest-{debug,release}-details-first.log` 和 `out/ecs-e2b-{supplemental,smoke,python,inspect}-{debug,release}-first.log`。本轮两个完整配置均首轮通过；先前定向失败证据照常保留。
+- Debug 候选 `e577b51b849049b3979b16c54ed56395`；Release 候选 `47f4cceb6906453e9ba274442320fde8`。两配置各五包的产品身份、路径、size/SHA256 与闭包核验通过；Editor/Null/DX11/Null-Physics/DX11-Physics 清单分别 144/56/113/67/116 文件，沿用原有有界 Editor 日志白名单。
+- 最终 `out/ecs-e2b-delivery-verification-first.log` exit 0，SHA256 `8A2FD7C2A8877345DC791EB1D9671B40D7AA8EB80B7DD2195854F75A231BB439`：冻结相同、十包完整；正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 的 144 清单/148 实际文件及 148 备份完整，E0 原始 18 个程序集 SHA 不变。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未改变。
+- 本轮没有新的无 Skip 部署、三轮历史 profile 或 E5 新旧性能配对验收；人工、目标素材/目标机、自包含、完整性能、1h 和历史故障调查仍开放。保留四项无关 IDE 设置，不将 out 产物/日志加入源码提交。下一步 E3 增量固定步，不进入 M8.3。
 
 ### E2-A 验证记录
 

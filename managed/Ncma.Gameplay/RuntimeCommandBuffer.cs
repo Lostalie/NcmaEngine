@@ -4,18 +4,21 @@ using Ncma.Runtime;
 using Ncma.Scene;
 namespace Ncma.Gameplay;
 
-internal sealed class RuntimeCommandBuffer(PlaySession session) : IRuntimeCommands
+internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRuntimeCommands
 {
     internal const int Capacity = 1024, PayloadBytes = 1024 * 1024;
-    private readonly List<(CommandToken Token, Guid Target)> _pending = [];
+    private List<(CommandToken Token, Guid Target)> _pending = [];
     private Dictionary<CommandToken, CommandReceipt> _receipts = [];
-    private readonly HashSet<Guid> _created = [];
+    private HashSet<Guid> _created = [];
     private Dictionary<Guid, BehaviourBindingData[]> _bindings = [];
     private ulong _sequence, _generation = 1;
+    private ulong _attempt;
+    private bool _submitting;
     private int _bytes;
     private bool _active;
     internal void Begin(SceneDocumentSnapshot snapshot)
     {
+        _attempt = checked(_attempt + 1);
         _bindings = snapshot.Objects.ToDictionary(o => o.Id, o => o.Behaviours);
         _pending.Clear(); _created.Clear(); _bytes = 0; _active = true;
     }
@@ -26,6 +29,7 @@ internal sealed class RuntimeCommandBuffer(PlaySession session) : IRuntimeComman
         if (!_active) throw new InvalidOperationException("Runtime commands require a fixed step.");
         try
         {
+            if (_submitting) throw new InvalidOperationException("Reentrant structural submission.");
             int bytes = measure();
             if (target == Guid.Empty || _pending.Count >= Capacity || bytes < 0 || bytes > PayloadBytes - _bytes || _sequence == ulong.MaxValue)
                 throw new ArgumentException("Runtime command budget or identity rejected.");
@@ -35,7 +39,7 @@ internal sealed class RuntimeCommandBuffer(PlaySession session) : IRuntimeComman
         }
         catch (Exception error) { session.Document.World.RejectStep(error); throw; }
     }
-    public PendingObject SpawnEmpty(string name, Guid? objectId = null)
+    public PendingEntity SpawnEmpty(string name, Guid? objectId = null)
     {
         Guid id = objectId ?? Guid.NewGuid();
         var token = Queue(id, () => Encoding.UTF8.GetByteCount(name), () =>
@@ -43,7 +47,8 @@ internal sealed class RuntimeCommandBuffer(PlaySession session) : IRuntimeComman
             if (!_created.Add(id)) throw new ArgumentException("Duplicate reserved UUID.");
             session.Document.World.StageCreate(id, name); _bindings.Add(id, []);
         });
-        return new(id, token);
+        try { return new(id, token, _attempt, session.Document.World.CandidateEntity(id)); }
+        catch (Exception error) { session.Document.World.RejectStep(error); throw; }
     }
     public CommandToken Destroy(Guid id) => Queue(id, () => 16, () =>
     { session.Document.World.StageDestroy(id); _bindings.Remove(id); });
@@ -79,16 +84,26 @@ internal sealed class RuntimeCommandBuffer(PlaySession session) : IRuntimeComman
         var alive = candidate.Objects.Select(o => o.PersistentId).ToHashSet();
         ulong tick = checked(session.Tick + 1);
         var values = _receipts.Values.OrderBy(r => r.Token.Sequence)
-            .Concat(_pending.Select(p => new CommandReceipt(p.Token, p.Target, tick, alive.Contains(p.Target) ? "committed" : "removed")))
+            .Where(r => r.WorldIdentity == session.Document.World.Identity)
+            .Concat(_pending.Select(p => new CommandReceipt(p.Token, p.Target, tick, alive.Contains(p.Target) ? "committed" : "removed",
+                alive.Contains(p.Target) ? session.Document.World.CandidateEntity(p.Target) : null, session.Document.World.Identity)))
             .TakeLast(Capacity).ToDictionary(r => r.Token);
         return () => { _receipts = values; _pending.Clear(); _active = false; };
     }
     public CommandReceipt GetReceipt(CommandToken token)
     {
         session.Document.VerifyAccess();
-        if (token.SessionId != session.SessionId || token.Generation != _generation || !_receipts.TryGetValue(token, out var result))
+        if (token.SessionId != session.SessionId || token.Generation != _generation || !_receipts.TryGetValue(token, out var result) || result.WorldIdentity != session.Document.World.Identity)
             throw new ArgumentException("Unknown, pending, expired or stale command receipt.");
         return result;
+    }
+    public Entity Resolve(PendingEntity pending)
+    {
+        session.Document.VerifyAccess(); ArgumentNullException.ThrowIfNull(pending);
+        var receipt = GetReceipt(pending.Token);
+        if (receipt.ObjectId != pending.ObjectId || receipt.Entity != pending.Entity || receipt.Disposition != "committed")
+            throw new ArgumentException("Pending creation did not survive a successful commit.");
+        return session.Document.World.Resolve(pending.Entity);
     }
     internal void Abort() { _pending.Clear(); _bindings = []; _created.Clear(); _active = false; _bytes = 0; }
     internal void Reset() { Abort(); _receipts.Clear(); _generation = checked(_generation + 1); }

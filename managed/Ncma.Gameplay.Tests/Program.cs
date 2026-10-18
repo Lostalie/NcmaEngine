@@ -95,7 +95,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Runtime create configure is atomic and keeps surviving handles", () => {
         var doc = Document(); global::Ncma.Runtime.Entity original = Object(doc); var originalId = original; var identity = doc.World.Identity;
-        var probe = new Probe(); PendingObject? pending = null; using var play = new PlaySession(doc);
+        var probe = new Probe(); PendingEntity? pending = null; using var play = new PlaySession(doc);
         probe.Fixed = _ => {
             if (play.Tick != 0) return;
             pending = probe.Context.Commands.SpawnEmpty("Spawned"); probe.Context.Commands.Rename(pending.ObjectId, "Configured");
@@ -122,7 +122,7 @@ var cases = new (string Name, Action Run)[]
         }
     }),
     ("Later invalid runtime command aborts structure components metadata input and receipts", () => {
-        var doc = Document(); var probe = new Probe(); PendingObject? pending = null; using var play = new PlaySession(doc);
+        var doc = Document(); var probe = new Probe(); PendingEntity? pending = null; using var play = new PlaySession(doc);
         var before = doc.CaptureBytes(); var reference = Object(doc); var revision = doc.Revision;
         probe.Fixed = _ => {
             pending = probe.Context.Commands.SpawnEmpty("Transient");
@@ -150,7 +150,7 @@ var cases = new (string Name, Action Run)[]
         }
     }),
     ("Spawn then delete publishes no object binding or lifecycle", () => {
-        var doc = Document(); var probe = new Probe(); int factories = 0; PendingObject? pending = null;
+        var doc = Document(); var probe = new Probe(); int factories = 0; PendingEntity? pending = null;
         using var play = new PlaySession(doc); probe.Fixed = _ => {
             pending = probe.Context.Commands.SpawnEmpty("Gone");
             probe.Context.Commands.AttachBehaviour(pending.ObjectId, new(Guid.NewGuid(), "Test.Probe", true, []));
@@ -494,6 +494,8 @@ foreach (var test in cases)
     catch (Exception error) { Console.Error.WriteLine("FAIL " + test.Name + ": " + error); return 1; }
 }
 Console.WriteLine($"Gameplay tests: {passed}/{cases.Length} passed.");
+try { StructuralBatchCases.Run(); }
+catch(Exception error){Console.Error.WriteLine(error);return 1;}
 try { MovementCases.Run(); }
 catch(Exception error){Console.Error.WriteLine(error);return 1;}
 try { GameplayUiCases.Run(); }

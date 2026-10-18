@@ -142,6 +142,7 @@ Console.WriteLine($"Ncma managed headless: {cases.Length - failures}/{cases.Leng
 failures += EcsStorageTests.Run();
 failures += EntityIdentityTests.Run();
 failures += EntityQueryTests.Run();
+failures += StructuralCandidateTests.Run();
 return failures == 0 ? 0 : 1;
 
 readonly record struct Health(int Points) : IComponent;
