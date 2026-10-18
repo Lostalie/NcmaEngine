@@ -171,3 +171,38 @@ CommandReceipt receipt = commands.GetReceipt(batch[0]);
 - Debug 候选 `3a411795b39f42ddb4da5d4b0f5e4b83`，Release 候选 `9e1fb6d5571f4e459e606d154ef9d0ec`。两配置各五个包的产品身份、路径、size/SHA256 和闭包核验通过；Editor/Null/DX11/Null-Physics/DX11-Physics 清单各 144/56/113/67/116 文件。未修改原有有界日志白名单。
 - 最终 `out/ecs-e2a-delivery-verification-first.log` 通过，SHA256 `D21682225976424589E05D86C0569A9A3360C7FB71D2FAF714D2FD81EB568481`：源码冻结相同；正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 安装 148 文件（144 清单）和备份 148 文件保持完整，E0 原始 18 个归档程序集逐一匹配。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未改动。
 - 最终顺序回归会话 57598 exit 0，所有构建/测试结束。第一轮失败会话 44267 exit 1 和失败证据保留。本片未执行新的无 Skip 部署或 E5 新旧配对性能门禁；只关闭 E2-A 自动候选门禁，不关闭整个 E2/ECS。
+
+## 9. E3 增量固定步实施顺序
+
+2026-10-18，E2-B 本地及 GitHub main 精确核对为 `cb50b4f25e9acfaa85ddf9568717ec30e1e254ea`。E3 要同时消除热点整池复制、稳定固定步全量 World/SceneDocument JSON、以及与变更量无关的高层重复准备。不能只完成分页存储就宣告 E3 完成；编辑 Undo/持久化冷路径仍允许完整文档。
+
+| 分片 | 改动和依赖 | 放行条件 |
+| --- | --- | --- |
+| E3-A 存储候选 | 按测量选择值页大小；稀疏/实体索引结构性 COW；替换整值池首次写复制，保留当前完整提交检查 | 多分支共享/撤销隔离、跨页 swap-delete/清空引用、所有池准备后再删除、实际旧 DLL 读路径对照、页粒度测量、双配置完整回归 |
+| E3-B 增量验证 | 建立候选写集和受限的内部已准备视图；逐项精确编码长度与聚合预算代替稳定帧完整 JSON；统一 World/SceneDocument 预算，不改变场景格式 | 原始与归一化后大小、对象/组件/绑定/Export、schema、UUID/代次/引用、跨域权限、溢出、失败恢复全部保留；自定义序列化/可信验证器无法证明可缓存时保留明确有界冷路径，不能静默漏检 |
+| E3-C 高层提交 | Commands.Begin 不再捕获整文档；绑定与实例按变更准备；信号/回执按完整 Entity 检查存活；插值从候选强类型 Transform 读取，不经 JSON 解码 | 固定顺序、提交前读取旧值、单一提交器、生命周期/信号/输入一次性消费、删除/复用、观察者错误与原生 fail-stop 语义保持；不新增 AI/网络写权限 |
+| E3-D 联合验收 | 对 A–C 做无写/稀疏/全写/结构变化与真实领域测试，检查稳定固定步没有完整文档构造 | 精确计数/负例证据、完整 Debug/Release 与包闭包；同输入旧实现/候选配对数据。人工/目标机/完整性能/长稳仍归原门禁，不用局部基准代替 |
+
+每片先测试再提交推送；当前 E3-A 自动候选通过，下一步 E3-B，后续分片尚未实现。E3–E5 通过前不启动 M8.3。
+
+### E3-A 混合分页存储
+
+- 生产值池使用 `PagedValues<T>`，当前默认每页 32 个值。固定容量仍为 4096；未写页不分配值数组。Fork 共享目录及页，分别更换父/子写入所有权；首次修改只复制目录及被修改页，不靠不可靠引用计数，也不暴露可写 ref。
+- 稀疏索引和 dense slot 索引仍是连续数组，只有 Add/Remove 等结构变化才复制；普通值写入不复制这两组索引。结构性新容量/页分配在修改数据之前准备。RemoveAll 先对所有参与池做 PrepareRemove，再开始删除，避免后半池分配失败造成前缀删除。
+- 读操作、公开 Entity、Query 缓存/顺序、权限、恢复和唯一 PlaySession 最终提交器不变；此片仍执行现有完整 World/SceneDocument 验证。没有新增并发写入、公开底层数组或 ABI。
+- 删除已不再使用的整值数组复制实现。`WholePoolBaseline` 仅在测试程序集保存 E2-B 已提交的池算法，改名并补无分配 PrepareRemove 方法，用于局部比较；它不是运行时兼容类型、后备存储或第二 World，不进入产品包。
+
+### E3-A 选择依据与测试状态
+
+- 初版将索引也分页：功能测试通过，但局部读取间接访问显著增加，因此未作为交付布局。保留 `out/ecs-e3a-pool-release-preliminary-{first,second,third}.log`：第一轮未关闭分层 JIT，受预热阶段变化影响，不用于跨页策略的最终结论；后两轮明确关闭分层 JIT。最终采用连续索引/分页值，仍不声称消除了所有直接池读取成本。
+- 新增 PagedStorageTests 10 组：懒分配/页大小边界、双向分支隔离、只复制触及值页、跨页删除、发布前准备/发布零分配、跨池准备失败无前缀、8000 次多分支随机映射对照、热读写零分配、分支分配不随对象数增长、引用清空。原 E1 字符串清空断言只改为检查分页值的所有 4096 个位置，没有删除断言。`out/ecs-e3a-runtime-debug-third.log` 全通过；此前 second 的测试参考类机械改名误改接口名导致编译失败，修复后通过，失败日志保留。
+- 三个独立进程测量目录 `out/verification/ecs-e3a/measure-first`，每轮 90 个池样例（100/1000/4096 × 整池参考及 16/32/64/128/256 值页 × 读/空 fork/1% 写/全写/1% 结构变化），每项 100 个原始样本，每样本 16 次操作。32 页在小规模稀疏分配、较大规模写入和目录/页对象数之间折中，不声明所有工作负载最优。
+- 同目录额外保存两组各四文件的隔离闭包，只有 Runtime DLL 不同：E2-B 来自其 Release 候选 `47f4cceb6906453e9ba274442320fde8` 且 SHA 匹配原清单；E3-A 来自本片 Release 构建。**同一个新测量程序**只调用两版本共有的 World/Query API，三轮交替先后顺序，每轮 6 个读取负载、每项 300 样本 × 16 次。它不是两套不同测试程序的历史时间比较；源码/输入哈希和原始结果保留。
+- 最终测量使用 `DOTNET_TieredCompilation=0`，这是局部算法比较条件，不改变产品配置，也不能与 E0 未固定分层 JIT 的历史数字直接计算收益。最终交付核验已确认 925 文件冻结不变，标准 Release 构建的 Runtime/测试程序集与测量输入逐字节一致。
+- 测量观察：混合池 fork 在 100/4096 元素下均 **144 B**；4096 元素、约 1% 均匀值写入每次分配 **54,632 B**，整池参考为 **196,728 B**。三轮同项 P50 为 **3.48–4.04 μs** 对 **45.21–47.70 μs**，只包括池算法，不包含 World 验证/文档/完整固定步。直接池读取仍慢于连续整值数组；实际 World/Query 读取全为 0 B，但 P95 波动明显，包括个别退化样本，**未证明 ≤5% 退化门禁或 E5 完整性能通过**。
+- 本片源码冻结 `out/verification/ecs-e3a/source-freeze-first.json` 共 925 文件，SHA256 `3DE0E5D5C46BC97BD2BCBB32957EA1184E68963F7E38479C00B4B18B82565351`。标准双配置 Build.bat -SkipTests 零编译警告，完整回归和最终交付核验通过；正式 E1-B EXE 不部署、不替换。
+- Debug 第一轮完整 CTest **89/89，1065.54 秒**；Release 第一轮 **89/89，981.89 秒**。两配置详情确认 PagedStorage 10/10，100/4096 元素池 fork 均 144 B，以及原 Runtime 13/storage 14/identity 15/Query 17/候选 8/Gameplay 53/批次 26/Movement 38/UI 18/E0 fixtures 11 全通过。托管/原生冒烟、Python 45/inspect 和前后 925 文件冻结复核通过。顺序会话 78237 已终止 exit 0，测量会话 13169 已终止 exit 0，无待轮询任务。
+- 构建/测试/补充日志 `out/ecs-e3a-{build,ctest,supplemental,smoke,python,inspect}-{debug,release}-first.log`；CTest 完整输出 `out/ecs-e3a-ctest-{debug,release}-details-first.log`。Debug 候选 `724ea17c9c5b4877855b4ea18bf43f88`，Release 候选 `e9457c62902544deb8dfd8902d814fdb`。两配置各五包 Editor/Null/DX11/Null-Physics/DX11-Physics 清单分别 144/56/113/67/116 文件，身份/路径/size/SHA256/闭包通过；原有有界 Editor 日志白名单不变。
+- `out/ecs-e3a-delivery-verification-first.log` exit 0，SHA256 `A33862C13D0D6A4E52ED2E931AEED970F456AC24A82E349072854AB58807F83A`：冻结/十包通过，正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 的 144 清单/148 实际/148 备份保持完整，E0 原始 18 个程序集保持原 SHA。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未变。
+- 测量核验 first 失败：Windows PowerShell 5 的 ConvertFrom-Json 返回数组被额外 `@(...)` 包成单项，核验脚本误报闭包数量。仅修正 out 内辅助脚本的数组接收方式，不修改数据、产品、断言或预算。保留 first 失败日志；`out/ecs-e3a-measurement-verification-second.log` exit 0，SHA256 `26026528ADEBAD1BF1617A9BE8E710DB1D9845387182BEC6668262A47BD4DEC9`，确认原 E2-B 算法参考一致、归档 8 文件不变、标准 Release DLL 与测量输入一致、三轮池各 90 × 100 原始样本和旧/新公开读取各 6 × 300 样本及环境/实际加载 DLL SHA 一致。
+- 仅 E3-A 自动候选门禁完成，不代表整个 E3/ECS 完成。没有新的无 Skip 部署、三轮历史 profile 或 E5 整帧性能验收；人工/目标机/自包含/完整性能/1h/历史故障调查仍开放。下一片 E3-B 增量精确验证；四项 IDE 设置与 out 产物/证据不提交。

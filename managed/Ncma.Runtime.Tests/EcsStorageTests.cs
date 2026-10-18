@@ -32,8 +32,8 @@ internal static class EcsStorageTests
                 Check(!pool.Has(9) && pool.Get(4095).Value == 4095 && pool.Get(0).Text == "zero");
                 pool.Remove(4095); pool.Remove(0); pool.Remove(0);
                 Check(!pool.Has(0) && !pool.Has(4095));
-                var values = (Label[])typeof(ComponentPool<Label>).GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pool)!;
-                Check(values.All(v => v.Text is null));
+                var values = (PagedValues<Label>)typeof(ComponentPool<Label>).GetField("_values", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pool)!;
+                Check(Enumerable.Range(0, World.MaxObjects).All(i => values.Read(i).Text is null));
                 pool.Set(9, new("reused", 42)); Check(pool.Get(9).Value == 42);
                 Reject(() => pool.Get(4096)); Reject(() => pool.Set(-1, default)); Reject(() => pool.Set(4096, default));
             }),

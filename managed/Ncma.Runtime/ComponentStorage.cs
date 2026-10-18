@@ -9,6 +9,7 @@ internal interface IComponentPool
     int SlotAt(int index);
     bool Has(int slot);
     IComponentPool Clone();
+    void PrepareRemove(int slot);
     void Remove(int slot);
     void SetDecoded(int slot, object value);
     JsonElement Encode(int slot);
@@ -16,64 +17,80 @@ internal interface IComponentPool
 
 internal sealed class ComponentPool<T> : IComponentPool where T : struct, IComponent
 {
-    private readonly int[] _sparse;
+    private int[] _sparse;
     private int[] _slots = [];
-    private T[] _values = [];
+    private bool _metadataOwned = true;
+    private readonly PagedValues<T> _values;
     private int _count;
 
-    internal ComponentPool() => _sparse = new int[World.MaxObjects];
+    internal ComponentPool(int pageSize = PagedValues<T>.DefaultPageSize)
+    { _values = new(pageSize); _sparse = new int[World.MaxObjects]; }
     private ComponentPool(ComponentPool<T> source)
     {
-        _sparse = (int[])source._sparse.Clone();
-        _slots = (int[])source._slots.Clone();
-        _values = (T[])source._values.Clone();
+        _values = source._values.Fork();
+        _sparse = source._sparse; _slots = source._slots;
+        _metadataOwned = false; source._metadataOwned = false;
         _count = source._count;
     }
 
-    public bool Has(int slot) => (uint)slot < (uint)_sparse.Length && _sparse[slot] != 0;
+    public bool Has(int slot) => (uint)slot < World.MaxObjects && _sparse[slot] != 0;
     public int Count => _count;
     public int SlotAt(int index) => (uint)index < (uint)_count ? _slots[index] : throw new ArgumentOutOfRangeException(nameof(index));
-    internal T Get(int slot) => Has(slot) ? _values[_sparse[slot] - 1] :
-        throw new ArgumentException("Component is not attached.");
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    internal T Get(int slot)
+    {
+        if ((uint)slot >= World.MaxObjects) throw new ArgumentException("Component is not attached.");
+        int encoded = _sparse[slot];
+        return encoded != 0 ? _values.ReadPresent(encoded - 1) : throw new ArgumentException("Component is not attached.");
+    }
 
     internal void Set(int slot, T value)
     {
-        if ((uint)slot >= (uint)_sparse.Length) throw new ArgumentOutOfRangeException(nameof(slot));
+        if ((uint)slot >= World.MaxObjects) throw new ArgumentOutOfRangeException(nameof(slot));
         int encoded = _sparse[slot];
-        if (encoded != 0) { _values[encoded - 1] = value; return; }
-        if (_count == _values.Length)
-        {
-            int size = Math.Min(World.MaxObjects, Math.Max(4, _count * 2));
-            var slots = new int[size];
-            var values = new T[size];
-            _slots.CopyTo(slots, 0);
-            _values.CopyTo(values, 0);
-            _slots = slots;
-            _values = values;
-        }
-        _slots[_count] = slot;
-        _values[_count] = value;
-        _sparse[slot] = ++_count;
+        if (encoded != 0) { _values.Write(encoded - 1, value); return; }
+        PrepareMetadata(_count + 1); _values.PrepareWrite(_count);
+        _slots[_count] = slot; _values.Write(_count, value); _sparse[slot] = _count + 1;
+        _count++;
     }
 
-    public void Remove(int slot)
+    public void PrepareRemove(int slot)
     {
         if (!Has(slot)) return;
         int index = _sparse[slot] - 1;
-        int last = --_count;
+        int last = _count - 1;
+        PrepareMetadata(_count);
+        _values.PrepareWrite(index); _values.PrepareWrite(last);
+    }
+    public void Remove(int slot)
+    {
+        if (!Has(slot)) return;
+        PrepareRemove(slot);
+        int index = _sparse[slot] - 1;
+        int last = _count - 1;
+        int moved = _slots[last];
         if (index != last)
         {
-            _slots[index] = _slots[last];
-            _values[index] = _values[last];
-            _sparse[_slots[index]] = index + 1;
+            _slots[index] = moved;
+            _values.Write(index, _values.ReadPresent(last));
+            _sparse[moved] = index + 1;
         }
         // Clear references (e.g. strings) and the removed membership, including last-element removal.
         _slots[last] = 0;
-        _values[last] = default;
+        _values.Write(last, default);
         _sparse[slot] = 0;
+        _count = last;
     }
 
     public IComponentPool Clone() => new ComponentPool<T>(this);
+    private void PrepareMetadata(int capacity)
+    {
+        if (_metadataOwned && capacity <= _slots.Length) return;
+        var sparse = _metadataOwned ? _sparse : (int[])_sparse.Clone();
+        int size = capacity <= _slots.Length ? _slots.Length : Math.Min(World.MaxObjects, Math.Max(4, _slots.Length * 2));
+        var slots = new int[size]; _slots.CopyTo(slots, 0);
+        _sparse = sparse; _slots = slots; _metadataOwned = true;
+    }
     // Boxing is confined to heterogeneous document decoding, never Get<T>/Set<T> storage.
     public void SetDecoded(int slot, object value) => Set(slot, (T)value);
     public JsonElement Encode(int slot) => JsonSerializer.SerializeToElement(Get(slot), SceneJson.Options);
@@ -87,7 +104,7 @@ internal sealed class ComponentStorage
     internal ComponentStorage() => _pools = [];
     private ComponentStorage(Dictionary<Type, IComponentPool> pools) => _pools = pools;
 
-    // Whole-pool copy on first write is intentional for E1. E3 measures finer-grained candidates.
+    // The pool directory is bounded by registered types; pool forks share immutable pages.
     internal ComponentStorage Fork()
     {
         var result = new ComponentStorage(new(_pools));
@@ -144,9 +161,10 @@ internal sealed class ComponentStorage
 
     internal void RemoveAll(int slot)
     {
-        // Prepare every clone before touching any value; a failed allocation cannot prefix-delete.
+        // Prepare every pool fork AND touched page before any value can be prefix-deleted.
         Type[] types = _pools.Where(pair => pair.Value.Has(slot)).Select(pair => pair.Key).ToArray();
         var pools = types.Select(Writable).ToArray();
+        foreach (var pool in pools) pool.PrepareRemove(slot);
         foreach (var pool in pools) pool.Remove(slot);
     }
 

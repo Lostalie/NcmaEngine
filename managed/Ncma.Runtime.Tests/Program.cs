@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Ncma.Runtime;
 
+if (args.Contains("--ecs-world-read")) { WorldReadMeasurements.Run(); return 0; }
+
 static void Check(bool valid, string message = "Assertion failed") { if (!valid) throw new Exception(message); }
 static void Reject(Action action)
 {
@@ -143,6 +145,8 @@ failures += EcsStorageTests.Run();
 failures += EntityIdentityTests.Run();
 failures += EntityQueryTests.Run();
 failures += StructuralCandidateTests.Run();
+failures += PagedStorageTests.Run();
+if (failures == 0 && args.Contains("--ecs-pool-benchmark")) PoolMeasurements.Run();
 return failures == 0 ? 0 : 1;
 
 readonly record struct Health(int Points) : IComponent;
