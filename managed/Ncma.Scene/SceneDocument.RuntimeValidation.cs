@@ -1,4 +1,5 @@
 using Ncma.Runtime;
+using System.Text.Json;
 
 namespace Ncma.Scene;
 
@@ -10,6 +11,36 @@ public sealed partial class SceneDocument
     private string? _runtimeHeaderName;
     private int _runtimeHeaderBytes;
     internal (int Bytes, long BindingEncodes) RuntimeValidationWork { get; private set; }
+
+    // A cold, metadata-only copy for a new runtime command lineage. Components never pass here.
+    // The command owner can retain it across successful steps and fork the dictionary on writes.
+    internal Dictionary<Guid, BehaviourBindingData[]> CopyRuntimeBindings()
+    {
+        VerifyAccess();
+        if (_preparing || World.IsUpdating) throw new InvalidOperationException("Bindings require a committed safe boundary.");
+        ObserveWorld();
+        // Preserve serialized order; the public authoring CopyBindings helper sorts Exports.
+        var identities = new HashSet<Guid>();
+        return _bindings.ToDictionary(p => p.Key, p => {
+            // Preserve the former JSON copy's normalization of ill-formed UTF-16, without
+            // encoding any components. Normal valid strings need only owned array shells.
+            var copy = NeedsRuntimeBindingNormalization(p.Value)
+                ? JsonSerializer.Deserialize<BehaviourBindingData[]>(SceneJson.EncodeBounded(p.Value, SceneDocumentCodec.MaxBytes), SceneJson.Options)!
+                : p.Value.Select(b => b with { Exports = (ExportData[])b.Exports.Clone() }).ToArray();
+            SceneDocumentValidator.ValidateBindings(copy, identities, "runtime binding copy");
+            return copy;
+        });
+    }
+    internal static bool NeedsRuntimeBindingNormalization(IEnumerable<BehaviourBindingData> values) =>
+        values.Any(b => !WellFormed(b.TypeName) || b.Exports.Any(e => !WellFormed(e.Name)));
+    private static bool WellFormed(string value)
+    {
+        for (int i = 0; i < value.Length; ++i)
+            if (char.IsHighSurrogate(value[i]))
+            { if (++i == value.Length || !char.IsLowSurrogate(value[i])) return false; }
+            else if (char.IsLowSurrogate(value[i])) return false;
+        return true;
+    }
 
     internal Action PrepareRuntimeStep(World.PreparedStepView world, Dictionary<Guid, BehaviourBindingData[]> bindings)
     {
@@ -24,8 +55,9 @@ public sealed partial class SceneDocument
                 SceneJson.MeasureBounded(new SceneDocumentSnapshot(1, name, []), SceneDocumentCodec.MaxBytes);
             int bytes = headerBytes;
             var identities = new HashSet<Guid>();
-            var prepared = new Dictionary<Guid, BehaviourBindingData[]>();
-            var encoding = new Dictionary<Guid, EncodedBindings>();
+            Dictionary<Guid, BehaviourBindingData[]>? changedBindings = null;
+            Dictionary<Guid, EncodedBindings>? changedEncoding = null;
+            int count = 0;
             foreach (var item in world.Objects)
             {
                 var values = bindings.GetValueOrDefault(item.Id, []);
@@ -42,10 +74,20 @@ public sealed partial class SceneDocument
                     current = new(item.Name, owned, SceneJson.MeasureBounded(owned, SceneDocumentCodec.MaxBytes), envelope);
                     _runtimeBindingEncodes++;
                 }
-                bytes = checked(bytes + envelope + item.ComponentArrayBytes - 2 + current.Bytes - 2 + (prepared.Count == 0 ? 0 : 1));
+                bytes = checked(bytes + envelope + item.ComponentArrayBytes - 2 + current.Bytes - 2 + (count++ == 0 ? 0 : 1));
                 if (bytes > SceneDocumentCodec.MaxBytes) throw new ArgumentException("Snapshot size limit exceeded.");
-                prepared.Add(item.Id, current.Values); encoding.Add(item.Id, current);
+                if (!ReferenceEquals(current.Values, _bindings.GetValueOrDefault(item.Id)))
+                    (changedBindings ??= new(_bindings))[item.Id] = current.Values;
+                if (!ReferenceEquals(current, prior)) (changedEncoding ??= new(_runtimeBindingEncoding))[item.Id] = current;
             }
+            if ((changedBindings ?? _bindings).Count != count)
+                foreach (var id in (changedBindings ?? _bindings).Keys.Where(id => !world.TryResolve(id, out _)).ToArray())
+                    (changedBindings ??= new(_bindings)).Remove(id);
+            if ((changedEncoding ?? _runtimeBindingEncoding).Count != count)
+                foreach (var id in (changedEncoding ?? _runtimeBindingEncoding).Keys.Where(id => !world.TryResolve(id, out _)).ToArray())
+                    (changedEncoding ??= new(_runtimeBindingEncoding)).Remove(id);
+            var prepared = changedBindings ?? _bindings;
+            var encoding = changedEncoding ?? _runtimeBindingEncoding;
             world.VerifyCurrent();
             ulong baseline = _revision, revision = checked(_revision + 1), worldRevision = checked(World.Revision + 1);
             Guid identity = World.Identity;

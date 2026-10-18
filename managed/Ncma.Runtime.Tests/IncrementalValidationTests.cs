@@ -47,6 +47,37 @@ internal static class IncrementalValidationTests
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("typed candidate reads copy staged values while public reads stay committed", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity);
+                var staged = TransformData.Identity with { Position = new(7, 0, 0) };
+                world.BeginStep(); world.Set(a, staged);
+                World.PreparedStepView? view = null; var commit = world.PrepareStepView(v => view = v);
+                Check(view!.TryResolve(world.GetUuid(a), out var resolved) && resolved == a);
+                Check(view.TryGet<TransformData>(a, out var copy) && copy == staged);
+                copy = copy with { Position = new(999, 0, 0) }; Check(view.TryGet<TransformData>(a, out var again) && again == staged);
+                Check(world.Get<TransformData>(a) == TransformData.Identity);
+                commit(); Check(world.Get<TransformData>(a) == staged); Reject(() => view.TryGet<TransformData>(a, out _));
+            }),
+            ("typed candidate reads validate missing components and full identity", () => {
+                var world = new World(); var a = world.CreateEntity("A"); var id = world.GetUuid(a);
+                var foreign = new World().CreateEntity("A"); world.BeginStep();
+                World.PreparedStepView? view = null; _ = world.PrepareStepView(v => view = v);
+                Check(!view!.TryGet<TransformData>(a, out _) && !view.TryResolve(Guid.NewGuid(), out _));
+                Reject(() => view.TryGet<TransformData>(foreign, out _)); Reject(() => view.TryGet<TransformData>(default, out _));
+                world.StageDestroy(id); Reject(() => view.TryResolve(id, out _));
+                _ = world.PrepareStepView(v => view = v); Check(!view!.TryResolve(id, out _));
+                Reject(() => view.TryGet<TransformData>(a, out _)); world.AbortStep();
+            }),
+            ("typed candidate reads reject abandoned branches and foreign threads", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.BeginStep();
+                World.PreparedStepView? branch = null;
+                _ = world.PrepareStructuralBatch(() => world.StageRename(world.GetUuid(a), "branch"), v => branch = v);
+                Reject(() => branch!.TryGet<TransformData>(a, out _));
+                _ = world.PrepareStepView(v => branch = v);
+                Reject(() => Task.Run(() => branch!.TryGet<TransformData>(a, out _)).GetAwaiter().GetResult());
+                world.AbortStep(); world.BeginStep(); _ = world.PrepareStepView();
+                Reject(() => branch!.TryResolve(world.GetUuid(a), out _)); world.AbortStep();
+            }),
             ("counting output equals actual JSON including escapes and exact boundary", () => {
                 foreach (string text in new[] { "", "quote\"slash\\", "中文😀<>\u0000\n", new string('x', 65500) }) {
                     var value = new ObjectSnapshot(Guid.NewGuid(), "name", [new("text", 1, JsonSerializer.SerializeToElement(new { text }))]);

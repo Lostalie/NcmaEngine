@@ -23,12 +23,13 @@ internal static class IncrementalGameplayCases
                 var document = Document(); using var play = new PlaySession(document); play.Start(_ => new Probe());
                 play.AdvanceFrame(1d / 60); long components = Count(document.World, "_encodedComponentCount");
                 long bindings = Count(document, "_runtimeBindingEncodes"), snapshots = Count(document.World, "_copiedValidationSnapshotCount");
+                long instances = Count(play, "_instancePreparations");
                 byte[] before = document.CaptureBytes();
                 for (int i = 0; i < 10; ++i) play.AdvanceFrame(1d / 60);
                 Check(play.State == PlayState.Running && play.Tick == 11 && document.CaptureBytes().SequenceEqual(before));
                 Check(Count(document.World, "_encodedComponentCount") == components && Count(document, "_runtimeBindingEncodes") == bindings);
-                // Explicit remaining E3-C consumer: one final DTO for instances/receipts/interpolation per step.
-                Check(Count(document.World, "_copiedValidationSnapshotCount") == snapshots + 10);
+                Check(Count(document.World, "_copiedValidationSnapshotCount") == snapshots);
+                Check(Count(play, "_instancePreparations") == instances);
             }),
             ("real Play sparse write encodes only its changed component", () => {
                 var document = Document(); var probe = new Probe(); using var play = new PlaySession(document); play.Start(_ => probe);

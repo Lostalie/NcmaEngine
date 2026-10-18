@@ -79,7 +79,9 @@ internal sealed partial class RuntimeCommandBuffer
             }
             // Burn token numbers even if later validation fails; never revive aborted submissions.
             for (int i = 0; i < tokens.Length; ++i) tokens[i] = new(session.SessionId, _generation, ++_sequence);
-            var bindings = new Dictionary<Guid, BehaviourBindingData[]>(_bindings);
+            bool changesBindings = copied.Any(c => c is StructuralCommand.Create or StructuralCommand.Destroy or
+                StructuralCommand.Attach or StructuralCommand.Detach or StructuralCommand.Enable);
+            var bindings = changesBindings ? new Dictionary<Guid, BehaviourBindingData[]>(_bindings) : _bindings;
             var pending = new List<(CommandToken Token, Guid Target)>(_pending);
             pending.EnsureCapacity(pending.Count + commands.Length);
             for (int i = 0; i < targets.Length; ++i) pending.Add((tokens[i], targets[i]));
@@ -110,6 +112,7 @@ internal sealed partial class RuntimeCommandBuffer
             });
             install();
             _bindings = bindings; _created = created; _pending = pending; _bytes += bytes;
+            if (changesBindings) _bindingsShared = false;
             return submission;
 
             Guid Target(StructuralTarget target, int operation)

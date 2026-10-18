@@ -30,6 +30,40 @@ internal static class RuntimeValidationTests
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("metadata-only normalization matches the old JSON copy and rejects normalized duplicates", () => {
+                var document = new SceneDocument(); var id = document.World.GetUuid(document.World.CreateEntity("A"));
+                document.SetBindings(id, [new(Guid.NewGuid(), "Type.\ud800", true, [new("A\udc00", ExportKind.Double, 3)])]);
+                var oracle = document.CaptureSnapshot().Objects[0].Behaviours[0]; var copy = document.CopyRuntimeBindings()[id][0];
+                Check(copy.TypeName == oracle.TypeName && copy.Exports[0] == oracle.Exports[0]);
+                document.SetBindings(id, [new(Guid.NewGuid(), "Type", true, [new("\ud800", ExportKind.Double, 1), new("\udc00", ExportKind.Double, 2)])]);
+                Reject(() => document.CaptureSnapshot()); Reject(() => document.CopyRuntimeBindings());
+            }),
+            ("metadata-only copy preserves restored Export order and exact document bytes", () => {
+                var document = new SceneDocument(); var id = Guid.NewGuid(); var binding = Binding() with {
+                    Exports = [new("Z", ExportKind.Double, -0d), new("A", ExportKind.Double, 2)] };
+                document.RestoreSnapshot(new(1, "Unsorted", [new(id, "A", [], [binding])]));
+                byte[] before = document.CaptureBytes(); var copy = document.CopyRuntimeBindings();
+                Check(copy[id][0].Exports.Select(e => e.Name).SequenceEqual(new[] { "Z", "A" }));
+                Commit(document, copy); Check(before.SequenceEqual(document.CaptureBytes()));
+            }),
+            ("metadata-only command copies own arrays and enforce safe-boundary access", () => {
+                var document = new SceneDocument(); var id = document.World.GetUuid(document.World.CreateEntity("A"));
+                var binding = Binding(3); document.SetBindings(id, [binding]);
+                var copy = document.CopyRuntimeBindings(); copy[id][0].Exports[0] = new("mutated", ExportKind.Double, 9);
+                copy[id] = []; copy.Clear(); Check(document.GetBindings(id)[0].Exports[0].Value == 3);
+                Reject(() => Task.Run(document.CopyRuntimeBindings).GetAwaiter().GetResult());
+                document.World.BeginStep(); Reject(() => document.CopyRuntimeBindings()); document.World.AbortStep();
+                document.World.Destroy(document.World.FindEntity(id)); Check(document.CopyRuntimeBindings().Count == 0);
+            }),
+            ("unchanged metadata reuses private roots but authoring and removal invalidate them", () => {
+                var document = new SceneDocument(); var id = document.World.GetUuid(document.World.CreateEntity("A"));
+                document.SetBindings(id, [Binding(3)]); Commit(document, Bindings(document));
+                var field = typeof(SceneDocument).GetField("_bindings", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+                var root = field.GetValue(document); Commit(document, Bindings(document)); Check(ReferenceEquals(root, field.GetValue(document)));
+                document.SetBindings(id, [Binding(4)]); Commit(document, Bindings(document)); Check(!ReferenceEquals(root, field.GetValue(document)));
+                Commit(document, Bindings(document), () => document.World.StageDestroy(id));
+                Check(document.CopyRuntimeBindings().Count == 0);
+            }),
             ("exact combined budget with escaped metadata and mixed components", () => {
                 var document = new SceneDocument("Scene \"引擎😀\"");
                 for (int i = 0; i < 12; ++i) {

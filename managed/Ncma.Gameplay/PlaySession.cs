@@ -22,6 +22,10 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         public readonly Behaviour Behaviour = behaviour;
         public bool Created, Activated;
     }
+    private Dictionary<Guid, BehaviourBindingData[]>? _instanceBindings;
+    private long _instancePreparations;
+    private static BehaviourBindingData FactoryInput(BehaviourBindingData binding) =>
+        binding with { Exports = (ExportData[])binding.Exports.Clone() };
     private sealed class Dispatcher(PlaySession session) : IWorldSystem
     {
         public void FixedUpdate(World world, double delta)
@@ -150,7 +154,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 foreach (var obj in snapshot.Objects.OrderBy(o => o.Id))
                     foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                     {
-                        var behaviour = createBehaviour(binding) ?? throw new ArgumentException("Null Behaviour.");
+                        var behaviour = createBehaviour(FactoryInput(binding)) ?? throw new ArgumentException("Null Behaviour.");
                         behaviour.GameObject = new(_facade, _document.World.FindEntity(obj.Id));
                         prepared.Add(new(obj.Id, binding, behaviour));
                     }
@@ -165,7 +169,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 Invoke(item, "enable", item.Behaviour.DispatchEnable);
             }
             Action? render = null;
-            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world.CopySnapshot(), reset: true));
+            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world, reset: true));
             commit(); render!(); // Initialization is committed, but is not a simulated Tick.
             State = PlayState.Running; _phase = "control"; _current = null;
         }
@@ -276,7 +280,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             foreach (var obj in _document.CaptureSnapshot().Objects.OrderBy(o => o.Id))
                 foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                 {
-                    var behaviour = createBehaviour(binding) ?? throw new ArgumentException("Null Behaviour.");
+                    var behaviour = createBehaviour(FactoryInput(binding)) ?? throw new ArgumentException("Null Behaviour.");
                     behaviour.GameObject = new(_facade, _document.World.FindEntity(obj.Id));
                     prepared.Add(new(obj.Id, binding, behaviour));
                 }
@@ -297,7 +301,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 if (item.Binding.Enabled) { item.Activated = true; Invoke(item, "reload_enable", item.Behaviour.DispatchEnable); }
             }
             Action? render = null;
-            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world.CopySnapshot(), reset: true));
+            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world, reset: true));
             commit(); render!(); State = PlayState.Paused; Fault = null; _phase = "control"; _current = null;
             return Status;
         }
@@ -345,7 +349,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 bool created = item.Created; item.Created = false;
                 if (created) try { item.Behaviour.DispatchDestroy(); } catch (Exception error) { errors.Add(error); }
             }
-        _instances = []; _retired = []; _factory = null; _commands.Reset();
+        _instances = []; _retired = []; _instanceBindings = null; _factory = null; _commands.Reset();
         return errors.ToArray();
     }
     private void RunStep(Action update)
@@ -356,7 +360,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         _attemptTick = Tick == ulong.MaxValue ? Tick : Tick + 1;
         _phase = "lifecycle_cleanup"; _current = null;
         CleanupRetired();
-        _commands.Begin(_document.CaptureSnapshot());
+        _commands.Begin();
         _stepInput = _input.Read();
         var uiInput = PrepareUiStep();
         _facade.BeginPhase();
@@ -391,10 +395,9 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             Action commit = _facade.PreparePhase(world =>
             {
                 long a = Stamp(); metadata = _document.PrepareRuntimeStep(world, _commands.Bindings); long b = Stamp();
-                var snapshot = world.CopySnapshot(); // E3-C will remove these remaining DTO consumers.
-                instances = PrepareInstances(snapshot, _commands.Bindings); long c = Stamp();
-                receipts = _commands.PrepareReceipts(snapshot); long d = Stamp();
-                render = _render.Prepare(snapshot); long e = Stamp();
+                instances = PrepareInstances(world, _commands.Bindings); long c = Stamp();
+                receipts = _commands.PrepareReceipts(world); long d = Stamp();
+                render = _render.Prepare(world); long e = Stamp();
                 metadataTime = b - a; instanceTime = c - b; receiptsTime = d - c; renderTime = e - d;
             });
             worldAt = Stamp();
@@ -408,27 +411,36 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         }
         finally { if (_facade.IsInPhase) _facade.AbortPhase(); _commands.Abort(); _stepInput = null; }
     }
-    private Action PrepareInstances(WorldSnapshot world, Dictionary<Guid, BehaviourBindingData[]> bindings)
+    private Action PrepareInstances(World.PreparedStepView world, Dictionary<Guid, BehaviourBindingData[]> bindings)
     {
+        world.VerifyCurrent();
+        if (ReferenceEquals(_instanceBindings, bindings) && _instances.All(i => world.Contains(i.Behaviour.GameObject.Entity)))
+            return static () => { };
+        _instancePreparations++;
         var prepared = new List<Instance>();
         var changes = new List<(Instance Instance, BehaviourBindingData Binding)>();
         var existing = _instances.ToDictionary(i => (i.ObjectId, i.Binding.Id));
         using (_document.World.PreparationReadOnly())
-            foreach (var obj in world.Objects.OrderBy(o => o.PersistentId))
-                foreach (var binding in bindings.GetValueOrDefault(obj.PersistentId, []).OrderBy(b => b.Id))
+            foreach (var obj in bindings.OrderBy(o => o.Key))
+            {
+                if (!world.TryResolve(obj.Key, out var entity)) continue;
+                foreach (var binding in obj.Value.OrderBy(b => b.Id))
                 {
-                    if (existing.Remove((obj.PersistentId, binding.Id), out var item) && item.Binding.TypeName == binding.TypeName)
-                    { prepared.Add(item); changes.Add((item, binding)); }
+                    if (existing.TryGetValue((obj.Key, binding.Id), out var item) && item.Binding.TypeName == binding.TypeName &&
+                        item.Behaviour.GameObject.Entity == entity)
+                    { existing.Remove((obj.Key, binding.Id)); prepared.Add(item); changes.Add((item, binding)); }
                     else
                     {
-                        var behaviour = _factory!(binding) ?? throw new ArgumentException("Null Behaviour.");
-                        behaviour.GameObject = new(_facade, _document.World.CandidateEntity(obj.PersistentId));
-                        prepared.Add(new(obj.PersistentId, binding, behaviour));
+                        var behaviour = _factory!(FactoryInput(binding)) ?? throw new ArgumentException("Null Behaviour.");
+                        behaviour.GameObject = new(_facade, entity);
+                        prepared.Add(new(obj.Key, binding, behaviour));
                     }
                 }
+            }
         var instances = prepared.ToArray();
         var retired = _retired.Concat(existing.Values).ToArray();
-        return () => { foreach (var (instance, binding) in changes) instance.Binding = binding; _instances = instances; _retired = retired; };
+        return () => { foreach (var (instance, binding) in changes) instance.Binding = binding;
+            _instances = instances; _retired = retired; _instanceBindings = bindings; };
     }
     private void CleanupRetired()
     {

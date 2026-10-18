@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Numerics;
 using Ncma.Runtime;
 namespace Ncma.Gameplay;
@@ -9,12 +8,11 @@ public sealed record RenderFrameView(Guid SessionId, ulong Tick, ulong FrameSequ
 internal sealed class RenderBuffer
 {
     private Dictionary<Guid, TransformData> _previous = [], _current = [];
-    internal Action Prepare(WorldSnapshot world, bool reset = false)
+    internal Action Prepare(World.PreparedStepView world, bool reset = false)
     {
         var current = new Dictionary<Guid, TransformData>();
         foreach (var obj in world.Objects)
-            foreach (var value in obj.Components)
-                if (value.TypeId == "ncma.transform") current.Add(obj.PersistentId, value.Data.Deserialize<TransformData>(SceneJson.Options));
+            if (world.TryGet<TransformData>(obj.Entity, out var value)) current.Add(obj.Id, value);
         var previous = current.ToDictionary(p => p.Key, p => reset ? p.Value : _current.GetValueOrDefault(p.Key, p.Value));
         return () => { _previous = previous; _current = current; };
     }

@@ -11,19 +11,26 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
     private Dictionary<CommandToken, CommandReceipt> _receipts = [];
     private HashSet<Guid> _created = [];
     private Dictionary<Guid, BehaviourBindingData[]> _bindings = [];
+    private Dictionary<Guid, BehaviourBindingData[]>? _committedBindings;
+    private ulong _bindingRevision;
+    private Guid _bindingWorld;
+    private bool _bindingsShared;
     private ulong _sequence, _generation = 1;
     private ulong _attempt;
     private bool _submitting;
     private int _bytes;
     private bool _active;
-    internal void Begin(SceneDocumentSnapshot snapshot)
+    internal void Begin()
     {
         _attempt = checked(_attempt + 1);
-        _bindings = snapshot.Objects.ToDictionary(o => o.Id, o => o.Behaviours);
+        var document = session.Document;
+        if (_committedBindings is null || _bindingRevision != document.Revision || _bindingWorld != document.World.Identity)
+            _committedBindings = document.CopyRuntimeBindings();
+        _bindings = _committedBindings; _bindingsShared = true;
         _pending.Clear(); _created.Clear(); _bytes = 0; _active = true;
     }
     internal Dictionary<Guid, BehaviourBindingData[]> Bindings => _bindings;
-    private CommandToken Queue(Guid target, Func<int> measure, Action stage)
+    private CommandToken Queue(Guid target, Func<int> measure, Action stage, bool changesBindings = false)
     {
         session.Document.VerifyAccess(); session.Document.World.VerifyWriteAccess();
         if (!_active) throw new InvalidOperationException("Runtime commands require a fixed step.");
@@ -33,6 +40,7 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
             int bytes = measure();
             if (target == Guid.Empty || _pending.Count >= Capacity || bytes < 0 || bytes > PayloadBytes - _bytes || _sequence == ulong.MaxValue)
                 throw new ArgumentException("Runtime command budget or identity rejected.");
+            if (changesBindings && _bindingsShared) { _bindings = new(_bindings); _bindingsShared = false; }
             stage();
             var token = new CommandToken(session.SessionId, _generation, ++_sequence);
             _pending.Add((token, target)); _bytes += bytes; return token;
@@ -46,12 +54,12 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
         {
             if (!_created.Add(id)) throw new ArgumentException("Duplicate reserved UUID.");
             session.Document.World.StageCreate(id, name); _bindings.Add(id, []);
-        });
+        }, changesBindings: true);
         try { return new(id, token, _attempt, session.Document.World.CandidateEntity(id)); }
         catch (Exception error) { session.Document.World.RejectStep(error); throw; }
     }
     public CommandToken Destroy(Guid id) => Queue(id, () => 16, () =>
-    { session.Document.World.StageDestroy(id); _bindings.Remove(id); });
+    { session.Document.World.StageDestroy(id); _bindings.Remove(id); }, changesBindings: true);
     public CommandToken Rename(Guid id, string name) => Queue(id, () => Encoding.UTF8.GetByteCount(name), () => session.Document.World.StageRename(id, name));
     public CommandToken AddComponent(Guid id, ComponentSnapshot component) => Queue(id, () =>
         component is null ? 0 : Encoding.UTF8.GetByteCount(component.Data.GetRawText()) + 128, () =>
@@ -66,29 +74,44 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
         var value = new BehaviourBindingData(binding.Id, binding.TypeName, binding.Enabled,
             binding.Exports.Select(e => new ExportData(e.Name, (ExportKind)e.Kind, e.Value)).ToArray());
         _bindings[id] = [.. _bindings.GetValueOrDefault(id, []), value];
-    });
+    }, changesBindings: true);
     public CommandToken RemoveBehaviour(Guid id, Guid bindingId) => Queue(id, () => 32, () =>
     {
         session.Document.World.RequireCommandTarget(id); var old = _bindings.GetValueOrDefault(id, []);
         if (!old.Any(b => b.Id == bindingId)) throw new ArgumentException("Unknown binding.");
         _bindings[id] = old.Where(b => b.Id != bindingId).ToArray();
-    });
+    }, changesBindings: true);
     public CommandToken SetBehaviourEnabled(Guid id, Guid bindingId, bool enabled) => Queue(id, () => 33, () =>
     {
         session.Document.World.RequireCommandTarget(id); var old = _bindings.GetValueOrDefault(id, []);
         if (!old.Any(b => b.Id == bindingId)) throw new ArgumentException("Unknown binding.");
         _bindings[id] = old.Select(b => b.Id == bindingId ? b with { Enabled = enabled } : b).ToArray();
-    });
-    internal Action PrepareReceipts(WorldSnapshot candidate)
+    }, changesBindings: true);
+    internal Action PrepareReceipts(World.PreparedStepView candidate)
     {
-        var alive = candidate.Objects.Select(o => o.PersistentId).ToHashSet();
         ulong tick = checked(session.Tick + 1);
         var values = _receipts.Values.OrderBy(r => r.Token.Sequence)
             .Where(r => r.WorldIdentity == session.Document.World.Identity)
-            .Concat(_pending.Select(p => new CommandReceipt(p.Token, p.Target, tick, alive.Contains(p.Target) ? "committed" : "removed",
-                alive.Contains(p.Target) ? session.Document.World.CandidateEntity(p.Target) : null, session.Document.World.Identity)))
+            .Concat(_pending.Select(p => {
+                bool alive = candidate.TryResolve(p.Target, out var entity);
+                return new CommandReceipt(p.Token, p.Target, tick, alive ? "committed" : "removed",
+                    alive ? entity : null, session.Document.World.Identity);
+            }))
             .TakeLast(Capacity).ToDictionary(r => r.Token);
-        return () => { _receipts = values; _pending.Clear(); _active = false; };
+        // Other trusted runtime producers may delete an entity without using this command owner.
+        // Never carry their dead binding IDs into the next attempt's uniqueness checks.
+        var removed = _bindings.Keys.Where(id => !candidate.TryResolve(id, out _)).ToArray();
+        var bindings = removed.Length == 0 ? _bindings : new Dictionary<Guid, BehaviourBindingData[]>(_bindings);
+        foreach (var id in removed) bindings.Remove(id);
+        // Rare noncanonical strings follow the same metadata-only normalization at the next
+        // Begin that the old full-document copy performed; stable normal metadata stays shared.
+        bool needsNormalization = !ReferenceEquals(bindings, _committedBindings) &&
+            SceneDocument.NeedsRuntimeBindingNormalization(bindings.Values.SelectMany(b => b));
+        return () => {
+            _receipts = values; _pending.Clear(); _active = false;
+            _committedBindings = needsNormalization ? null : bindings;
+            _bindingRevision = session.Document.Revision; _bindingWorld = session.Document.World.Identity;
+        };
     }
     public CommandReceipt GetReceipt(CommandToken token)
     {
@@ -106,5 +129,5 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
         return session.Document.World.Resolve(pending.Entity);
     }
     internal void Abort() { _pending.Clear(); _bindings = []; _created.Clear(); _active = false; _bytes = 0; }
-    internal void Reset() { Abort(); _receipts.Clear(); _generation = checked(_generation + 1); }
+    internal void Reset() { Abort(); _committedBindings = null; _receipts.Clear(); _generation = checked(_generation + 1); }
 }

@@ -126,6 +126,19 @@ public sealed partial class World
             return entity.WorldIdentity == _world._identity && _encoded.Objects.TryGetValue(entity.Index, out var value) &&
                 value.Entry.Generation == entity.Generation;
         }
+        internal bool TryResolve(Guid id, out Entity entity)
+        {
+            VerifyCurrent();
+            if (_world._stepUuids!.TryGetValue(id, out int slot) && _encoded.Objects.TryGetValue(slot, out var value))
+            { entity = _world.IdentityOf(value.Entry); return true; }
+            entity = default; return false;
+        }
+        internal bool TryGet<T>(Entity entity, out T value) where T : struct, IComponent
+        {
+            if (!Contains(entity)) throw new ArgumentException("Unknown prepared entity.");
+            if (!_world._stepStorage!.Has(entity.Index, typeof(T))) { value = default; return false; }
+            value = _world._stepStorage.Get<T>(entity.Index); return true;
+        }
         internal int ComponentBytes(Guid id, string typeId)
         {
             VerifyCurrent();

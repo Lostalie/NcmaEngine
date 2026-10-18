@@ -1,7 +1,7 @@
 # ECS 重构实施合同（E0–E5）
 
 2026-10-16。用户已批准按方案实施。顺序：M8.2 自动候选交付 → 本重构 → M8.3 及后续 → M9 Windows。
-本文件规定目标和门禁；各项是否实现以第 7、8 节的状态和证据为准。M8.2 基点为 `51010c33755ab35ac5fa3f45bc297c074ea3addb`。
+本文件规定目标和门禁；各项是否实现以第 7、8、9 节的状态和证据为准。M8.2 基点为 `51010c33755ab35ac5fa3f45bc297c074ea3addb`。
 
 ## 1. 不变边界
 
@@ -231,3 +231,40 @@ E3-A 已核对本地/GitHub main 为 `3d0a1fb329fbdae77bc5729a9878c9218e28e0e4`�
 - Debug 候选 `caa4790ddf74492abf53a5d2bbdcb983`；Release 候选 `25eaacb8544d42a6808861d51701293c`。两配置各五包 Editor/Null/DX11/Null-Physics/DX11-Physics 的清单分别 144/56/113/67/116 文件，产品身份、路径、size/SHA256 和闭包检查通过。未改变既有有界 Editor 日志白名单。
 - 最终 `out/ecs-e3b-delivery-verification-second.log` exit 0，SHA256 `C7CFA27066C323B212AA65FF72EC2C80B7F6BF0574181A3305DBD7F2FAA04945`：冻结及十包通过；正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 保持 144 清单/148 实际文件、148 备份完整，E0 原始 18 个程序集逐一匹配。另核对 E3-A 归档测量 8 文件原始 SHA 未变。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未改变。
 - 本轮只是 E3-B 自动候选，不部署、不执行新的无 Skip/三轮历史 profile 或 E5 整帧配对性能门禁。C# 候选视图、编码计数和完整 codec oracle 是正确性/路径证据，不是完整性能验收。保留所有早期失败、两份冻结、首轮 89/89 但冻结失效的记录、历史 File.Replace 调查和四项 IDE 改动。下一步 E3-C，不跳到 M8.3；人工/目标素材与目标机/自包含/完整性能/1h 仍开放。
+
+### E3-C 高层提交（自动候选完成）
+
+E3-B 本地及 GitHub main 精确核对为 `a430a2ab43daafa6d5c4e7db1af5e9402071205a` 后开始。此片移除运行步的完整文档/快照消费者，不删除现役作者编辑、Undo、持久化、Start/Reload 冷路径的完整格式。
+
+| 消费者 | E3-C 路径 | 保留约束与成本 |
+| --- | --- | --- |
+| Commands.Begin | 有版本元数据副本；成功步复用根、绑定写入时 fork | 文档/World 变化失效；单命令和批次共享 1024/1 MiB |
+| Scene 元数据准备 | 逐对象精确预算检查；未改根复用 | 全局绑定 UUID/Export 验证仍遍历；失败不安装 |
+| Behaviour 实例 | 稳定根复用；变化时以类型和完整 Entity 匹配 | UUID/绑定排序、延迟生命周期、退休清理；仍检查存活 |
+| 成功回执 | 候选 UUID 解析为完整 Entity | 仅提交后可读；旧代次/世界、删除和淘汰拒绝 |
+| 插值 | 按值读取候选 TransformData | 仍遍历 Transform、准备输出；没有 GPU/整帧性能结论 |
+| 作者编辑/Undo/持久化/Start/Reload | 原现役完整快照冷路径 | 不是旧格式兼容层，不删除也不伪称已增量化 |
+
+- Commands.Begin 只在新 lineage、文档 revision 或 World identity 改变时复制私有 Behaviour/Export 元数据；成功步保留自己的元数据根。单条结构命令只在第一次修改绑定时复制字典，数组始终替换；批次仍是原子的候选分支，纯改名/组件批次不复制绑定根。失败候选不安装到已提交缓存；其他受信运行生产者删除对象后，提交准备过滤已失效的绑定 UUID。
+- SceneDocument 保留原有全局绑定 UUID/Export 和精确文档预算验证；元数据相同时复用私有字典根，改名、删除、创建或绑定变化时才准备变化后的根。没有共享可写数组给公开 API、Behaviour 工厂或 Agent；工厂得到自己的 Export 数组副本。
+- 内部受检候选视图增加 UUID → 完整 Entity 解析和按值强类型组件读取；提交前公共 World.Get 仍读旧值。视图仍由 attempt/mutation/root/线程检查保护，写入、丢弃分支、撤销、提交、替换后失效；没有可写 ref 或新公开权限。
+- PlaySession 不再在固定步开始 CaptureSnapshot，也不再在最终预检 CopySnapshot。稳定绑定/实体状态直接保留实例数组；结构变化按 UUID/绑定 ID 原有顺序准备，类型与完整 Entity 相同才复用实例。检查发现原分支在相同绑定 UUID 改类型时会提前移除旧实例、漏掉清理；现在保留其退休记录，下一边界恰好 Disable/Destroy 一次。新实例的 Create/Enable 仍在下一步执行，失败工厂不发布任何高层状态。
+- 回执通过受检候选解析存活 Entity，保留原提交后可见性、容量及世界身份检查；插值直接读取候选 TransformData，不解码 JSON。新对象、无 Transform、删除、暂停和旧值插值规则不变。初始化/Reload 插值也使用强类型候选；两者作者快照仍是明确冷路径。
+- 无写/稀疏步骤的测试收紧为**没有最终 validation snapshot 复制**（原 E3-B 测试明确允许每步一个），并检查实例和绑定根复用。两配置定向 Runtime 增量 22/22、Scene 9/9、真实 Play 3/3、新高层提交 10/10，原 Gameplay 53/结构批次 26/Movement 38 fake/UI 18/E0 fixtures 11 全通过。新增覆盖完整身份/值副本/分支与线程失效、绑定复制别名、作者编辑/Restore 失效、启停及类型替换生命周期、工厂修改 Export/失败回滚、插值和确定性工厂顺序。
+- 首次 Runtime 定向编译失败为测试误写 struct 返回值的 Position.X，改成完整值替换后通过，不改产品约束或断言。证据 `out/ecs-e3c-runtime-debug-first.log` 保留；最终定向日志 Runtime Debug second、Scene Debug first、Gameplay Debug second，Release 三项均 first。首次 Gameplay Debug 仅含旧及增量 Play 三组，新增十组以 second 为准。
+- 932 文件冻结 `out/verification/ecs-e3c/source-freeze-first.json`，SHA256 `7BE7DAD2383F4D5510C7DC974D58A4A792A43B97BC1E1BE3B8E9B94355A3DEB1`。顺序标准 Build.bat -SkipTests、两配置全部 89 CTest、smoke/Python45/inspect 会话 65547 正在执行；不能提前标记全门禁通过或提交。正式 E1-B 安装/备份和 E0 原始基线待最终核验，不部署。
+- 仍有 World 元数据复制、全局绑定身份验证、实例存活检查、Transform 遍历/插值数组与回执处理成本；移除整文档不是零分配承诺或整帧性能结论。E3-D 联合验收、E4 领域迁移、E5 性能与既有人工/目标机/自包含/1h 门禁保留。
+- 第一轮期间的等价性复查发现：作者用 CopyBindings 会排序 Export，不能用于保留已恢复文档顺序的运行时复制。修正为保序数组副本，增加完整文档字节 oracle 和真实 Play 无写步骤测试。另对旧 JSON copy 的异常 UTF-16 规范化保留**绑定元数据专用**有界冷路径；规范化后的重复 Export 名仍拒绝。正常绑定保留纯数组复制/跨步复用，不重新序列化组件；新提交的非规范字符串仍按原语义在下一 Begin 规范化，不提前更改当前 factory 输入。新增 Scene 2 组/真实提交 2 组尚待重新构建。源码已与 first 冻结不同；65547 原 Debug 结束后应在冻结核验处拒绝、不执行 first Release。该轮及 first 冻结全部保留，修正后须重新跑 second 同源码完整双配置。
+- 第一轮已结束：Debug **89/89，1082.12 秒**，补充 smoke/Python45/inspect 通过；随后源码冻结检查按预期拒绝，会话 65547 exit 1，未运行 first Release，不作为最终验收。最终修正源码重新完成两配置定向 Runtime 22/Scene 11/真实 Play 3/提交路径 12 组及原用例，日志 `out/ecs-e3c-{runtime,scene,gameplay}-{debug,release}-final-first.log`；定向会话 81486 exit 0。第二份 932 文件冻结 SHA256 `4DCCBEA037329B171672F659E3008E86BA27480E53F44911C34CA66160A27FC9`，路径 `out/verification/ecs-e3c/source-freeze-second.json`。第二轮完整两配置门禁开始；正式入口不变，全部首轮/定向失败证据保留。
+- 第二轮 Debug **89/89，1079.76 秒**，smoke/Python45/inspect 及前后同 932 文件冻结复核通过；候选 `b7e40b7191314de7bc148e6e9f708b1a`，正式入口不变。顺序会话 14376 继续执行 Release 标准构建与完整回归，不启动重复任务。尚未完成双配置最终验收和交付核验，不提交。
+
+### E3-C 最终验证与交付记录（2026-10-19）
+
+上述进行中段落为过程历史，以本段为最终状态。E3-B 基点已核对本地/远端 `a430a2ab43daafa6d5c4e7db1af5e9402071205a`；E3-C 不代表整个 E3/ECS 完成。
+
+- 同一第二份 **932 文件**源码冻结在双配置前后保持一致，SHA256 `4DCCBEA037329B171672F659E3008E86BA27480E53F44911C34CA66160A27FC9`。标准 Build.bat -SkipTests 两配置零编译警告；Debug 第二轮 **89/89，1079.76 秒**，Release 第二轮 **89/89，968.99 秒**。顺序会话 **14376 exit 0**，全部构建和测试结束，不再轮询。
+- 两配置增量 Runtime **22/22**、Scene **11/11**、真实 Play **3/3**、高层提交 **12/12**；原 Runtime 13/storage 14/identity 15/Query 17/结构候选 8/Paged 10、Scene 36、Gameplay 53/结构批次 26/Movement 38 fake/UI 18/E0 fixtures 11 保留并通过。托管/原生 smoke、Python **45**、inspect 全通过；没有以 fake Movement 代替新的真实 Jolt 角色验收。
+- 完整日志 `out/ecs-e3c-{build,ctest,supplemental,smoke,python,inspect}-{debug,release}-second.log`；详细输出 `out/ecs-e3c-ctest-{debug,release}-details-second.log`。Debug 候选 `b7e40b7191314de7bc148e6e9f708b1a`，Release 候选 `748552c447514c89a50b86b7ddae835c`；两配置各五包 Editor/Null/DX11/Null-Physics/DX11-Physics 清单 **144/56/113/67/116** 文件，身份、路径、size/SHA256 与完整闭包核验通过。有界 Editor 日志白名单未修改。
+- 最终 `out/ecs-e3c-delivery-verification-second.log` exit 0，SHA256 `0FC5849505CA90D9896C64E48B4C4065907CC141309F66170A508D596AB6D59D`：源码冻结和十包通过；正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 的 **144 清单/148 实际/148 备份**完整；E0 原始 **18** 个归档程序集、E3-A 原始 **8** 个测量输入与 **9** 份测量日志均逐一匹配。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未变。
+- 第一轮 Debug 89/89 及补充通过，但追加保序/Unicode 修正使冻结失效；65547 已结束 exit 1，**不算最终验收**，没有 first Release。首次定向测试 struct 返回值赋值编译失败、两份冻结及全部日志保留。最终定向会话 81486 已结束 exit 0。四项 IDE 改动、out 候选/失败/备份不提交。
+- 本轮只完成 E3-C 自动候选；无新无 Skip 部署、三轮历史 profile 或 E5 整帧配对性能验收。保留所有人工/目标素材与目标机/自包含/完整性能/1h/历史 File.Replace 调查门禁。按既定门禁提交推送并核对远端后，下一片为 **E3-D 联合验收**，其后 E4/E5，通过后才恢复 M8.3，最后 M9 Windows。
