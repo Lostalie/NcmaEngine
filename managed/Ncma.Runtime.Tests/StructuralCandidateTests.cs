@@ -40,7 +40,7 @@ internal static class StructuralCandidateTests
                 var world = new World(); var a = world.CreateEntity("A"); var id = Guid.NewGuid();
                 var query = world.Query<TransformData>(); Check(query.Count == 0); world.BeginStep();
                 var install = world.PrepareStructuralBatch(() => { world.StageCreate(id, "B"); world.StageAdd(id, Transform(world)); },
-                    snapshot => Check(snapshot.Objects.Length == 2));
+                    snapshot => Check(snapshot.Objects.Count() == 2));
                 Reject(() => world.CandidateEntity(id)); Check(world.Count == 1 && query.Count == 0);
                 install(); var entity = world.CandidateEntity(id); Reject(() => world.Resolve(entity)); Check(query.Count == 0);
                 world.CommitStep(); Check(query.Count == 1 && world.Resolve(entity) == entity && world.Resolve(a) == a);

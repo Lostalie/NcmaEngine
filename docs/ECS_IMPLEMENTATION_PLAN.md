@@ -183,7 +183,7 @@ CommandReceipt receipt = commands.GetReceipt(batch[0]);
 | E3-C 高层提交 | Commands.Begin 不再捕获整文档；绑定与实例按变更准备；信号/回执按完整 Entity 检查存活；插值从候选强类型 Transform 读取，不经 JSON 解码 | 固定顺序、提交前读取旧值、单一提交器、生命周期/信号/输入一次性消费、删除/复用、观察者错误与原生 fail-stop 语义保持；不新增 AI/网络写权限 |
 | E3-D 联合验收 | 对 A–C 做无写/稀疏/全写/结构变化与真实领域测试，检查稳定固定步没有完整文档构造 | 精确计数/负例证据、完整 Debug/Release 与包闭包；同输入旧实现/候选配对数据。人工/目标机/完整性能/长稳仍归原门禁，不用局部基准代替 |
 
-每片先测试再提交推送；当前 E3-A 自动候选通过，下一步 E3-B，后续分片尚未实现。E3–E5 通过前不启动 M8.3。
+每片先测试再提交推送；当前 E3-A/B 自动候选通过，下一步 E3-C 剩余高层提交，随后 E3-D 联合验收。信号过滤在 B 的视图迁移中已接入完整 Entity，但不代表 C 完成。E3–E5 通过前不启动 M8.3。
 
 ### E3-A 混合分页存储
 
@@ -206,3 +206,28 @@ CommandReceipt receipt = commands.GetReceipt(batch[0]);
 - `out/ecs-e3a-delivery-verification-first.log` exit 0，SHA256 `A33862C13D0D6A4E52ED2E931AEED970F456AC24A82E349072854AB58807F83A`：冻结/十包通过，正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 的 144 清单/148 实际/148 备份保持完整，E0 原始 18 个程序集保持原 SHA。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未变。
 - 测量核验 first 失败：Windows PowerShell 5 的 ConvertFrom-Json 返回数组被额外 `@(...)` 包成单项，核验脚本误报闭包数量。仅修正 out 内辅助脚本的数组接收方式，不修改数据、产品、断言或预算。保留 first 失败日志；`out/ecs-e3a-measurement-verification-second.log` exit 0，SHA256 `26026528ADEBAD1BF1617A9BE8E710DB1D9845387182BEC6668262A47BD4DEC9`，确认原 E2-B 算法参考一致、归档 8 文件不变、标准 Release DLL 与测量输入一致、三轮池各 90 × 100 原始样本和旧/新公开读取各 6 × 300 样本及环境/实际加载 DLL SHA 一致。
 - 仅 E3-A 自动候选门禁完成，不代表整个 E3/ECS 完成。没有新的无 Skip 部署、三轮历史 profile 或 E5 整帧性能验收；人工/目标机/自包含/完整性能/1h/历史故障调查仍开放。下一片 E3-B 增量精确验证；四项 IDE 设置与 out 产物/证据不提交。
+
+### E3-B 增量精确验证（自动候选完成）
+
+E3-A 已核对本地/GitHub main 为 `3d0a1fb329fbdae77bc5729a9878c9218e28e0e4`。此片不移除持久化、Undo 或完整快照格式；目标是让固定步预检使用同一 World 的受检候选和精确预算，不依赖整份 JSON 往返。
+
+- World 派生编码缓存按槽/代次保存对象与组件编码、精确字节数，不成为第二组件存储。写集追踪对象及具体组件；普通值写只重新编码被改组件，改名复用组件编码。编码器实际输出的单项长度加原封套/逗号计算完整 4 MiB 预算，算术为 checked；不估算 Unicode、转义、数字或组件类型名长度。编码组件仍受 64 KiB 边界和注册 schema 检查；原始/归一化输入、结构批次 1 MiB 和聚合预算继续检查。
+- 缓存资格由引擎保守判定：纯值字段/自动属性及递归稳定类型。属性不只看 CompilerGenerated 标签，还检查 getter 是否严格读取自己的一个实例字段；JSON 属性/自定义转换器/未知访问器走有界冷路径。可信值验证器仍在每次写入执行，没有新增可由 Agent 输入的“跳过验证”选项。动态编码结果每次预检重新测量并检查 payload/schema，不因没有 World 写入而跳过。
+- 缓存仅随最终 World 提交安装；编辑直写和 Restore 的 revision/identity 变化会失效。候选回滚、分支丢弃、跨槽复用不污染已提交缓存。准备动作包含 attempt/变更序号/候选根检查；捕获编码/检查异常后仍毒化整步。结构分支还保留自己的脏集及已准备编码版本，避免丢弃分支后复用错误缓存。
+- 内部 PreparedStepView 只提供受检元数据、完整 Entity 存活检查和字节计数；没有底层数组、可写 ref 或新权限。线程、写入、撤销、提交、替换及枚举恢复均检查有效性。需要旧 DTO 的现役消费者显式取得新数组壳，不能改动缓存。信号过滤已按候选完整 Entity 检查，不再先构造 WorldSnapshot 的 UUID 集。
+- SceneDocument 的运行时预检已移除整文档 Encode/Decode；对象/文档封套和 Behaviour 编码按内容复用，组件数组长度来自同一受检候选。所有跨对象绑定 UUID、Export 类型/有限值/容量仍每次验证；缓存持有私有数组副本。双精度比较使用位模式，不能把 JSON 长度不同的 +0/-0 当作相同缓存项。元数据安装仍在唯一 World 提交后且校验目标 identity/revision，不引入第二事务或编辑历史。
+- 现役 Play/结构批次已改用候选视图。**E3-C 尚未完成**：Commands.Begin 仍读取整文档；实例、回执和插值仍共用每步一个最终 DTO；World 元数据复制和信号/绑定遍历等成本仍在。本片测试不宣称完整固定步无全量文档或 E5 性能通过。
+- 新增 Runtime 18、Scene 7、真实 Play 3 组验证；包括编码器实际字节 oracle、Unicode/转义、精确世界/文档边界、归一化超预算、组件级脏写、动态转换器/伪造属性标记、冷路径 schema、过期/跨线程视图、丢弃分支、缓存别名/回滚、负零、重复绑定和真实 Play 失败。原 Runtime 13/storage 14/identity 15/Query 17/结构候选 8/Paged 10、Scene 36、Gameplay 53/结构批次 26/Movement 38 fake/UI 18/E0 fixtures 11 保留。
+- 定向 Debug/Release 已通过：`out/ecs-e3b-{runtime,scene,gameplay}-{debug,release}-tenth.log`，新增真实 Play 的最终定向结果为 `out/ecs-e3b-gameplay-{debug,release}-eleventh.log`。原始 second 的测试静态字段未初始化编译警告、sixth 的迁移调用点未改完编译失败、eighth 的枚举器最后一项恢复漏检失败均保留；修复产品失效检查后通过，不降低断言。早期 SSH 沙箱只读访问失败后，经正常授权核验精确远端 SHA 成功，没有改安全设置。
+- 完整门禁冻结 `out/verification/ecs-e3b/source-freeze-first.json` 共 931 文件，SHA256 `7F9CBF58AA36E298DB0432466DFC0AB094BE0F60A08015FBD258594AF3216D42`。顺序 canonical Build.bat -SkipTests、全 89 CTest、smoke/Python45/inspect 进行中；会话 81334，不启动重复构建。完整门禁/最终十包与正式安装/备份/E0 核验未完成前，不提交推送或开始 E3-C。正式 E1-B EXE 不变。
+- 深度专项复查追加：字节长度可以分项相加，但 JSON 最大嵌套不能直接沿用单项限制。World/Scene 在组件 Data 之前增加五层容器，因此候选编码显式保留 `MaxDepth - 5` 的 Data 嵌套限制；不依赖当前 schema 检查恰好更严格。新增第 19 组运行时测试，用深度 1/26/27/28/31 与完整 serializer 的接受/拒绝结果对照。第一份冻结因此作废，原 Debug 二进制仍按原会话完成，不并行改其程序集；第一轮完整结果不作为修复后的验收。结束后另建 second 冻结和两配置全回归，保留 first 全部证据。
+- 第一轮 Debug 二进制 **89/89，1102.43 秒**，smoke/Python45/inspect 通过；由于上述源码补充，门禁在回归后的冻结复核处按预期拒绝，81334 已结束 exit 1，未启动第一轮 Release。不能把该轮当作最终同源码通过。补充测试实际覆盖对象和数组嵌套，并与完整编码后的严格 32 层 JSON 读取共同对照；两配置 Runtime 19/19（thirteenth）、Scene 7/7 与 Gameplay 3/3（twelfth）通过。
+- 第二份冻结 `out/verification/ecs-e3b/source-freeze-second.json` 931 文件，SHA256 `89FE13F9D9AA66DB81F56C0B5A8A7082B40CE7452B3CE502782E21EBFE622C91`；第二轮完整门禁会话 32308 正在执行。日志后缀为 second，检查脚本 `out/verification/ecs-e3b/verify-delivery-second.ps1`。完整两配置及最终核验完成前，E3-B 仍未交付，不进入 E3-C。
+
+### E3-B 最终验证与交付记录
+
+- 上述进行中记录为过程历史，以此处最终结果为准。第二份 931 文件冻结前后完全一致；两配置标准 Build.bat -SkipTests 均零编译警告，Debug 第二轮 **89/89，1076.11 秒**，Release 第二轮 **89/89，982.44 秒**。顺序会话 32308 已结束 exit 0；旧 81334 已结束 exit 1（源码补充导致冻结拒绝），不再轮询或重启。
+- 两配置新增 Runtime **19/19**、Scene **7/7**、真实 Play **3/3**，原 Runtime 13/storage 14/identity 15/Query 17/结构候选 8/Paged 10、Scene 36、Gameplay 53/结构批次 26/Movement 38 fake/UI 18/E0 fixtures 11 全通过；托管/原生冒烟、Python **45**、inspect 全通过。完整日志 `out/ecs-e3b-{build,ctest,supplemental,smoke,python,inspect}-{debug,release}-second.log`，详细用例输出 `out/ecs-e3b-ctest-{debug,release}-details-second.log`。
+- Debug 候选 `caa4790ddf74492abf53a5d2bbdcb983`；Release 候选 `25eaacb8544d42a6808861d51701293c`。两配置各五包 Editor/Null/DX11/Null-Physics/DX11-Physics 的清单分别 144/56/113/67/116 文件，产品身份、路径、size/SHA256 和闭包检查通过。未改变既有有界 Editor 日志白名单。
+- 最终 `out/ecs-e3b-delivery-verification-second.log` exit 0，SHA256 `C7CFA27066C323B212AA65FF72EC2C80B7F6BF0574181A3305DBD7F2FAA04945`：冻结及十包通过；正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 保持 144 清单/148 实际文件、148 备份完整，E0 原始 18 个程序集逐一匹配。另核对 E3-A 归档测量 8 文件原始 SHA 未变。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未改变。
+- 本轮只是 E3-B 自动候选，不部署、不执行新的无 Skip/三轮历史 profile 或 E5 整帧配对性能门禁。C# 候选视图、编码计数和完整 codec oracle 是正确性/路径证据，不是完整性能验收。保留所有早期失败、两份冻结、首轮 89/89 但冻结失效的记录、历史 File.Replace 调查和四项 IDE 改动。下一步 E3-C，不跳到 M8.3；人工/目标素材与目标机/自包含/完整性能/1h 仍开放。

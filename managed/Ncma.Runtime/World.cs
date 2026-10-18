@@ -278,6 +278,7 @@ public sealed partial class World
         {
             var candidate = StepEntry(entry.PersistentId);
             if (!_stepStorage!.Has(candidate.Entry.Slot, type)) throw new InvalidOperationException("Component was removed or is not attached.");
+            DirtyStep(candidate.Entry.Slot, type);
             _stepStorage.Set(candidate.Entry.Slot, validated);
         }
         else
@@ -324,6 +325,7 @@ public sealed partial class World
         _stepUuids.EnsureCapacity(_stepUuids.Count + 1);
         var (slot, generation) = _generations.Reserve(_stepSlots!);
         var entry = new Entry(uuid, name, slot, generation, _nextOrdinal++);
+        DirtyStep(slot);
         _stepObjects.Add(slot, entry); _stepUuids.Add(uuid, slot);
         _stepSlots![slot] = true;
         _stepMembershipChanged = true;
@@ -332,6 +334,7 @@ public sealed partial class World
     {
         VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
+        DirtyStep(target.Entry.Slot);
         _stepStorage!.RemoveAll(target.Entry.Slot);
         _stepObjects!.Remove(target.Id); _stepUuids!.Remove(uuid);
         _stepSlots![target.Entry.Slot] = false;
@@ -340,6 +343,7 @@ public sealed partial class World
     internal void StageRename(Guid uuid, string name)
     {
         VerifyCommandAccess(); ValidateName(name); var target = StepEntry(uuid);
+        DirtyStep(target.Entry.Slot);
         _stepObjects![target.Id] = target.Entry with { Name = name };
     }
     internal void StageAdd(Guid uuid, ComponentSnapshot value)
@@ -353,6 +357,7 @@ public sealed partial class World
         VerifyComponentTopology(type);
         if (_stepStorage!.Has(target.Entry.Slot, type)) throw new ArgumentException("Component already attached.");
         if (_stepStorage.Count(target.Entry.Slot) >= MaxComponentsPerObject) throw new ArgumentException("Component capacity exceeded.");
+        DirtyStep(target.Entry.Slot, type);
         _stepStorage.SetDecoded(target.Entry.Slot, decoded, Components);
         _stepMembershipChanged = true;
     }
@@ -363,6 +368,7 @@ public sealed partial class World
         Type? type = _stepStorage!.FindType(target.Entry.Slot, typeId, Components);
         if (type is null) throw new ArgumentException("Component is not attached.");
         VerifyComponentTopology(type);
+        DirtyStep(target.Entry.Slot, type);
         _stepStorage.Remove(target.Entry.Slot, type);
         _stepMembershipChanged = true;
     }
@@ -376,15 +382,24 @@ public sealed partial class World
         var uuids = new Dictionary<Guid, int>(_uuidIndex);
         var slots = (bool[])_slots.Clone();
         var storage = _storage.Fork();
+        var dirtySlots = new HashSet<int>();
+        var dirtyComponents = new HashSet<(int, Type)>();
+        Guid attempt = Guid.NewGuid();
         _authorityWrites.EnsureCapacity(_authorities.Count);
         _authorityWrites.Clear();
         _stepObjects = objects; _stepUuids = uuids; _stepError = null;
         _stepMembershipChanged = false;
         _stepSlots = slots; _stepStorage = storage;
+        _stepDirtySlots = dirtySlots; _stepAttempt = attempt; _stepMutation = 0;
+        _stepDirtyComponents = dirtyComponents;
+        _stepEncodingBaseline = _encodingRevision == _revision ? _committedEncoding : null;
+        _stepPreparedEncoding = null;
         _initializing = initialization;
         _updating = true;
     }
     internal Action PrepareStep(Action<WorldSnapshot>? inspect = null, bool requireAuthorityWrites = true)
+        => PrepareStepView(inspect is null ? null : view => inspect(view.CopySnapshot()), requireAuthorityWrites);
+    internal Action PrepareStepView(Action<PreparedStepView>? inspect = null, bool requireAuthorityWrites = true)
     {
         VerifyWriteAccess();
         if (!_updating || _preparing) throw new InvalidOperationException("No active gameplay step.");
@@ -395,12 +410,23 @@ public sealed partial class World
             if (requireAuthorityWrites) VerifyAuthorityWrites();
             var objects = _stepObjects!; var uuids = _stepUuids!;
             var storage = _stepStorage!; var slots = _stepSlots!;
-            var candidate = Capture(_name, objects, storage);
-            _ = SceneJson.EncodeBounded(candidate, MaxSnapshotBytes);
-            inspect?.Invoke(candidate);
+            var encoded = PrepareEncoding();
+            _stepPreparedEncoding = encoded; _stepPreparedMutation = _stepMutation;
+            if (inspect is not null) inspect(new PreparedStepView(this));
             if (_stepError is not null) throw new InvalidOperationException("Candidate validation rejected; step must abort.", _stepError);
-            return () => { _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _revision++; if (_stepMembershipChanged) _membershipVersion = _revision; if (!_initializing) _tick++; AbortStep(); };
+            Guid attempt = _stepAttempt; ulong mutation = _stepMutation;
+            return () =>
+            {
+                VerifyWriteAccess();
+                if (!_updating || _preparing || _stepError is not null || _stepAttempt != attempt || _stepMutation != mutation ||
+                    !ReferenceEquals(_stepObjects, objects)) throw new InvalidOperationException("Prepared step is stale or rejected.");
+                _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _revision++;
+                _committedEncoding = encoded; _encodingRevision = _revision;
+                if (_stepMembershipChanged) _membershipVersion = _revision; if (!_initializing) _tick++;
+                AbortStep();
+            };
         }
+        catch (Exception error) { RejectStep(error); throw; }
         finally { _preparing = false; }
     }
     internal void CommitStep()
@@ -413,6 +439,8 @@ public sealed partial class World
     {
         VerifyAccess();
         _stepObjects = null; _stepUuids = null; _stepStorage = null; _stepSlots = null; _stepError = null;
+        _stepDirtySlots = null; _stepEncodingBaseline = null; _stepPreparedEncoding = null; _stepAttempt = Guid.Empty;
+        _stepDirtyComponents = null;
         _authorityWrites.Clear();
         _updating = false;
         _initializing = false;

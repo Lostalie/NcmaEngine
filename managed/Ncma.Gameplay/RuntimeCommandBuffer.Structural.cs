@@ -94,14 +94,15 @@ internal sealed partial class RuntimeCommandBuffer
                 }
             }, snapshot =>
             {
-                // Keep complete-document, bindings and normalized payload validation. E3 optimizes it later.
+                // Exact complete-document and normalized batch budgets share the checked candidate encoding.
                 _ = session.Document.PrepareRuntimeStep(snapshot, bindings);
                 int normalizedBytes = bytes;
                 for (int i = 0; i < copied.Length; ++i)
                     if (copied[i] is StructuralCommand.Add add)
                     {
-                        var component = snapshot.Objects.First(o => o.PersistentId == targets[i]).Components.First(c => c.TypeId == add.Component.TypeId);
-                        normalizedBytes = checked(normalizedBytes - componentBytes[i] + SceneJson.EncodeBounded(component, ComponentRegistry.MaxPayloadBytes + 512).Length);
+                        int componentSize = snapshot.ComponentBytes(targets[i], add.Component.TypeId);
+                        if (componentSize > ComponentRegistry.MaxPayloadBytes + 512) throw new ArgumentException("Normalized component budget exceeded.");
+                        normalizedBytes = checked(normalizedBytes - componentBytes[i] + componentSize);
                         if (normalizedBytes > PayloadBytes - _bytes) throw new ArgumentException("Normalized batch payload budget exceeded.");
                     }
                 // Charge the greater encoded size: normalization cannot grant a budget bypass.

@@ -2,7 +2,7 @@ using Ncma.Runtime;
 namespace Ncma.Scene;
 
 // Owns metadata, not a second object/component store. World is the sole runtime authority.
-public sealed class SceneDocument
+public sealed partial class SceneDocument
 {
     private Dictionary<Guid, BehaviourBindingData[]> _bindings = [];
     private ulong _revision, _knownWorldRevision;
@@ -125,22 +125,6 @@ public sealed class SceneDocument
         ulong revision = checked(_revision + 1);
         _bindings[objectId] = owned;
         _revision = revision;
-    }
-    internal Action PrepareRuntimeStep(WorldSnapshot world, Dictionary<Guid, BehaviourBindingData[]> bindings)
-    {
-        VerifyAccess();
-        if (!World.IsUpdating || _preparing) throw new InvalidOperationException("No active runtime step.");
-        _preparing = true;
-        try
-        {
-            var candidate = new SceneDocumentSnapshot(1, world.Name, world.Objects.Select(o => new SceneObjectData(
-                o.PersistentId, o.Name, o.Components, bindings.GetValueOrDefault(o.PersistentId, []))).ToArray());
-            var owned = SceneDocumentCodec.Copy(candidate);
-            var prepared = owned.Objects.ToDictionary(o => o.Id, o => o.Behaviours);
-            ulong revision = checked(_revision + 1), worldRevision = checked(World.Revision + 1);
-            return () => { _bindings = prepared; _revision = revision; _knownWorldRevision = worldRevision; };
-        }
-        finally { _preparing = false; }
     }
     private static BehaviourBindingData[] CopyBindings(BehaviourBindingData[] values) => values
         .Select(b => b with { Exports = b.Exports.OrderBy(p => p.Name, StringComparer.Ordinal).ToArray() }).ToArray();

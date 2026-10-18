@@ -2,9 +2,9 @@
 
 面向模型与动画驱动动作游戏的引擎：**C# 主引擎与游戏逻辑 + C++ 性能插件 + 可选 Python 专长模块**。
 
-更新：2026-10-18。当前是持续开发中的可验证候选，不是生产就绪版本。M8.2 已通过同源码完整 Debug/Release 自动回归与受检部署；**ECS E0、E1、E2 与 E3-A 混合分页存储已完成自动候选门禁；E3-A 同源码 Debug/Release 各 89 项 CTest、新增 10 组分页测试通过，下一步 E3-B 增量精确验证，M8.3 未开始**。契约、测量限制、失败修正与交付证据见 [ECS 实施记录](docs/ECS_IMPLEMENTATION_PLAN.md#9-e3-增量固定步实施顺序)。人工、目标机、自包含和完整性能/长稳验收仍开放。
+更新：2026-10-18。当前是持续开发中的可验证候选，不是生产就绪版本。M8.2 已通过同源码完整 Debug/Release 自动回归与受检部署；**ECS E0、E1、E2、E3-A 混合分页存储与 E3-B 增量精确验证已完成自动候选门禁；E3-B 最终同源码 Debug/Release 各 89 项 CTest、新增 29 组专项通过，下一步 E3-C 高层提交，M8.3 未开始**。契约、测量限制、失败修正与交付证据见 [ECS 实施记录](docs/ECS_IMPLEMENTATION_PLAN.md#9-e3-增量固定步实施顺序)。人工、目标机、自包含和完整性能/长稳验收仍开放。
 
-最新目标顺序：**M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**。源码已采用唯一 World 的强类型池与代次 Entity，删除两种旧 ObjectReference、Runtime.GameObject 和低层旧创建/查找/枚举入口；低层消费者使用 World + Entity，用户侧仅保留 Ncma.GameObject 高层门面，共享同一份组件存储。E2-A 提供有界 All/None、常见类型组合、确定性成员缓存及受检迭代；E2-B 提供共享 1024 条/1 MiB 预算的结构批次、创建依赖、PendingEntity 与提交后回执，旧 PendingObject 已删除。失败批次不留下前缀且毒化整个候选步。E3-A 值池采用 32 值/页的惰性 COW，连续稀疏/实体索引仅在结构写入时复制；全量快照验证仍保留，E3-B/C/D 和完整 ECS 验收尚未完成。局部测量显示稀疏写分配下降、直接池读取变慢，不能据此宣称整体性能通过。正式 EXE 保持已通过完整 Release 构建与受检部署的 E1-B，本轮只生成候选包、不部署。详见 [路线图](docs/ROADMAP.md) 与 [ECS 实施合同](docs/ECS_IMPLEMENTATION_PLAN.md)。
+最新目标顺序：**M8.2 收尾 → ECS 重构 → M8.3 及后续 → M9**。源码已采用唯一 World 的强类型池与代次 Entity，删除两种旧 ObjectReference、Runtime.GameObject 和低层旧创建/查找/枚举入口；低层消费者使用 World + Entity，用户侧仅保留 Ncma.GameObject 高层门面，共享同一份组件存储。E2 提供有界确定性 Query 和共享预算的结构批次、创建依赖、PendingEntity/提交后回执；失败批次不留下前缀且毒化候选步。E3-A 使用 32 值/页惰性 COW，连续索引只在结构修改时复制。E3-B 的固定步预检使用组件级派生编码缓存、受检候选视图和精确字节/深度预算，保留 schema、权限、绑定及 Export 校验；未知编码器走有界冷路径。**固定步开始时的整文档读取和最终实例/回执/插值 DTO 仍待 E3-C 清除，E3-D/E5 联合与性能验收尚未完成**。局部编码复用不代表整帧性能已通过。正式 EXE 保持 E1-B Release，本轮只生成候选包、不部署。详见 [路线图](docs/ROADMAP.md) 与 [ECS 实施合同](docs/ECS_IMPLEMENTATION_PLAN.md)。
 
 M8.2 交付的是可选本机工具模块，不是模型推理服务；worker 开发环境须单独准备，不随默认 Editor/Player 部署。范围、测试与剩余门禁见 [M8.2 交付记录](docs/M8_2_DELIVERY_REPORT.md)。ECS 的实施边界、分片与验收见 [详细合同](docs/ECS_IMPLEMENTATION_PLAN.md) 和 [E0 基线记录](docs/ECS_E0_BASELINE.md)。
 

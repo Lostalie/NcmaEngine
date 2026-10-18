@@ -33,6 +33,7 @@ public sealed class ComponentRegistry
         internal bool RuntimeAttachable { get; } = runtimeAttachable;
         internal abstract object Decode(JsonElement data);
         internal abstract IComponentPool CreatePool();
+        internal abstract bool Cacheable { get; }
     }
     private sealed class Registration<T>(ComponentDescriptor descriptor, Func<T, T> validate, bool runtimeAttachable)
         : Registration(descriptor, runtimeAttachable) where T : struct, IComponent
@@ -40,6 +41,7 @@ public sealed class ComponentRegistry
         internal T Validate(T value) => validate(value);
         internal override object Decode(JsonElement data) => validate(data.Deserialize<T>(SceneJson.Options));
         internal override IComponentPool CreatePool() => new ComponentPool<T>();
+        internal override bool Cacheable { get; } = StableComponentEncoding.IsStable(typeof(T));
     }
     private readonly Dictionary<string, Registration> _byId = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, Registration> _byType = new();
@@ -99,6 +101,8 @@ public sealed class ComponentRegistry
         if (!Require(type).RuntimeAttachable) throw new InvalidOperationException("This component requires authoring/startup composition; runtime attachment is not supported.");
     }
     internal IComponentPool CreatePool(Type type) => Require(type).CreatePool();
+    // Eligibility concerns serialization only. Trusted value validation still runs on EVERY write.
+    internal bool CanCacheEncoding(Type type) => Require(type).Cacheable;
     internal T Validate<T>(T value) where T : struct, IComponent
     {
         T validated = ((Registration<T>)Require(typeof(T))).Validate(value);
@@ -106,6 +110,14 @@ public sealed class ComponentRegistry
         return validated;
     }
     internal JsonElement EncodeObject(object value) => JsonSerializer.SerializeToElement(value, value.GetType(), SceneJson.Options);
+    internal void ValidateEncoding(ComponentSnapshot component)
+    {
+        if (!_byId.TryGetValue(component.TypeId, out var registration) || component.Version != registration.Descriptor.Version)
+            throw new ArgumentException("Unknown component type/version: " + component.TypeId);
+        CheckPayload(component.Data);
+        SceneJson.VerifySnapshotComponentDepth(component.Data);
+        CheckShape(component.Data, registration.Descriptor.Schema, registration.Descriptor.Schema);
+    }
     internal object Decode(ComponentSnapshot component)
     {
         if (!_byId.TryGetValue(component.TypeId, out var registration) || component.Version != registration.Descriptor.Version)
@@ -179,6 +191,48 @@ public sealed class ComponentRegistry
 
 internal static class SceneJson
 {
+    internal static void VerifySnapshotComponentDepth(JsonElement value)
+    {
+        // World and SceneDocument both add five containers before the Data root:
+        // document / objects[] / object / components[] / component. Per-item length counting
+        // must retain the FULL serializer's depth limit, independently of schema validation.
+        Visit(value, Options.MaxDepth - 5);
+        static void Visit(JsonElement node, int remaining)
+        {
+            if (node.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array)) return;
+            if (remaining <= 0) throw new ArgumentException("Snapshot component nesting limit exceeded.");
+            if (node.ValueKind == JsonValueKind.Object)
+                foreach (var property in node.EnumerateObject()) Visit(property.Value, remaining - 1);
+            else foreach (var item in node.EnumerateArray()) Visit(item, remaining - 1);
+        }
+    }
+    internal static int MeasureBounded<T>(T value, int maximum)
+    {
+        using var output = new CountingOutput(maximum);
+        JsonSerializer.Serialize(output, value, Options);
+        return checked((int)output.Length);
+    }
+    private sealed class CountingOutput(int maximum) : Stream
+    {
+        private int _length;
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => _length;
+        public override long Position { get => _length; set => throw new NotSupportedException(); }
+        private void Count(int count)
+        {
+            if (count < 0 || count > maximum - _length) throw new ArgumentException("Snapshot size limit exceeded.");
+            _length += count;
+        }
+        public override void Write(byte[] buffer, int offset, int count) => Count(buffer.AsSpan(offset, count).Length);
+        public override void Write(ReadOnlySpan<byte> buffer) => Count(buffer.Length);
+        public override void WriteByte(byte value) => Count(1);
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+    }
     internal static byte[] EncodeBounded<T>(T value, int maximum)
     {
         using var output = new BoundedBuffer(maximum);

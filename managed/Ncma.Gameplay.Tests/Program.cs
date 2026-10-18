@@ -494,6 +494,8 @@ foreach (var test in cases)
     catch (Exception error) { Console.Error.WriteLine("FAIL " + test.Name + ": " + error); return 1; }
 }
 Console.WriteLine($"Gameplay tests: {passed}/{cases.Length} passed.");
+try { IncrementalGameplayCases.Run(); }
+catch (Exception error) { Console.Error.WriteLine("FAIL incremental gameplay: " + error); return 1; }
 try { StructuralBatchCases.Run(); }
 catch(Exception error){Console.Error.WriteLine(error);return 1;}
 try { MovementCases.Run(); }

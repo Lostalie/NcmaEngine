@@ -1,0 +1,238 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Ncma.Runtime;
+
+internal static class IncrementalValidationTests
+{
+    private readonly record struct TextData(string Text) : IComponent;
+    private struct Computed : IComponent
+    {
+        private int _value;
+        internal static int Bias = 0;
+        public int Value { [CompilerGenerated] get => _value + Bias; set => _value = value; }
+    }
+    [JsonConverter(typeof(DynamicConverter))]
+    public readonly record struct Dynamic(int Value) : IComponent;
+    public sealed class DynamicConverter : JsonConverter<Dynamic>
+    {
+        internal static string Text = "x";
+        internal static Action? OnWrite;
+        public override Dynamic Read(ref Utf8JsonReader reader, Type type, JsonSerializerOptions options)
+        { using var document = JsonDocument.ParseValue(ref reader); return new(1); }
+        public override void Write(Utf8JsonWriter writer, Dynamic value, JsonSerializerOptions options)
+        { OnWrite?.Invoke(); writer.WriteStartObject(); writer.WriteString("text", Text); writer.WriteEndObject(); }
+    }
+    private static void Check(bool value) { if (!value) throw new Exception("Incremental validation assertion failed."); }
+    private static void Reject(Action action)
+    {
+        try { action(); } catch (Exception error) when (error is ArgumentException or InvalidOperationException) { return; }
+        throw new Exception("Invalid validation candidate accepted.");
+    }
+    private static World TextWorld(Func<TextData, TextData>? validator = null)
+    {
+        var registry = new ComponentRegistry();
+        registry.Register<TextData>("text", 1, """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", validator ?? (v => v));
+        return new World("引擎 \"exact\" \\ budget", registry);
+    }
+    private static void CheckPrepared(World world, Action<WorldSnapshot>? inspect = null)
+    {
+        int bytes = 0;
+        Action commit = world.PrepareStep(snapshot => {
+            bytes = SceneJson.EncodeBounded(snapshot, World.MaxSnapshotBytes).Length; inspect?.Invoke(snapshot);
+        });
+        Check(world.PreparedSnapshotBytes == bytes); commit();
+    }
+    internal static int Run()
+    {
+        var cases = new (string Name, Action Run)[]
+        {
+            ("counting output equals actual JSON including escapes and exact boundary", () => {
+                foreach (string text in new[] { "", "quote\"slash\\", "中文😀<>\u0000\n", new string('x', 65500) }) {
+                    var value = new ObjectSnapshot(Guid.NewGuid(), "name", [new("text", 1, JsonSerializer.SerializeToElement(new { text }))]);
+                    byte[] encoded = SceneJson.EncodeBounded(value, World.MaxSnapshotBytes);
+                    Check(SceneJson.MeasureBounded(value, encoded.Length) == encoded.Length);
+                    Reject(() => SceneJson.MeasureBounded(value, encoded.Length - 1));
+                }
+            }),
+            ("eligibility rejects converters and spoofed compiler-generated getters", () => {
+                Check(StableComponentEncoding.IsStable(typeof(TransformData)) && StableComponentEncoding.IsStable(typeof(TextData)));
+                Check(!StableComponentEncoding.IsStable(typeof(Dynamic)) && !StableComponentEncoding.IsStable(typeof(Computed)));
+            }),
+            ("composed component depth agrees with full snapshot codec", () => {
+                foreach (bool arrays in new[] { false, true })
+                foreach (int depth in new[] { 1, 26, 27, 28, 31 }) {
+                    string nested = arrays ? new string('[', depth) + "0" + new string(']', depth) :
+                        string.Concat(Enumerable.Repeat("{\"v\":", depth)) + "0" + new string('}', depth);
+                    using var json = JsonDocument.Parse(nested);
+                    var snapshot = new WorldSnapshot(1, "depth", [new(Guid.NewGuid(), "A", [new("test.depth", 1, json.RootElement)])]);
+                    if (depth <= 27) {
+                        SceneJson.VerifySnapshotComponentDepth(json.RootElement);
+                        using var decoded = JsonDocument.Parse(SceneJson.EncodeBounded(snapshot, World.MaxSnapshotBytes), new JsonDocumentOptions { MaxDepth = SceneJson.Options.MaxDepth });
+                        Check(decoded.RootElement.ValueKind == JsonValueKind.Object);
+                    } else {
+                        Reject(() => SceneJson.VerifySnapshotComponentDepth(json.RootElement));
+                        bool failed = false;
+                        try {
+                            using var decoded = JsonDocument.Parse(SceneJson.EncodeBounded(snapshot, World.MaxSnapshotBytes), new JsonDocumentOptions { MaxDepth = SceneJson.Options.MaxDepth });
+                        }
+                        catch (Exception error) when (error is JsonException or InvalidOperationException) { failed = true; }
+                        Check(failed);
+                    }
+                }
+            }),
+            ("warm unchanged steps do not encode objects or construct snapshots", () => {
+                var world = new World(); for (int i = 0; i < 100; ++i) world.Set(world.CreateEntity("A"), TransformData.Identity);
+                world.FixedStep(() => { }); var work = world.ValidationWork;
+                Check(work.EncodedObjects == 100 && work.CopiedSnapshots == 0);
+                for (int i = 0; i < 20; ++i) world.FixedStep(() => { });
+                Check(world.ValidationWork == work && world.Tick == 21);
+            }),
+            ("one dirty object is encoded once and repeated preflight reuses it", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity);
+                for (int i = 0; i < 20; ++i) world.Set(world.CreateEntity("B"), TransformData.Identity);
+                world.FixedStep(() => { }); long initial = world.ValidationWork.EncodedObjects;
+                world.BeginStep(); world.Set(a, TransformData.Identity with { Position = new(8, 0, 0) });
+                _ = world.PrepareStep(); _ = world.PrepareStep();
+                Check(world.ValidationWork.EncodedObjects == initial + 1 && world.Get<TransformData>(a).Position.X == 0);
+                world.CommitStep(); Check(world.ValidationWork.EncodedObjects == initial + 1 && world.Get<TransformData>(a).Position.X == 8);
+            }),
+            ("writes always validate even when the component encoding is cacheable", () => {
+                int calls = 0; var world = TextWorld(v => { calls++; return v with { Text = v.Text.Trim() }; });
+                var a = world.CreateEntity("A"); world.Set(a, new TextData(" start ")); world.FixedStep(() => { });
+                int before = calls; world.FixedStep(() => { world.Set(a, new TextData(" one ")); world.Set(a, new TextData(" two ")); });
+                Check(calls == before + 2 && world.Get<TextData>(a).Text == "two");
+            }),
+            ("dirty component does not reencode unchanged peers or renamed values", () => {
+                var registry = ComponentRegistry.CreateDefault(); registry.Register<TextData>("text", 1,
+                    """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
+                var world = new World(components: registry); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.Set(a, new TextData("old"));
+                world.FixedStep(() => { }); long before = world.EncodedComponentCount;
+                world.BeginStep(); world.Set(a, new TextData("new")); CheckPrepared(world); Check(world.EncodedComponentCount == before + 1);
+                world.BeginStep(); world.StageRename(world.GetUuid(a), "renamed"); CheckPrepared(world); Check(world.EncodedComponentCount == before + 1);
+                world.BeginStep(); world.StageRemove(world.GetUuid(a), "text");
+                world.StageAdd(world.GetUuid(a), new("text", 1, registry.Encode(new TextData("replacement")))); CheckPrepared(world);
+                Check(world.EncodedComponentCount == before + 2 && world.Get<TextData>(a).Text == "replacement");
+            }),
+            ("snapshot callbacks cannot mutate cached array shells", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.FixedStep(() => { });
+                world.BeginStep(); _ = world.PrepareStep(snapshot => { snapshot.Objects[0].Components[0] = null!; snapshot.Objects[0] = null!; });
+                CheckPrepared(world, snapshot => Check(snapshot.Objects[0].Components[0].TypeId == "ncma.transform"));
+                Check(world.Get<TransformData>(a) == TransformData.Identity);
+            }),
+            ("prepared view rejects foreign threads writes abort and commit", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.BeginStep();
+                World.PreparedStepView? view = null; _ = world.PrepareStepView(v => view = v);
+                Check(view is not null && view.Contains(a) && !view.Contains(default));
+                var active = view!; Check(active.ComponentBytes(world.GetUuid(a), "ncma.transform") > 0);
+                Reject(() => Task.Run(() => active.Bytes).GetAwaiter().GetResult());
+                var cursor = active.Objects.GetEnumerator(); Check(cursor.MoveNext()); world.Set(a, TransformData.Identity);
+                Reject(() => { _ = active.Bytes; }); Reject(() => cursor.MoveNext());
+                _ = world.PrepareStepView(v => view = v); active = view!; world.AbortStep(); Reject(() => active.CopySnapshot());
+                world.BeginStep(); var commit = world.PrepareStepView(v => view = v); active = view!; commit(); Reject(() => active.Contains(a));
+            }),
+            ("discarded structural preparation never installs its encoded root", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.FixedStep(() => { });
+                world.BeginStep(); _ = world.PrepareStep();
+                _ = world.PrepareStructuralBatch(() => world.StageRename(world.GetUuid(a), "discarded"), _ => { });
+                CheckPrepared(world, snapshot => Check(snapshot.Objects[0].Name == "A"));
+                world.BeginStep(); world.PrepareStructuralBatch(() => world.StageRename(world.GetUuid(a), "installed"), _ => { })();
+                CheckPrepared(world, snapshot => Check(snapshot.Objects[0].Name == "installed"));
+            }),
+            ("aborted writes do not replace committed encoded data", () => {
+                var world = TextWorld(); var a = world.CreateEntity("A"); world.Set(a, new TextData("old")); world.FixedStep(() => { });
+                world.BeginStep(); world.Set(a, new TextData("candidate")); _ = world.PrepareStep(); world.AbortStep();
+                long before = world.ValidationWork.EncodedObjects; world.BeginStep();
+                CheckPrepared(world, snapshot => Check(snapshot.Objects[0].Components[0].Data.GetProperty("text").GetString() == "old"));
+                Check(world.ValidationWork.EncodedObjects == before);
+            }),
+            ("direct edits and restore invalidate encoded roots", () => {
+                var world = TextWorld(); var a = world.CreateEntity("A"); world.Set(a, new TextData("old")); world.FixedStep(() => { });
+                world.Rename(a, "B"); world.Set(a, new TextData("edit")); world.BeginStep();
+                CheckPrepared(world, snapshot => Check(snapshot.Objects[0].Name == "B" && snapshot.Objects[0].Components[0].Data.GetProperty("text").GetString() == "edit"));
+                var snapshot = world.CaptureSnapshot(); world.RestoreSnapshot(snapshot with { Name = "restored😀" });
+                long before = world.ValidationWork.EncodedObjects; world.BeginStep(); CheckPrepared(world);
+                Check(world.ValidationWork.EncodedObjects == before + 1); Reject(() => world.Resolve(a));
+            }),
+            ("structural batches carry dirty sets without exposing candidate caches", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.FixedStep(() => { });
+                var oldId = world.GetUuid(a); var newId = Guid.NewGuid(); world.BeginStep();
+                world.PrepareStructuralBatch(() => { world.StageDestroy(oldId); world.StageCreate(newId, "Replacement"); }, _ => { })();
+                var replacement = world.CandidateEntity(newId); Check(replacement.Index == a.Index && replacement.Generation > a.Generation);
+                world.PrepareStructuralBatch(() => world.StageAdd(newId, new("ncma.transform", 1, world.Components.Encode(TransformData.Identity))), _ => { })();
+                CheckPrepared(world, snapshot => Check(snapshot.Objects.Length == 1 && snapshot.Objects[0].PersistentId == newId));
+                Reject(() => world.Resolve(a)); Check(world.Has<TransformData>(replacement));
+            }),
+            ("prepared commits and structural installs reject intervening writes", () => {
+                var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity);
+                world.BeginStep(); var first = world.PrepareStep(); world.Set(a, TransformData.Identity with { Position = new(3, 0, 0) }); Reject(first);
+                var second = world.PrepareStructuralBatch(() => world.StageRename(world.GetUuid(a), "candidate"), _ => { });
+                world.Set(a, TransformData.Identity with { Position = new(4, 0, 0) }); Reject(second);
+                world.CommitStep(); Check(world.GetName(a) == "A" && world.Get<TransformData>(a).Position.X == 4); Reject(first);
+                world.BeginStep(); var aborted = world.PrepareStep(); world.AbortStep(); world.BeginStep(); Reject(aborted); world.AbortStep();
+            }),
+            ("cold converters reencode on every preparation and obey mutation guard", () => {
+                var registry = new ComponentRegistry(); registry.Register<Dynamic>("dynamic", 1,
+                    """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
+                DynamicConverter.Text = "x"; DynamicConverter.OnWrite = null;
+                var world = new World(components: registry); world.Set(world.CreateEntity("A"), new Dynamic(1)); world.FixedStep(() => { });
+                world.BeginStep(); var prepared = world.PrepareStep(); int first = world.PreparedSnapshotBytes;
+                DynamicConverter.Text = "longer"; _ = world.PrepareStep(); Check(world.PreparedSnapshotBytes == first + 5);
+                DynamicConverter.OnWrite = () => world.CreateEntity("forbidden"); Reject(() => world.PrepareStep());
+                DynamicConverter.OnWrite = null; Reject(prepared); Reject(world.CommitStep);
+                world.AbortStep(); Check(world.Count == 1); DynamicConverter.Text = "x";
+            }),
+            ("computed getters cannot reuse stale encodings", () => {
+                var registry = new ComponentRegistry(); registry.Register<Computed>("computed", 1,
+                    """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
+                Computed.Bias = 0; var world = new World(components: registry); world.Set(world.CreateEntity("A"), new Computed { Value = 1 });
+                world.FixedStep(() => { }); world.BeginStep(); _ = world.PrepareStep(); int first = world.PreparedSnapshotBytes;
+                Computed.Bias = 1000; _ = world.PrepareStep(); Check(world.PreparedSnapshotBytes == first + 3);
+                world.AbortStep(); Computed.Bias = 0;
+            }),
+            ("cold output retains per-component payload and schema checks", () => {
+                var registry = new ComponentRegistry(); registry.Register<Dynamic>("dynamic", 1,
+                    """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
+                DynamicConverter.Text = "x"; var world = new World(components: registry); world.Set(world.CreateEntity("A"), new Dynamic(1)); world.FixedStep(() => { });
+                world.BeginStep(); DynamicConverter.Text = new string('x', ComponentRegistry.MaxPayloadBytes); Reject(world.CommitStep); world.AbortStep();
+                DynamicConverter.Text = "x"; world.FixedStep(() => { });
+                var badRegistry = new ComponentRegistry(); badRegistry.Register<TextData>("text", 1,
+                    """{"type":"object","required":["text"],"properties":{"text":{"type":"integer"}}}""", v => v);
+                var bad = new World(components: badRegistry); bad.Set(bad.CreateEntity("bad"), new TextData("not integer"));
+                bad.BeginStep(); Reject(bad.CommitStep); bad.AbortStep(); Check(bad.Tick == 0);
+            }),
+            ("exact aggregate boundary rejects normalized growth without corrupting cache", () => {
+                string? normalized = null; var world = TextWorld(v => normalized is null ? v : new TextData(normalized));
+                for (int i = 0; i < 64; ++i) world.Set(world.CreateEntity("Full"), new TextData(new string('x', 65000)));
+                var edge = world.CreateEntity("Edge"); world.Set(edge, new TextData(""));
+                int remaining = World.MaxSnapshotBytes - SceneJson.EncodeBounded(world.CaptureSnapshot(), World.MaxSnapshotBytes).Length;
+                Check(remaining > 0 && remaining < 65000); world.Set(edge, new TextData(new string('x', remaining)));
+                world.BeginStep(); CheckPrepared(world); Check(System.Text.Encoding.UTF8.GetByteCount(world.SerializeSnapshot()) == World.MaxSnapshotBytes);
+                string before = world.SerializeSnapshot(); normalized = new string('x', remaining + 1);
+                world.BeginStep(); world.Set(edge, new TextData("small raw input")); Reject(world.CommitStep); world.AbortStep(); normalized = null;
+                Check(world.SerializeSnapshot() == before); world.BeginStep(); CheckPrepared(world);
+            }),
+            ("random dirty and structural steps equal independently captured JSON", () => {
+                var random = new Random(310218); var world = TextWorld();
+                for (int i = 0; i < 30; ++i) world.Set(world.CreateEntity("A"), new TextData("v" + i));
+                for (int i = 0; i < 160; ++i) {
+                    var live = world.GetEntities(); var a = live[random.Next(live.Count)]; string old = world.SerializeSnapshot();
+                    world.BeginStep(); world.Set(a, new TextData(new string('界', random.Next(50))));
+                    if (i % 3 == 0) world.StageRename(world.GetUuid(a), "changed😀" + i);
+                    if (i % 7 == 0) { world.StageDestroy(world.GetUuid(a)); world.StageCreate(Guid.NewGuid(), "new" + i); }
+                    string? prepared = null; var commit = world.PrepareStep(s => prepared = JsonSerializer.Serialize(s, SceneJson.Options));
+                    Check(world.PreparedSnapshotBytes == System.Text.Encoding.UTF8.GetByteCount(prepared!));
+                    if (i % 11 == 0) { world.AbortStep(); Check(world.SerializeSnapshot() == old); }
+                    else { commit(); Check(world.SerializeSnapshot() == prepared); }
+                    // New empty entities are intentionally kept valid and receive their component off-frame.
+                    foreach (var entity in world.GetEntities()) if (!world.Has<TextData>(entity)) world.Set(entity, new TextData("new"));
+                }
+            }),
+        };
+        int failures = 0;
+        foreach (var test in cases) { try { test.Run(); Console.WriteLine("PASS incremental validation " + test.Name); }
+            catch (Exception error) { failures++; Console.Error.WriteLine("FAIL incremental validation " + test.Name + ": " + error); }
+            finally { DynamicConverter.OnWrite = null; DynamicConverter.Text = "x"; } }
+        Console.WriteLine($"Incremental validation tests: {cases.Length - failures}/{cases.Length} passed."); return failures;
+    }
+}

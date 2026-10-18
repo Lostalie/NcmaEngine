@@ -165,7 +165,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 Invoke(item, "enable", item.Behaviour.DispatchEnable);
             }
             Action? render = null;
-            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world, reset: true));
+            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world.CopySnapshot(), reset: true));
             commit(); render!(); // Initialization is committed, but is not a simulated Tick.
             State = PlayState.Running; _phase = "control"; _current = null;
         }
@@ -297,7 +297,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 if (item.Binding.Enabled) { item.Activated = true; Invoke(item, "reload_enable", item.Behaviour.DispatchEnable); }
             }
             Action? render = null;
-            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world, reset: true));
+            Action commit = _facade.PreparePhase(world => render = _render.Prepare(world.CopySnapshot(), reset: true));
             commit(); render!(); State = PlayState.Paused; Fault = null; _phase = "control"; _current = null;
             return Status;
         }
@@ -391,9 +391,10 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             Action commit = _facade.PreparePhase(world =>
             {
                 long a = Stamp(); metadata = _document.PrepareRuntimeStep(world, _commands.Bindings); long b = Stamp();
-                instances = PrepareInstances(world, _commands.Bindings); long c = Stamp();
-                receipts = _commands.PrepareReceipts(world); long d = Stamp();
-                render = _render.Prepare(world); long e = Stamp();
+                var snapshot = world.CopySnapshot(); // E3-C will remove these remaining DTO consumers.
+                instances = PrepareInstances(snapshot, _commands.Bindings); long c = Stamp();
+                receipts = _commands.PrepareReceipts(snapshot); long d = Stamp();
+                render = _render.Prepare(snapshot); long e = Stamp();
                 metadataTime = b - a; instanceTime = c - b; receiptsTime = d - c; renderTime = e - d;
             });
             worldAt = Stamp();

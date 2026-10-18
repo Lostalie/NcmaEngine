@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Ncma.Runtime.Tests" />
+    <InternalsVisibleTo Include="Ncma.Scene.Tests" />
     <InternalsVisibleTo Include="Ncma.Animation" />
     <InternalsVisibleTo Include="Ncma.Movement" />
     <InternalsVisibleTo Include="Ncma.Application.Runtime" />

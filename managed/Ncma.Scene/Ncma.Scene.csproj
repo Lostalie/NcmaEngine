@@ -8,6 +8,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Ncma.Editor.Core" />
     <InternalsVisibleTo Include="Ncma.Gameplay" />
+    <InternalsVisibleTo Include="Ncma.Scene.Tests" />
     <ProjectReference Include="../Ncma.Runtime/Ncma.Runtime.csproj" />
   </ItemGroup>
 </Project>

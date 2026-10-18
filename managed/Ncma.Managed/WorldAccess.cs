@@ -91,17 +91,15 @@ public sealed partial class SceneWorld
         return count;
     }
     internal void BeginPhase(bool initialization = false) { Verify(); Runtime.BeginStep(initialization); _phase = true; }
-    internal Action PreparePhase(Action<Ncma.Runtime.WorldSnapshot>? inspect = null, bool preflight = false)
+    internal Action PreparePhase(Action<Ncma.Runtime.World.PreparedStepView>? inspect = null, bool preflight = false)
     {
         Verify();
         if (!_phase) throw new InvalidOperationException("No active gameplay phase.");
         List<GameplaySignal>? ready = null;
-        Action commit = Runtime.PrepareStep(world =>
+        Action commit = Runtime.PrepareStepView(world =>
         {
-            var alive = world.Objects.Select(o => o.PersistentId).ToHashSet();
-            var entities = Runtime.GetEntities().Where(o => alive.Contains(Runtime.GetUuid(o))).ToHashSet();
-            ready = _ready.Where(s => !_consumed.Contains(s.Sequence) && entities.Contains(s.Source) && entities.Contains(s.Target))
-                .Concat(_pendingSignals.Where(s => entities.Contains(s.Source) && entities.Contains(s.Target))).ToList();
+            ready = _ready.Where(s => !_consumed.Contains(s.Sequence) && world.Contains(s.Source) && world.Contains(s.Target))
+                .Concat(_pendingSignals.Where(s => world.Contains(s.Source) && world.Contains(s.Target))).ToList();
             if (ready.Count > AccessCapacity) throw new InvalidOperationException("Signal capacity exceeded.");
             inspect?.Invoke(world);
         }, requireAuthorityWrites: !preflight);

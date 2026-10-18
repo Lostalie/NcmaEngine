@@ -93,7 +93,11 @@ internal sealed class ComponentPool<T> : IComponentPool where T : struct, ICompo
     }
     // Boxing is confined to heterogeneous document decoding, never Get<T>/Set<T> storage.
     public void SetDecoded(int slot, object value) => Set(slot, (T)value);
-    public JsonElement Encode(int slot) => JsonSerializer.SerializeToElement(Get(slot), SceneJson.Options);
+    public JsonElement Encode(int slot)
+    {
+        using var document = JsonDocument.Parse(SceneJson.EncodeBounded(Get(slot), ComponentRegistry.MaxPayloadBytes));
+        return document.RootElement.Clone();
+    }
 }
 
 internal sealed class ComponentStorage
@@ -114,6 +118,7 @@ internal sealed class ComponentStorage
 
     internal bool Has(int slot, Type type) => _pools.TryGetValue(type, out var pool) && pool.Has(slot);
     internal IComponentPool? FindPool(Type type) => _pools.GetValueOrDefault(type);
+    internal IEnumerable<Type> TypesAt(int slot) => _pools.Where(pair => pair.Value.Has(slot)).Select(pair => pair.Key);
     internal T Get<T>(int slot) where T : struct, IComponent =>
         _pools.TryGetValue(typeof(T), out var pool) ? ((ComponentPool<T>)pool).Get(slot) :
             throw new ArgumentException("Component is not attached.");
