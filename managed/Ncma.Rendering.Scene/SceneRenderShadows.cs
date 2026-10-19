@@ -14,14 +14,14 @@ public sealed partial class SceneRenderSession
     private void InitializeShadows(SceneDocumentSnapshot startup,PreparedShadowLibrary? high)
     {
         var selection=SceneShadowState.Read(startup);
-        if(selection!=SceneShadowState.Read(_world,WorldId))throw new ArgumentException("Stale startup shadow selection.");
+        if(selection!=SceneShadowState.Read(_shadowReader,WorldId))throw new ArgumentException("Stale startup shadow selection.");
         if(_hasGeometry&&selection?.Quality==SceneShadowQuality.High&&high is null)throw new ArgumentException("High scene shadows require an explicitly admitted source-free library.");
         _highShadows=high;_shadowObserved=_shadowPrepared=selection;_shadowObservedRevision=_world.Revision;
     }
     private SceneShadowData? ObserveShadowSelection()
     {
         SceneEnvironmentState.VerifyBoundary(_world,WorldId);
-        if(_shadowObservedRevision!=_world.Revision){var current=SceneShadowState.Read(_world,WorldId);_shadowObserved=current;_shadowObservedRevision=_world.Revision;}
+        if(_shadowObservedRevision!=_world.Revision){var current=SceneShadowState.Read(_shadowReader,WorldId);_shadowObserved=current;_shadowObservedRevision=_world.Revision;}
         return _shadowObserved;
     }
     private void VerifyPreparedShadows()

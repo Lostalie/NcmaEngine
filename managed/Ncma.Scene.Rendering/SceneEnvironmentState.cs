@@ -13,14 +13,13 @@ public static class SceneEnvironmentState
     public static IDisposable BeginRead(World world, Guid expectedWorld)
     { VerifyBoundary(world, expectedWorld); return world.ReadOnly(); }
     public static EnvironmentLightingData Read(World world, Guid expectedWorld)
+        => Read(new SceneComponentReader<EnvironmentLightingData>(world), expectedWorld);
+    public static EnvironmentLightingData Read(SceneComponentReader<EnvironmentLightingData> reader, Guid expectedWorld)
     {
-        VerifyBoundary(world, expectedWorld);
-        var value=EnvironmentLightingData.Off; int count=0;
-        foreach(global::Ncma.Runtime.Entity obj in world.GetEntities()) if(world.Has<EnvironmentLightingData>(obj)) {
-            if(++count>1)throw new ArgumentException("One scene environment configuration required.");
-            value=EnvironmentLightingData.Validate(world.Get<EnvironmentLightingData>(obj));
-        }
-        return value;
+        ArgumentNullException.ThrowIfNull(reader);
+        int count = reader.ReadSingle(expectedWorld, out var value);
+        if (count > 1) throw new ArgumentException("One scene environment configuration required.");
+        return count == 0 ? EnvironmentLightingData.Off : EnvironmentLightingData.Validate(value);
     }
     public static EnvironmentLightingData Read(SceneDocumentSnapshot snapshot)
     {

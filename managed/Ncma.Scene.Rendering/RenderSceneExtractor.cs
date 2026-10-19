@@ -34,6 +34,8 @@ public sealed class RenderSceneView
 public sealed class RenderSceneExtractor
 {
     private readonly World _world;
+    private readonly SceneGeometryQuery _geometryQuery;
+    private readonly SceneComponentReader<DirectionalLightData> _lightQuery;
     private RenderSceneView? _cached;
     private Guid _assets, _camera;
     private SceneCameraView? _browser;
@@ -41,7 +43,7 @@ public sealed class RenderSceneExtractor
     private bool _skin;
     private IReadOnlyDictionary<Guid, TransformData>? _presentationTransforms;
     private readonly int _owner = Environment.CurrentManagedThreadId;
-    public RenderSceneExtractor(World world) { ArgumentNullException.ThrowIfNull(world); _ = world.Identity; _world = world; }
+    public RenderSceneExtractor(World world) { ArgumentNullException.ThrowIfNull(world); _ = world.Identity; _world = world; _geometryQuery = new(world); _lightQuery = new(world); }
     // Optional owned immutable presentation values; never install them into World.
     public RenderSceneView Extract(PreparedSceneAssets assets, Guid cameraObject, uint width, uint height, SceneCameraView? browserCamera = null, bool gpuSkin = false,
         IReadOnlyDictionary<Guid, TransformData>? presentationTransforms = null)
@@ -55,7 +57,7 @@ public sealed class RenderSceneExtractor
         if (_cached is not null && _cached.WorldId == worldId && _cached.Revision == revision && _assets == assets.Identity &&
             _camera == cameraObject && _browser == browserCamera && _width == width && _height == height && _skin == gpuSkin && ReferenceEquals(_presentationTransforms,presentationTransforms)) return _cached;
         using var read = _world.ReadOnly();
-        var objects = _world.GetEntities(); var diagnostics = new List<SceneRenderDiagnostic>();
+        var diagnostics = new List<SceneRenderDiagnostic>();
         TransformData Transform(global::Ncma.Runtime.Entity obj)=>presentationTransforms is not null && presentationTransforms.TryGetValue(_world.GetUuid(obj),out var t) ? t : _world.Get<TransformData>(obj);
         SceneCameraView? camera = browserCamera;
         if (camera is { } provided && (provided.ObjectId != Guid.Empty || !SceneRenderValidation.Finite(provided.ViewProjection) ||
@@ -64,17 +66,14 @@ public sealed class RenderSceneExtractor
         if (camera is { } b) _ = CameraData.Validate(b.Data);
         if (camera is null && cameraObject != Guid.Empty)
         {
-            global::Ncma.Runtime.Entity? selected = null;
-            foreach (global::Ncma.Runtime.Entity item in objects) if (_world.GetUuid(item) == cameraObject) { selected = item; break; }
-            if (selected is not { } selectedEntity || !_world.Has<CameraData>(selectedEntity) || !_world.Has<TransformData>(selectedEntity)) diagnostics.Add(new(cameraObject, "camera_missing"));
+            if (!_world.TryFindEntity(cameraObject, out var selectedEntity) || !_world.Has<CameraData>(selectedEntity) || !_world.Has<TransformData>(selectedEntity)) diagnostics.Add(new(cameraObject, "camera_missing"));
             else try { camera = CreateCamera(cameraObject, Transform(selectedEntity), _world.Get<CameraData>(selectedEntity), width, height); }
                 catch (ArgumentException) { diagnostics.Add(new(cameraObject, "camera_invalid")); }
         }
         else if (camera is null) diagnostics.Add(new(Guid.Empty, "camera_selection_required"));
         SceneLightView? light = null; int primaryLights = 0;
-        foreach (global::Ncma.Runtime.Entity obj in objects)
+        if (_lightQuery.GetQuery(worldId) is { } lights) foreach (global::Ncma.Runtime.Entity obj in lights)
         {
-            if (!_world.Has<DirectionalLightData>(obj)) continue;
             var data = _world.Get<DirectionalLightData>(obj); if (!data.IsPrimary) continue;
             if (++primaryLights > 1) { diagnostics.Add(new(_world.GetUuid(obj), "multiple_primary_lights")); continue; }
             try
@@ -88,7 +87,7 @@ public sealed class RenderSceneExtractor
         }
         if (primaryLights > 1) light = null; // Never silently select the first light in an invalid committed World.
         var geometry = new List<SceneDrawItem>(); var casters = new List<SceneDrawItem>(); var indices = new Dictionary<Guid, int>();
-        foreach (global::Ncma.Runtime.Entity obj in objects)
+        foreach (global::Ncma.Runtime.Entity obj in _geometryQuery.Read(worldId))
         {
             Guid id = _world.GetUuid(obj);
             if (_world.Has<StaticMeshData>(obj) && _world.Has<SkinnedMeshData>(obj)) { diagnostics.Add(new(id, "geometry_conflict")); continue; }

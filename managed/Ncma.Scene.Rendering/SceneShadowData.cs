@@ -26,13 +26,13 @@ public static class SceneShadowState
     // Absence means the official Medium default; custom pipelines retain their explicit policy
     // until a scene selection is authored. Preserve absence rather than synthesizing a component.
     public static SceneShadowData? Read(World world, Guid expectedWorld)
+        => Read(new SceneComponentReader<SceneShadowData>(world), expectedWorld);
+    public static SceneShadowData? Read(SceneComponentReader<SceneShadowData> reader, Guid expectedWorld)
     {
-        SceneEnvironmentState.VerifyBoundary(world, expectedWorld); SceneShadowData? value = null;
-        foreach (global::Ncma.Runtime.Entity obj in world.GetEntities()) if (world.Has<SceneShadowData>(obj)) {
-            if (value is not null) throw new ArgumentException("At most one scene shadow selection, including Off.");
-            value = SceneShadowData.Validate(world.Get<SceneShadowData>(obj));
-        }
-        return value;
+        ArgumentNullException.ThrowIfNull(reader);
+        int count = reader.ReadSingle(expectedWorld, out var value);
+        if (count > 1) throw new ArgumentException("At most one scene shadow selection, including Off.");
+        return count == 0 ? null : SceneShadowData.Validate(value);
     }
     public static SceneShadowData? Read(SceneDocumentSnapshot snapshot)
     {

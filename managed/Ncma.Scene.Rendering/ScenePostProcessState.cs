@@ -6,14 +6,13 @@ public static class ScenePostProcessState
     private static readonly ComponentRegistry Registry = CreateRegistry();
     private static ComponentRegistry CreateRegistry() { var registry = ComponentRegistry.CreateDefault(); PostProcessData.Register(registry); return registry; }
     public static PostProcessData Read(World world, Guid expectedWorld)
+        => Read(new SceneComponentReader<PostProcessData>(world), expectedWorld);
+    public static PostProcessData Read(SceneComponentReader<PostProcessData> reader, Guid expectedWorld)
     {
-        SceneEnvironmentState.VerifyBoundary(world, expectedWorld);
-        var value = PostProcessData.Off; int count = 0;
-        foreach (global::Ncma.Runtime.Entity obj in world.GetEntities()) if (world.Has<PostProcessData>(obj)) {
-            if (++count > 1) throw new ArgumentException("One scene post-process configuration required, including Off.");
-            value = PostProcessData.Validate(world.Get<PostProcessData>(obj));
-        }
-        return value;
+        ArgumentNullException.ThrowIfNull(reader);
+        int count = reader.ReadSingle(expectedWorld, out var value);
+        if (count > 1) throw new ArgumentException("One scene post-process configuration required, including Off.");
+        return count == 0 ? PostProcessData.Off : PostProcessData.Validate(value);
     }
     public static PostProcessData Read(SceneDocumentSnapshot snapshot)
     {

@@ -17,6 +17,16 @@ internal sealed unsafe partial class CandidatePresentation
     private (SceneRenderSession Scene,EnvironmentLightingData Environment,Guid Assets,ulong Revision,uint Width,uint Height,float Exposure,float Ambient)? _failedEnvironment;
     private string? _scenePreparationError;
     private ulong? _failedEnvironmentCatalog;
+    private Ncma.Runtime.World? _environmentQueryWorld;
+    private SceneComponentReader<EnvironmentLightingData>? _environmentReader;
+    private EnvironmentLightingData ReadEnvironmentSettings(Ncma.Runtime.World world, Guid expectedWorld)
+    {
+        SceneEnvironmentState.VerifyBoundary(world, expectedWorld);
+        if (!ReferenceEquals(_environmentQueryWorld, world)) {
+            _environmentReader = new(world); _environmentQueryWorld = world;
+        }
+        return SceneEnvironmentState.Read(_environmentReader!, expectedWorld);
+    }
     private void SynchronizeEnvironmentCatalog()
     {
         if(_editor?.Environments is not {} environments||_editor.Assets is not {} assets||_failedEnvironmentCatalog==assets.Clock.Revision)return;
@@ -88,7 +98,7 @@ internal sealed unsafe partial class CandidatePresentation
         if(assets is null)return false;
         try {
             var world=_editor.Play?.Document.World??_editor.Document.World;
-            var value=SceneEnvironmentState.Read(world,scene.WorldId);
+            var value=ReadEnvironmentSettings(world,scene.WorldId);
             var request=(scene,value,assets.Assets.Identity,world.Revision,width,height,config.Exposure,config.Ambient);
             if(_failedEnvironment==request)return false;
             if(scene.PreparedEnvironment!=value)scene.RefreshEnvironment(assets,()=>!_closed);
@@ -97,7 +107,7 @@ internal sealed unsafe partial class CandidatePresentation
         }catch(Exception error)when(PreparationError(error)){
             ScenePreparationFailed(error);
             // Preserve installed resources but never submit/pick old pixels as a new World.
-            try{var world=_editor.Play?.Document.World??_editor.Document.World;_failedEnvironment=(scene,SceneEnvironmentState.Read(world,scene.WorldId),assets.Assets.Identity,world.Revision,width,height,config.Exposure,config.Ambient);}catch(Exception e)when(e is ArgumentException or InvalidOperationException){_failedEnvironment=null;}
+            try{var world=_editor.Play?.Document.World??_editor.Document.World;_failedEnvironment=(scene,ReadEnvironmentSettings(world,scene.WorldId),assets.Assets.Identity,world.Revision,width,height,config.Exposure,config.Ambient);}catch(Exception e)when(e is ArgumentException or InvalidOperationException){_failedEnvironment=null;}
             return false;
         }
     }

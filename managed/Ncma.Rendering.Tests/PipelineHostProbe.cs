@@ -75,6 +75,28 @@ internal static class PipelineHostProbe
                 var late=Run((e,a,s)=>++calls>2?throw new ArgumentException("late callback failure"):new Scene3DPipeline(e,a,shadows:s),(p,_,_)=>{captured++;failed=p;});
                 Pass(late.ExitCode==5 && captured==1 && failed is not null && failed.Where((b,i)=>b!=failed[i%4]).Any()==false && late.ShutdownErrors.Length==0, "late factory failure clears without stale pixels and closes");
                 Healthy(Run(Factory(true))); Pass(!GraphicsLoaded(), "Player resources unload after all runs");
+                foreach (bool environmentConflict in new[] { false, true }) {
+                    using var faultOwner = new PlayerRunner(); bool invoked = false; int frames = 0; string? rejected = null;
+                    string expected = environmentConflict ? "ambiguous_environment_configuration" : "ambiguous_render_configuration";
+                    var report = faultOwner.RunForVerification(Options(), plugins, (_,_,_) => frames++, postModules: modules,
+                        trustedInput: (play, _) => {
+                            Pass(!invoked, "E4-C fault probe enters once"); invoked = true;
+                            var presentation = EnvironmentProductEvidence.Field<PlayerPresentation>(faultOwner, "presentation");
+                            presentation.Present(play, (_,_,_) => frames++); // Warm the real host and retained query plans.
+                            // Trusted test fault injection at a committed boundary, not a gameplay/Agent capability.
+                            for (int i = 0; i < 2; i++) {
+                                var obj = play.Document.World.CreateEntity("E4-C duplicate setting");
+                                if (environmentConflict) play.Document.World.Set(obj, EnvironmentLightingData.Off);
+                                else play.Document.World.Set(obj, RenderConfiguration.Default(Guid.NewGuid()));
+                            }
+                            try { presentation.Present(play, (_,_,_) => frames++); }
+                            catch (ArgumentException error) { rejected = error.Message; throw; }
+                        });
+                    Pass(invoked && rejected == expected && report.ExitCode == 5 && frames == 1 &&
+                        report.ShutdownErrors.Length == 0 && faultOwner.LastPresentationFailure is not null,
+                        "E4-C Player duplicate setting faults before another presentation and closes: " + expected);
+                    Pass(!GraphicsLoaded(), "E4-C failed Player releases graphics");
+                }
             }
             else Pass(!GraphicsLoaded(), "Null no graphics native modules");
         }
@@ -100,7 +122,29 @@ internal static class PipelineHostProbe
                         editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);return pixels??[];
                     }
                     var image=Draw(); Image(image,"Editor mode "+mode); var size=editor.VerificationViewport;
-                    if(mode==0){defaultImage=image;continue;}
+                    if(mode==0){
+                        defaultImage=image;
+                        var editorOwner=editor.VerificationEditor;var world=editorOwner.Document.World;
+                        var original=editorOwner.Document.CaptureSnapshot();Guid oldWorld=world.Identity;
+                        var reader=EnvironmentProductEvidence.Field<SceneComponentReader<RenderConfiguration>>(editor,"_configurationReader");
+                        var originalConfig=EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration");
+                        // Deliberately malformed trusted extension state, not an authoring permission bypass.
+                        var first=world.CreateEntity("E4-C setting");var selected=RenderConfiguration.Default(Guid.NewGuid()) with{Exposure=.5f};world.Set(first,selected);
+                        Draw();Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==selected,"E4-C Editor observes one setting");
+                        var second=world.CreateEntity("E4-C duplicate");world.Set(second,selected with{Exposure=2});Draw();
+                        Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==selected,"E4-C Editor duplicate preserves last valid setting");
+                        var log=EnvironmentProductEvidence.Field<ApplicationLog>(editor,"_log");
+                        Pass(log.Snapshot.Any(e=>e.Code=="render.ambiguous_configuration"&&e.Level=="warning"),"E4-C duplicate warning remains visible");
+                        world.Set(first,selected with{Exposure=.25f});Draw();
+                        Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==selected,"E4-C value mutation does not pick an ambiguous setting");
+                        world.Destroy(second);Draw();
+                        Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")== (selected with{Exposure=.25f}),"E4-C unique setting recovers after member removal");
+                        editorOwner.Document.RestoreSnapshot(original);
+                        Pass(Draw().SequenceEqual(image)&&world.Identity!=oldWorld,"E4-C Restore rebuilds resources and restores exact viewport");
+                        Pass(ReferenceEquals(reader,EnvironmentProductEvidence.Field<SceneComponentReader<RenderConfiguration>>(editor,"_configurationReader"))&&
+                            EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==originalConfig,"E4-C retained reader rebuilds its plan, absent setting uses original default");
+                        continue;
+                    }
                     Pass(!image.SequenceEqual(defaultImage!),"Editor uses custom stage/final Tone");
                     if(mode==1)stageImage=image;else Pass(image.SequenceEqual(stageImage!),"Editor full graph/stage parity");
                     var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;

@@ -111,6 +111,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     private uint _viewWidth, _viewHeight;
     private ulong _configurationRevision = ulong.MaxValue;
     private Guid _configurationWorld;
+    private Ncma.Runtime.World? _configurationQueryWorld;
+    private Ncma.Scene.Rendering.SceneComponentReader<RenderConfiguration>? _configurationReader;
     private RenderConfiguration _configuration;
     private EditorSessionOwner? _editor;
     private EditorAssetWorkflow? _assetWorkflow;
@@ -428,10 +430,12 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             if(_viewportTarget is not null){x=0;y=0;width=_viewportTarget.Width;height=_viewportTarget.Height;}
             var configurationWorld=_editor.Play?.Document.World??_editor.Document.World;
             if (_configurationRevision != configurationWorld.Revision || _configurationWorld != configurationWorld.Identity) {
-                var objects = configurationWorld.GetEntities();
-                var configurations=objects.Where(item=>configurationWorld.Has<RenderConfiguration>(item)).Take(2).ToArray();
-                if(configurations.Length>1) _log!.Write("warning","render.ambiguous_configuration","Multiple render configurations; keeping the last valid configuration.",_correlation);
-                else _configuration=configurations.Length==1?configurationWorld.Get<RenderConfiguration>(configurations[0]):RenderConfiguration.Default(_editor.Edit.SessionId);
+                if (!ReferenceEquals(_configurationQueryWorld, configurationWorld)) {
+                    _configurationReader = new(configurationWorld); _configurationQueryWorld = configurationWorld;
+                }
+                int configurations = _configurationReader!.ReadSingle(configurationWorld.Identity, out var selectedConfig);
+                if(configurations>1) _log!.Write("warning","render.ambiguous_configuration","Multiple render configurations; keeping the last valid configuration.",_correlation);
+                else _configuration=configurations==1?selectedConfig:RenderConfiguration.Default(_editor.Edit.SessionId);
                 _configurationRevision=configurationWorld.Revision; _configurationWorld=configurationWorld.Identity;
             }
             if(_presenter?.UiWorkspaceActive==true||_presenter?.GraphWorkspaceActive==true){

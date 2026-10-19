@@ -14,7 +14,7 @@ public sealed partial class SceneRenderSession
         _postReady&&!_postViewEmpty&&_postPrepared==_postObserved&&_postEnvironment==_environment); } }
     private void InitializePostProcess(PostProcessRuntime? runtime,PostProcessData startup)
     {
-        _postRuntime=runtime;var current=ScenePostProcessState.Read(_world,WorldId);
+        _postRuntime=runtime;var current=ScenePostProcessState.Read(_postReader,WorldId);
         if(startup!=current)throw new ArgumentException("Stale startup post-process settings.");
         if(runtime is null&&current.Enabled)throw new ArgumentException("Enabled post processing requires explicit trusted runtime.");
         if(runtime is not null){using var read=SceneEnvironmentState.BeginRead(_world,WorldId);runtime.VerifyFor(_renderer);_=runtime.Validate(current);}
@@ -22,7 +22,7 @@ public sealed partial class SceneRenderSession
     }
     private void VerifyPreparedPostProcess()
     {
-        if(_postObservedRevision!=_world.Revision){_postObserved=ScenePostProcessState.Read(_world,WorldId);_postObservedRevision=_world.Revision;}
+        if(_postObservedRevision!=_world.Revision){_postObserved=ScenePostProcessState.Read(_postReader,WorldId);_postObservedRevision=_world.Revision;}
         if(_postRuntime is null){if(_postObserved.Enabled)throw new InvalidOperationException("Post runtime must be prepared before enabling post processing.");return;}
         if(_hasGeometry&&!_postViewEmpty&&(!_postReady||_postObserved!=_postPrepared||_postEnvironment!=_environment))throw new InvalidOperationException("Post view requires explicit off-frame preparation.");
     }
@@ -33,7 +33,7 @@ public sealed partial class SceneRenderSession
         var runtime=_postRuntime!;_environmentPreparing=true;
         try {
             runtime.VerifyFor(_renderer);
-            var value=runtime.Validate(ScenePostProcessState.Read(_world,WorldId));
+            var value=runtime.Validate(ScenePostProcessState.Read(_postReader,WorldId));
             var selection=ObserveShadowSelection();
             var view=_extractor.Extract(_resources.Metadata,browserCamera is null?sceneCamera:Guid.Empty,width,height,browserCamera,_animation is not null);
             // A culled/missing-camera view has no installed candidate. Do not stamp old GPU state

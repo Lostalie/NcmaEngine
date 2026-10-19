@@ -26,6 +26,9 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     private SceneUiInput? _uiInput;
     private readonly Ncma.Ui.Rendering.UiWindowInput _uiWindowInput = new();
     private Guid _camera;
+    private Ncma.Runtime.World? _settingsWorld;
+    private Ncma.Scene.Rendering.SceneComponentReader<RenderConfiguration>? _configurationReader;
+    private Ncma.Scene.Rendering.SceneComponentReader<Ncma.Scene.Rendering.EnvironmentLightingData>? _environmentReader;
     private readonly WindowInputAccumulator _input = new();
     private WindowState _state;
     private readonly ulong[] _held = new ulong[8], _pressed = new ulong[8], _released = new ulong[8];
@@ -137,15 +140,18 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     {
         var renderer=_renderer??throw new InvalidOperationException("Player presentation is not started.");
         if (!_windowSurface!.Prepare(_state)) { _window!.Wait(.01); return; }
-        var objects = play.Document.World.GetEntities();
-        var configurations = objects.Where(o => play.Document.World.Has<RenderConfiguration>(o)).Take(2).ToArray();
-        if (configurations.Length > 1) throw new ArgumentException("ambiguous_render_configuration");
-        var config = configurations.Length == 1 ? play.Document.World.Get<RenderConfiguration>(configurations[0]) : RenderConfiguration.Default(play.SessionId);
+        var world = play.Document.World;
+        if (!ReferenceEquals(_settingsWorld, world)) {
+            _configurationReader = new(world); _environmentReader = new(world); _settingsWorld = world;
+        }
+        int configurations = _configurationReader!.ReadSingle(world.Identity, out var selectedConfig);
+        if (configurations > 1) throw new ArgumentException("ambiguous_render_configuration");
+        var config = configurations == 1 ? selectedConfig : RenderConfiguration.Default(play.SessionId);
         ulong frame = ++_frame;
         var follow=Ncma.Characters.CharacterPlayRuntime.FollowView(play,_camera,_state.FramebufferWidth,_state.FramebufferHeight);
-        var environments=objects.Where(o=>play.Document.World.Has<Ncma.Scene.Rendering.EnvironmentLightingData>(o)).Take(2).ToArray();
-        if(environments.Length>1)throw new ArgumentException("ambiguous_environment_configuration");
-        var environment=environments.Length==1?play.Document.World.Get<Ncma.Scene.Rendering.EnvironmentLightingData>(environments[0]):Ncma.Scene.Rendering.EnvironmentLightingData.Off;
+        int environments=_environmentReader!.ReadSingle(world.Identity,out var selectedEnvironment);
+        if(environments>1)throw new ArgumentException("ambiguous_environment_configuration");
+        var environment=environments==1?selectedEnvironment:Ncma.Scene.Rendering.EnvironmentLightingData.Off;
         try {
             _ui?.PrepareView(new(_state.FramebufferWidth,_state.FramebufferHeight,_state.ScaleX,default));
             if(_scene!.PreparedEnvironment!=environment)_scene.RefreshEnvironment(_assets!,()=>!_disposed);

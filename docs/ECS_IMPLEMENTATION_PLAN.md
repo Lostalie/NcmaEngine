@@ -516,3 +516,76 @@ E4-A审计片完成，下一片是E4-B角色/动画查询与身份访问适配�
 - 首轮Debug88/89渲染超时和早期测试夹具错误完整保留，首次超时根因仍未证明；未修改产品、超时或断言来换取通过，没有终止残留进程或删除失败文件。双配置自动候选通过不等于无偶发故障保证或性能验收。
 
 本片自动候选完成，提交推送后再推进E4-C渲染提取/设置查询。E4-C/D/E、E5、M8.3尚未完成/开始；ECS-PERF-01/02以及人工、目标机、自包含、完整整帧性能、1h和历史File.Replace调查保持开放。正式EXE未更新。
+
+### 10.7 E4-C 渲染提取与设置查询：自动候选验证完成
+
+E4-B已提交推送 `1ef60366bdf3ad4a7107266ea887784d3573095f`，本地与远端已核对。E4-C已完成下列实现及同冻结自动候选验证，提交交付后再进入E4-D；不表示整个E4或性能门禁完成。
+
+- `SceneComponentReader<T>`由消费者持有，读取已提交World；可选类型未注册时返回空，查询容量随World规模从16增长至4096，完整成员计数不截断，只有唯一成员才返回值副本。先校验expectedWorld/owner/提交边界，再重建Restore后的计划；不缓存组件值，不扩大权限。
+- 内部几何并集缓存按World身份与MembershipVersion刷新，合并静态/蒙皮、去重后保持创建顺序，不过滤缺Transform、双几何等错误。Extractor保留Revision/资产/相机/视口/插值等完整缓存键，显式相机改为TryFindEntity，灯光改为可复用类型查询；独立阴影集合不变。
+- 环境/后处理/阴影设置读者及SceneRenderSession间接消费者复用计划；Editor和Player各自持有配置读者，前者重复配置保留last-valid并告警，后者仍抛原错误。冷启动静态读取仍可创建短命读者，不是每帧全局缓存或第二World。
+- E4-C范围7处GetEntities调用已替换。按原过滤规则生产残留6行（1定义、5调用），分别是E4-D待迁移与权威/用户显式副本合同；不删除现役复制API。
+- 新增12组基础用例：可选类型、重复Off、值更新与成员版本分离、陈旧/外World、线程/提交边界、4096容量增长、暖态分配、混合成员/错误诊断及创建顺序/槽位复用。第二轮Debug/Release **133/133**，真实Rendering.Tests消费者均编译成功、0警告；会话10903结束exit0。日志 `out/ecs-e4c-scene-{Debug,Release}-targeted-second.log`、`out/ecs-e4c-rendering-{Debug,Release}-build-second.log`。
+- 首轮65463结束exit1：暖态测试只预热读取，未预热生成的TransformData相等比较器，分配断言失败。隔离测量两配置均显示读取0B、首次相等比较88B、完整表达式预热后0B；修正测试预热范围并同时保留读取/完整表达式严格0B断言，未改变产品或放宽阈值。原日志保留，局部0B不代表整帧性能通过。
+
+以下按发生顺序保留候选补测、冻结与完整回归记录；历史“进行中”不代表当前仍有对应测试会话。最终状态以本节末尾的交付核验为准。
+
+后续进展（覆盖上述待补测试）：新增4096混合/重复几何容量用例，基础测试第三轮两配置 **134/134**。现役PipelineHostProbe增加真实故障注入：Player先成功呈现一帧并预热查询，注入重复配置/环境后验证准确原错误、exit5、无后续呈现及正常释放；Editor检查重复设置告警、last-valid、重复期间值改变不选错对象、移除重复后恢复、新World身份及精确原视口恢复，同一读者实例可重建计划。源宿主两配置各 **177 checks**，构建均0警告；会话33825结束exit0，日志 `out/ecs-e4c-{scene,host}-{Debug,Release}-targeted-third.log` 和 `out/ecs-e4c-rendering-{Debug,Release}-build-third.log`。测试仅使用既有可信探针，没有新增产品写入/授权后门；尚不能以源宿主测试代替搬移候选包测试。
+
+最终候选冻结 **944文件**：`out/verification/ecs-e4c/source-freeze-first.json` SHA256 **F09131174EDEB4B0AFF3D79A3DDC092ACA0A2B4DCC5A1855C09A4F5D1F423821**。各轮均计划顺序执行标准Debug/Release构建（SkipTests只把全89测试移至外层并禁止部署）、完整CTest、smoke/Python45/inspect及前后冻结核验。首轮脚本 `out/verification/ecs-e4c/run-gates-first.ps1`、总日志 `out/ecs-e4c-gates-first.log`的失败终态见下文；正式EXE仍为E1-B，不部署。
+
+首轮标准Debug构建成功，候选 `79040c18ea6940629fcac5414aa2f684`，未发现编译警告；该轮未获得完整双配置结论。只读历史性能证据核验通过：E3-D修复归档18输入/6日志、原939冻结与分位数证明未变；日志 `out/ecs-e4c-deferred-performance-first.log` SHA256 `B4BE5E4CD20B71A6A32C18D01811ED5C864C83020C893559325BC7613923626A`。这仅证明证据保留，不是新性能测量或验收。
+
+#### E4-C 首轮完整回归失败与原条件复测
+
+会话15355已结束exit1，不能继续轮询。首轮完整Debug **88/89，1128.43秒**；唯一失败为`NcmaSceneDocumentTests`完整保存用例，未修改的`SceneDocumentFiles.Save:60`在`File.Replace`抛出IOException“无法删除要被替换的文件”（测试第209行）。其余88项通过，包括主渲染177.21秒、真实源与搬移候选管线宿主 **657 checks**、SceneRendering **134/134**。Release和补充门禁尚未执行，首轮不能记作完整通过。
+
+失败目录`out/tests/scene-document-f60e91b9a2cf48528c818622f308bcac`及同次另外6个测试目录保持原样。只读核对目标`Scene.ncmascene`仍为964字节、可解析的Scene v1，Logic的Health为100，SHA256 `4B02C729B66528013BC313041445C30A2212C1AB460DA0632DE664DDF7EBA28F`；缺少失败前独立哈希，故不宣称已证明逐字节回滚。目录/文件清单证据`out/ecs-e4c-scene-failure-inspection-first.log` SHA256 `6840EEFFFE9281EADE8BA9382D7ABC432B71604386FBFE160D352BCD8422B8D6`。
+
+原CTest单独复测 **1/1，1.23秒**，Scene原36/36及运行时文档11/11通过；测试自身创建全新目录，没有再次替换失败目标。日志`out/ecs-e4c-scene-recheck-debug-first.log`及`scene-recheck-debug-details-first.log`保留。未改产品、断言、原子写策略或944文件冻结；没有删除、强制覆盖、关闭锁持有者或忽略异常。根因仍未证明，历史File.Replace调查不关闭。
+
+第二轮会话 **6955** 使用`out/verification/ecs-e4c/run-gates-second.ps1`，总日志`out/ecs-e4c-gates-second.log`，保持同一944冻结。该轮在构建阶段失败，未执行交付核验；正式EXE和E3-D性能未达标状态不变。
+
+第二轮随后结束exit1：标准Debug构建在可选gRPC项目恢复时触发`NU1900`，无法获取官方NuGet漏洞数据源；没有进入第二轮CTest、补充或Release。默认沙箱中的只读curl也遇到Schannel凭据错误。经联网提权执行相同锁定依赖恢复`dotnet restore managed/Ncma.Modules.Grpc.Tests/Ncma.Modules.Grpc.Tests.csproj --locked-mode --force --nologo`成功，日志`out/ecs-e4c-nuget-restore-first.log`；未改版本/锁文件，未关闭漏洞审计、忽略失败源或降低警告级别。
+
+第三轮会话 **45145** 使用`run-gates-third.ps1`，总日志`out/ecs-e4c-gates-third.log`，仍使用原944冻结。该轮在完整Debug测试阶段失败，未执行补充测试或Release；首轮保存失败及第二轮网络恢复失败全部保留，不能继续轮询或重启已结束会话。
+
+第三轮标准Debug构建通过，候选`b6a43637a3dc4611874ba408327a34f8`，未发现编译警告。日志含一处PowerShell 5对用户Git ignore读取权限提示的NativeCommandError包装；交付辅助核验仅按完全匹配的六行记录将其分类为非编译诊断，原日志/哈希保留并单独报告计数，不忽略其他PowerShell错误、编译警告或测试失败。该辅助分类器的真实记录、变更路径、插入编译警告、插入无关错误4项检查通过；产品源码与测试断言未改动。
+
+第三轮完整Debug最终为 **87/89，1202.61秒**（会话45145终态exit1）：`NcmaModuleTests.Grpc`在错误凭据负例中收到Schannel“安全包中没有可用的凭证”，尚未进入预期Unauthenticated应用鉴权路径；`RelocatedClient`报告startup_failed后生命周期等待超时。原场景保存测试本轮36/36通过，Runtime文档11/11、渲染基础134/134、源/搬移宿主657检查及主渲染189.93秒通过，但不能拼成完整通过。
+
+两个原始模块CTest在批准的正常Windows/TLS环境下原条件复测 **2/2，39.44秒**（34.24/5.18秒），会话22040终态exit0；日志`out/ecs-e4c-module-recheck-debug-first.log`及对应details-first。未改鉴权状态码、证书校验、超时、源码或依赖/审计配置。该结果支持执行环境差异的判断，不证明首轮File.Replace根因。
+
+第四轮会话 **52983** 经批准在上述环境运行`run-gates-fourth.ps1`，已结束exit0：同一944冻结，重新标准Debug/Release、完整89项及补充验证；总日志`out/ecs-e4c-gates-fourth.log`，build/CTest/details/补充外层为fourth，此前未执行过的smoke/Python/inspect为first。随后`verify-delivery-fourth.ps1`核验通过，包括首轮7个原测试目录的完整文件SHA/大小清单未变。原始失败与独立复测均保留，没有把第三轮87/89与独立2/2相加冒充一次完整门禁。
+
+#### 最终双配置自动交付核验
+
+| 同一944源码冻结 | Debug FOURTH | Release FOURTH |
+| --- | --- | --- |
+| 标准Build.bat（SkipTests、不部署） | 成功，0编译警告 | 成功，0编译警告 |
+| 完整CTest | 89/89，1106.53秒 | 89/89，1000.40秒 |
+| 主渲染 / 实际源与搬移宿主 | 175.40秒 / 657检查 | 169.57秒 / 657检查 |
+| 渲染基础 / 场景 / 运行时文档 | 134 / 36 / 11通过 | 134 / 36 / 11通过 |
+| 真实TLS / 搬移客户端 | 4583 / 1174检查 | 4583 / 1174检查 |
+| managed/native smoke、Python、inspect | 通过 / 45通过 / 通过 | 通过 / 45通过 / 通过 |
+| 候选代次 | `2076bbfa42084230bb052e3c826d50a6` | `0496eb36a93e409f99c1c39f3e85372b` |
+
+原Runtime13/storage14/identity15/Query17/lookup8/candidate8/paged10、增量验证25/schema6、Gameplay53/batch26/真实Play3/commit12/joint15、Movement38（fake）、UI18/E0fixtures11均通过。暖读严格0B仅为局部断言，不代表整帧性能。双配置构建没有需要分类的Git提示；旧分类器证据仍保留。
+
+最终只读核验`out/ecs-e4c-delivery-verification-fourth.log` SHA256 **B6D8BB7A0DDE2E9BB4045032520529F642D968A31AD18B7E20DC3B7B831ED4DF**通过：同一944冻结；十个当前包与本轮构建代次匹配，每配置manifest为144/56/113/67/116文件；正式安装144清单/148实际、原备份148文件SHA与大小；E0原始18程序集、E3-A原8输入/9日志；前三轮失败日志和首轮7目录完整闭包。原File.Replace根因仍未证明，不将文件保留冒充事前/事后逐字节回滚证明。
+
+E3-D延期性能归档第二次只读核验`out/ecs-e4c-deferred-performance-second.log`通过，SHA仍为 **B4BE5E4CD20B71A6A32C18D01811ED5C864C83020C893559325BC7613923626A**；未重采样或改变ECS-PERF-01/02。正式E1-B安装代次`7f3d3822dd39431b9c203e17194afb8c`及EXE SHA256 **C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61**不变。不是新的no-Skip/旧三轮profile/部署验收；人工、目标机、自包含、整帧性能、1h与历史调查门禁仍开放。
+
+E4-C自动候选完成，下一步限定21个任务文件提交推送并核对远端，排除4项IDE设置和out；E4-D/E未实施，E5与M8.3未开始。全部测试会话已结束，不重启旧会话或覆盖其日志。
+
+### 10.8 E4-D 读取边界准备核对（待E4-C交付后实施）
+
+以下是等待E4-C回归时对现役源码的只读核对，不是E4-D实现或验证结论。
+
+1. `EditorPresenter`的行ID清理可对已记录UUID使用受检`TryFindEntity`，结合确切World身份/成员版本避免选择或目录变化时重新复制全对象列表。`SceneDocument.ObserveWorld`仍须观察每次World Revision并使编辑历史失效，但失效绑定清理仅需在成员/身份变化时扫描已有绑定UUID；Restore、运行时提交、删除/复用和元数据根安装都须同步观察戳。不要改变未被观察期间同UUID重建的既有行为，也不要仅凭成员版本跳过值修订。
+2. `AffectedRenderObjects`是导入事件，不是每帧热点。保留prepared ticket/会话/项目检查，用StaticMesh、SkinnedMesh、ClipPlayback的可选类型查询求并集，再按创建顺序去重输出UUID；空类型注册、双几何、同对象多引用及绑定被删除等情况仍可诊断。不将SceneStartupEntities的UUID排序误用于此接口，不新增导入批准能力。
+3. `ncma.scene.inspect`和`object.inspect`目前每次完整CaptureSnapshot后分页；新读取应面向请求页/对象，仅返回独立DTO，不暴露Entity、内部数组或第二World。**不能直接把全局4MiB/元数据验证变成只验证当前页**：World外部Set只保证单组件验证，未知JsonConverter/计算属性也可能在Revision不变时改变编码。实现前需明确完整验证戳的来源：只有经过现役完整作者/运行时验证且编码稳定性可证明的精确文档/World代次才可走局部读取；外部World变更、未知编码器或无法证明的状态继续走原有有界完整检查，不以缓存掩盖失败。保存、撤销/重做、场景验证、资源恢复及草稿预览继续使用其原完整文档合同。
+
+读取测试须与旧完整codec结果对照：创建顺序与非UUID顺序、删除/复用、换场景与Restore、值更新、元数据排序/异常UTF-16规范化、offset边界/整数溢出、128/64条分页和256KiB输出、返回副本隔离、陈旧session/revision、外线程/未提交边界、编码回调试图写World；特别加入“页外异常编码/全局超预算仍拒绝”的负例。未知编码的冷路径是正确性回退，不是新兼容格式。使用现有捕获计数证明稳定路径没有整文档复制，另保留完整回归；该计数不能代替E5性能测量。
+
+读取与验证还须区分：原`CaptureSnapshot`执行codec/元数据/字节深度等读取检查，并不等于`PrepareRestore`的完整组件schema/作者组合验证。World直接Set的自定义值验证和载荷检查也不是完整schema验证。新检查戳/冷路径必须精确保持原读取前提，不能用`ValidateAuthoring`替换inspect从而隐藏原本可供诊断的数据；增加“可读但scene.validate拒绝”的对照用例，同时保持所有写入/安装的原校验不变。

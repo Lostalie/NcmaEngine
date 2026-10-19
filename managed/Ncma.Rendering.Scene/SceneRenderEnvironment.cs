@@ -20,7 +20,7 @@ public sealed partial class SceneRenderSession
     {
         SceneEnvironmentState.VerifyBoundary(_world,WorldId);
         if(_environmentObservedRevision!=_world.Revision) {
-            var value=SceneEnvironmentState.Read(_world,WorldId);
+            var value=SceneEnvironmentState.Read(_environmentReader,WorldId);
             _environmentObserved=value;_environmentObservedRevision=_world.Revision;
         }
         if(_hasGeometry&&_environmentObserved!=_environment)
@@ -52,7 +52,7 @@ public sealed partial class SceneRenderSession
         RequireExchangeReady();ArgumentNullException.ThrowIfNull(assets);ArgumentNullException.ThrowIfNull(preparationAllowed);
         if(_environmentPreparing)throw new InvalidOperationException("Nonreentrant scene environment preparation.");
         using var read=SceneEnvironmentState.BeginRead(_world,WorldId);
-        var value=SceneEnvironmentState.Read(_world,WorldId);
+        var value=SceneEnvironmentState.Read(_environmentReader,WorldId);
         if(!_hasGeometry){_environmentObserved=value;_environmentObservedRevision=_world.Revision;return;}
         BeginCandidateBundle();var previousApproval=_environmentApproval;_environmentApproval=preparationAllowed;_environmentPreparing=true;bool committed=false;
         try {

@@ -25,6 +25,9 @@ public sealed partial class SceneRenderSession : IDisposable
     private SceneRuntimeShaders? _shaders;
     public SceneRuntimeShaders? PreparedShaders => _shaders;
     private readonly World _world;
+    private readonly SceneComponentReader<EnvironmentLightingData> _environmentReader;
+    private readonly SceneComponentReader<PostProcessData> _postReader;
+    private readonly SceneComponentReader<SceneShadowData> _shadowReader;
     private ulong _submittedFrame,_submittedPose;
     private Guid _publication;
     private AnimationPresentationStamp? _animationStamp;
@@ -58,6 +61,7 @@ public sealed partial class SceneRenderSession : IDisposable
         ArgumentNullException.ThrowIfNull(renderer); ArgumentNullException.ThrowIfNull(cache); ArgumentNullException.ThrowIfNull(world);
         cache.VerifyFor(renderer);
         _renderer = renderer; _cache = cache; _world = world; _extractor = new(world);
+        _environmentReader = new(world); _postReader = new(world); _shadowReader = new(world);
         _readDiagnostics = _diagnostics.AsReadOnly(); WorldId = world.Identity;
     }
     public void Prepare(PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
@@ -85,7 +89,7 @@ public sealed partial class SceneRenderSession : IDisposable
             InitializeShadows(startup,highShadows);
             InitializePostProcess(postProcessing,ScenePostProcessState.Read(startup));
             var environment=SceneEnvironmentState.Read(startup);
-            if(environment!=SceneEnvironmentState.Read(world,WorldId))throw new ArgumentException("Stale startup environment configuration.");
+            if(environment!=SceneEnvironmentState.Read(_environmentReader,WorldId))throw new ArgumentException("Stale startup environment configuration.");
             _environmentObservedRevision=world.Revision;_environmentObserved=environment;
             if(hasGeometry) {
                 if(environment.Enabled||environmentShaders is not null) {
