@@ -5,13 +5,17 @@ public sealed partial class World
     // Derived encoded metadata only; all values and identities remain owned by the sole World.
     // Cached DTO arrays never leave this class. Snapshot callbacks receive fresh array shells.
     private sealed record EncodedComponent(ComponentSnapshot Snapshot, int Bytes, bool Stable);
-    private sealed record EncodedObject(Entry Entry, ObjectSnapshot Snapshot, Dictionary<Type, EncodedComponent> Components, int Bytes, bool Stable);
+    private sealed record EncodedObject(Entry Entry, ObjectSnapshot Snapshot, Dictionary<Type, EncodedComponent> Components, int HeaderBytes, int Bytes, bool Stable);
     private sealed record EncodedWorld(Dictionary<int, EncodedObject> Objects, int HeaderBytes, int Bytes, bool Stable);
     private EncodedWorld? _committedEncoding, _stepEncodingBaseline, _stepPreparedEncoding;
     private ulong _encodingRevision, _stepMutation, _stepPreparedMutation;
     private Guid _stepAttempt;
     private HashSet<int>? _stepDirtySlots;
     private HashSet<(int Slot, Type Type)>? _stepDirtyComponents;
+    // Only proof-eligible immutable value encodings, produced by the normal EVERY-write validator.
+    // Attempt-local, branch-forked and generation-checked; never a second component value store.
+    private readonly record struct ValidatedEncoding(ulong Generation, System.Text.Json.JsonElement Data);
+    private Dictionary<(int Slot, Type Type), ValidatedEncoding>? _stepValidatedEncodings;
     private long _encodedObjectCount, _encodedComponentCount, _copiedValidationSnapshotCount;
     internal (long EncodedObjects, long CopiedSnapshots) ValidationWork
     { get { VerifyAccess(); return (_encodedObjectCount, _copiedValidationSnapshotCount); } }
@@ -31,7 +35,11 @@ public sealed partial class World
     {
         ulong next = checked(_stepMutation + 1);
         _stepDirtySlots!.Add(slot); // Allocation, if any, precedes the actual mutation.
-        if (type is not null) _stepDirtyComponents!.Add((slot, type));
+        if (type is not null)
+        {
+            _stepDirtyComponents!.Add((slot, type));
+            _stepValidatedEncodings!.Remove((slot, type));
+        }
         _stepMutation = next;
     }
     private EncodedWorld PrepareEncoding()
@@ -65,7 +73,9 @@ public sealed partial class World
     private EncodedObject EncodeObject(Entry entry, EncodedObject? prior)
     {
         if (prior?.Entry.Generation != entry.Generation) prior = null;
-        int bytes = SceneJson.MeasureBounded(new ObjectSnapshot(entry.PersistentId, entry.Name, []), MaxSnapshotBytes);
+        int headerBytes = prior is not null && ReferenceEquals(prior.Entry, entry) ? prior.HeaderBytes :
+            SceneJson.MeasureBounded(new ObjectSnapshot(entry.PersistentId, entry.Name, []), MaxSnapshotBytes);
+        int bytes = headerBytes;
         var components = new Dictionary<Type, EncodedComponent>(); bool stable = true;
         foreach (Type type in _stepStorage!.TypesAt(entry.Slot))
         {
@@ -75,7 +85,9 @@ public sealed partial class World
             else
             {
                 var descriptor = Components.Describe(type);
-                var snapshot = new ComponentSnapshot(descriptor.TypeId, descriptor.Version, _stepStorage.FindPool(type)!.Encode(entry.Slot));
+                var data = _stepValidatedEncodings!.TryGetValue((entry.Slot, type), out var validated) && validated.Generation == entry.Generation
+                    ? validated.Data : _stepStorage.FindPool(type)!.Encode(entry.Slot);
+                var snapshot = new ComponentSnapshot(descriptor.TypeId, descriptor.Version, data);
                 Components.ValidateEncoding(snapshot);
                 int size = SceneJson.MeasureBounded(snapshot, MaxSnapshotBytes);
                 current = new(snapshot, size, Components.CanCacheEncoding(type)); _encodedComponentCount++;
@@ -86,7 +98,7 @@ public sealed partial class World
         }
         var result = new ObjectSnapshot(entry.PersistentId, entry.Name,
             components.Values.Select(c => c.Snapshot).OrderBy(c => c.TypeId, StringComparer.Ordinal).ToArray());
-        return new(entry, result, components, bytes, stable);
+        return new(entry, result, components, headerBytes, bytes, stable);
     }
     private WorldSnapshot CopyValidationSnapshot(EncodedWorld encoded)
     {

@@ -7,6 +7,12 @@ using Ncma.Runtime;
 using Ncma.Scene;
 using Ncma.Editor.Core;
 
+internal static class GameplayTestProgram
+{
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    internal static int Run(string[] args)
+    {
+
 static void Check(bool condition, string message = "Assertion failed")
 { if (!condition) throw new InvalidOperationException(message); }
 static void Reject(Action action)
@@ -498,6 +504,8 @@ try { IncrementalGameplayCases.Run(); }
 catch (Exception error) { Console.Error.WriteLine("FAIL incremental gameplay: " + error); return 1; }
 try { IncrementalCommitCases.Run(); }
 catch (Exception error) { Console.Error.WriteLine("FAIL incremental commit: " + error); return 1; }
+try { EcsJointCases.Run(); }
+catch (Exception error) { Console.Error.WriteLine("FAIL E3 joint: " + error); return 1; }
 try { StructuralBatchCases.Run(); }
 catch(Exception error){Console.Error.WriteLine(error);return 1;}
 try { MovementCases.Run(); }
@@ -531,6 +539,8 @@ if (args.Contains("--pressure-benchmark")) PressureProfiles.Run();
 // Always validate the measurement fixtures; opt-in measurements leave existing benchmark output unchanged.
 EcsBaseline.Run(args.Contains("--ecs-baseline"));
 return 0;
+    }
+}
 
 sealed class Probe : Behaviour
 {

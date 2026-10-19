@@ -47,6 +47,45 @@ internal static class IncrementalValidationTests
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("validated payload is last-write normalized and retains delayed schema rejection", () => {
+                int calls = 0; var world = TextWorld(v => { calls++; return new(v.Text.Trim()); });
+                var a = world.CreateEntity("A"); world.Set(a, new TextData("original")); world.FixedStep(() => { });
+                int before = calls; world.BeginStep(); world.Set(a, new TextData(" first ")); _ = world.PrepareStep();
+                world.Set(a, new TextData(" 中文😀\\\"\u0000\ud800 "));
+                string? serialized = null; var install = world.PrepareStep(s => serialized = JsonSerializer.Serialize(s, SceneJson.Options));
+                Check(world.PreparedSnapshotBytes == System.Text.Encoding.UTF8.GetByteCount(serialized!)); install();
+                Check(calls == before + 2 && world.SerializeSnapshot() == serialized);
+                var badRegistry = new ComponentRegistry(); badRegistry.Register<TextData>("bad", 1,
+                    """{"type":"object","required":["text"],"properties":{"text":{"type":"integer"}}}""", v => v);
+                var bad = new World(components: badRegistry); var b = bad.CreateEntity("B"); bad.Set(b, new TextData("before"));
+                bad.BeginStep(); bad.Set(b, new TextData("after")); // Schema rejection stays at preparation, not Set.
+                Reject(bad.CommitStep); bad.AbortStep(); Check(bad.Get<TextData>(b).Text == "before");
+            }),
+            ("validated payload branches remain isolated through discard install abort and slot reuse", () => {
+                var world = TextWorld(); var a = world.CreateEntity("A"); var id = world.GetUuid(a);
+                world.Set(a, new TextData("old")); world.FixedStep(() => { });
+                world.BeginStep(); world.Set(a, new TextData("outer"));
+                _ = world.PrepareStructuralBatch(() => world.Set(a, new TextData("discarded")), _ => { });
+                CheckPrepared(world, s => Check(s.Objects[0].Components[0].Data.GetProperty("text").GetString() == "outer"));
+                world.BeginStep(); world.Set(a, new TextData("before installed"));
+                world.PrepareStructuralBatch(() => world.Set(a, new TextData("installed")), _ => { })();
+                CheckPrepared(world, s => Check(s.Objects[0].Components[0].Data.GetProperty("text").GetString() == "installed"));
+                world.BeginStep(); world.Set(a, new TextData("aborted")); _ = world.PrepareStep(); world.AbortStep();
+                world.BeginStep(); CheckPrepared(world, s => Check(s.Objects[0].Components[0].Data.GetProperty("text").GetString() == "installed"));
+                world.BeginStep(); world.Set(a, new TextData("must not revive")); var next = Guid.NewGuid();
+                world.PrepareStructuralBatch(() => { world.StageDestroy(id); world.StageCreate(next, "new");
+                    world.StageAdd(next, new("text", 1, world.Components.Encode(new TextData("replacement")))); }, _ => { })();
+                var replacement = world.CandidateEntity(next); Check(replacement.Index == a.Index && replacement.Generation != a.Generation);
+                CheckPrepared(world, s => Check(s.Objects[0].Components[0].Data.GetProperty("text").GetString() == "replacement"));
+            }),
+            ("remove then add invalidates a validated payload even within same generation", () => {
+                var world = TextWorld(); var a = world.CreateEntity("A"); var id = world.GetUuid(a);
+                world.Set(a, new TextData("old")); world.FixedStep(() => { }); world.BeginStep(); world.Set(a, new TextData("stale"));
+                world.PrepareStructuralBatch(() => { world.StageRemove(id, "text");
+                    world.StageAdd(id, new("text", 1, world.Components.Encode(new TextData("new")))); }, _ => { })();
+                CheckPrepared(world, s => Check(s.Objects[0].Components[0].Data.GetProperty("text").GetString() == "new"));
+                Check(world.Get<TextData>(a).Text == "new");
+            }),
             ("typed candidate reads copy staged values while public reads stay committed", () => {
                 var world = new World(); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity);
                 var staged = TransformData.Identity with { Position = new(7, 0, 0) };

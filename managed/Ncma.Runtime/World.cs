@@ -28,6 +28,7 @@ public sealed partial class World
     private Guid _identity = Guid.NewGuid();
     private ulong _nextOrdinal = 1, _revision, _tick;
     private ulong _membershipVersion;
+    private long _capturedSnapshotCount;
     private bool _stepMembershipChanged;
     private bool _updating, _preparing, _initializing;
     private int _readOnlyDepth;
@@ -92,9 +93,12 @@ public sealed partial class World
         return Capture(_name, _objects, _storage);
     }
 
-    private WorldSnapshot Capture(string name, Dictionary<int, Entry> objects, ComponentStorage storage) =>
-        new(1, name, objects.OrderBy(pair => pair.Value.CreationOrdinal).Select(pair => new ObjectSnapshot(
+    private WorldSnapshot Capture(string name, Dictionary<int, Entry> objects, ComponentStorage storage)
+    {
+        _capturedSnapshotCount++;
+        return new(1, name, objects.OrderBy(pair => pair.Value.CreationOrdinal).Select(pair => new ObjectSnapshot(
             pair.Value.PersistentId, pair.Value.Name, storage.Capture(pair.Value.Slot, Components))).ToArray());
+    }
 
     private Entity IdentityOf(Entry entry) => new(_identity, entry.Slot, entry.Generation);
 
@@ -272,14 +276,17 @@ public sealed partial class World
         VerifyComponentAuthority(entry.PersistentId, type, authority);
         if (!_storage.Has(entry.Slot, type)) { VerifyObjectStructure(entry.PersistentId); VerifyComponentTopology(type); }
         T validated;
+        JsonElement encoding;
         _preparing = true;
-        try { validated = Components.Validate(value); } finally { _preparing = false; }
+        try { validated = Components.Validate(value, out encoding); } finally { _preparing = false; }
         if (_updating)
         {
             var candidate = StepEntry(entry.PersistentId);
             if (!_stepStorage!.Has(candidate.Entry.Slot, type)) throw new InvalidOperationException("Component was removed or is not attached.");
             DirtyStep(candidate.Entry.Slot, type);
             _stepStorage.Set(candidate.Entry.Slot, validated);
+            if (Components.CanCacheEncoding(type))
+                _stepValidatedEncodings![(candidate.Entry.Slot, type)] = new(candidate.Entry.Generation, encoding);
         }
         else
         {
@@ -335,6 +342,8 @@ public sealed partial class World
         VerifyObjectStructure(uuid);
         VerifyCommandAccess(); var target = StepEntry(uuid);
         DirtyStep(target.Entry.Slot);
+        foreach (Type type in _stepStorage!.TypesAt(target.Entry.Slot))
+            _stepValidatedEncodings!.Remove((target.Entry.Slot, type));
         _stepStorage!.RemoveAll(target.Entry.Slot);
         _stepObjects!.Remove(target.Id); _stepUuids!.Remove(uuid);
         _stepSlots![target.Entry.Slot] = false;
@@ -384,6 +393,7 @@ public sealed partial class World
         var storage = _storage.Fork();
         var dirtySlots = new HashSet<int>();
         var dirtyComponents = new HashSet<(int, Type)>();
+        var validatedEncodings = new Dictionary<(int, Type), ValidatedEncoding>();
         Guid attempt = Guid.NewGuid();
         _authorityWrites.EnsureCapacity(_authorities.Count);
         _authorityWrites.Clear();
@@ -392,6 +402,7 @@ public sealed partial class World
         _stepSlots = slots; _stepStorage = storage;
         _stepDirtySlots = dirtySlots; _stepAttempt = attempt; _stepMutation = 0;
         _stepDirtyComponents = dirtyComponents;
+        _stepValidatedEncodings = validatedEncodings;
         _stepEncodingBaseline = _encodingRevision == _revision ? _committedEncoding : null;
         _stepPreparedEncoding = null;
         _initializing = initialization;
@@ -441,6 +452,7 @@ public sealed partial class World
         _stepObjects = null; _stepUuids = null; _stepStorage = null; _stepSlots = null; _stepError = null;
         _stepDirtySlots = null; _stepEncodingBaseline = null; _stepPreparedEncoding = null; _stepAttempt = Guid.Empty;
         _stepDirtyComponents = null;
+        _stepValidatedEncodings = null;
         _authorityWrites.Clear();
         _updating = false;
         _initializing = false;

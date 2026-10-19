@@ -87,7 +87,7 @@ internal static class EcsBaseline
             scope = "CPU shipping APIs; no GPU, physics, inference or whole-frame claim"
         }));
     }
-    internal static void Run(bool measured)
+    internal static void Run(bool measured, Action<string, int, SceneDocument>? verified = null)
     {
         if (measured)
             Console.WriteLine(JsonSerializer.Serialize(new
@@ -121,7 +121,7 @@ internal static class EcsBaseline
                     },
                     () => Require(matches == (joint ? (count + 1) / 2 : count) &&
                         sum == Enumerable.Range(0, count).Where(i => !joint || i % 2 == 0).Sum(i => (double)i)));
-                cases++;
+                verified?.Invoke(joint ? "read_transform_and_marker" : "read_transform", count, doc); cases++;
             }
             foreach (int stride in new[] { 0, 100, 1 })
             {
@@ -131,7 +131,7 @@ internal static class EcsBaseline
                 Measure("world_step_stride_" + stride, count, doc.CaptureBytes().Length, measured, 1,
                     () => { Require(runner.Advance(1d / 60) == 1); steps++; },
                     () => VerifyMoves(doc.World, count, stride, steps));
-                cases++;
+                verified?.Invoke("world_step_stride_" + stride, count, doc); cases++;
             }
             foreach (int stride in new[] { 0, 100, 1, -1 })
             {
@@ -165,7 +165,7 @@ internal static class EcsBaseline
                         return [p.Setup, p.Callbacks, p.InputPrepare, p.WorldSignalsPrepare, p.MetadataPrepare,
                             p.InstancesPrepare, p.ReceiptsPrepare, p.RenderPrepare, p.Install];
                     });
-                cases++;
+                verified?.Invoke("play_step_stride_" + stride, count, doc); cases++;
             }
             {
                 var doc = Fixture(count); int steps = 0;
@@ -183,7 +183,7 @@ internal static class EcsBaseline
                     () => { var result = play.AdvanceFrame(1d / 60); Require(result.State == PlayState.Running && result.StepsExecuted == 1); steps++; },
                     () => { VerifyMoves(doc.World, count, 1, steps); Require(play.BehaviourCount == count); },
                     () => Layers(play));
-                cases++;
+                verified?.Invoke("play_behaviour_full_write", count, doc); cases++;
             }
             {
                 var doc = Fixture(count); int steps = 0, nextId = count;
@@ -214,7 +214,7 @@ internal static class EcsBaseline
                             Require(doc.World.Get<TransformData>(doc.World.FindEntity(live[i])).Position.X == targets[i]);
                         Require(doc.World.GetEntities().Sum(o => (double)doc.World.Get<TransformData>(o).Position.X) == count * (count - 1d) / 2);
                     }, () => Layers(play));
-                cases++;
+                verified?.Invoke("play_replace_one_percent", count, doc); cases++;
             }
         }
         Console.WriteLine($"E0 fixture checks: {cases}/{cases} passed; measured={measured}.");

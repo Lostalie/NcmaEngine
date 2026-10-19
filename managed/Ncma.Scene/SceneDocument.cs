@@ -7,6 +7,7 @@ public sealed partial class SceneDocument
     private Dictionary<Guid, BehaviourBindingData[]> _bindings = [];
     private ulong _revision, _knownWorldRevision;
     private bool _preparing;
+    private long _capturedDocumentCount;
     private readonly Action<SceneDocumentSnapshot>? _validateComposition;
     // Trusted authoring policy only, not a gameplay step validator or an Agent-supplied callback.
     public SceneDocument(string name = "Untitled", ComponentRegistry? components = null,
@@ -40,6 +41,7 @@ public sealed partial class SceneDocument
         VerifyAccess();
         if (_preparing || World.IsUpdating) throw new InvalidOperationException("Snapshot requires a committed safe boundary.");
         ObserveWorld();
+        _capturedDocumentCount++;
         WorldSnapshot world = World.CaptureSnapshot();
         var snapshot = new SceneDocumentSnapshot(1, world.Name, world.Objects.Select(o => new SceneObjectData(
             o.PersistentId, o.Name, o.Components, _bindings.GetValueOrDefault(o.PersistentId, []))).ToArray());

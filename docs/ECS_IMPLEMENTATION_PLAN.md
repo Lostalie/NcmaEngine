@@ -268,3 +268,133 @@ E3-B 本地及 GitHub main 精确核对为 `a430a2ab43daafa6d5c4e7db1af5e9402071
 - 最终 `out/ecs-e3c-delivery-verification-second.log` exit 0，SHA256 `0FC5849505CA90D9896C64E48B4C4065907CC141309F66170A508D596AB6D59D`：源码冻结和十包通过；正式 E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 的 **144 清单/148 实际/148 备份**完整；E0 原始 **18** 个归档程序集、E3-A 原始 **8** 个测量输入与 **9** 份测量日志均逐一匹配。正式 EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61` 未变。
 - 第一轮 Debug 89/89 及补充通过，但追加保序/Unicode 修正使冻结失效；65547 已结束 exit 1，**不算最终验收**，没有 first Release。首次定向测试 struct 返回值赋值编译失败、两份冻结及全部日志保留。最终定向会话 81486 已结束 exit 0。四项 IDE 改动、out 候选/失败/备份不提交。
 - 本轮只完成 E3-C 自动候选；无新无 Skip 部署、三轮历史 profile 或 E5 整帧配对性能验收。保留所有人工/目标素材与目标机/自包含/完整性能/1h/历史 File.Replace 调查门禁。按既定门禁提交推送并核对远端后，下一片为 **E3-D 联合验收**，其后 E4/E5，通过后才恢复 M8.3，最后 M9 Windows。
+
+### E3-D 联合验收（进行中，2026-10-19）
+
+E3-C 本地和 GitHub main 已核对为 `28aecf523c6dfc6b2634549f7ab4cd67cf592dc6`。本片同时检验 A–C 的路径不变量、真实产品领域回归和同驱动旧/新工作负载，不能只用局部池测试或冒烟代替阶段验收。
+
+- 新增 `EcsJointCases`：100/1000/4096 对象 × 无写、稀疏写、全写、组件成员变化、1% 创建替换，共 15 组。实际 PlaySession 预热后四步检查完整 World 捕获、validation snapshot 复制、SceneDocument 捕获计数均不增加；无写/稀疏/全写检查精确组件编码增量。公共读取保持已提交视图，查询/最终值/暂停插值与完整 codec 冷路径对照一致。计数器私有，不构成新的公开写权限或性能 API。
+- Debug/Release 定向 second 日志均通过联合 15/15、原 Gameplay 53/53、增量 Play 3/3、高层提交 12/12，以及结构批次、Movement fake、UI 和 E0 fixtures。证据 `out/ecs-e3d-gameplay-{debug,release}-second.log`。这是定向验证，不是完整双配置门禁；真实物理/动画/渲染/Editor/Player 组合仍须完整 CTest。
+- `Measure-EcsPaired.ps1` 用同一个新测试驱动分别加载 E2-B 已交付 Release 与当前候选六个真实产品程序集；每侧闭包为六 DLL 加驱动 DLL/deps/runtimeconfig 九文件。校验原包身份、清单和复制 SHA/size、实际已加载程序集路径/哈希，并在工作负载外用完整场景编码摘要比较最终语义。测量模式三轮交替顺序，各 33 项 × 100 样本，保留原始时间/线程分配/GC/分层记录；TieredCompilation=0 是明确记录的局部实验条件，不是产品默认设置。
+- 原 E0 工作负载计时区、12 次预热和 100 次采样不变；只增加计时外语义回调。初始化/Start/Reload/Undo 仍是冷路径，不宣称完全增量化。CPU 工作负载不代表 GPU、物理、推理、整个引擎帧或 E5 验收。
+- 配对 smoke third 已完成：`out/verification/ecs-e3d/537c74946bda4ad78b7300dec6e5fa59`，旧 E2-B 与已交付 E3-C 各 11 项语义相等。**此处 E3-C 只用于证明驱动兼容，不是最终 E3-D 候选或正式测量。** 最终需标准 Release 构建后新归档并测量。
+- 输入负例 second **11/11** 正确拒绝，原输入不变：`negative-8a6e4ba3ebd24042b872b32a9a05f4ef`，包括缺失/损坏 DLL、哈希/大小、重复/越界名、schema/variant、额外文件、坏 JSON 和多模式参数。失败前不能运行工作负载。
+- 负例 first 保留：PowerShell 单项参数被展开成字符，缺失程序集在旧顶层入口 JIT 时抛出未捕获异常；修正为显式 string[] 参数与独立 BCL 入口捕获、被调用入口 NoInlining。原会话 79529 仍有三个已核对的辅助进程 17524/12936/7156，常规停止 17524 报错后未升级终止。已请求用户许可；未获答复，不强杀、不删除失败副本。正式测量须等这些进程结束后再进行，不能隐藏环境污染。
+- 下一门禁：冻结最终源码 → 标准 Debug/Release Build.bat -SkipTests（不部署）及全部 89 CTest、smoke/Python45/inspect → 同驱动真实配对测量与摘要分析 → 同源码/十包/正式安装/备份/E0 与 E3-A 原始证据核验 → 文档与受限提交推送。任一失败保留证据、修正后重跑受影响门禁；目前不得标记 E3-D/E3/ECS 完成。
+
+#### E3-D 全域回归范围与证据边界
+
+已核对 CMake 的现役测试注册：下列领域包含在完整 89 项中，不能用 Gameplay 定向结果替代。表格是门禁映射，不表示正在执行的本轮测试已经通过。
+
+| 领域 | 现役测试入口 | 本片依赖的证据；不能推导的结论 |
+| --- | --- | --- |
+| 唯一存储、查询、结构事务、回执 | NcmaManagedHeadlessTests、NcmaGameplayTests、NcmaSceneDocumentTests | E0–E3 断言及新增 15 组；不代表整帧性能 |
+| 真实原生数值边界 | NcmaPhysicsNativeTests、NcmaCharacterNativeTests、NcmaPhysicsTests、NcmaPoseManagedTests | 原生插件/托管消费仍兼容；Gameplay 的 38 组 fake Movement 不代替这些入口 |
+| 场景、动画、DX11、2D/UI | NcmaSceneRenderingTests、NcmaRenderingTests、SceneUiJointProducts、ShadowJointProducts、UiCostJoint、SceneCostJoint 四档 | 场景与真实渲染/输出组合、原有精度与资源约束；不新增 Vulkan/OpenGL 实现声明 |
+| 世界替换与恢复 | GraphicsRecoveryJoint 四档、EditorGraphicsRecovery、PlayGraphicsRecovery、PlayerGraphicsRecovery、EditorRecoveryLoop | 完整 Entity 在世界恢复后的失效与现役恢复路径；不是 1h 稳定性验收 |
+| 编辑/历史/资产/独立 Player | NcmaEditorCoreTests、NcmaEditorServiceTests、NcmaAssetTests、NcmaAssetImportTests、NcmaPlayerTests、NcmaEditorDeploymentTests | 原持久化、Undo、资产与包约束；不是手动 UI 或干净目标机验收 |
+| 可选 Python 与传输隔离 | NcmaModuleTests、NoPythonProducts、Grpc、RelocatedClient、NcmaEditorTransportTests，另 Python45/inspect | 原可选模块与命令边界不退化；不是接入推理服务 |
+
+静态冷/热路径复核：Gameplay 的完整捕获仅在组成生命周期注册、Start/Reload；MovementCoordinator 仅在构造和 `ICoupledStepParticipant.Start` 核对启动文档；RuntimeSessionOwner 的捕获属于脚本候选 Preflight（加载/重载）；SceneAnimatorRuntime 的捕获属于 Compose。它们不能被计入固定步收益，也不能以删除启动校验来改善数据。当前没有在这些模块的现役固定步发现完整捕获调用；该搜索是补充证据，动态 15 组计数检查和完整领域回归仍不可省略。
+
+本轮第一份冻结 937 文件，SHA256 `498B12B4F35F5EF36255B6A75C2009E0260940B73FE64308432E834AC5972F3B`。Debug 标准 SkipTests 构建已通过，候选 `0397270b82dd4c0786267ea94b81c214`；第一轮完整 **89/89，1101.03 秒**，补充原生/托管 smoke、Python45/inspect 及前后源码冻结核验均通过。详细日志含 Runtime 增量22/Scene增量11/提交12/新增联合15组及原有领域断言。会话 11250 已进入 Release 标准构建，尚无双配置最终验收、最终配对测量或交付核验；不得以 Debug 单配置通过替代 E3-D 完成。
+
+#### E3-D 双配置回归及包核验结果（配对测量待完成）
+
+上述进行中记录由本段更新：会话 **11250 已结束 exit 0**。同一 937 文件冻结在完整 Debug/Release 构建、回归前后均一致；两配置标准 SkipTests 构建零编译警告，Debug **89/89，1101.03 秒**，Release **89/89，978.60 秒**，两边原生/托管 smoke、Python **45**、inspect 全通过。Runtime22/Scene11/提交12/新增联合15组与全部旧领域测试保留通过，不把 fake Movement 代替真实数值插件或将 CPU 合成检查冒称完整性能验收。
+
+- Debug 候选 `0397270b82dd4c0786267ea94b81c214`，Release 候选 `881d1a0599444fe488d8ee47dbe1378e`；日志 `out/ecs-e3d-{build,ctest,supplemental,smoke,python,inspect}-{debug,release}-first.log`，详细测试输出另存 `ctest-{debug,release}-details-first.log`。
+- 最终回归/闭包核验 `out/ecs-e3d-delivery-verification-second.log` exit 0，SHA256 `33796E7024A6B9DC0E238B2088715C850F35F7463021F6923A5907372228D2E2`。十包清单各配置144/56/113/67/116项通过；正式 E1-B 的144清单/148实际文件、148备份，E0原始18个程序集，E3-A原始8输入与9日志均保持原SHA/size。正式 EXE 仍为 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61`，未部署。
+- 交付核验 first 失败来自辅助脚本机械替换后误指向 E3-A 的 first 失败日志，旧正确 second 成功日志 SHA `26026528ADEBAD1BF1617A9BE8E710DB1D9845387182BEC6668262A47BD4DEC9` 实际不变。保留首轮日志与辅助脚本；second 仅修正历史证据路径，不修改产品、断言或历史文件。
+- **本轮标准 Release** 新配对冒烟归档 `out/verification/ecs-e3d/11b670bfc7424fd0845c57bc8ca08153`：E2-B/最终候选各11项语义一致。对该新归档的负例11/11通过，目录 `negative-3956fc6f210a40c8878b614874ddb3e1`；日志 `out/ecs-e3d-canonical-paired-{smoke,negative}-first.log`。它仍是冒烟，不是33项×100样本×三轮的正式测量。
+- 唯一当前待处理步骤：旧负例三个精确辅助进程仍存活，常规停止失败后的终止许可尚未收到。未杀进程、未删除失败文件。正式三轮配对测量须等待处置完成，之后复核新旧输入/原始样本/语义与全部分位数、分配和GC数据，再完成E3-D文档、受限提交推送。当前 **E3-D/E3仍未完成**；不跳到E4/M8.3，不把本轮回归通过等同E5性能/人工/目标机/自包含/1h验收。
+
+用户随后明确批准仅终止三个已核对辅助进程。执行时17524/12936已自行退出，7156的完整命令行、镜像、父进程、精确创建时间及持有句柄的StartTime均匹配；仅对7156执行一次Kill，WaitForExit返回成功。原辅助脚本最后以CIM枚举记录是否消失为断言，遇到已退出记录残留而报错；此失败保留，没有重试更强终止。后续两次只读实际进程枚举均确认三者不存在，旧会话79529已结束exit0（不据此宣称旧负例测试成功）。证据 `out/ecs-e3d-approved-helper-close-first.log` 与 `out/ecs-e3d-approved-helper-exit-first.log`；所有文件保留。上述处置阻塞已解除，937源码冻结再次匹配，正式三轮配对会话88153开始；测量完成前仍不标记E3-D完成。
+
+#### E3-D 三轮配对完成：发现全写回退，暂不收尾
+
+会话 **88153 已结束 exit 0**。最终 Release 候选与原 E2-B 使用同一驱动、TieredCompilation=0，顺序为旧/新、新/旧、旧/新。归档 `out/verification/ecs-e3d/1977744a247f47769370bcb095f87dc2` 包含18份输入、6份运行日志和输入/完成清单；每轮每侧33工作负载，每项100原始时间及分配样本，共 **19,800 个时间样本和19,800个分配样本**。三轮各33个最终场景摘要完全相等，程序集实际加载路径/哈希匹配，输入前后未改变。
+
+独立复核 `out/ecs-e3d-paired-verification-first.log` exit0，SHA256 `D41DE712DBACC312D6645FB1F3BD77B2772935B92B0171931FD0225B9661F0A3`，逐一验证九文件闭包、6轮日志、33个工作负载键、预热12/样本100、读取16遍归一化、原始数值和nearest-rank分位数。测量后的 `out/ecs-e3d-delivery-verification-third.log` 再次通过，SHA仍为 `33796E7024A6B9DC0E238B2088715C850F35F7463021F6923A5907372228D2E2`；同937源码、十包、正式安装/备份及原始基线均不变。
+
+以下为 **4096对象、三轮各自P50的最小–最大范围**，单位毫秒；不是置信区间，也不是GPU/整帧/FPS结论。P95比值为同轮候选/旧版。
+
+| 工作负载 | 旧版 P50 ms | 候选 P50 ms | 候选/旧版 P95 |
+| --- | --- | --- | --- |
+| World 无写 | 36.176–37.611 | 0.048–0.058 | 约0.002 |
+| World 约1%写 | 36.512–37.000 | 1.490–1.574 | 0.054–0.060 |
+| **World 全写** | **55.773–56.938** | **129.144–132.864** | **2.198–2.294** |
+| Play 无写 | 230.946–231.404 | 1.512–1.632 | 0.009–0.010 |
+| Play 约1%写 | 229.475–233.313 | 3.147–3.313 | 0.019–0.020 |
+| Play 全写 | 251.254–252.211 | 133.113–136.074 | 0.504–0.567 |
+| 每对象 Behaviour 全写 | 290.381–293.652 | 135.143–138.373 | 0.493–0.514 |
+| Play 约1%对象替换 | 233.014–235.156 | 5.839–5.910 | 0.030–0.032 |
+
+- 无写/稀疏/结构变化与高层Play的全量文档消除收益明显，但**不能只报收益**：直接World全写在100/1000/4096均回退，三轮P95比值总范围1.994–2.534；4096每步线程分配从20,152,776–20,153,088 B升为34,214,440 B。其100样本观察的Gen0回收154–155次变为232次；Gen1/Gen2减少不代表该路径成本改善。当前不得将E3-D/E3标为通过，不提交推送、不进入E4。
+- Play无写4096线程分配从约77.30 MB降至2,219,048 B，稀疏写降至2,959,872 B；它们仍不是零分配。Play全写降至36,136,784 B，但不能掩盖其底层World全写回退。全部三轮原始分配/GC/分层统计保留在复核报告。
+- `read_transform*` 负载有意沿用E0的 `GetEntities()` 复制枚举而非E2-A强类型Query；每遍5712/52512/213504 B在两版本相同。其P95比值存在跨轮波动（最高约1.511），不能用它宣称新Query退化或5%小场景门禁通过；E2-A的预热强类型Query零分配属于另一明确边界。
+- 初步代码审查发现待验证热点：每次 `Set` 的Validate已序列化检查payload；提交期脏组件还要有界编码/解析/Clone、schema/depth校验与组件计量，并对脏对象重新计量不变头部。E2-B池Encode是直接SerializeToElement，当前为有界输出后Parse/Clone。**这只是候选原因，不是已证明根因**；不能直接移除64KiB/4MiB/depth/schema/归一化、每次可信验证器或unknown getter/converter保护来取悦基准。
+- 下一片保持在E3-D：对上述成本做有界定向分项，优先消除稳定值重复编码和不变头部的重复计量；确保批次分支、重复写、删除复用、abort/restore、未知编码器及失败毒化语义不变，再用新冻结重跑定向、完整双配置和同驱动三轮配对。当前937版本及此次退化数据作为不可覆盖的对照保留；修复前不重复提交或部署。
+
+#### E3-D 全写回退修复候选（定向通过，完整门禁尚未启动）
+
+2026-10-19按用户“开始下一步”继续在E3-D修复，不进入E4。
+
+- 先对原标准Release `881d1a0599444fe488d8ee47dbe1378e` 的真实Runtime DLL做隔离分项诊断，三轮各20,000调用：递归Schema校验约12.9–13.8微秒/3032 B，写入验证约4.4–4.9微秒/1280 B，提交期有界编码/Parse/Clone约4.7–4.8微秒/1768 B，组件计量约2.0–2.6微秒/184 B，对象头计量约0.46–0.54微秒/496 B。最大热点是反复解析Schema及其字段字符串/集合分配，重复序列化是另一项可消除成本。日志 `out/ecs-e3d-profile-first.log`；辅助源码在 `out/verification/ecs-e3d/profile-first`，记录实际程序集/MVID。这是隔离调用诊断，不是整步各项可精确相加的耗时占比。
+- 新 `ComponentShape` 在可信注册时预编译既有闭合对象/标量/local-$defs检查。每次仍检查所有数据字段、重复/未知/必需字段、数值有限性和Int64范围；仅避免反复解析同一Schema。每对象最多32字段、展开最多4096节点、深度32；不支持、畸形、过大或循环Schema回到**未修改**的原递归检查，不添加新Schema方言，也不放宽原来对额外字段的拒绝。
+- `World.Set` 原本已生成并验证的JSON，仅对现有IL证明稳定的值类型保留到当前候选步；可信验证器仍每次调用。缓存跟随候选分支复制/恢复/安装，包含代次，重复写取最后一次；组件增删使相应项失效，删除对象清理其项，abort全部丢弃。未知getter/converter仍走原有有界冷编码。Schema错误仍在准备提交时拒绝，没有提前到Set或跳过。独立组件值仍只在原强类型池中保存，不产生第二World或新写权限。
+- 不变的Entry引用可复用原对象头精确字节数；重命名、替换、编辑/restore仍触发重新计量。组件64KiB、World4MiB、完整JSON深度、原始/归一化校验和失败毒化均保留。
+- 新6组Schema等价测试包含1000个确定性随机payload，使用原未修改递归检查作为接受/拒绝oracle；另覆盖UTF8/转义名称、重复字段、嵌套引用、Int64/有限数边界、32字段末位和fallback。新增3组增量测试覆盖重复写与规范化、延迟Schema拒绝、分支丢弃/安装/abort、同槽不同代次和同代次移除再添加；原精确聚合边界、JSON深度、未知转换器与权限测试保留。
+- Debug/Release定向均通过：Runtime13/storage14/identity15/Query17/结构候选8/Paged10/增量25/Schema6，Scene原36/增量11，Gameplay53/增量Play3/提交12/联合15/批次26/Movement38 fake/UI18/E0fixtures11。日志 `out/ecs-e3d-repair-{runtime,scene,gameplay}-{debug,release}-targeted-first.log`，会话99567已结束exit0，无编译警告。第一次缓存实现误将代次写为uint，CS1503保存在 `out/ecs-e3d-repair-runtime-release-second.log`，改为实际ulong后通过；没有放宽测试。
+- 局部整步诊断每规模仅30样本：仅Schema优化的4096对象P50为80.8185ms，加入编码/头部复用后P50为50.2337ms、P95为66.7157ms、样本范围40.5535–70.3877ms，线程分配约14.081MB。日志 `out/ecs-e3d-profile-{second,third}.log`。早先进度消息44–48ms只引用最后两个样本，**不能作为完整分布或正式收益范围**。这些数据没有同轮旧版配对、不是最终标准候选，也未包含最后补充的删除缓存清理；不据此关闭原来的2倍回退或宣称E5通过。
+- 完整门禁审批连续两次遇到服务容量错误：`Automatic approval review failed: Selected model is at capacity`；两次命令均**未执行**，不是产品失败或安全性否决。没有绕过审批降级执行；`source-freeze-repair-first.json` 和新gate日志均尚未生成。忽略目录中已准备 `freeze-source-repair-first.ps1`、`run-gates-repair-first.ps1`、`run-supplemental-repair-first.ps1`、`verify-delivery-repair-first.ps1`，等待审批恢复后按原流程执行。历史E3-A正确second测量证据路径保留，不作全局first/second替换。
+- 下一步仍须新939源码冻结、标准双配置构建和全部89CTest/补充检查、最终标准候选配对冒烟与负例、三轮正式配对、十包/正式安装/备份/历史证据核验。全部通过前不提交推送、不部署、不进入E4；第一份937源码/全部退化样本、失败记录和四项IDE改动均保留。
+
+#### E3-D 修复完整验证：首轮原子替换异常与同源码重测
+
+用户要求“进行完整验证”后，审批成功；939文件冻结 `out/verification/ecs-e3d/source-freeze-repair-first.json`，SHA256 `47905BDD40B61E63ED8B89D5DF5D8EABC6E329D735C3C364DCB8442FCE288BFC`。第一轮Debug标准构建通过，候选 `4acbffd0e59d418699cdf696fcf8c0c7`；完整CTest **88/89，1089.95秒**，仅第75项部署回归失败，未开始Release。会话95930已结束exit1，日志与详细用例保存在 `out/ecs-e3d-*-debug-*-repair-first.log` / `out/ecs-e3d-ctest-debug-repair-first.log`，不能记作全通过。
+
+- 失败位置：未修改的 `scripts/EditorDeployment.ps1:77` 的File.Replace，IOException “Unable to remove the file to be replaced”。目标为独立测试目录 `out/verification/deployment-tests/baa25fc617d54fc48a81ee91dc4e85c3/success`，不是正式 `out/bin`。部署自身回滚后journal为RolledBack；只读核验该测试bin的原始3文件与journal记录的SHA/size全部匹配，未对失败目录做删除、强制替换或恢复重试。
+- 同一部署CTest在脚本正常新建的全新GUID目录中单独复测 **1/1，17.01秒**，会话18342 exit0。日志 `out/ecs-e3d-deployment-repair-isolated-first.log`，详细输出 `out/ecs-e3d-deployment-repair-isolated-details-first.log`。不修改源码、断言或原子写入策略，不将此次成功视作根因已解决；文件系统异常的根因仍未确证，历史调查保留。
+- 源码冻结再次匹配；第二轮顺序完整门禁会话83142已启动，`run-gates-repair-second.ps1`重新执行标准Debug/Release构建、全部89CTest和补充检查，日志使用 `-repair-second`，原失败证据不覆盖。正式三轮配对及最终交付核验仍须等待本轮结束，不能由单项复测通过推导阶段完成。
+- 另验证原937版本退化归档18输入/6测量日志及原始冻结、原配对复核报告SHA均未改变，记录 `out/ecs-e3d-regression-archive-verification-first.log`。当前构建目录的DLL正常更新，不把可变的构建产物当作历史测量输入；历史归档始终保留。
+
+#### E3-D 修复完整验证最终结果：功能通过，尾部性能仍未通过
+
+2026-10-19本次“进行完整验证”已执行完毕。**验证流程结束不等于阶段验收通过：E3-D/E3仍不收尾，不提交推送、不部署、不开始E4。** 本轮未修改已冻结的产品或测试源码。
+
+- 同一 **939文件**冻结 SHA256 `47905BDD40B61E63ED8B89D5DF5D8EABC6E329D735C3C364DCB8442FCE288BFC` 前后匹配。标准Build.bat -SkipTests两配置零编译警告；Debug修复第二轮 **89/89，1124.47秒**，Release **89/89，1001.41秒**，两边托管/原生smoke、Python45、inspect通过。完整门禁会话83142已结束exit0，不再轮询。日志 `out/ecs-e3d-{build,ctest,supplemental,smoke,python,inspect}-{debug,release}-repair-second.log`，详细用例日志 `out/ecs-e3d-ctest-{debug,release}-details-repair-second.log`。
+- Runtime增量25/Schema6、Scene增量11、增量Play3/提交12/联合15与原Runtime13/storage14/identity15/Query17/结构候选8/Paged10/Scene36/Gameplay53/批次26/Movement38 fake/UI18/E0fixtures11均通过。部署8组在完整Debug/Release中均通过（17.51/17.20秒）；首轮88/89和单独1/1记录不丢弃，原子替换异常根因仍未确证。
+- 最终Debug候选 `585453061b454867a566ba192224dafe`，Release候选 `be823509e2ee4a84b3bd593897715dc4`。两配置各五包清单144/56/113/67/116文件；实际146/57/114/68/117，差额是清单和现役允许的Editor日志，既有白名单未更改。所有身份/路径/size/SHA及闭包核验通过。
+- 正式E1-B Complete `7f3d3822dd39431b9c203e17194afb8c` 保持144清单/148实际文件、148备份完整；EXE SHA `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61`未变。E0原始18程序集、E3-A原始8测量输入和9日志保持原哈希。测量前后交付核验 `out/ecs-e3d-delivery-verification-repair-{first,second}.log` 的SHA相同：`0E485981DF8803A0E4043FF0A2B5B02ECA3C5C4724E9A2A6344F79F33075C15F`。
+- 最终标准候选配对冒烟归档 `4f380fec3daa417ca15ad02437644879`，旧/新11项语义一致；负例目录 `negative-33480195240148479d9affbf07887335` 的11项均正确拒绝且原输入不变。日志 `out/ecs-e3d-paired-{smoke,negative}-repair-first.log`。
+- 三轮正式配对归档 `out/verification/ecs-e3d/ff40e2cf71514201943d7304632ed924`，旧/新、新/旧、旧/新交替执行，33项×100样本×6进程，共 **19,800个耗时样本和19,800个分配样本**。同驱动、真实产品程序集、TieredCompilation=0，三轮各33个完整场景摘要全部一致，18输入和实际加载九文件闭包前后哈希一致。独立分位数复核 `out/ecs-e3d-paired-verification-repair-first.log`，SHA256 `AD1D1576A153921469B619D879F8FCC94F67F9AD74416ED1B7688C193E87A2E9`。后续核验会话41850已结束exit0，无剩余构建/测试/测量进程会话。
+
+**World全写重点结果**（各轮P50/P95的最小–最大值，ms；区间不是置信区间）：
+
+| 对象数 | 旧版P50 | 修复候选P50 | 旧版P95 | 修复候选P95 | 同轮P95候选/旧版 |
+| --- | --- | --- | --- | --- | --- |
+| 100 | 1.2110–1.2203 | 0.9365–0.9547 | 1.8391–1.9065 | 1.4552–1.4800 | 0.774–0.805 |
+| 1000 | 12.9827–13.3305 | 10.5785–11.3219 | 15.2221–17.7173 | 14.9121–16.0881 | 0.891–1.057 |
+| **4096** | **55.5210–56.7901** | **52.9296–54.7862** | **62.5545–65.0129** | **70.6210–75.3443** | **1.102–1.159** |
+
+4096全写三轮P95分别 **+12.895%、+10.202%、+15.891%**，三轮都回退，不能当作一个偶发样本忽略。每步线程分配从20,152,112–20,152,600 B降为14,080,720 B，约下降30%；100样本观察的Gen0/1/2计数也由153–156/119–122/64–67降至98–100/73–75/24–25，但回收次数少不证明停顿短，不能据此解释或关闭尾部回退。先前约2倍的严重回退已显著缩小，**不等于性能问题完全修复**。
+
+其他4096工作负载仍有明显收益：World无写P95比0.00184–0.00275、约1%写0.0281–0.0291；Play无写约0.0093–0.0101、全写0.271–0.282、Behaviour全写约0.233、1%对象替换0.0238–0.0261。它们不能掩盖直接World全写的尾部问题。`read_transform*`继续沿用E0的GetEntities复制枚举而非强类型Query，分配不变；小场景P95波动最大约1.387，未证明5%门禁或整帧收益。
+
+原937退化归档18输入、6日志及原冻结/配对证明再次保持不变，`out/ecs-e3d-regression-archive-verification-second.log` SHA `60C50262ED36425E019B2AD3D63FF9E253AAFBC4E269B8DA08F22C1CF12F3418`。全部失败目录、首轮日志、原始数据和四项IDE改动保留。
+
+**验证结束时的原建议（被下述用户排期决定覆盖）**：先在E3-D定位密集写的回调、准备、安装耗时及瞬时分配/GC停顿/派生缓存存活期，再修复。尚未证明GC或某个缓存是根因；不得通过反复抽样挑选一次通过、放宽阈值、删除边界校验或退回完整快照来收尾。任何产品修改仍须新冻结、完整双配置和配对；人工/目标机/自包含/整帧性能/1h门禁保持开放。
+
+#### E3-D 用户确认提交与性能债务延期
+
+2026-10-19用户明确要求：**E3-D先提交，记录性能未达标状态，在后续阶段统一修复。** 本次作为“功能回归通过、性能未达标”的源码检查点提交，不代表E3/ECS完整验收通过；用户随后明确授权推送，并标记“功能验证通过、性能未达标”，不部署；本轮只调整交付状态与排期，产品/测试源码保持已验证的939文件冻结不变。
+
+下一开发阶段可推进E4领域迁移；下列债务纳入E5统一性能修复与验收，在恢复M8.3前处理。该决定覆盖上文以及历史记录中“必须先修复才允许提交/进入E4”的排期限制，不覆盖测试、安全、权限或性能判定标准。
+
+| 跟踪项 | 已知证据与状态 | 后续修复与关闭条件 |
+| --- | --- | --- |
+| ECS-PERF-01 密集全写尾延迟 | 未达标；4096对象三轮P95回退12.895%、10.202%、15.891%；约30%分配下降不能抵消尾延迟退化 | E5定向分析回调/准备/安装及GC停顿、缓存存活期；修复后新冻结、完整Debug/Release回归、同驱动三轮配对及原始分位数/语义/闭包核验，按既定性能门禁验收 |
+| ECS-PERF-02 小场景读性能 | 未证明5%门禁；E0复制枚举样本P95最大比值约1.387，不是typed Query测量，也不直接断言为已确证退化 | E5控制测量噪声、区分复制枚举与typed Query，对100/1000/4096分别复核耗时、分配和GC；存在回退则修复，不挑样本或放宽标准 |
+
+完整整帧性能、真实素材/目标机、自包含、人工和1h门禁继续独立开放。File.Replace首轮失败及根因未证实的调查保留。提交不覆盖原939修复与937退化归档、失败日志、正式安装或备份。

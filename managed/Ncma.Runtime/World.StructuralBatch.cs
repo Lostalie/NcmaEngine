@@ -18,6 +18,7 @@ public sealed partial class World
             var priorDirty = _stepDirtySlots!; var priorPrepared = _stepPreparedEncoding;
             ulong priorPreparedMutation = _stepPreparedMutation;
             var priorDirtyComponents = _stepDirtyComponents!;
+            var priorValidatedEncodings = _stepValidatedEncodings!;
             bool priorMembership = _stepMembershipChanged;
             var objects = new Dictionary<int, Entry>(priorObjects);
             var uuids = new Dictionary<Guid, int>(priorUuids);
@@ -25,6 +26,7 @@ public sealed partial class World
             var slots = (bool[])priorSlots.Clone();
             var dirty = new HashSet<int>(priorDirty);
             var dirtyComponents = new HashSet<(int, Type)>(priorDirtyComponents);
+            var validatedEncodings = new Dictionary<(int, Type), ValidatedEncoding>(priorValidatedEncodings);
             bool membership;
             _preparingStructuralBatch = true;
             try
@@ -32,6 +34,7 @@ public sealed partial class World
                 _stepObjects = objects; _stepUuids = uuids; _stepStorage = storage; _stepSlots = slots;
                 _stepDirtySlots = dirty; _stepPreparedEncoding = null;
                 _stepDirtyComponents = dirtyComponents;
+                _stepValidatedEncodings = validatedEncodings;
                 stage();
                 if (_stepError is not null) throw new InvalidOperationException("Structural batch validation rejected.", _stepError);
                 _preparing = true;
@@ -50,6 +53,7 @@ public sealed partial class World
                 _stepDirtySlots = priorDirty; _stepPreparedEncoding = priorPrepared;
                 _stepPreparedMutation = priorPreparedMutation;
                 _stepDirtyComponents = priorDirtyComponents;
+                _stepValidatedEncodings = priorValidatedEncodings;
                 _stepMembershipChanged = priorMembership;
                 _preparingStructuralBatch = false;
             }
@@ -63,6 +67,7 @@ public sealed partial class World
                 _stepObjects = objects; _stepUuids = uuids; _stepStorage = storage; _stepSlots = slots;
                 _stepDirtySlots = dirty; _stepPreparedEncoding = null;
                 _stepDirtyComponents = dirtyComponents;
+                _stepValidatedEncodings = validatedEncodings;
                 _stepMutation = installedMutation;
                 _stepMembershipChanged = membership;
             };

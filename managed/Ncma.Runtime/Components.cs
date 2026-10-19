@@ -30,6 +30,12 @@ public sealed class ComponentRegistry
     private abstract class Registration(ComponentDescriptor descriptor, bool runtimeAttachable)
     {
         internal ComponentDescriptor Descriptor { get; } = descriptor;
+        private readonly ComponentShape? _shape = ComponentShape.TryCreate(descriptor.Schema);
+        internal void Check(JsonElement data)
+        {
+            if (_shape is not null) _shape.Check(data);
+            else CheckShape(data, Descriptor.Schema, Descriptor.Schema);
+        }
         internal bool RuntimeAttachable { get; } = runtimeAttachable;
         internal abstract object Decode(JsonElement data);
         internal abstract IComponentPool CreatePool();
@@ -103,10 +109,12 @@ public sealed class ComponentRegistry
     internal IComponentPool CreatePool(Type type) => Require(type).CreatePool();
     // Eligibility concerns serialization only. Trusted value validation still runs on EVERY write.
     internal bool CanCacheEncoding(Type type) => Require(type).Cacheable;
-    internal T Validate<T>(T value) where T : struct, IComponent
+    internal T Validate<T>(T value) where T : struct, IComponent => Validate(value, out _);
+    internal T Validate<T>(T value, out JsonElement encoding) where T : struct, IComponent
     {
         T validated = ((Registration<T>)Require(typeof(T))).Validate(value);
-        CheckPayload(JsonSerializer.SerializeToElement(validated, SceneJson.Options));
+        encoding = JsonSerializer.SerializeToElement(validated, SceneJson.Options);
+        CheckPayload(encoding);
         return validated;
     }
     internal JsonElement EncodeObject(object value) => JsonSerializer.SerializeToElement(value, value.GetType(), SceneJson.Options);
@@ -116,18 +124,18 @@ public sealed class ComponentRegistry
             throw new ArgumentException("Unknown component type/version: " + component.TypeId);
         CheckPayload(component.Data);
         SceneJson.VerifySnapshotComponentDepth(component.Data);
-        CheckShape(component.Data, registration.Descriptor.Schema, registration.Descriptor.Schema);
+        registration.Check(component.Data);
     }
     internal object Decode(ComponentSnapshot component)
     {
         if (!_byId.TryGetValue(component.TypeId, out var registration) || component.Version != registration.Descriptor.Version)
             throw new ArgumentException("Unknown component type/version: " + component.TypeId);
         CheckPayload(component.Data);
-        CheckShape(component.Data, registration.Descriptor.Schema, registration.Descriptor.Schema);
+        registration.Check(component.Data);
         object decoded = registration.Decode(component.Data);
         JsonElement normalized = EncodeObject(decoded);
         CheckPayload(normalized);
-        CheckShape(normalized, registration.Descriptor.Schema, registration.Descriptor.Schema);
+        registration.Check(normalized);
         return decoded;
     }
 
