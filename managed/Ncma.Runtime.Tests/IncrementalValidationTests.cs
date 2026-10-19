@@ -6,6 +6,10 @@ using Ncma.Runtime;
 internal static class IncrementalValidationTests
 {
     private readonly record struct TextData(string Text) : IComponent;
+    private readonly record struct Tagged<T>(int Value) : IComponent;
+    private static void RegisterTagged<T>(ComponentRegistry registry, string id) => registry.Register<Tagged<T>>(id, 1,
+        """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
+    private static void SetTagged<T>(World world, Entity entity, int value) => world.Set(entity, new Tagged<T>(value));
     private struct Computed : IComponent
     {
         private int _value;
@@ -47,6 +51,74 @@ internal static class IncrementalValidationTests
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("internal component traversal preserves sparse membership without iterator allocations", () => {
+                var storage = new ComponentStorage(); storage.Set(0, TransformData.Identity);
+                storage.Set(0, new TextData("zero")); storage.Set(1, new TextData("one"));
+                int Visit(int slot) { int result = 0; foreach (Type type in storage.TypesAt(slot))
+                    result += type == typeof(TransformData) ? 1 : type == typeof(TextData) ? 2 : throw new Exception("Unknown type"); return result; }
+                Check(Visit(0) == 3 && Visit(1) == 2 && Visit(2) == 0);
+                for (int i = 0; i < 100; i++) _ = Visit(0);
+                long before = GC.GetAllocatedBytesForCurrentThread(); int sum = 0;
+                for (int i = 0; i < 4096; i++) sum += Visit(i % 3);
+                long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Check(sum == 1365 * 5 + 3 && allocated == 0);
+                var branch = storage.Fork(); branch.Remove(0, typeof(TransformData));
+                int count = 0; foreach (Type type in branch.TypesAt(0)) { Check(type == typeof(TextData)); count++; }
+                Check(count == 1 && Visit(0) == 3);
+            }),
+            ("bounded derived component array preserves all 64 identities across membership changes", () => {
+                var registry = new ComponentRegistry(); Type tag = typeof(int);
+                var setters = new List<Action<World, Entity, int>>();
+                for (int i = 0; i < World.MaxComponentsPerObject; i++) {
+                    typeof(IncrementalValidationTests).GetMethod(nameof(RegisterTagged), System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+                        .MakeGenericMethod(tag).Invoke(null, [registry, "tag." + i.ToString("D2")]);
+                    setters.Add(typeof(IncrementalValidationTests).GetMethod(nameof(SetTagged), System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!
+                        .MakeGenericMethod(tag).CreateDelegate<Action<World, Entity, int>>());
+                    tag = typeof(Tagged<>).MakeGenericType(tag);
+                }
+                var world = new World("64 components", registry); var entity = world.CreateEntity("all"); var id = world.GetUuid(entity);
+                for (int i = 0; i < setters.Count; i++) setters[i](world, entity, i);
+                world.BeginStep(); CheckPrepared(world);
+                world.BeginStep(); setters[63](world, entity, 999);
+                world.StageRemove(id, "tag.00"); world.StageRemove(id, "tag.31");
+                CheckPrepared(world, s => {
+                    Check(s.Objects[0].Components.Length == 62);
+                    foreach (var c in s.Objects[0].Components) {
+                        int number = int.Parse(c.TypeId.AsSpan(4));
+                        Check(c.Data.GetProperty("value").GetInt32() == (number == 63 ? 999 : number));
+                    }
+                });
+                using var restored = JsonDocument.Parse("{\"value\":777}");
+                world.BeginStep(); world.StageAdd(id, new("tag.00", 1, restored.RootElement.Clone()));
+                _ = world.PrepareStep(); world.AbortStep();
+                world.BeginStep(); CheckPrepared(world, s => Check(s.Objects[0].Components.Length == 62));
+                world.BeginStep(); world.StageAdd(id, new("tag.00", 1, restored.RootElement.Clone()));
+                CheckPrepared(world, s => Check(s.Objects[0].Components.Length == 63 && s.Objects[0].Components[0].Data.GetProperty("value").GetInt32() == 777));
+            }),
+            ("lazy validation DTO copies retain ordering budget and observer isolation", () => {
+                var registry = ComponentRegistry.CreateDefault();
+                registry.Register<TextData>("a.text", 1,
+                    """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
+                var world = new World("lazy DTO", registry); var a = world.CreateEntity("first"); var b = world.CreateEntity("second");
+                world.Set(a, TransformData.Identity); world.Set(a, new TextData("中文\\\"")); world.Set(b, TransformData.Identity);
+                world.FixedStep(() => { }); long copies = world.ValidationWork.CopiedSnapshots;
+                world.BeginStep(); world.Set(a, TransformData.Identity with { Position = new(3, 0, 0) });
+                _ = world.PrepareStepView(view => Check(view.Objects.Count() == 2));
+                Check(world.ValidationWork.CopiedSnapshots == copies);
+                byte[]? first = null;
+                _ = world.PrepareStep(snapshot => {
+                    Check(snapshot.Objects[0].PersistentId == world.GetUuid(a) && snapshot.Objects[1].PersistentId == world.GetUuid(b));
+                    Check(snapshot.Objects[0].Components.Select(c => c.TypeId).SequenceEqual(new[] { "a.text", "ncma.transform" }));
+                    first = SceneJson.EncodeBounded(snapshot, World.MaxSnapshotBytes);
+                    snapshot.Objects[0].Components[0] = snapshot.Objects[0].Components[1];
+                    snapshot.Objects[1] = snapshot.Objects[0];
+                });
+                Action commit = world.PrepareStep(snapshot => Check(first!.AsSpan().SequenceEqual(SceneJson.EncodeBounded(snapshot, World.MaxSnapshotBytes))));
+                Check(world.PreparedSnapshotBytes == first!.Length && world.Get<TransformData>(a).Position.X == 0);
+                commit(); Check(world.Get<TransformData>(a).Position.X == 3);
+                world.BeginStep(); world.Set(a, new TextData("aborted")); _ = world.PrepareStep(); world.AbortStep();
+                world.BeginStep(); CheckPrepared(world, snapshot => Check(snapshot.Objects[0].Components[0].Data.GetProperty("text").GetString() == "中文\\\""));
+            }),
             ("validated payload is last-write normalized and retains delayed schema rejection", () => {
                 int calls = 0; var world = TextWorld(v => { calls++; return new(v.Text.Trim()); });
                 var a = world.CreateEntity("A"); world.Set(a, new TextData("original")); world.FixedStep(() => { });

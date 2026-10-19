@@ -1,5 +1,7 @@
 # NcmaEngine
 
+E5-B限定自动候选门禁通过：同957源码Debug/Release各89/89、Python各53/53及实际包/历史证据核验通过。新候选三轮配对证明4096全写PERF-01达标，1000对象冷查询分配131,480→32,416B；全部93项结果保留。PERF-02仍未证明，4096复制读取相对E2-B偏慢的调查项进入E5-C，不宣称整体性能验收完成。正式EXE未更新。见 [E5-B最终结果](docs/ECS_IMPLEMENTATION_PLAN.md#1115-e5-b-second-最终限定结果全写目标通过复制读取债务进入c) 和 [新候选完整证据](docs/ECS_E5_B_SECOND_EVIDENCE.json)。
+
 E4消费者迁移自动功能门禁完成：同一950文件冻结，Debug/Release SECOND完整CTest各89/89（1135.05/1009.45秒），smoke/Python45/inspect及十包/正式安装/备份/失败证据核验通过；本片不部署，E3-D仍“功能验证通过、性能未达标”。见 [E4-E最终结果](docs/ECS_IMPLEMENTATION_PLAN.md#1013-e4-e-最终自动验证结果)。
 
 E4-D自动候选验证完成：场景/对象检查已接入有界副本读取，编辑器行ID、失效绑定和导入引用查询已迁移；保留全局校验、未知编码冷路径、唯一Undo及原MCP权限。同一949文件冻结，标准Debug/Release构建0编译警告，完整CTest各89/89（1122.43/1014.55秒），smoke/Python45/inspect及十包/正式安装/备份核验通过；本片不部署。E4-D已交付，E4-E最终结果见上；E5性能验收未完成。见 [E4-D实施记录](docs/ECS_IMPLEMENTATION_PLAN.md#109-e4-d-场景编辑与既有ai读取自动候选验证完成)。

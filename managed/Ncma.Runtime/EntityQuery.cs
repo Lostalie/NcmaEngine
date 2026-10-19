@@ -10,7 +10,8 @@ public sealed class EntityQuery
     private readonly World _world;
     private readonly Guid _identity;
     private readonly Type[] _all, _none;
-    private readonly Entity[] _members;
+    private readonly int _capacity;
+    private Entity[] _members;
     private readonly IComparer<Entity> _order;
     private ulong _version;
     private bool _cached;
@@ -22,7 +23,9 @@ public sealed class EntityQuery
         _identity = world.Identity;
         _all = all;
         _none = none;
-        _members = new Entity[capacity];
+        _capacity = capacity;
+        int initial = Math.Min(capacity, world.Count);
+        _members = initial == 0 ? [] : new Entity[initial];
         _order = new CreationOrder(world);
     }
 
@@ -49,6 +52,11 @@ public sealed class EntityQuery
         ulong version = _world.MembershipVersion;
         if (_cached && _version == version) return;
         _cached = false;
+        // Capacity is the caller's hard result budget, not a mandatory initial allocation.
+        // Only committed topology can grow this buffer. Existing iterators check that topology
+        // version before accessing their captured array; aborts retain the old cache and buffer.
+        int required = Math.Min(_capacity, _world.Count);
+        if (_members.Length < required) _members = new Entity[required];
         int count = _world.FillQuery(_all, _none, _members);
         Array.Sort(_members, 0, count, _order);
         _members.AsSpan(count).Clear();

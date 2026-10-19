@@ -30,7 +30,7 @@ internal static class EcsBaseline
     {
         if (!value) throw new InvalidOperationException("E0 fixture result mismatch.");
     }
-    private static SceneDocument Fixture(int count)
+    internal static SceneDocument Fixture(int count)
     {
         var registry = ComponentRegistry.CreateDefault();
         registry.Register<Marker>("e0.marker", 1,
@@ -227,7 +227,7 @@ internal static class EcsBaseline
         return [p.Setup, p.Callbacks, p.InputPrepare, p.WorldSignalsPrepare, p.MetadataPrepare,
             p.InstancesPrepare, p.ReceiptsPrepare, p.RenderPrepare, p.Install];
     }
-    private static void Move(World world, int stride)
+    internal static void Move(World world, int stride)
     {
         if (stride == 0) return;
         var objects = world.GetEntities();
@@ -237,7 +237,7 @@ internal static class EcsBaseline
             world.Set(objects[i], old with { Position = old.Position + new global::System.Numerics.Vector3(1, 0, 0) });
         }
     }
-    private static void VerifyMoves(World world, int count, int stride, int steps)
+    internal static void VerifyMoves(World world, int count, int stride, int steps)
     {
         Require(world.Count == count && world.Tick == (ulong)steps);
         for (int i = 0; i < count; i++)

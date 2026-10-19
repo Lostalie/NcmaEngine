@@ -539,6 +539,7 @@ if (args.Contains("--pressure-benchmark")) PressureProfiles.Run();
 // Always validate the measurement fixtures; opt-in measurements leave existing benchmark output unchanged.
 EcsBaseline.Run(args.Contains("--ecs-baseline"));
 EcsReadBaseline.Run(false, (_, _, _) => { });
+EcsDenseDiagnostics.Run(false);
 return 0;
     }
 }

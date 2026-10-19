@@ -120,7 +120,24 @@ internal sealed class ComponentStorage
     internal IComponentPool? FindPool(Type type) => _pools.GetValueOrDefault(type);
     internal bool HasStableReadEncoding(ComponentRegistry registry) =>
         _pools.All(pair => pair.Value.Count == 0 || registry.CanCacheEncoding(pair.Key));
-    internal IEnumerable<Type> TypesAt(int slot) => _pools.Where(pair => pair.Value.Has(slot)).Select(pair => pair.Key);
+    internal MemberTypes TypesAt(int slot) => new(_pools, slot);
+    // Internal owner-thread traversal; does not escape World as a query or writable lease.
+    // Avoid a closure, LINQ iterator chain and boxed dictionary enumerator per prepared object.
+    internal readonly struct MemberTypes(Dictionary<Type, IComponentPool> pools, int slot)
+    {
+        public Enumerator GetEnumerator() => new(pools, slot);
+        internal struct Enumerator(Dictionary<Type, IComponentPool> pools, int slot)
+        {
+            private Dictionary<Type, IComponentPool>.Enumerator _iterator = pools.GetEnumerator();
+            public readonly Type Current => _iterator.Current.Key;
+            public bool MoveNext()
+            {
+                while (_iterator.MoveNext()) if (_iterator.Current.Value.Has(slot)) return true;
+                return false;
+            }
+            public void Dispose() => _iterator.Dispose();
+        }
+    }
     internal T Get<T>(int slot) where T : struct, IComponent =>
         _pools.TryGetValue(typeof(T), out var pool) ? ((ComponentPool<T>)pool).Get(slot) :
             throw new ArgumentException("Component is not attached.");

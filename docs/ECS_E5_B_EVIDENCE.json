@@ -1,0 +1,6685 @@
+{
+  "schema": 1,
+  "stage": "E5-B",
+  "date": "2026-10-20",
+  "baseCommit": "1974a214cde3d4c3ef470d99e03b7471bf943419",
+  "status": "In progress: functional gates and scoped PERF01 target met; cold-query risk unresolved; not committed or deployed.",
+  "sourceFreeze": {
+    "files": 957,
+    "evidence": {
+      "path": "out/verification/ecs-e5b/source-freeze-first.json",
+      "sha256": "CD7821A6B24BE035159B77D5E3D159C8D53A9AC0CFD1E8F40ADBC32334D57810"
+    }
+  },
+  "contract": {
+    "path": "scripts/ecs-e5-contract.json",
+    "sha256": "C368CBC8EA89AF54C3114D991201D065199909E4E0D22DAF59EF5EDB430B196E"
+  },
+  "functional": {
+    "Debug": {
+      "ctest": 89,
+      "seconds": 1105.45,
+      "python": 53,
+      "candidate": "4510c0cc01084691a3b06872ead3a180"
+    },
+    "Release": {
+      "ctest": 89,
+      "seconds": 1009.32,
+      "python": 53,
+      "candidate": "bd7a0321c86a4e0185a33aa1015a8e70"
+    },
+    "compilerWarnings": 0,
+    "skipTestsCanonicalBuildThenFullExternalCtest": true,
+    "smokeAndInspect": true,
+    "incrementalValidationGroups": 28,
+    "denseDiagnosticFixtureGroups": 2,
+    "realInputNegativeCases": 14,
+    "realSourceAndRelocatedHostChecks": 1607,
+    "realTlsChecks": 4583,
+    "relocatedModuleChecks": 1174,
+    "privatePipeChecks": 871
+  },
+  "decisions": [
+    {
+      "cohort": "primary-common",
+      "workload": "play_step_stride_0",
+      "objects": 1000,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.007109859209588042,
+            0.006087242394355741,
+            0.008225262976717706
+          ],
+          "geometricMean": 0.007087239832264817,
+          "process95Interval": [
+            0.004876128873405289,
+            0.01030099280476219
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "play_step_stride_0",
+      "objects": 4096,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.008022008298655231,
+            0.006480837560138518,
+            0.006621356825140511
+          ],
+          "geometricMean": 0.007008424705797687,
+          "process95Interval": [
+            0.005234659975260703,
+            0.009383229682342292
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "play_step_stride_100",
+      "objects": 1000,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.010527511341749797,
+            0.009987288905029961,
+            0.011589728666232263
+          ],
+          "geometricMean": 0.010681088984071833,
+          "process95Interval": [
+            0.008855507925916146,
+            0.012883017308559173
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "play_step_stride_100",
+      "objects": 4096,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.010516225780290532,
+            0.010019299138182369,
+            0.01135183215939502
+          ],
+          "geometricMean": 0.010615026158563592,
+          "process95Interval": [
+            0.009078228524965256,
+            0.01241197883894651
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "read_transform",
+      "objects": 100,
+      "targets": [
+        {
+          "id": "ECS-PERF-02",
+          "ratios": [
+            0.8968115942028987,
+            1.0256559766763849,
+            0.6979166666666667
+          ],
+          "geometricMean": 0.8626517341097004,
+          "process95Interval": [
+            0.5309064978051525,
+            1.4016931746719545
+          ],
+          "threshold": 1.05,
+          "status": "unproven"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "read_transform_and_marker",
+      "objects": 100,
+      "targets": [
+        {
+          "id": "ECS-PERF-02",
+          "ratios": [
+            0.8089456869009584,
+            1.1346704871060174,
+            1.0247229326513214
+          ],
+          "geometricMean": 0.9797874209369294,
+          "process95Interval": [
+            0.6365941513563366,
+            1.507999073162839
+          ],
+          "threshold": 1.05,
+          "status": "unproven"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "world_step_stride_0",
+      "objects": 1000,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.0010291251525473123,
+            0.0014751895665573586,
+            0.0009524662362930341
+          ],
+          "geometricMean": 0.0011308071299115242,
+          "process95Interval": [
+            0.0006331586474911673,
+            0.0020195961472303466
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "world_step_stride_0",
+      "objects": 4096,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.0017062916728927805,
+            0.002340909785232029,
+            0.0017664092269866487
+          ],
+          "geometricMean": 0.001917975657893251,
+          "process95Interval": [
+            0.0012466062429601743,
+            0.002950916253664688
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "world_step_stride_1",
+      "objects": 4096,
+      "targets": [
+        {
+          "id": "ECS-PERF-01",
+          "ratios": [
+            0.791741953135242,
+            0.8081801627241494,
+            0.8768107861213927
+          ],
+          "geometricMean": 0.8247694689462997,
+          "process95Interval": [
+            0.7212734604369783,
+            0.9431161885449657
+          ],
+          "threshold": 1,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "world_step_stride_100",
+      "objects": 1000,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.016743877616806506,
+            0.023594473399368755,
+            0.015565385678739285
+          ],
+          "geometricMean": 0.018320700369228917,
+          "process95Interval": [
+            0.010551724703029723,
+            0.03180978195182534
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    },
+    {
+      "cohort": "primary-common",
+      "workload": "world_step_stride_100",
+      "objects": 4096,
+      "targets": [
+        {
+          "id": "HOTSPOT-20",
+          "ratios": [
+            0.025601450058770625,
+            0.025191724112310975,
+            0.02641912948304326
+          ],
+          "geometricMean": 0.025732401541381778,
+          "process95Interval": [
+            0.024231452250621704,
+            0.027326322922717868
+          ],
+          "threshold": 0.8,
+          "status": "met"
+        }
+      ]
+    }
+  ],
+  "cohorts": [
+    {
+      "name": "primary-common",
+      "archive": "out/verification/ecs-e5a/6daa20a7a9664ec9bf00dd7b2f842cc4",
+      "inputs": {
+        "path": "out/verification/ecs-e5a/6daa20a7a9664ec9bf00dd7b2f842cc4/inputs.json",
+        "sha256": "D9AA46209026EC018840DCBE9F28583A13D5ABBAD12A299EE3CE35A105209E5F"
+      },
+      "execution": {
+        "path": "out/verification/ecs-e5a/6daa20a7a9664ec9bf00dd7b2f842cc4/execution.json",
+        "sha256": "B26F6774D8D2E47220978D84CC2338CEB1A18A1EA386A86DEC56B58FA5B82F35"
+      },
+      "verification": {
+        "path": "out/verification/ecs-e5a/6daa20a7a9664ec9bf00dd7b2f842cc4/verification.json",
+        "sha256": "781B7264B1D7F852B3A6DA230F7B5F9B1E0069AA23DC6A93486848E9B08F228C"
+      },
+      "rows": [
+        {
+          "workload": "play_behaviour_full_write",
+          "objects": 100,
+          "p95Ratios": [
+            0.1305366857534847,
+            0.16558979860535428,
+            0.16636354934430939
+          ],
+          "referenceP50Ms": [
+            6.7419,
+            6.2919,
+            6.4164
+          ],
+          "candidateP50Ms": [
+            0.9276,
+            0.9012,
+            0.9212
+          ],
+          "referenceP95Ms": [
+            10.4959,
+            8.2028,
+            8.3576
+          ],
+          "candidateP95Ms": [
+            1.3701,
+            1.3583,
+            1.3904
+          ],
+          "candidateP99Ms": [
+            1.4093,
+            1.3809,
+            1.4124
+          ],
+          "candidateMaxMs": [
+            1.6966,
+            1.3899,
+            1.437
+          ],
+          "referenceMedianAllocatedBytes": [
+            2375272,
+            2375272,
+            2375272
+          ],
+          "candidateMedianAllocatedBytes": [
+            320440,
+            320440,
+            320440
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_behaviour_full_write",
+          "objects": 1000,
+          "p95Ratios": [
+            0.1819042502832281,
+            0.17478475140625868,
+            0.17763018951085552
+          ],
+          "referenceP50Ms": [
+            69.1535,
+            70.3076,
+            67.3139
+          ],
+          "candidateP50Ms": [
+            10.2714,
+            10.8083,
+            10.0688
+          ],
+          "referenceP95Ms": [
+            75.2044,
+            82.9506,
+            76.2331
+          ],
+          "candidateP95Ms": [
+            13.68,
+            14.4985,
+            13.5413
+          ],
+          "candidateP99Ms": [
+            16.0912,
+            18.189,
+            14.7614
+          ],
+          "candidateMaxMs": [
+            16.2204,
+            20.4333,
+            15.2177
+          ],
+          "referenceMedianAllocatedBytes": [
+            23715696,
+            23715608,
+            23715608
+          ],
+          "candidateMedianAllocatedBytes": [
+            3105968,
+            3105968,
+            3105968
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_behaviour_full_write",
+          "objects": 4096,
+          "p95Ratios": [
+            0.18675821169804216,
+            0.18299947724107726,
+            0.1870897121143411
+          ],
+          "referenceP50Ms": [
+            301.5141,
+            300.6376,
+            297.9754
+          ],
+          "candidateP50Ms": [
+            46.8711,
+            47.4822,
+            47.5799
+          ],
+          "referenceP95Ms": [
+            318.2259,
+            327.8758,
+            319.745
+          ],
+          "candidateP95Ms": [
+            59.4313,
+            60.0011,
+            59.821
+          ],
+          "candidateP99Ms": [
+            66.6064,
+            62.9915,
+            64.5515
+          ],
+          "candidateMaxMs": [
+            72.0803,
+            63.1278,
+            65.8677
+          ],
+          "referenceMedianAllocatedBytes": [
+            97472760,
+            97473120,
+            97473104
+          ],
+          "candidateMedianAllocatedBytes": [
+            12964136,
+            12964136,
+            12964136
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_replace_one_percent",
+          "objects": 100,
+          "p95Ratios": [
+            0.022607107816417747,
+            0.024908887843874912,
+            0.028022463582200178
+          ],
+          "referenceP50Ms": [
+            5.5119,
+            5.2805,
+            5.3072
+          ],
+          "candidateP50Ms": [
+            0.121,
+            0.1126,
+            0.1183
+          ],
+          "referenceP95Ms": [
+            7.3384,
+            6.8048,
+            7.0158
+          ],
+          "candidateP95Ms": [
+            0.1659,
+            0.1695,
+            0.1966
+          ],
+          "candidateP99Ms": [
+            0.172,
+            0.1953,
+            0.2545
+          ],
+          "candidateMaxMs": [
+            0.6118,
+            0.4507,
+            0.4634
+          ],
+          "referenceMedianAllocatedBytes": [
+            1849512,
+            1849512,
+            1849512
+          ],
+          "candidateMedianAllocatedBytes": [
+            163096,
+            163096,
+            163096
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_replace_one_percent",
+          "objects": 1000,
+          "p95Ratios": [
+            0.015021986627311606,
+            0.020959264758227698,
+            0.02232254983736384
+          ],
+          "referenceP50Ms": [
+            58.116,
+            56.5012,
+            56.924
+          ],
+          "candidateP50Ms": [
+            0.8221,
+            0.8518,
+            0.9468
+          ],
+          "referenceP95Ms": [
+            83.005,
+            62.3686,
+            64.4998
+          ],
+          "candidateP95Ms": [
+            1.2469,
+            1.3072,
+            1.4398
+          ],
+          "candidateP99Ms": [
+            1.3121,
+            1.4693,
+            2.101
+          ],
+          "candidateMaxMs": [
+            1.4938,
+            1.5211,
+            2.2371
+          ],
+          "referenceMedianAllocatedBytes": [
+            19244392,
+            19244392,
+            19244392
+          ],
+          "candidateMedianAllocatedBytes": [
+            940632,
+            940632,
+            940632
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_replace_one_percent",
+          "objects": 4096,
+          "p95Ratios": [
+            0.01879197227091671,
+            0.019782125375118767,
+            0.020797183382403977
+          ],
+          "referenceP50Ms": [
+            238.5442,
+            238.4532,
+            237.9192
+          ],
+          "candidateP50Ms": [
+            3.4779,
+            3.6429,
+            3.594
+          ],
+          "referenceP95Ms": [
+            253.3369,
+            255.1192,
+            250.1156
+          ],
+          "candidateP95Ms": [
+            4.7607,
+            5.0468,
+            5.2017
+          ],
+          "candidateP99Ms": [
+            5.2117,
+            5.369,
+            6.5674
+          ],
+          "candidateMaxMs": [
+            5.3045,
+            5.4595,
+            7.7515
+          ],
+          "referenceMedianAllocatedBytes": [
+            78268816,
+            78268608,
+            78268608
+          ],
+          "candidateMedianAllocatedBytes": [
+            3163032,
+            3163032,
+            3163032
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_-1",
+          "objects": 100,
+          "p95Ratios": [
+            0.008279589881454576,
+            0.006405920502924442,
+            0.008983472809622365
+          ],
+          "referenceP50Ms": [
+            5.1327,
+            5.7229,
+            5.1431
+          ],
+          "candidateP50Ms": [
+            0.0426,
+            0.0424,
+            0.0424
+          ],
+          "referenceP95Ms": [
+            6.9931,
+            7.5399,
+            6.6678
+          ],
+          "candidateP95Ms": [
+            0.0579,
+            0.0483,
+            0.0599
+          ],
+          "candidateP99Ms": [
+            0.0834,
+            0.0524,
+            0.0726
+          ],
+          "candidateMaxMs": [
+            0.1047,
+            0.053,
+            0.1177
+          ],
+          "referenceMedianAllocatedBytes": [
+            1775880,
+            1775880,
+            1775880
+          ],
+          "candidateMedianAllocatedBytes": [
+            85968,
+            85968,
+            85968
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_-1",
+          "objects": 1000,
+          "p95Ratios": [
+            0.009546543177460037,
+            0.009462844838215878,
+            0.009300499279585069
+          ],
+          "referenceP50Ms": [
+            55.4256,
+            56.4434,
+            55.4878
+          ],
+          "candidateP50Ms": [
+            0.3531,
+            0.3579,
+            0.3568
+          ],
+          "referenceP95Ms": [
+            62.8395,
+            66.5022,
+            60.8677
+          ],
+          "candidateP95Ms": [
+            0.5999,
+            0.6293,
+            0.5661
+          ],
+          "candidateP99Ms": [
+            0.7767,
+            0.7016,
+            0.7142
+          ],
+          "candidateMaxMs": [
+            0.9249,
+            1.122,
+            0.7654
+          ],
+          "referenceMedianAllocatedBytes": [
+            18945552,
+            18945552,
+            18945552
+          ],
+          "candidateMedianAllocatedBytes": [
+            617176,
+            617176,
+            616840
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_-1",
+          "objects": 4096,
+          "p95Ratios": [
+            0.008347857235311293,
+            0.008861793277359085,
+            0.008708896428754331
+          ],
+          "referenceP50Ms": [
+            237.7169,
+            236.7543,
+            237.1262
+          ],
+          "candidateP50Ms": [
+            1.548,
+            1.4722,
+            1.5481
+          ],
+          "referenceP95Ms": [
+            265.7688,
+            251.2584,
+            255.7959
+          ],
+          "candidateP95Ms": [
+            2.2186,
+            2.2266,
+            2.2277
+          ],
+          "candidateP99Ms": [
+            2.4532,
+            2.3397,
+            2.7561
+          ],
+          "candidateMaxMs": [
+            2.7441,
+            3.0848,
+            2.7657
+          ],
+          "referenceMedianAllocatedBytes": [
+            77538712,
+            77540368,
+            77540272
+          ],
+          "candidateMedianAllocatedBytes": [
+            2308912,
+            2306600,
+            2307720
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_0",
+          "objects": 100,
+          "p95Ratios": [
+            0.003950479899846988,
+            0.00379630659695183,
+            0.004847604364326376
+          ],
+          "referenceP50Ms": [
+            5.3592,
+            5.3394,
+            5.1369
+          ],
+          "candidateP50Ms": [
+            0.0253,
+            0.0251,
+            0.0249
+          ],
+          "referenceP95Ms": [
+            7.189,
+            7.1912,
+            6.7456
+          ],
+          "candidateP95Ms": [
+            0.0284,
+            0.0273,
+            0.0327
+          ],
+          "candidateP99Ms": [
+            0.0311,
+            0.0287,
+            0.039
+          ],
+          "candidateMaxMs": [
+            0.0375,
+            0.0368,
+            0.0444
+          ],
+          "referenceMedianAllocatedBytes": [
+            1747976,
+            1747976,
+            1747976
+          ],
+          "candidateMedianAllocatedBytes": [
+            51824,
+            51824,
+            51824
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_0",
+          "objects": 1000,
+          "p95Ratios": [
+            0.007109859209588042,
+            0.006087242394355741,
+            0.008225262976717706
+          ],
+          "referenceP50Ms": [
+            55.4162,
+            56.2833,
+            54.674
+          ],
+          "candidateP50Ms": [
+            0.2456,
+            0.2393,
+            0.2431
+          ],
+          "referenceP95Ms": [
+            61.8437,
+            66.0069,
+            60.4236
+          ],
+          "candidateP95Ms": [
+            0.4397,
+            0.4018,
+            0.497
+          ],
+          "candidateP99Ms": [
+            0.6442,
+            0.4351,
+            0.5628
+          ],
+          "candidateMaxMs": [
+            1.4145,
+            1.4901,
+            1.5769
+          ],
+          "referenceMedianAllocatedBytes": [
+            18811192,
+            18811192,
+            18811192
+          ],
+          "candidateMedianAllocatedBytes": [
+            438576,
+            438576,
+            438576
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_0",
+          "objects": 4096,
+          "p95Ratios": [
+            0.008022008298655231,
+            0.006480837560138518,
+            0.006621356825140511
+          ],
+          "referenceP50Ms": [
+            241.6905,
+            236.5366,
+            240.8023
+          ],
+          "candidateP50Ms": [
+            1.4697,
+            1.1599,
+            1.2894
+          ],
+          "referenceP95Ms": [
+            265.6816,
+            252.7914,
+            271.2435
+          ],
+          "candidateP95Ms": [
+            2.1313,
+            1.6383,
+            1.796
+          ],
+          "candidateP99Ms": [
+            3.5354,
+            1.825,
+            2.0186
+          ],
+          "candidateMaxMs": [
+            4.4491,
+            2.0268,
+            2.1842
+          ],
+          "referenceMedianAllocatedBytes": [
+            77301512,
+            77301512,
+            77301512
+          ],
+          "candidateMedianAllocatedBytes": [
+            1891368,
+            1891368,
+            1891368
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_1",
+          "objects": 100,
+          "p95Ratios": [
+            0.1846692733789508,
+            0.19010188066927353,
+            0.1800762732063879
+          ],
+          "referenceP50Ms": [
+            5.7196,
+            5.6116,
+            5.8394
+          ],
+          "candidateP50Ms": [
+            0.9106,
+            0.9286,
+            0.8939
+          ],
+          "referenceP95Ms": [
+            7.3656,
+            7.5186,
+            7.5518
+          ],
+          "candidateP95Ms": [
+            1.3602,
+            1.4293,
+            1.3599
+          ],
+          "candidateP99Ms": [
+            1.3979,
+            1.4438,
+            1.8664
+          ],
+          "candidateMaxMs": [
+            1.4065,
+            1.5259,
+            1.8685
+          ],
+          "referenceMedianAllocatedBytes": [
+            1905160,
+            1905160,
+            1905160
+          ],
+          "candidateMedianAllocatedBytes": [
+            287152,
+            287152,
+            287152
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_1",
+          "objects": 1000,
+          "p95Ratios": [
+            0.17440186673174474,
+            0.18923045351939258,
+            0.2126918223025397
+          ],
+          "referenceP50Ms": [
+            63.8513,
+            61.2613,
+            60.0228
+          ],
+          "candidateP50Ms": [
+            9.9439,
+            10.1009,
+            10.2105
+          ],
+          "referenceP95Ms": [
+            76.6259,
+            73.095,
+            66.9565
+          ],
+          "candidateP95Ms": [
+            13.3637,
+            13.8318,
+            14.2411
+          ],
+          "candidateP99Ms": [
+            14.4312,
+            15.315,
+            14.7706
+          ],
+          "candidateMaxMs": [
+            19.5626,
+            18.5139,
+            14.9978
+          ],
+          "referenceMedianAllocatedBytes": [
+            20216952,
+            20216952,
+            20216952
+          ],
+          "candidateMedianAllocatedBytes": [
+            2768256,
+            2768256,
+            2768256
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_1",
+          "objects": 4096,
+          "p95Ratios": [
+            0.2071592019006395,
+            0.20663172277243627,
+            0.20639918261656978
+          ],
+          "referenceP50Ms": [
+            257.959,
+            257.8316,
+            256.559
+          ],
+          "candidateP50Ms": [
+            46.8632,
+            45.762,
+            46.3209
+          ],
+          "referenceP95Ms": [
+            274.1814,
+            273.9439,
+            273.6537
+          ],
+          "candidateP95Ms": [
+            56.7992,
+            56.6055,
+            56.4819
+          ],
+          "candidateP99Ms": [
+            63.3508,
+            66.4696,
+            65.746
+          ],
+          "candidateMaxMs": [
+            66.1937,
+            66.6929,
+            79.789
+          ],
+          "referenceMedianAllocatedBytes": [
+            83002152,
+            83001600,
+            83002776
+          ],
+          "candidateMedianAllocatedBytes": [
+            11546560,
+            11546560,
+            11546560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_100",
+          "objects": 100,
+          "p95Ratios": [
+            0.010227574603736828,
+            0.0068080757864501336,
+            0.007186540033255362
+          ],
+          "referenceP50Ms": [
+            5.3166,
+            5.3691,
+            5.3106
+          ],
+          "candidateP50Ms": [
+            0.0464,
+            0.0459,
+            0.0456
+          ],
+          "referenceP95Ms": [
+            6.7758,
+            7.2414,
+            7.0966
+          ],
+          "candidateP95Ms": [
+            0.0693,
+            0.0493,
+            0.051
+          ],
+          "candidateP99Ms": [
+            0.0787,
+            0.0554,
+            0.1038
+          ],
+          "candidateMaxMs": [
+            0.4956,
+            0.3908,
+            0.4045
+          ],
+          "referenceMedianAllocatedBytes": [
+            1777168,
+            1777168,
+            1777168
+          ],
+          "candidateMedianAllocatedBytes": [
+            65696,
+            65696,
+            65696
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_100",
+          "objects": 1000,
+          "p95Ratios": [
+            0.010527511341749797,
+            0.009987288905029961,
+            0.011589728666232263
+          ],
+          "referenceP50Ms": [
+            55.1078,
+            56.5164,
+            55.2298
+          ],
+          "candidateP50Ms": [
+            0.4117,
+            0.4034,
+            0.5008
+          ],
+          "referenceP95Ms": [
+            62.5124,
+            64.4319,
+            63.2284
+          ],
+          "candidateP95Ms": [
+            0.6581,
+            0.6435,
+            0.7328
+          ],
+          "candidateP99Ms": [
+            0.7439,
+            0.7997,
+            0.884
+          ],
+          "candidateMaxMs": [
+            1.0753,
+            0.913,
+            0.9956
+          ],
+          "referenceMedianAllocatedBytes": [
+            18937632,
+            18937632,
+            18937632
+          ],
+          "candidateMedianAllocatedBytes": [
+            558560,
+            558560,
+            558560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_100",
+          "objects": 4096,
+          "p95Ratios": [
+            0.010516225780290532,
+            0.010019299138182369,
+            0.01135183215939502
+          ],
+          "referenceP50Ms": [
+            239.7507,
+            238.1411,
+            240.7057
+          ],
+          "candidateP50Ms": [
+            1.9727,
+            1.8359,
+            1.9453
+          ],
+          "referenceP95Ms": [
+            262.2709,
+            259.6489,
+            259.9228
+          ],
+          "candidateP95Ms": [
+            2.7581,
+            2.6015,
+            2.9506
+          ],
+          "candidateP99Ms": [
+            2.8795,
+            2.7738,
+            3.6279
+          ],
+          "candidateMaxMs": [
+            3.2111,
+            2.8905,
+            4.5213
+          ],
+          "referenceMedianAllocatedBytes": [
+            77762744,
+            77762192,
+            77762176
+          ],
+          "candidateMedianAllocatedBytes": [
+            2389184,
+            2389184,
+            2389184
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform",
+          "objects": 100,
+          "p95Ratios": [
+            0.8968115942028987,
+            1.0256559766763849,
+            0.6979166666666667
+          ],
+          "referenceP50Ms": [
+            0.00676875,
+            0.00665625,
+            0.00674375
+          ],
+          "candidateP50Ms": [
+            0.006725,
+            0.00704375,
+            0.0067
+          ],
+          "referenceP95Ms": [
+            0.01078125,
+            0.01071875,
+            0.012
+          ],
+          "candidateP95Ms": [
+            0.00966875,
+            0.01099375,
+            0.008375
+          ],
+          "candidateP99Ms": [
+            0.01046875,
+            0.01218125,
+            0.00901875
+          ],
+          "candidateMaxMs": [
+            0.012,
+            0.0135875,
+            0.009825
+          ],
+          "referenceMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "candidateMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9577710056595559,
+            0.970196981325147,
+            0.976055890758971
+          ],
+          "referenceP50Ms": [
+            0.05995,
+            0.05911875,
+            0.05920625
+          ],
+          "candidateP50Ms": [
+            0.0592,
+            0.05903125,
+            0.05956875
+          ],
+          "referenceP95Ms": [
+            0.10049375,
+            0.097725,
+            0.09840625
+          ],
+          "candidateP95Ms": [
+            0.09625,
+            0.0948125,
+            0.09605
+          ],
+          "candidateP99Ms": [
+            0.09936875,
+            0.10315,
+            0.09778125
+          ],
+          "candidateMaxMs": [
+            0.10303125,
+            0.11816875,
+            0.1168
+          ],
+          "referenceMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "candidateMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0541138603902636,
+            0.9966662141165468,
+            0.9667164742779266
+          ],
+          "referenceP50Ms": [
+            0.2795875,
+            0.27823125,
+            0.2737625
+          ],
+          "candidateP50Ms": [
+            0.28615,
+            0.286725,
+            0.28418125
+          ],
+          "referenceP95Ms": [
+            0.40389375,
+            0.41431875,
+            0.38063125
+          ],
+          "candidateP95Ms": [
+            0.42575,
+            0.4129375,
+            0.3679625
+          ],
+          "candidateP99Ms": [
+            0.44410625,
+            0.41676875,
+            0.4002125
+          ],
+          "candidateMaxMs": [
+            0.48955,
+            0.4204875,
+            0.415075
+          ],
+          "referenceMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "candidateMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform_and_marker",
+          "objects": 100,
+          "p95Ratios": [
+            0.8089456869009584,
+            1.1346704871060174,
+            1.0247229326513214
+          ],
+          "referenceP50Ms": [
+            0.00640625,
+            0.00770625,
+            0.0063
+          ],
+          "candidateP50Ms": [
+            0.0064,
+            0.00929375,
+            0.0064875
+          ],
+          "referenceP95Ms": [
+            0.00978125,
+            0.01090625,
+            0.00733125
+          ],
+          "candidateP95Ms": [
+            0.0079125,
+            0.012375,
+            0.0075125
+          ],
+          "candidateP99Ms": [
+            0.01231875,
+            0.0127,
+            0.0079
+          ],
+          "candidateMaxMs": [
+            0.0826625,
+            0.08724375,
+            0.0789125
+          ],
+          "referenceMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "candidateMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform_and_marker",
+          "objects": 1000,
+          "p95Ratios": [
+            0.980453479280688,
+            1.0111925681347584,
+            1.0263984915147706
+          ],
+          "referenceP50Ms": [
+            0.06819375,
+            0.068325,
+            0.0677
+          ],
+          "candidateP50Ms": [
+            0.06866875,
+            0.07195,
+            0.06834375
+          ],
+          "referenceP95Ms": [
+            0.1119125,
+            0.11168125,
+            0.10938125
+          ],
+          "candidateP95Ms": [
+            0.109725,
+            0.11293125,
+            0.11226875
+          ],
+          "candidateP99Ms": [
+            0.11398125,
+            0.11448125,
+            0.11533125
+          ],
+          "candidateMaxMs": [
+            0.11439375,
+            0.122975,
+            0.1168
+          ],
+          "referenceMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "candidateMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform_and_marker",
+          "objects": 4096,
+          "p95Ratios": [
+            0.8740731766416283,
+            1.0392997061704212,
+            1.1055599246212515
+          ],
+          "referenceP50Ms": [
+            0.3785,
+            0.3104375,
+            0.30848125
+          ],
+          "candidateP50Ms": [
+            0.3204,
+            0.329075,
+            0.31884375
+          ],
+          "referenceP95Ms": [
+            0.515875,
+            0.45945,
+            0.42120625
+          ],
+          "candidateP95Ms": [
+            0.4509125,
+            0.47750625,
+            0.46566875
+          ],
+          "candidateP99Ms": [
+            0.464825,
+            0.49778125,
+            0.50076875
+          ],
+          "candidateMaxMs": [
+            0.5053375,
+            0.50545625,
+            0.5132375
+          ],
+          "referenceMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "candidateMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_0",
+          "objects": 100,
+          "p95Ratios": [
+            0.0015007503751875938,
+            0.0015515270292340358,
+            0.0015529219452390683
+          ],
+          "referenceP50Ms": [
+            0.7699,
+            0.8142,
+            0.9196
+          ],
+          "candidateP50Ms": [
+            0.0016,
+            0.0016,
+            0.0016
+          ],
+          "referenceP95Ms": [
+            1.1994,
+            1.2246,
+            1.2235
+          ],
+          "candidateP95Ms": [
+            0.0018,
+            0.0019,
+            0.0019
+          ],
+          "candidateP99Ms": [
+            0.0021,
+            0.002,
+            0.002
+          ],
+          "candidateMaxMs": [
+            0.0021,
+            0.0021,
+            0.0021
+          ],
+          "referenceMedianAllocatedBytes": [
+            310600,
+            310600,
+            310600
+          ],
+          "candidateMedianAllocatedBytes": [
+            11568,
+            11568,
+            11568
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_0",
+          "objects": 1000,
+          "p95Ratios": [
+            0.0010291251525473123,
+            0.0014751895665573586,
+            0.0009524662362930341
+          ],
+          "referenceP50Ms": [
+            8.7757,
+            8.5219,
+            8.5643
+          ],
+          "candidateP50Ms": [
+            0.0103,
+            0.0125,
+            0.0109
+          ],
+          "referenceP95Ms": [
+            10.9802,
+            10.6427,
+            12.2839
+          ],
+          "candidateP95Ms": [
+            0.0113,
+            0.0157,
+            0.0117
+          ],
+          "candidateP99Ms": [
+            0.0161,
+            0.0191,
+            0.0144
+          ],
+          "candidateMaxMs": [
+            0.8418,
+            0.9107,
+            0.9141
+          ],
+          "referenceMedianAllocatedBytes": [
+            3538192,
+            3538192,
+            3538192
+          ],
+          "candidateMedianAllocatedBytes": [
+            71328,
+            71328,
+            71328
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_0",
+          "objects": 4096,
+          "p95Ratios": [
+            0.0017062916728927805,
+            0.002340909785232029,
+            0.0017664092269866487
+          ],
+          "referenceP50Ms": [
+            38.8756,
+            38.9357,
+            37.9944
+          ],
+          "candidateP50Ms": [
+            0.04,
+            0.0669,
+            0.0667
+          ],
+          "referenceP95Ms": [
+            49.5226,
+            52.3728,
+            48.9694
+          ],
+          "candidateP95Ms": [
+            0.0845,
+            0.1226,
+            0.0865
+          ],
+          "candidateP99Ms": [
+            0.4455,
+            0.1569,
+            1.5741
+          ],
+          "candidateMaxMs": [
+            4.4529,
+            5.4487,
+            3.4304
+          ],
+          "referenceMedianAllocatedBytes": [
+            14455544,
+            14455544,
+            14455544
+          ],
+          "candidateMedianAllocatedBytes": [
+            296808,
+            296808,
+            296808
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_1",
+          "objects": 100,
+          "p95Ratios": [
+            0.6863845787216014,
+            0.6835205992509363,
+            0.7105665320379871
+          ],
+          "referenceP50Ms": [
+            1.2261,
+            1.257,
+            1.2133
+          ],
+          "candidateP50Ms": [
+            0.8601,
+            0.8618,
+            0.8826
+          ],
+          "referenceP95Ms": [
+            1.8883,
+            1.9224,
+            1.8322
+          ],
+          "candidateP95Ms": [
+            1.2961,
+            1.314,
+            1.3019
+          ],
+          "candidateP99Ms": [
+            1.3112,
+            1.3383,
+            1.3265
+          ],
+          "candidateMaxMs": [
+            1.315,
+            1.821,
+            1.3536
+          ],
+          "referenceMedianAllocatedBytes": [
+            467504,
+            467504,
+            467504
+          ],
+          "candidateMedianAllocatedBytes": [
+            246872,
+            246872,
+            246872
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_1",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9240596301421562,
+            0.8342509120511351,
+            0.8941578013128268
+          ],
+          "referenceP50Ms": [
+            14.2496,
+            13.6192,
+            13.873
+          ],
+          "candidateP50Ms": [
+            9.9272,
+            9.6045,
+            9.7685
+          ],
+          "referenceP95Ms": [
+            15.898,
+            16.5835,
+            16.7882
+          ],
+          "candidateP95Ms": [
+            14.6907,
+            13.8348,
+            15.0113
+          ],
+          "candidateP99Ms": [
+            17.1578,
+            16.1831,
+            16.5883
+          ],
+          "candidateMaxMs": [
+            18.2686,
+            17.4003,
+            17.1178
+          ],
+          "referenceMedianAllocatedBytes": [
+            4943000,
+            4943000,
+            4943032
+          ],
+          "candidateMedianAllocatedBytes": [
+            2400984,
+            2400984,
+            2400984
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_1",
+          "objects": 4096,
+          "p95Ratios": [
+            0.791741953135242,
+            0.8081801627241494,
+            0.8768107861213927
+          ],
+          "referenceP50Ms": [
+            58.7211,
+            57.6961,
+            57.7761
+          ],
+          "candidateP50Ms": [
+            44.7236,
+            43.7297,
+            44.5233
+          ],
+          "referenceP95Ms": [
+            70.1764,
+            66.8862,
+            65.4619
+          ],
+          "candidateP95Ms": [
+            55.5616,
+            54.0561,
+            57.3977
+          ],
+          "candidateP99Ms": [
+            58.906,
+            57.8238,
+            60.0207
+          ],
+          "candidateMaxMs": [
+            61.2271,
+            60.3873,
+            60.7149
+          ],
+          "referenceMedianAllocatedBytes": [
+            20152600,
+            20152480,
+            20152512
+          ],
+          "candidateMedianAllocatedBytes": [
+            9951976,
+            9951976,
+            9951976
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_100",
+          "objects": 100,
+          "p95Ratios": [
+            0.01626082693250531,
+            0.015012785614121919,
+            0.02091462462931169
+          ],
+          "referenceP50Ms": [
+            0.8278,
+            0.7938,
+            1.1537
+          ],
+          "candidateP50Ms": [
+            0.0177,
+            0.0173,
+            0.0174
+          ],
+          "referenceP95Ms": [
+            1.2238,
+            1.2123,
+            1.2814
+          ],
+          "candidateP95Ms": [
+            0.0199,
+            0.0182,
+            0.0268
+          ],
+          "candidateP99Ms": [
+            0.0328,
+            0.0304,
+            0.0397
+          ],
+          "candidateMaxMs": [
+            1.1532,
+            1.1078,
+            1.1124
+          ],
+          "referenceMedianAllocatedBytes": [
+            339848,
+            339848,
+            339848
+          ],
+          "candidateMedianAllocatedBytes": [
+            25416,
+            25416,
+            25416
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_100",
+          "objects": 1000,
+          "p95Ratios": [
+            0.016743877616806506,
+            0.023594473399368755,
+            0.015565385678739285
+          ],
+          "referenceP50Ms": [
+            8.8679,
+            8.8188,
+            8.4354
+          ],
+          "candidateP50Ms": [
+            0.1599,
+            0.1627,
+            0.1582
+          ],
+          "referenceP95Ms": [
+            10.8577,
+            10.9941,
+            10.851
+          ],
+          "candidateP95Ms": [
+            0.1818,
+            0.2594,
+            0.1689
+          ],
+          "candidateP99Ms": [
+            0.2558,
+            0.3869,
+            0.1905
+          ],
+          "candidateMaxMs": [
+            1.2159,
+            1.1048,
+            1.0959
+          ],
+          "referenceMedianAllocatedBytes": [
+            3665280,
+            3665280,
+            3665280
+          ],
+          "candidateMedianAllocatedBytes": [
+            191288,
+            191288,
+            191288
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_100",
+          "objects": 4096,
+          "p95Ratios": [
+            0.025601450058770625,
+            0.025191724112310975,
+            0.02641912948304326
+          ],
+          "referenceP50Ms": [
+            38.1886,
+            38.1501,
+            37.0188
+          ],
+          "candidateP50Ms": [
+            0.7341,
+            0.7725,
+            0.7201
+          ],
+          "referenceP95Ms": [
+            43.4741,
+            43.0697,
+            43.6729
+          ],
+          "candidateP95Ms": [
+            1.113,
+            1.085,
+            1.1538
+          ],
+          "candidateP99Ms": [
+            1.3825,
+            4.3949,
+            1.2763
+          ],
+          "candidateMaxMs": [
+            3.3085,
+            4.9271,
+            5.6336
+          ],
+          "referenceMedianAllocatedBytes": [
+            14918808,
+            14918808,
+            14918808
+          ],
+          "candidateMedianAllocatedBytes": [
+            794600,
+            794600,
+            794600
+          ],
+          "warmAllocationTarget": null
+        }
+      ]
+    },
+    {
+      "name": "incremental-common",
+      "archive": "out/verification/ecs-e5a/a25fd2733e9d4c8e950afb94b975e841",
+      "inputs": {
+        "path": "out/verification/ecs-e5a/a25fd2733e9d4c8e950afb94b975e841/inputs.json",
+        "sha256": "FE4D816985DACC6F71388BF88295CE31DD9A4B793FEEB7310F1A3850EBDCABAD"
+      },
+      "execution": {
+        "path": "out/verification/ecs-e5a/a25fd2733e9d4c8e950afb94b975e841/execution.json",
+        "sha256": "0899B466A8298174D856F833F538B27F5492FCD9AAA86EA1549CA50487F0DBE8"
+      },
+      "verification": {
+        "path": "out/verification/ecs-e5a/a25fd2733e9d4c8e950afb94b975e841/verification.json",
+        "sha256": "C6111C5C0CC41E4D3B9A90FDC20CE5956EA5C71E720DB7E037700AAAB92EB282"
+      },
+      "rows": [
+        {
+          "workload": "play_behaviour_full_write",
+          "objects": 100,
+          "p95Ratios": [
+            0.8750715239366775,
+            0.9150625754399339,
+            0.9127119758117523
+          ],
+          "referenceP50Ms": [
+            1.0178,
+            1.0061,
+            1.01
+          ],
+          "candidateP50Ms": [
+            0.9153,
+            1.1124,
+            0.9167
+          ],
+          "referenceP95Ms": [
+            1.5729,
+            1.5741,
+            1.5214
+          ],
+          "candidateP95Ms": [
+            1.3764,
+            1.4404,
+            1.3886
+          ],
+          "candidateP99Ms": [
+            1.5868,
+            1.7661,
+            1.4209
+          ],
+          "candidateMaxMs": [
+            1.8877,
+            1.9281,
+            1.4222
+          ],
+          "referenceMedianAllocatedBytes": [
+            429216,
+            429216,
+            429216
+          ],
+          "candidateMedianAllocatedBytes": [
+            320440,
+            320440,
+            320440
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_behaviour_full_write",
+          "objects": 1000,
+          "p95Ratios": [
+            0.8921258995310097,
+            0.8146583562764406,
+            0.826817924131499
+          ],
+          "referenceP50Ms": [
+            12.2586,
+            11.3764,
+            11.7126
+          ],
+          "candidateP50Ms": [
+            10.3443,
+            10.4295,
+            10.3556
+          ],
+          "referenceP95Ms": [
+            15.7999,
+            16.3811,
+            16.4047
+          ],
+          "candidateP95Ms": [
+            14.0955,
+            13.345,
+            13.5637
+          ],
+          "candidateP99Ms": [
+            14.8166,
+            14.4958,
+            16.0582
+          ],
+          "candidateMaxMs": [
+            16.6547,
+            16.3437,
+            17.7848
+          ],
+          "referenceMedianAllocatedBytes": [
+            4193944,
+            4193944,
+            4193944
+          ],
+          "candidateMedianAllocatedBytes": [
+            3105968,
+            3105968,
+            3105968
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_behaviour_full_write",
+          "objects": 4096,
+          "p95Ratios": [
+            0.8140583557875051,
+            0.8146710787557909,
+            0.8404772055101116
+          ],
+          "referenceP50Ms": [
+            59.0319,
+            57.7543,
+            58.2354
+          ],
+          "candidateP50Ms": [
+            47.9511,
+            46.8225,
+            47.1234
+          ],
+          "referenceP95Ms": [
+            75.8211,
+            75.55,
+            75.062
+          ],
+          "candidateP95Ms": [
+            61.7228,
+            61.5484,
+            63.0879
+          ],
+          "candidateP99Ms": [
+            69.8199,
+            64.6761,
+            69.005
+          ],
+          "candidateMaxMs": [
+            76.7065,
+            67.7566,
+            72.3924
+          ],
+          "referenceMedianAllocatedBytes": [
+            17420560,
+            17420560,
+            17420560
+          ],
+          "candidateMedianAllocatedBytes": [
+            12964136,
+            12964136,
+            12964136
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_replace_one_percent",
+          "objects": 100,
+          "p95Ratios": [
+            0.6407185628742516,
+            0.9675645959318306,
+            0.7936438833260775
+          ],
+          "referenceP50Ms": [
+            0.1405,
+            0.1365,
+            0.1995
+          ],
+          "candidateP50Ms": [
+            0.1104,
+            0.1271,
+            0.1356
+          ],
+          "referenceP95Ms": [
+            0.2171,
+            0.1819,
+            0.2297
+          ],
+          "candidateP95Ms": [
+            0.1391,
+            0.176,
+            0.1823
+          ],
+          "candidateP99Ms": [
+            0.171,
+            0.1871,
+            0.1917
+          ],
+          "candidateMaxMs": [
+            0.4516,
+            0.6283,
+            0.6075
+          ],
+          "referenceMedianAllocatedBytes": [
+            172408,
+            172408,
+            172408
+          ],
+          "candidateMedianAllocatedBytes": [
+            163096,
+            163096,
+            163096
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_replace_one_percent",
+          "objects": 1000,
+          "p95Ratios": [
+            0.7990561351217088,
+            0.7605792628642649,
+            0.8339089072782955
+          ],
+          "referenceP50Ms": [
+            1.0373,
+            1.0003,
+            0.9806
+          ],
+          "candidateP50Ms": [
+            0.829,
+            0.8396,
+            0.8573
+          ],
+          "referenceP95Ms": [
+            1.6104,
+            1.6849,
+            1.5347
+          ],
+          "candidateP95Ms": [
+            1.2868,
+            1.2815,
+            1.2798
+          ],
+          "candidateP99Ms": [
+            1.4539,
+            1.5551,
+            1.334
+          ],
+          "candidateMaxMs": [
+            1.9621,
+            1.6116,
+            1.4662
+          ],
+          "referenceMedianAllocatedBytes": [
+            1033752,
+            1033752,
+            1033752
+          ],
+          "candidateMedianAllocatedBytes": [
+            940632,
+            940632,
+            940632
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_replace_one_percent",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9252721630186697,
+            0.8368293635298711,
+            0.8067172741131909
+          ],
+          "referenceP50Ms": [
+            4.3472,
+            4.2665,
+            4.5055
+          ],
+          "candidateP50Ms": [
+            3.6555,
+            3.5537,
+            3.5429
+          ],
+          "referenceP95Ms": [
+            6.0901,
+            6.4025,
+            6.3627
+          ],
+          "candidateP95Ms": [
+            5.635,
+            5.3578,
+            5.1329
+          ],
+          "candidateP99Ms": [
+            6.1175,
+            6.9955,
+            5.5844
+          ],
+          "candidateMaxMs": [
+            7.3652,
+            7.0172,
+            6.3902
+          ],
+          "referenceMedianAllocatedBytes": [
+            3544504,
+            3544504,
+            3544504
+          ],
+          "candidateMedianAllocatedBytes": [
+            3163032,
+            3163032,
+            3163032
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_-1",
+          "objects": 100,
+          "p95Ratios": [
+            0.8356164383561644,
+            0.7598736176935229,
+            0.5349040139616056
+          ],
+          "referenceP50Ms": [
+            0.0558,
+            0.0524,
+            0.0642
+          ],
+          "candidateP50Ms": [
+            0.0471,
+            0.0415,
+            0.0431
+          ],
+          "referenceP95Ms": [
+            0.0949,
+            0.0633,
+            0.1146
+          ],
+          "candidateP95Ms": [
+            0.0793,
+            0.0481,
+            0.0613
+          ],
+          "candidateP99Ms": [
+            0.0818,
+            0.0514,
+            0.0751
+          ],
+          "candidateMaxMs": [
+            0.0848,
+            0.0517,
+            0.0762
+          ],
+          "referenceMedianAllocatedBytes": [
+            94936,
+            94936,
+            94936
+          ],
+          "candidateMedianAllocatedBytes": [
+            85968,
+            85968,
+            85968
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_-1",
+          "objects": 1000,
+          "p95Ratios": [
+            0.7306761747103018,
+            0.8770759775075192,
+            0.6769858411327094
+          ],
+          "referenceP50Ms": [
+            0.4923,
+            0.4755,
+            0.484
+          ],
+          "candidateP50Ms": [
+            0.3584,
+            0.3533,
+            0.3535
+          ],
+          "referenceP95Ms": [
+            0.7853,
+            0.7647,
+            0.8334
+          ],
+          "candidateP95Ms": [
+            0.5738,
+            0.6707,
+            0.5642
+          ],
+          "candidateP99Ms": [
+            0.6818,
+            0.8264,
+            0.6499
+          ],
+          "candidateMaxMs": [
+            0.71,
+            1.0193,
+            0.6733
+          ],
+          "referenceMedianAllocatedBytes": [
+            706920,
+            706912,
+            706912
+          ],
+          "candidateMedianAllocatedBytes": [
+            616840,
+            617176,
+            617176
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_-1",
+          "objects": 4096,
+          "p95Ratios": [
+            0.6643684586477842,
+            0.7117025340634152,
+            0.888173929999025
+          ],
+          "referenceP50Ms": [
+            2.0886,
+            2.0784,
+            1.9885
+          ],
+          "candidateP50Ms": [
+            1.4603,
+            1.5066,
+            1.5871
+          ],
+          "referenceP95Ms": [
+            3.2199,
+            3.1412,
+            3.0771
+          ],
+          "candidateP95Ms": [
+            2.1392,
+            2.2356,
+            2.733
+          ],
+          "candidateP99Ms": [
+            2.3302,
+            2.8371,
+            3.8112
+          ],
+          "candidateMaxMs": [
+            2.3586,
+            4.4882,
+            4.1556
+          ],
+          "referenceMedianAllocatedBytes": [
+            2676520,
+            2673560,
+            2674120
+          ],
+          "candidateMedianAllocatedBytes": [
+            2309224,
+            2305944,
+            2305864
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_0",
+          "objects": 100,
+          "p95Ratios": [
+            0.5253164556962024,
+            0.5303030303030303,
+            1.0213903743315507
+          ],
+          "referenceP50Ms": [
+            0.0342,
+            0.0334,
+            0.0333
+          ],
+          "candidateP50Ms": [
+            0.0253,
+            0.0253,
+            0.0272
+          ],
+          "referenceP95Ms": [
+            0.0632,
+            0.0528,
+            0.0374
+          ],
+          "candidateP95Ms": [
+            0.0332,
+            0.028,
+            0.0382
+          ],
+          "candidateP99Ms": [
+            0.0443,
+            0.0328,
+            0.0417
+          ],
+          "candidateMaxMs": [
+            0.0456,
+            0.0368,
+            0.0448
+          ],
+          "referenceMedianAllocatedBytes": [
+            59824,
+            59824,
+            59824
+          ],
+          "candidateMedianAllocatedBytes": [
+            51824,
+            51824,
+            51824
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_0",
+          "objects": 1000,
+          "p95Ratios": [
+            0.6821532659009085,
+            0.69548999660902,
+            0.6765541740674956
+          ],
+          "referenceP50Ms": [
+            0.3436,
+            0.3495,
+            0.342
+          ],
+          "candidateP50Ms": [
+            0.2578,
+            0.244,
+            0.245
+          ],
+          "referenceP95Ms": [
+            0.5833,
+            0.5898,
+            0.563
+          ],
+          "candidateP95Ms": [
+            0.3979,
+            0.4102,
+            0.3809
+          ],
+          "candidateP99Ms": [
+            0.9958,
+            0.5387,
+            0.6098
+          ],
+          "candidateMaxMs": [
+            1.7283,
+            1.7707,
+            1.5723
+          ],
+          "referenceMedianAllocatedBytes": [
+            518576,
+            518576,
+            518576
+          ],
+          "candidateMedianAllocatedBytes": [
+            438576,
+            438576,
+            438576
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_0",
+          "objects": 4096,
+          "p95Ratios": [
+            0.8864361472794688,
+            0.7114000169391038,
+            0.6622714072678754
+          ],
+          "referenceP50Ms": [
+            1.5884,
+            1.5631,
+            1.6324
+          ],
+          "candidateP50Ms": [
+            1.3376,
+            1.1157,
+            1.1456
+          ],
+          "referenceP95Ms": [
+            2.3194,
+            2.3614,
+            2.5482
+          ],
+          "candidateP95Ms": [
+            2.056,
+            1.6799,
+            1.6876
+          ],
+          "candidateP99Ms": [
+            4.2575,
+            2.0789,
+            2.1013
+          ],
+          "candidateMaxMs": [
+            4.7649,
+            2.2377,
+            4.2769
+          ],
+          "referenceMedianAllocatedBytes": [
+            2219048,
+            2219048,
+            2219048
+          ],
+          "candidateMedianAllocatedBytes": [
+            1891368,
+            1891368,
+            1891368
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_1",
+          "objects": 100,
+          "p95Ratios": [
+            0.755046206225681,
+            0.8535675914807559,
+            0.8671081677704194
+          ],
+          "referenceP50Ms": [
+            1.3866,
+            1.0636,
+            1.0686
+          ],
+          "candidateP50Ms": [
+            0.8841,
+            0.8757,
+            0.9125
+          ],
+          "referenceP95Ms": [
+            1.6448,
+            1.5823,
+            1.5855
+          ],
+          "candidateP95Ms": [
+            1.2419,
+            1.3506,
+            1.3748
+          ],
+          "candidateP99Ms": [
+            1.3895,
+            1.3994,
+            1.5799
+          ],
+          "candidateMaxMs": [
+            1.8411,
+            1.4255,
+            1.8016
+          ],
+          "referenceMedianAllocatedBytes": [
+            395928,
+            395928,
+            395928
+          ],
+          "candidateMedianAllocatedBytes": [
+            287152,
+            287152,
+            287152
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_1",
+          "objects": 1000,
+          "p95Ratios": [
+            0.862821747223827,
+            0.9056536388140162,
+            0.8443607208477942
+          ],
+          "referenceP50Ms": [
+            11.8468,
+            11.2887,
+            11.4528
+          ],
+          "candidateP50Ms": [
+            10.0749,
+            10.091,
+            10.1208
+          ],
+          "referenceP95Ms": [
+            15.579,
+            14.84,
+            16.1643
+          ],
+          "candidateP95Ms": [
+            13.4419,
+            13.4399,
+            13.6485
+          ],
+          "candidateP99Ms": [
+            14.4294,
+            13.833,
+            16.0294
+          ],
+          "candidateMaxMs": [
+            22.1187,
+            14.4979,
+            17.1135
+          ],
+          "referenceMedianAllocatedBytes": [
+            3856232,
+            3856232,
+            3856232
+          ],
+          "candidateMedianAllocatedBytes": [
+            2768256,
+            2768256,
+            2768256
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_1",
+          "objects": 4096,
+          "p95Ratios": [
+            0.786048508437987,
+            0.7729540314968117,
+            0.7233586862216403
+          ],
+          "referenceP50Ms": [
+            56.0613,
+            58.7767,
+            56.5569
+          ],
+          "candidateP50Ms": [
+            46.6442,
+            45.3216,
+            45.7041
+          ],
+          "referenceP95Ms": [
+            73.8387,
+            73.6265,
+            76.9932
+          ],
+          "candidateP95Ms": [
+            58.0408,
+            56.9099,
+            55.6937
+          ],
+          "candidateP99Ms": [
+            60.7475,
+            64.5732,
+            62.3593
+          ],
+          "candidateMaxMs": [
+            62.8327,
+            70.0674,
+            66.3869
+          ],
+          "referenceMedianAllocatedBytes": [
+            16002984,
+            16002984,
+            16002984
+          ],
+          "candidateMedianAllocatedBytes": [
+            11546560,
+            11546560,
+            11546560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_100",
+          "objects": 100,
+          "p95Ratios": [
+            0.6645962732919254,
+            1.089922480620155,
+            0.8565891472868218
+          ],
+          "referenceP50Ms": [
+            0.0676,
+            0.0597,
+            0.063
+          ],
+          "candidateP50Ms": [
+            0.072,
+            0.0456,
+            0.0766
+          ],
+          "referenceP95Ms": [
+            0.1288,
+            0.0645,
+            0.1032
+          ],
+          "candidateP95Ms": [
+            0.0856,
+            0.0703,
+            0.0884
+          ],
+          "candidateP99Ms": [
+            0.0955,
+            0.0898,
+            0.1151
+          ],
+          "candidateMaxMs": [
+            0.5999,
+            0.5418,
+            0.5755
+          ],
+          "referenceMedianAllocatedBytes": [
+            74680,
+            74680,
+            74680
+          ],
+          "candidateMedianAllocatedBytes": [
+            65696,
+            65696,
+            65696
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_100",
+          "objects": 1000,
+          "p95Ratios": [
+            0.7470803755438516,
+            0.7264685067232838,
+            0.8653684337059743
+          ],
+          "referenceP50Ms": [
+            0.5431,
+            0.5221,
+            0.5187
+          ],
+          "candidateP50Ms": [
+            0.4063,
+            0.4109,
+            0.4049
+          ],
+          "referenceP95Ms": [
+            0.8734,
+            0.8478,
+            0.8319
+          ],
+          "candidateP95Ms": [
+            0.6525,
+            0.6159,
+            0.7199
+          ],
+          "candidateP99Ms": [
+            0.7258,
+            0.6812,
+            0.8038
+          ],
+          "candidateMaxMs": [
+            0.8253,
+            0.743,
+            0.8944
+          ],
+          "referenceMedianAllocatedBytes": [
+            648616,
+            648616,
+            648616
+          ],
+          "candidateMedianAllocatedBytes": [
+            558560,
+            558560,
+            558560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "play_step_stride_100",
+          "objects": 4096,
+          "p95Ratios": [
+            0.6709470304975923,
+            0.6971700272063871,
+            0.8213656705644581
+          ],
+          "referenceP50Ms": [
+            2.5009,
+            2.5288,
+            2.4005
+          ],
+          "candidateP50Ms": [
+            1.7435,
+            1.789,
+            1.9641
+          ],
+          "referenceP95Ms": [
+            3.8626,
+            3.9329,
+            3.4635
+          ],
+          "candidateP95Ms": [
+            2.5916,
+            2.7419,
+            2.8448
+          ],
+          "candidateP99Ms": [
+            2.8378,
+            3.3302,
+            3.0098
+          ],
+          "candidateMaxMs": [
+            3.0696,
+            3.9178,
+            3.8926
+          ],
+          "referenceMedianAllocatedBytes": [
+            2758168,
+            2758168,
+            2758168
+          ],
+          "candidateMedianAllocatedBytes": [
+            2389184,
+            2389184,
+            2389184
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform",
+          "objects": 100,
+          "p95Ratios": [
+            1.0028506271379705,
+            0.9456762749445676,
+            0.9607558139534884
+          ],
+          "referenceP50Ms": [
+            0.00763125,
+            0.0105,
+            0.0067125
+          ],
+          "candidateP50Ms": [
+            0.00675,
+            0.00675625,
+            0.00685625
+          ],
+          "referenceP95Ms": [
+            0.0109625,
+            0.011275,
+            0.0086
+          ],
+          "candidateP95Ms": [
+            0.01099375,
+            0.0106625,
+            0.0082625
+          ],
+          "candidateP99Ms": [
+            0.011675,
+            0.01091875,
+            0.0104
+          ],
+          "candidateMaxMs": [
+            0.01305,
+            0.0109375,
+            0.010625
+          ],
+          "referenceMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "candidateMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9330627496456642,
+            0.9751768488745981,
+            0.9701609225356702
+          ],
+          "referenceP50Ms": [
+            0.0596625,
+            0.05968125,
+            0.0594125
+          ],
+          "candidateP50Ms": [
+            0.05953125,
+            0.059975,
+            0.06009375
+          ],
+          "referenceP95Ms": [
+            0.0970125,
+            0.0971875,
+            0.09593125
+          ],
+          "candidateP95Ms": [
+            0.09051875,
+            0.094775,
+            0.09306875
+          ],
+          "candidateP99Ms": [
+            0.09586875,
+            0.09853125,
+            0.09626875
+          ],
+          "candidateMaxMs": [
+            0.09714375,
+            0.1096375,
+            0.10474375
+          ],
+          "referenceMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "candidateMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform",
+          "objects": 4096,
+          "p95Ratios": [
+            0.8943758573388203,
+            0.8096294134811789,
+            0.9162858035029948
+          ],
+          "referenceP50Ms": [
+            0.2866875,
+            0.29091875,
+            0.2851875
+          ],
+          "candidateP50Ms": [
+            0.27128125,
+            0.26871875,
+            0.28950625
+          ],
+          "referenceP95Ms": [
+            0.42373125,
+            0.428375,
+            0.4403375
+          ],
+          "candidateP95Ms": [
+            0.378975,
+            0.346825,
+            0.403475
+          ],
+          "candidateP99Ms": [
+            0.40079375,
+            0.39475,
+            0.44511875
+          ],
+          "candidateMaxMs": [
+            0.40301875,
+            0.40000625,
+            0.44623125
+          ],
+          "referenceMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "candidateMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform_and_marker",
+          "objects": 100,
+          "p95Ratios": [
+            1.3883647798742138,
+            0.6075566750629723,
+            0.6303901437371664
+          ],
+          "referenceP50Ms": [
+            0.0064625,
+            0.00656875,
+            0.0064375
+          ],
+          "candidateP50Ms": [
+            0.00665,
+            0.0064625,
+            0.0065625
+          ],
+          "referenceP95Ms": [
+            0.00795,
+            0.01240625,
+            0.012175
+          ],
+          "candidateP95Ms": [
+            0.0110375,
+            0.0075375,
+            0.007675
+          ],
+          "candidateP99Ms": [
+            0.0113,
+            0.01030625,
+            0.00860625
+          ],
+          "candidateMaxMs": [
+            0.08235,
+            0.08191875,
+            0.08195
+          ],
+          "referenceMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "candidateMedianAllocatedBytes": [
+            5712,
+            5712,
+            5712
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform_and_marker",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9772968148602666,
+            0.9816737935247404,
+            1.0143641982373812
+          ],
+          "referenceP50Ms": [
+            0.06866875,
+            0.0688125,
+            0.06856875
+          ],
+          "candidateP50Ms": [
+            0.06856875,
+            0.06814375,
+            0.06858125
+          ],
+          "referenceP95Ms": [
+            0.11204375,
+            0.11254375,
+            0.1092125
+          ],
+          "candidateP95Ms": [
+            0.1095,
+            0.11048125,
+            0.11078125
+          ],
+          "candidateP99Ms": [
+            0.1151875,
+            0.11404375,
+            0.1150125
+          ],
+          "candidateMaxMs": [
+            0.1158125,
+            0.119775,
+            0.12205625
+          ],
+          "referenceMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "candidateMedianAllocatedBytes": [
+            52512,
+            52512,
+            52512
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "read_transform_and_marker",
+          "objects": 4096,
+          "p95Ratios": [
+            1.1135217099699648,
+            1.011424390792954,
+            0.9354673104673104
+          ],
+          "referenceP50Ms": [
+            0.31065,
+            0.31715625,
+            0.32645625
+          ],
+          "candidateP50Ms": [
+            0.34655,
+            0.32601875,
+            0.3128375
+          ],
+          "referenceP95Ms": [
+            0.4286625,
+            0.444225,
+            0.45045
+          ],
+          "candidateP95Ms": [
+            0.477325,
+            0.4493,
+            0.42138125
+          ],
+          "candidateP99Ms": [
+            0.51718125,
+            0.48751875,
+            0.449925
+          ],
+          "candidateMaxMs": [
+            0.52323125,
+            0.490475,
+            0.4820875
+          ],
+          "referenceMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "candidateMedianAllocatedBytes": [
+            213504,
+            213504,
+            213504
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_0",
+          "objects": 100,
+          "p95Ratios": [
+            0.6206896551724138,
+            0.6551724137931035,
+            1
+          ],
+          "referenceP50Ms": [
+            0.0025,
+            0.0024,
+            0.0016
+          ],
+          "candidateP50Ms": [
+            0.0016,
+            0.0016,
+            0.0016
+          ],
+          "referenceP95Ms": [
+            0.0029,
+            0.0029,
+            0.0019
+          ],
+          "candidateP95Ms": [
+            0.0018,
+            0.0019,
+            0.0019
+          ],
+          "candidateP99Ms": [
+            0.002,
+            0.0021,
+            0.002
+          ],
+          "candidateMaxMs": [
+            0.002,
+            0.0057,
+            0.0022
+          ],
+          "referenceMedianAllocatedBytes": [
+            11568,
+            11568,
+            11568
+          ],
+          "candidateMedianAllocatedBytes": [
+            11568,
+            11568,
+            11568
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_0",
+          "objects": 1000,
+          "p95Ratios": [
+            1.0353982300884956,
+            1.4636363636363636,
+            0.9821428571428571
+          ],
+          "referenceP50Ms": [
+            0.0103,
+            0.0102,
+            0.0104
+          ],
+          "candidateP50Ms": [
+            0.0109,
+            0.0121,
+            0.0103
+          ],
+          "referenceP95Ms": [
+            0.0113,
+            0.011,
+            0.0112
+          ],
+          "candidateP95Ms": [
+            0.0117,
+            0.0161,
+            0.011
+          ],
+          "candidateP99Ms": [
+            0.0141,
+            0.0302,
+            0.0139
+          ],
+          "candidateMaxMs": [
+            0.9348,
+            0.8758,
+            0.8988
+          ],
+          "referenceMedianAllocatedBytes": [
+            71328,
+            71328,
+            71328
+          ],
+          "candidateMedianAllocatedBytes": [
+            71328,
+            71328,
+            71328
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_0",
+          "objects": 4096,
+          "p95Ratios": [
+            1.1255565449688336,
+            1.0150943396226415,
+            1.4006586169045006
+          ],
+          "referenceP50Ms": [
+            0.0717,
+            0.0524,
+            0.0659
+          ],
+          "candidateP50Ms": [
+            0.0411,
+            0.0406,
+            0.043
+          ],
+          "referenceP95Ms": [
+            0.1123,
+            0.106,
+            0.0911
+          ],
+          "candidateP95Ms": [
+            0.1264,
+            0.1076,
+            0.1276
+          ],
+          "candidateP99Ms": [
+            0.3684,
+            0.4609,
+            0.4092
+          ],
+          "candidateMaxMs": [
+            3.5768,
+            3.5599,
+            4.6968
+          ],
+          "referenceMedianAllocatedBytes": [
+            296808,
+            296808,
+            296808
+          ],
+          "candidateMedianAllocatedBytes": [
+            296808,
+            296808,
+            296808
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_1",
+          "objects": 100,
+          "p95Ratios": [
+            0.7912574619680338,
+            0.849479910259025,
+            0.9362538204045989
+          ],
+          "referenceP50Ms": [
+            0.9546,
+            0.9454,
+            0.9437
+          ],
+          "candidateP50Ms": [
+            0.8529,
+            0.8573,
+            0.8607
+          ],
+          "referenceP95Ms": [
+            1.5579,
+            1.4709,
+            1.3742
+          ],
+          "candidateP95Ms": [
+            1.2327,
+            1.2495,
+            1.2866
+          ],
+          "candidateP99Ms": [
+            1.3042,
+            1.3452,
+            1.3133
+          ],
+          "candidateMaxMs": [
+            1.3306,
+            1.468,
+            1.3223
+          ],
+          "referenceMedianAllocatedBytes": [
+            347648,
+            347648,
+            347648
+          ],
+          "candidateMedianAllocatedBytes": [
+            246872,
+            246872,
+            246872
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_1",
+          "objects": 1000,
+          "p95Ratios": [
+            0.8000812747544587,
+            0.9182385985195983,
+            0.9998686974789917
+          ],
+          "referenceP50Ms": [
+            10.6668,
+            11.0069,
+            11.1571
+          ],
+          "candidateP50Ms": [
+            9.1549,
+            9.9748,
+            9.698
+          ],
+          "referenceP95Ms": [
+            17.4716,
+            15.9146,
+            15.232
+          ],
+          "candidateP95Ms": [
+            13.9787,
+            14.6134,
+            15.23
+          ],
+          "candidateP99Ms": [
+            30.3779,
+            16.8754,
+            17.894
+          ],
+          "candidateMaxMs": [
+            34.6323,
+            17.2788,
+            18.4963
+          ],
+          "referenceMedianAllocatedBytes": [
+            3408960,
+            3408960,
+            3408960
+          ],
+          "candidateMedianAllocatedBytes": [
+            2400984,
+            2400984,
+            2400984
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_1",
+          "objects": 4096,
+          "p95Ratios": [
+            0.7135128919599736,
+            0.704276795099379,
+            0.8386530758774247
+          ],
+          "referenceP50Ms": [
+            57.6014,
+            53.5375,
+            53.6856
+          ],
+          "candidateP50Ms": [
+            45.6155,
+            44.9437,
+            44.7582
+          ],
+          "referenceP95Ms": [
+            74.7908,
+            77.3453,
+            74.3739
+          ],
+          "candidateP95Ms": [
+            53.3642,
+            54.4725,
+            62.3739
+          ],
+          "candidateP99Ms": [
+            61.6177,
+            58.7558,
+            67.1602
+          ],
+          "candidateMaxMs": [
+            66.0369,
+            63.4422,
+            68.6956
+          ],
+          "referenceMedianAllocatedBytes": [
+            14080720,
+            14080720,
+            14080720
+          ],
+          "candidateMedianAllocatedBytes": [
+            9951976,
+            9951976,
+            9951976
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_100",
+          "objects": 100,
+          "p95Ratios": [
+            0.5504322766570605,
+            0.6385224274406331,
+            0.7142857142857143
+          ],
+          "referenceP50Ms": [
+            0.0194,
+            0.0324,
+            0.0201
+          ],
+          "candidateP50Ms": [
+            0.0173,
+            0.0177,
+            0.0174
+          ],
+          "referenceP95Ms": [
+            0.0347,
+            0.0379,
+            0.0273
+          ],
+          "candidateP95Ms": [
+            0.0191,
+            0.0242,
+            0.0195
+          ],
+          "candidateP99Ms": [
+            0.0287,
+            0.0476,
+            0.0309
+          ],
+          "candidateMaxMs": [
+            1.083,
+            1.4663,
+            1.0839
+          ],
+          "referenceMedianAllocatedBytes": [
+            26400,
+            26400,
+            26400
+          ],
+          "candidateMedianAllocatedBytes": [
+            25416,
+            25416,
+            25416
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_100",
+          "objects": 1000,
+          "p95Ratios": [
+            0.8898305084745763,
+            0.977890540050743,
+            0.8742075408742075
+          ],
+          "referenceP50Ms": [
+            0.1875,
+            0.1724,
+            0.1738
+          ],
+          "candidateP50Ms": [
+            0.228,
+            0.161,
+            0.1598
+          ],
+          "referenceP95Ms": [
+            0.295,
+            0.2759,
+            0.2997
+          ],
+          "candidateP95Ms": [
+            0.2625,
+            0.2698,
+            0.262
+          ],
+          "candidateP99Ms": [
+            0.2744,
+            0.2737,
+            0.3057
+          ],
+          "candidateMaxMs": [
+            1.085,
+            1.6115,
+            1.09
+          ],
+          "referenceMedianAllocatedBytes": [
+            201344,
+            201344,
+            201344
+          ],
+          "candidateMedianAllocatedBytes": [
+            191288,
+            191288,
+            191288
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "world_step_stride_100",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9830037862852334,
+            0.8554552912223132,
+            0.978075618433027
+          ],
+          "referenceP50Ms": [
+            0.7601,
+            0.7287,
+            0.8748
+          ],
+          "candidateP50Ms": [
+            0.7034,
+            0.6916,
+            0.718
+          ],
+          "referenceP95Ms": [
+            1.1885,
+            1.219,
+            1.2087
+          ],
+          "candidateP95Ms": [
+            1.1683,
+            1.0428,
+            1.1822
+          ],
+          "candidateP99Ms": [
+            1.7444,
+            1.415,
+            1.3271
+          ],
+          "candidateMaxMs": [
+            4.5345,
+            1.6295,
+            4.6688
+          ],
+          "referenceMedianAllocatedBytes": [
+            835904,
+            835904,
+            835904
+          ],
+          "candidateMedianAllocatedBytes": [
+            794600,
+            794600,
+            794600
+          ],
+          "warmAllocationTarget": null
+        }
+      ]
+    },
+    {
+      "name": "incremental-reads-first",
+      "archive": "out/verification/ecs-e5a/4f9d4dcd755e4705a9a96a9c83d49fba",
+      "inputs": {
+        "path": "out/verification/ecs-e5a/4f9d4dcd755e4705a9a96a9c83d49fba/inputs.json",
+        "sha256": "B50199EAFEECD8A02596FF2D8EDE03250B6D424C7946CA1B4DCE364D3E657368"
+      },
+      "execution": {
+        "path": "out/verification/ecs-e5a/4f9d4dcd755e4705a9a96a9c83d49fba/execution.json",
+        "sha256": "E62E51BBB1761D80D520B8B843792745E597F65BD0C9F4494BF1D3417DE84286"
+      },
+      "verification": {
+        "path": "out/verification/ecs-e5a/4f9d4dcd755e4705a9a96a9c83d49fba/verification.json",
+        "sha256": "AAC2DF5440B1882FE7E8FDF2DAA242B64FBF42921FFD4EBDF86A998CB3A3EFB5"
+      },
+      "rows": [
+        {
+          "workload": "editor_object_warm",
+          "objects": 100,
+          "p95Ratios": [
+            0.7516254876462939,
+            0.7467191601049868,
+            0.9946865037194474
+          ],
+          "referenceP50Ms": [
+            0.056,
+            0.069,
+            0.0806
+          ],
+          "candidateP50Ms": [
+            0.0501,
+            0.0503,
+            0.0753
+          ],
+          "referenceP95Ms": [
+            0.0769,
+            0.0762,
+            0.0941
+          ],
+          "candidateP95Ms": [
+            0.0578,
+            0.0569,
+            0.0936
+          ],
+          "candidateP99Ms": [
+            0.0716,
+            0.0643,
+            0.167
+          ],
+          "candidateMaxMs": [
+            0.0811,
+            0.0644,
+            0.2078
+          ],
+          "referenceMedianAllocatedBytes": [
+            14544,
+            14544,
+            14544
+          ],
+          "candidateMedianAllocatedBytes": [
+            14544,
+            14544,
+            14544
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_object_warm",
+          "objects": 1000,
+          "p95Ratios": [
+            0.7042424242424242,
+            0.8323632130384166,
+            1.0422535211267605
+          ],
+          "referenceP50Ms": [
+            0.0514,
+            0.0808,
+            0.0511
+          ],
+          "candidateP50Ms": [
+            0.0519,
+            0.0506,
+            0.051
+          ],
+          "referenceP95Ms": [
+            0.0825,
+            0.0859,
+            0.0568
+          ],
+          "candidateP95Ms": [
+            0.0581,
+            0.0715,
+            0.0592
+          ],
+          "candidateP99Ms": [
+            0.0728,
+            0.0736,
+            0.0769
+          ],
+          "candidateMaxMs": [
+            0.0868,
+            0.1162,
+            0.0886
+          ],
+          "referenceMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "candidateMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_object_warm",
+          "objects": 4096,
+          "p95Ratios": [
+            0.7248858447488585,
+            1.2,
+            1.1446428571428573
+          ],
+          "referenceP50Ms": [
+            0.0765,
+            0.0508,
+            0.0506
+          ],
+          "candidateP50Ms": [
+            0.0506,
+            0.0768,
+            0.0513
+          ],
+          "referenceP95Ms": [
+            0.0876,
+            0.0695,
+            0.056
+          ],
+          "candidateP95Ms": [
+            0.0635,
+            0.0834,
+            0.0641
+          ],
+          "candidateP99Ms": [
+            0.0826,
+            0.0944,
+            0.0942
+          ],
+          "candidateMaxMs": [
+            0.151,
+            0.122,
+            0.1353
+          ],
+          "referenceMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "candidateMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_cold",
+          "objects": 100,
+          "p95Ratios": [
+            0.9789013825799887,
+            0.9894455066921607,
+            0.9884502151430512
+          ],
+          "referenceP50Ms": [
+            2.841,
+            2.8042,
+            2.8907
+          ],
+          "candidateP50Ms": [
+            2.8262,
+            2.7771,
+            2.8487
+          ],
+          "referenceP95Ms": [
+            4.0287,
+            3.9225,
+            3.9741
+          ],
+          "candidateP95Ms": [
+            3.9437,
+            3.8811,
+            3.9282
+          ],
+          "candidateP99Ms": [
+            4.1959,
+            3.9085,
+            4.0674
+          ],
+          "candidateMaxMs": [
+            4.3998,
+            4.0684,
+            4.2161
+          ],
+          "referenceMedianAllocatedBytes": [
+            943176,
+            943176,
+            943176
+          ],
+          "candidateMedianAllocatedBytes": [
+            943176,
+            943176,
+            943176
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_cold",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9854673815311865,
+            0.960058377231562,
+            0.9717563587248377
+          ],
+          "referenceP50Ms": [
+            26.5397,
+            26.0169,
+            25.5318
+          ],
+          "candidateP50Ms": [
+            26.2942,
+            25.3264,
+            25.9343
+          ],
+          "referenceP95Ms": [
+            30.029,
+            30.3543,
+            30.7255
+          ],
+          "candidateP95Ms": [
+            29.5926,
+            29.1419,
+            29.8577
+          ],
+          "candidateP99Ms": [
+            31.7477,
+            30.1938,
+            30.6471
+          ],
+          "candidateMaxMs": [
+            32.372,
+            31.3333,
+            32.2375
+          ],
+          "referenceMedianAllocatedBytes": [
+            9099784,
+            9099784,
+            9099784
+          ],
+          "candidateMedianAllocatedBytes": [
+            9099784,
+            9099784,
+            9099784
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_cold",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9769580849567402,
+            0.9936811273606162,
+            0.9698319115350036
+          ],
+          "referenceP50Ms": [
+            105.5849,
+            106.0361,
+            106.4875
+          ],
+          "candidateP50Ms": [
+            107.6407,
+            105.4653,
+            107.2104
+          ],
+          "referenceP95Ms": [
+            119.2913,
+            117.1728,
+            120.6805
+          ],
+          "candidateP95Ms": [
+            116.5426,
+            116.4324,
+            117.0398
+          ],
+          "candidateP99Ms": [
+            122.7925,
+            126.7117,
+            120.828
+          ],
+          "candidateMaxMs": [
+            123.0103,
+            127.4704,
+            122.8227
+          ],
+          "referenceMedianAllocatedBytes": [
+            36942232,
+            36942232,
+            36942232
+          ],
+          "candidateMedianAllocatedBytes": [
+            36942232,
+            36942232,
+            36942232
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_first",
+          "objects": 100,
+          "p95Ratios": [
+            1.0114582537621268,
+            0.9573781159275202,
+            0.9605034174884612
+          ],
+          "referenceP50Ms": [
+            2.8077,
+            2.8668,
+            2.8151
+          ],
+          "candidateP50Ms": [
+            2.8345,
+            2.7863,
+            2.8079
+          ],
+          "referenceP95Ms": [
+            3.9273,
+            3.9956,
+            3.9649
+          ],
+          "candidateP95Ms": [
+            3.9723,
+            3.8253,
+            3.8083
+          ],
+          "candidateP99Ms": [
+            4.052,
+            4.1584,
+            3.9219
+          ],
+          "candidateMaxMs": [
+            4.2939,
+            4.2824,
+            4.2914
+          ],
+          "referenceMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "candidateMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_first",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9378169834033904,
+            0.9956245188996474,
+            1.0204077387143748
+          ],
+          "referenceP50Ms": [
+            3.7633,
+            3.5789,
+            3.571
+          ],
+          "candidateP50Ms": [
+            3.6033,
+            3.7221,
+            3.6015
+          ],
+          "referenceP95Ms": [
+            5.0673,
+            4.9366,
+            4.807
+          ],
+          "candidateP95Ms": [
+            4.7522,
+            4.915,
+            4.9051
+          ],
+          "candidateP99Ms": [
+            4.991,
+            5.0285,
+            5.1453
+          ],
+          "candidateMaxMs": [
+            5.5457,
+            5.0731,
+            5.2841
+          ],
+          "referenceMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "candidateMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_first",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0721862231210533,
+            1.0109852385856506,
+            1.0411346371423953
+          ],
+          "referenceP50Ms": [
+            3.717,
+            3.5695,
+            3.6451
+          ],
+          "candidateP50Ms": [
+            3.6087,
+            3.5858,
+            3.8006
+          ],
+          "referenceP95Ms": [
+            4.8458,
+            4.9521,
+            4.9496
+          ],
+          "candidateP95Ms": [
+            5.1956,
+            5.0065,
+            5.1532
+          ],
+          "candidateP99Ms": [
+            5.3505,
+            5.2046,
+            5.2695
+          ],
+          "candidateMaxMs": [
+            5.4269,
+            5.4205,
+            5.2712
+          ],
+          "referenceMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "candidateMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_last",
+          "objects": 100,
+          "p95Ratios": [
+            1.0298179457083636,
+            0.9885006850655704,
+            1.0004674231997714
+          ],
+          "referenceP50Ms": [
+            2.834,
+            2.8199,
+            2.7609
+          ],
+          "candidateP50Ms": [
+            3.0962,
+            2.9912,
+            2.839
+          ],
+          "referenceP95Ms": [
+            4.0043,
+            4.0872,
+            3.8509
+          ],
+          "candidateP95Ms": [
+            4.1237,
+            4.0402,
+            3.8527
+          ],
+          "candidateP99Ms": [
+            4.41,
+            4.2204,
+            4.2131
+          ],
+          "candidateMaxMs": [
+            4.9175,
+            4.3565,
+            4.2855
+          ],
+          "referenceMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "candidateMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_last",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9702462380300958,
+            1.0217356656174044,
+            0.9820316289900068
+          ],
+          "referenceP50Ms": [
+            3.6642,
+            3.6409,
+            3.6938
+          ],
+          "candidateP50Ms": [
+            3.5936,
+            3.7307,
+            3.8461
+          ],
+          "referenceP95Ms": [
+            4.9708,
+            5.0194,
+            5.1535
+          ],
+          "candidateP95Ms": [
+            4.8229,
+            5.1285,
+            5.0609
+          ],
+          "candidateP99Ms": [
+            5.0748,
+            5.2957,
+            5.1168
+          ],
+          "candidateMaxMs": [
+            5.1789,
+            5.3727,
+            5.2583
+          ],
+          "referenceMedianAllocatedBytes": [
+            1241192,
+            1241192,
+            1241192
+          ],
+          "candidateMedianAllocatedBytes": [
+            1241192,
+            1241192,
+            1241192
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_last",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0120538417957685,
+            0.9863008367386651,
+            0.9774519516544483
+          ],
+          "referenceP50Ms": [
+            3.7656,
+            3.7982,
+            3.6372
+          ],
+          "candidateP50Ms": [
+            3.6785,
+            3.6239,
+            3.7746
+          ],
+          "referenceP95Ms": [
+            5.1187,
+            5.139,
+            5.047
+          ],
+          "candidateP95Ms": [
+            5.1804,
+            5.0686,
+            4.9332
+          ],
+          "candidateP99Ms": [
+            5.3847,
+            5.16,
+            5.0629
+          ],
+          "candidateMaxMs": [
+            5.479,
+            5.1756,
+            5.088
+          ],
+          "referenceMedianAllocatedBytes": [
+            1242576,
+            1242576,
+            1242576
+          ],
+          "candidateMedianAllocatedBytes": [
+            1242576,
+            1242576,
+            1242576
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_cold",
+          "objects": 100,
+          "p95Ratios": [
+            1.0481727574750832,
+            0.6627318718381113,
+            0.7711538461538461
+          ],
+          "referenceP50Ms": [
+            0.0147,
+            0.0151,
+            0.0149
+          ],
+          "candidateP50Ms": [
+            0.0248,
+            0.0146,
+            0.0159
+          ],
+          "referenceP95Ms": [
+            0.0602,
+            0.0593,
+            0.052
+          ],
+          "candidateP95Ms": [
+            0.0631,
+            0.0393,
+            0.0401
+          ],
+          "candidateP99Ms": [
+            0.5284,
+            0.3331,
+            0.3316
+          ],
+          "candidateMaxMs": [
+            1.45,
+            1.0034,
+            1.0541
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_cold",
+          "objects": 1000,
+          "p95Ratios": [
+            1.089655172413793,
+            1.1114345114345114,
+            1.1004601226993864
+          ],
+          "referenceP50Ms": [
+            0.1617,
+            0.1611,
+            0.1613
+          ],
+          "candidateP50Ms": [
+            0.1793,
+            0.1711,
+            0.1641
+          ],
+          "referenceP95Ms": [
+            0.2465,
+            0.2405,
+            0.2608
+          ],
+          "candidateP95Ms": [
+            0.2686,
+            0.2673,
+            0.287
+          ],
+          "candidateP99Ms": [
+            0.2916,
+            0.3099,
+            0.3366
+          ],
+          "candidateMaxMs": [
+            0.3711,
+            0.3565,
+            0.3592
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_cold",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0377214546071034,
+            0.9815878511291212,
+            1.0087255843739993
+          ],
+          "referenceP50Ms": [
+            0.7865,
+            0.8148,
+            0.7843
+          ],
+          "candidateP50Ms": [
+            0.7606,
+            0.7702,
+            0.7919
+          ],
+          "referenceP95Ms": [
+            1.1797,
+            1.2709,
+            1.2492
+          ],
+          "candidateP95Ms": [
+            1.2242,
+            1.2475,
+            1.2601
+          ],
+          "candidateP99Ms": [
+            1.2536,
+            1.2697,
+            1.273
+          ],
+          "candidateMaxMs": [
+            1.3063,
+            1.3238,
+            1.3048
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_membership_rebuild",
+          "objects": 100,
+          "p95Ratios": [
+            1.9397590361445782,
+            0.9878048780487804,
+            1.951219512195122
+          ],
+          "referenceP50Ms": [
+            0.008,
+            0.008,
+            0.0079
+          ],
+          "candidateP50Ms": [
+            0.0137,
+            0.0079,
+            0.0129
+          ],
+          "referenceP95Ms": [
+            0.0083,
+            0.0082,
+            0.0082
+          ],
+          "candidateP95Ms": [
+            0.0161,
+            0.0081,
+            0.016
+          ],
+          "candidateP99Ms": [
+            0.0181,
+            0.0088,
+            0.0189
+          ],
+          "candidateMaxMs": [
+            0.0196,
+            0.0091,
+            0.0195
+          ],
+          "referenceMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "candidateMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_membership_rebuild",
+          "objects": 1000,
+          "p95Ratios": [
+            0.8053740014524329,
+            0.7452316076294278,
+            0.6824776785714286
+          ],
+          "referenceP50Ms": [
+            0.1071,
+            0.11,
+            0.1074
+          ],
+          "candidateP50Ms": [
+            0.0949,
+            0.0887,
+            0.1015
+          ],
+          "referenceP95Ms": [
+            0.1377,
+            0.1468,
+            0.1792
+          ],
+          "candidateP95Ms": [
+            0.1109,
+            0.1094,
+            0.1223
+          ],
+          "candidateP99Ms": [
+            0.1139,
+            0.1131,
+            0.1418
+          ],
+          "candidateMaxMs": [
+            0.1141,
+            0.1227,
+            0.1435
+          ],
+          "referenceMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "candidateMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_membership_rebuild",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9444878811571541,
+            1.0128769535549198,
+            1.0067246186649172
+          ],
+          "referenceP50Ms": [
+            0.5477,
+            0.5693,
+            0.5443
+          ],
+          "candidateP50Ms": [
+            0.5359,
+            0.6063,
+            0.5396
+          ],
+          "referenceP95Ms": [
+            0.8953,
+            0.9086,
+            0.6097
+          ],
+          "candidateP95Ms": [
+            0.8456,
+            0.9203,
+            0.6138
+          ],
+          "candidateP99Ms": [
+            0.9053,
+            0.9305,
+            0.8911
+          ],
+          "candidateMaxMs": [
+            0.9087,
+            0.9358,
+            0.8918
+          ],
+          "referenceMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "candidateMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_mixed_warm",
+          "objects": 100,
+          "p95Ratios": [
+            1.6666666666666667,
+            1,
+            1
+          ],
+          "referenceP50Ms": [
+            0.0023,
+            0.0023,
+            0.0023
+          ],
+          "candidateP50Ms": [
+            0.0024,
+            0.0024,
+            0.0024
+          ],
+          "referenceP95Ms": [
+            0.0024,
+            0.0024,
+            0.0024
+          ],
+          "candidateP95Ms": [
+            0.004,
+            0.0024,
+            0.0024
+          ],
+          "candidateP99Ms": [
+            0.004,
+            0.0024,
+            0.0025
+          ],
+          "candidateMaxMs": [
+            0.0041,
+            0.0025,
+            0.0025
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_mixed_warm",
+          "objects": 1000,
+          "p95Ratios": [
+            0.6050632911392405,
+            1.065340909090909,
+            1.0506666666666666
+          ],
+          "referenceP50Ms": [
+            0.0323,
+            0.0242,
+            0.0301
+          ],
+          "candidateP50Ms": [
+            0.0236,
+            0.0329,
+            0.0309
+          ],
+          "referenceP95Ms": [
+            0.0395,
+            0.0352,
+            0.0375
+          ],
+          "candidateP95Ms": [
+            0.0239,
+            0.0375,
+            0.0394
+          ],
+          "candidateP99Ms": [
+            0.0273,
+            0.04,
+            0.04
+          ],
+          "candidateMaxMs": [
+            0.0283,
+            0.0401,
+            0.0405
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_mixed_warm",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0883720930232559,
+            1.420849420849421,
+            1.0309653916211292
+          ],
+          "referenceP50Ms": [
+            0.109,
+            0.0985,
+            0.0987
+          ],
+          "candidateP50Ms": [
+            0.0986,
+            0.1015,
+            0.1026
+          ],
+          "referenceP95Ms": [
+            0.1505,
+            0.1036,
+            0.1647
+          ],
+          "candidateP95Ms": [
+            0.1638,
+            0.1472,
+            0.1698
+          ],
+          "candidateP99Ms": [
+            0.1691,
+            0.1579,
+            0.1775
+          ],
+          "candidateMaxMs": [
+            0.1821,
+            0.1657,
+            0.1924
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_restore_rebuild",
+          "objects": 100,
+          "p95Ratios": [
+            1.2215743440233238,
+            1.008595988538682,
+            1.0168539325842698
+          ],
+          "referenceP50Ms": [
+            0.0229,
+            0.0227,
+            0.0229
+          ],
+          "candidateP50Ms": [
+            0.0234,
+            0.0233,
+            0.0243
+          ],
+          "referenceP95Ms": [
+            0.0343,
+            0.0349,
+            0.0356
+          ],
+          "candidateP95Ms": [
+            0.0419,
+            0.0352,
+            0.0362
+          ],
+          "candidateP99Ms": [
+            0.9529,
+            0.9458,
+            0.977
+          ],
+          "candidateMaxMs": [
+            1.1755,
+            0.9804,
+            0.9869
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_restore_rebuild",
+          "objects": 1000,
+          "p95Ratios": [
+            1.0670132871172733,
+            0.8591765221200175,
+            1.08911434055388
+          ],
+          "referenceP50Ms": [
+            0.2142,
+            0.2199,
+            0.2145
+          ],
+          "candidateP50Ms": [
+            0.2171,
+            0.2323,
+            0.2241
+          ],
+          "referenceP95Ms": [
+            0.3462,
+            0.4566,
+            0.3647
+          ],
+          "candidateP95Ms": [
+            0.3694,
+            0.3923,
+            0.3972
+          ],
+          "candidateP99Ms": [
+            0.4709,
+            0.5107,
+            0.4633
+          ],
+          "candidateMaxMs": [
+            0.6344,
+            0.7036,
+            0.5133
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_restore_rebuild",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0175009854158454,
+            1.009957779016968,
+            0.9670346757891464
+          ],
+          "referenceP50Ms": [
+            0.8691,
+            0.8339,
+            0.8201
+          ],
+          "candidateP50Ms": [
+            0.808,
+            0.8813,
+            0.8175
+          ],
+          "referenceP95Ms": [
+            1.2685,
+            1.2553,
+            1.2862
+          ],
+          "candidateP95Ms": [
+            1.2907,
+            1.2678,
+            1.2438
+          ],
+          "candidateP99Ms": [
+            1.4867,
+            1.3555,
+            1.3224
+          ],
+          "candidateMaxMs": [
+            1.5769,
+            1.6328,
+            1.576
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_warm",
+          "objects": 100,
+          "p95Ratios": [
+            0.9787234042553191,
+            1.9148936170212765,
+            0.6075949367088607
+          ],
+          "referenceP50Ms": [
+            0.0046,
+            0.0046,
+            0.0066
+          ],
+          "candidateP50Ms": [
+            0.0045,
+            0.0079,
+            0.0047
+          ],
+          "referenceP95Ms": [
+            0.0047,
+            0.0047,
+            0.0079
+          ],
+          "candidateP95Ms": [
+            0.0046,
+            0.009,
+            0.0048
+          ],
+          "candidateP99Ms": [
+            0.0046,
+            0.0102,
+            0.0048
+          ],
+          "candidateMaxMs": [
+            0.0047,
+            0.0106,
+            0.0048
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_warm",
+          "objects": 1000,
+          "p95Ratios": [
+            0.7412140575079872,
+            1.397489539748954,
+            0.9464285714285714
+          ],
+          "referenceP50Ms": [
+            0.0466,
+            0.0472,
+            0.0473
+          ],
+          "candidateP50Ms": [
+            0.0461,
+            0.0457,
+            0.0468
+          ],
+          "referenceP95Ms": [
+            0.0626,
+            0.0478,
+            0.0504
+          ],
+          "candidateP95Ms": [
+            0.0464,
+            0.0668,
+            0.0477
+          ],
+          "candidateP99Ms": [
+            0.0533,
+            0.0752,
+            0.049
+          ],
+          "candidateMaxMs": [
+            0.0866,
+            0.0765,
+            0.0557
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_warm",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0025149324111915,
+            0.8943466172381834,
+            0.8884185061989719
+          ],
+          "referenceP50Ms": [
+            0.1931,
+            0.2082,
+            0.2491
+          ],
+          "candidateP50Ms": [
+            0.195,
+            0.1986,
+            0.1948
+          ],
+          "referenceP95Ms": [
+            0.3181,
+            0.3237,
+            0.3307
+          ],
+          "candidateP95Ms": [
+            0.3189,
+            0.2895,
+            0.2938
+          ],
+          "candidateP99Ms": [
+            0.3269,
+            0.3121,
+            0.313
+          ],
+          "candidateMaxMs": [
+            0.3909,
+            0.3246,
+            0.3196
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        }
+      ]
+    },
+    {
+      "name": "incremental-reads-confirmation",
+      "archive": "out/verification/ecs-e5a/0e1e53322161421387052026154d9919",
+      "inputs": {
+        "path": "out/verification/ecs-e5a/0e1e53322161421387052026154d9919/inputs.json",
+        "sha256": "03315E6183C377D3104CF9BD7D0CCAF84BBDA324FF36DE8E40D7C8D2A56DE439"
+      },
+      "execution": {
+        "path": "out/verification/ecs-e5a/0e1e53322161421387052026154d9919/execution.json",
+        "sha256": "7D5A20DEA3F7AD45F32BF2CC0F0BBD258174CC878207CFEB27F17EE82E59F647"
+      },
+      "verification": {
+        "path": "out/verification/ecs-e5a/0e1e53322161421387052026154d9919/verification.json",
+        "sha256": "2148E5C9A4A4F2C2D4CD3C0AB8D7D67B139305CE8140051630198B088B9993BE"
+      },
+      "rows": [
+        {
+          "workload": "editor_object_warm",
+          "objects": 100,
+          "p95Ratios": [
+            0.7594405594405595,
+            1.0816326530612244,
+            0.8803512623490669
+          ],
+          "referenceP50Ms": [
+            0.0502,
+            0.051,
+            0.0509
+          ],
+          "candidateP50Ms": [
+            0.0503,
+            0.0908,
+            0.0519
+          ],
+          "referenceP95Ms": [
+            0.0715,
+            0.0882,
+            0.0911
+          ],
+          "candidateP95Ms": [
+            0.0543,
+            0.0954,
+            0.0802
+          ],
+          "candidateP99Ms": [
+            0.0596,
+            0.0975,
+            0.0832
+          ],
+          "candidateMaxMs": [
+            0.0757,
+            0.0975,
+            0.0869
+          ],
+          "referenceMedianAllocatedBytes": [
+            14544,
+            14544,
+            14544
+          ],
+          "candidateMedianAllocatedBytes": [
+            14544,
+            14544,
+            14544
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_object_warm",
+          "objects": 1000,
+          "p95Ratios": [
+            1.1796657381615598,
+            1.0786802030456855,
+            1.047080979284369
+          ],
+          "referenceP50Ms": [
+            0.05,
+            0.0505,
+            0.0496
+          ],
+          "candidateP50Ms": [
+            0.0586,
+            0.0516,
+            0.0506
+          ],
+          "referenceP95Ms": [
+            0.0718,
+            0.0788,
+            0.0531
+          ],
+          "candidateP95Ms": [
+            0.0847,
+            0.085,
+            0.0556
+          ],
+          "candidateP99Ms": [
+            0.088,
+            0.0883,
+            0.0803
+          ],
+          "candidateMaxMs": [
+            0.0893,
+            0.0886,
+            0.1053
+          ],
+          "referenceMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "candidateMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_object_warm",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9663056558363418,
+            1.7481060606060606,
+            1.79136690647482
+          ],
+          "referenceP50Ms": [
+            0.0501,
+            0.0499,
+            0.0504
+          ],
+          "candidateP50Ms": [
+            0.0504,
+            0.0536,
+            0.0907
+          ],
+          "referenceP95Ms": [
+            0.0831,
+            0.0528,
+            0.0556
+          ],
+          "candidateP95Ms": [
+            0.0803,
+            0.0923,
+            0.0996
+          ],
+          "candidateP99Ms": [
+            0.0947,
+            0.1001,
+            0.1633
+          ],
+          "candidateMaxMs": [
+            0.0958,
+            0.1107,
+            0.1682
+          ],
+          "referenceMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "candidateMedianAllocatedBytes": [
+            14560,
+            14560,
+            14560
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_cold",
+          "objects": 100,
+          "p95Ratios": [
+            0.9421777964717817,
+            0.8820736434108527,
+            1.0570912044436294
+          ],
+          "referenceP50Ms": [
+            2.7819,
+            3.0155,
+            2.8083
+          ],
+          "candidateP50Ms": [
+            2.7767,
+            2.7718,
+            2.9274
+          ],
+          "referenceP95Ms": [
+            4.0417,
+            4.128,
+            3.8167
+          ],
+          "candidateP95Ms": [
+            3.808,
+            3.6412,
+            4.0346
+          ],
+          "candidateP99Ms": [
+            4.0049,
+            3.9925,
+            4.1618
+          ],
+          "candidateMaxMs": [
+            4.015,
+            4.0044,
+            4.1828
+          ],
+          "referenceMedianAllocatedBytes": [
+            943176,
+            943176,
+            943176
+          ],
+          "candidateMedianAllocatedBytes": [
+            943176,
+            943176,
+            943176
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_cold",
+          "objects": 1000,
+          "p95Ratios": [
+            1.007425651949608,
+            0.9997329312652973,
+            0.9983626716078497
+          ],
+          "referenceP50Ms": [
+            25.7585,
+            25.7461,
+            25.4696
+          ],
+          "candidateP50Ms": [
+            25.9165,
+            25.6556,
+            25.4659
+          ],
+          "referenceP95Ms": [
+            30.0445,
+            29.5804,
+            29.6825
+          ],
+          "candidateP95Ms": [
+            30.2676,
+            29.5725,
+            29.6339
+          ],
+          "candidateP99Ms": [
+            33.2794,
+            31.0864,
+            30.5816
+          ],
+          "candidateMaxMs": [
+            35.0016,
+            31.7919,
+            31.2681
+          ],
+          "referenceMedianAllocatedBytes": [
+            9099784,
+            9099784,
+            9099784
+          ],
+          "candidateMedianAllocatedBytes": [
+            9099784,
+            9099784,
+            9099784
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_cold",
+          "objects": 4096,
+          "p95Ratios": [
+            1.075395681478126,
+            0.9636509880412114,
+            1.007844013833007
+          ],
+          "referenceP50Ms": [
+            106.6621,
+            106.4227,
+            106.8201
+          ],
+          "candidateP50Ms": [
+            107.67,
+            105.6728,
+            107.0793
+          ],
+          "referenceP95Ms": [
+            116.5584,
+            118.4819,
+            116.7642
+          ],
+          "candidateP95Ms": [
+            125.3464,
+            114.1752,
+            117.6801
+          ],
+          "candidateP99Ms": [
+            131.7113,
+            118.6638,
+            127.7788
+          ],
+          "candidateMaxMs": [
+            140.2826,
+            120.2408,
+            135.264
+          ],
+          "referenceMedianAllocatedBytes": [
+            36942232,
+            36942232,
+            36942232
+          ],
+          "candidateMedianAllocatedBytes": [
+            36942232,
+            36942232,
+            36942232
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_first",
+          "objects": 100,
+          "p95Ratios": [
+            1.1740547588005215,
+            0.9185252410663642,
+            0.9785772730653839
+          ],
+          "referenceP50Ms": [
+            2.8704,
+            3.3697,
+            2.9707
+          ],
+          "candidateP50Ms": [
+            2.836,
+            2.9589,
+            2.7872
+          ],
+          "referenceP95Ms": [
+            3.9884,
+            4.4075,
+            4.0331
+          ],
+          "candidateP95Ms": [
+            4.6826,
+            4.0484,
+            3.9467
+          ],
+          "candidateP99Ms": [
+            5.0896,
+            4.3171,
+            4.1024
+          ],
+          "candidateMaxMs": [
+            5.2049,
+            4.4875,
+            4.3422
+          ],
+          "referenceMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "candidateMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_first",
+          "objects": 1000,
+          "p95Ratios": [
+            0.9546742209631728,
+            1.0201576867316744,
+            1.0533651431441486
+          ],
+          "referenceP50Ms": [
+            3.6655,
+            3.5753,
+            3.571
+          ],
+          "candidateP50Ms": [
+            3.6404,
+            3.6632,
+            3.6971
+          ],
+          "referenceP95Ms": [
+            5.1538,
+            5.0353,
+            4.7784
+          ],
+          "candidateP95Ms": [
+            4.9202,
+            5.1368,
+            5.0334
+          ],
+          "candidateP99Ms": [
+            5.0886,
+            5.2597,
+            5.1734
+          ],
+          "candidateMaxMs": [
+            5.2244,
+            5.287,
+            5.4506
+          ],
+          "referenceMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "candidateMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_first",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0018313154949638,
+            0.9409517259823867,
+            0.9935749062175753
+          ],
+          "referenceP50Ms": [
+            3.577,
+            3.6665,
+            3.638
+          ],
+          "candidateP50Ms": [
+            3.7274,
+            3.6084,
+            3.6343
+          ],
+          "referenceP95Ms": [
+            4.9145,
+            5.2347,
+            5.0116
+          ],
+          "candidateP95Ms": [
+            4.9235,
+            4.9256,
+            4.9794
+          ],
+          "candidateP99Ms": [
+            5.0567,
+            5.0384,
+            5.0796
+          ],
+          "candidateMaxMs": [
+            5.0886,
+            5.1748,
+            5.156
+          ],
+          "referenceMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "candidateMedianAllocatedBytes": [
+            1239352,
+            1239352,
+            1239352
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_last",
+          "objects": 100,
+          "p95Ratios": [
+            0.9311896455837,
+            0.9493910690121786,
+            1.0331490304991464
+          ],
+          "referenceP50Ms": [
+            2.8295,
+            3.3843,
+            2.9019
+          ],
+          "candidateP50Ms": [
+            2.7838,
+            2.8105,
+            2.8905
+          ],
+          "referenceP95Ms": [
+            3.9558,
+            4.0645,
+            3.9247
+          ],
+          "candidateP95Ms": [
+            3.6836,
+            3.8588,
+            4.0548
+          ],
+          "candidateP99Ms": [
+            4.063,
+            4.0012,
+            4.1103
+          ],
+          "candidateMaxMs": [
+            4.1238,
+            4.4739,
+            4.3822
+          ],
+          "referenceMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "candidateMedianAllocatedBytes": [
+            937824,
+            937824,
+            937824
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_last",
+          "objects": 1000,
+          "p95Ratios": [
+            1.0123832015607352,
+            0.9573883552170371,
+            1.0508096834873641
+          ],
+          "referenceP50Ms": [
+            3.6147,
+            3.767,
+            3.6008
+          ],
+          "candidateP50Ms": [
+            3.6389,
+            3.7773,
+            3.602
+          ],
+          "referenceP95Ms": [
+            4.8695,
+            5.2779,
+            4.8908
+          ],
+          "candidateP95Ms": [
+            4.9298,
+            5.053,
+            5.1393
+          ],
+          "candidateP99Ms": [
+            5.1878,
+            5.2936,
+            5.4327
+          ],
+          "candidateMaxMs": [
+            5.3268,
+            5.3032,
+            5.4527
+          ],
+          "referenceMedianAllocatedBytes": [
+            1241192,
+            1241192,
+            1241192
+          ],
+          "candidateMedianAllocatedBytes": [
+            1241192,
+            1241192,
+            1241192
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "editor_page_warm_last",
+          "objects": 4096,
+          "p95Ratios": [
+            1.0146558963490222,
+            1.0104834706641517,
+            1.0078629709386173
+          ],
+          "referenceP50Ms": [
+            3.6483,
+            3.6236,
+            3.6071
+          ],
+          "candidateP50Ms": [
+            3.7344,
+            3.6617,
+            3.67
+          ],
+          "referenceP95Ms": [
+            5.0014,
+            5.0365,
+            5.0617
+          ],
+          "candidateP95Ms": [
+            5.0747,
+            5.0893,
+            5.1015
+          ],
+          "candidateP99Ms": [
+            5.2536,
+            5.2694,
+            5.2182
+          ],
+          "candidateMaxMs": [
+            5.4179,
+            5.4296,
+            5.3252
+          ],
+          "referenceMedianAllocatedBytes": [
+            1242576,
+            1242576,
+            1242576
+          ],
+          "candidateMedianAllocatedBytes": [
+            1242576,
+            1242576,
+            1242576
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_cold",
+          "objects": 100,
+          "p95Ratios": [
+            0.9208754208754208,
+            0.9826732673267327,
+            0.8603174603174603
+          ],
+          "referenceP50Ms": [
+            0.0236,
+            0.0148,
+            0.018
+          ],
+          "candidateP50Ms": [
+            0.0239,
+            0.0148,
+            0.0179
+          ],
+          "referenceP95Ms": [
+            0.0594,
+            0.0404,
+            0.063
+          ],
+          "candidateP95Ms": [
+            0.0547,
+            0.0397,
+            0.0542
+          ],
+          "candidateP99Ms": [
+            0.5097,
+            0.3297,
+            0.3496
+          ],
+          "candidateMaxMs": [
+            1.1555,
+            1.0485,
+            1.2487
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_cold",
+          "objects": 1000,
+          "p95Ratios": [
+            1.0295708618824377,
+            0.7165087956698241,
+            0.9780342516753536
+          ],
+          "referenceP50Ms": [
+            0.1592,
+            0.1641,
+            0.1734
+          ],
+          "candidateP50Ms": [
+            0.1928,
+            0.158,
+            0.1612
+          ],
+          "referenceP95Ms": [
+            0.2773,
+            0.2956,
+            0.2686
+          ],
+          "candidateP95Ms": [
+            0.2855,
+            0.2118,
+            0.2627
+          ],
+          "candidateP99Ms": [
+            0.3798,
+            0.2607,
+            0.3
+          ],
+          "candidateMaxMs": [
+            0.4036,
+            0.2785,
+            0.3899
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_cold",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9906817457789104,
+            1.0256301451243317,
+            0.9956186612576066
+          ],
+          "referenceP50Ms": [
+            0.8166,
+            0.7558,
+            0.788
+          ],
+          "candidateP50Ms": [
+            0.7772,
+            0.7628,
+            0.7604
+          ],
+          "referenceP95Ms": [
+            1.2556,
+            1.1783,
+            1.2325
+          ],
+          "candidateP95Ms": [
+            1.2439,
+            1.2085,
+            1.2271
+          ],
+          "candidateP99Ms": [
+            1.2616,
+            1.2388,
+            1.2507
+          ],
+          "candidateMaxMs": [
+            1.2647,
+            1.272,
+            1.2607
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_membership_rebuild",
+          "objects": 100,
+          "p95Ratios": [
+            1.0602409638554218,
+            1.8072289156626504,
+            0.9431818181818181
+          ],
+          "referenceP50Ms": [
+            0.0081,
+            0.0081,
+            0.0081
+          ],
+          "candidateP50Ms": [
+            0.0085,
+            0.0135,
+            0.008
+          ],
+          "referenceP95Ms": [
+            0.0083,
+            0.0083,
+            0.0088
+          ],
+          "candidateP95Ms": [
+            0.0088,
+            0.015,
+            0.0083
+          ],
+          "candidateP99Ms": [
+            0.0096,
+            0.0163,
+            0.009
+          ],
+          "candidateMaxMs": [
+            0.0098,
+            0.0171,
+            0.0122
+          ],
+          "referenceMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "candidateMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_membership_rebuild",
+          "objects": 1000,
+          "p95Ratios": [
+            1.5914429530201344,
+            0.9775413711583925,
+            0.924985899605189
+          ],
+          "referenceP50Ms": [
+            0.106,
+            0.1077,
+            0.1078
+          ],
+          "candidateP50Ms": [
+            0.1106,
+            0.1076,
+            0.1107
+          ],
+          "referenceP95Ms": [
+            0.1192,
+            0.1692,
+            0.1773
+          ],
+          "candidateP95Ms": [
+            0.1897,
+            0.1654,
+            0.164
+          ],
+          "candidateP99Ms": [
+            0.1929,
+            0.1824,
+            0.2053
+          ],
+          "candidateMaxMs": [
+            0.1946,
+            0.1889,
+            0.6317
+          ],
+          "referenceMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "candidateMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_membership_rebuild",
+          "objects": 4096,
+          "p95Ratios": [
+            0.6960554251871718,
+            1.1735729967069155,
+            1.1550109072244321
+          ],
+          "referenceP50Ms": [
+            0.5475,
+            0.5382,
+            0.5364
+          ],
+          "candidateP50Ms": [
+            0.548,
+            0.5373,
+            0.5457
+          ],
+          "referenceP95Ms": [
+            0.8949,
+            0.7288,
+            0.7793
+          ],
+          "candidateP95Ms": [
+            0.6229,
+            0.8553,
+            0.9001
+          ],
+          "candidateP99Ms": [
+            0.8788,
+            0.8873,
+            0.9182
+          ],
+          "candidateMaxMs": [
+            0.8836,
+            0.8907,
+            0.924
+          ],
+          "referenceMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "candidateMedianAllocatedBytes": [
+            64,
+            64,
+            64
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_mixed_warm",
+          "objects": 100,
+          "p95Ratios": [
+            1,
+            1.7083333333333337,
+            1
+          ],
+          "referenceP50Ms": [
+            0.0023,
+            0.0023,
+            0.0024
+          ],
+          "candidateP50Ms": [
+            0.0024,
+            0.0038,
+            0.0023
+          ],
+          "referenceP95Ms": [
+            0.0024,
+            0.0024,
+            0.0024
+          ],
+          "candidateP95Ms": [
+            0.0024,
+            0.0041,
+            0.0024
+          ],
+          "candidateP99Ms": [
+            0.0025,
+            0.0066,
+            0.0024
+          ],
+          "candidateMaxMs": [
+            0.0025,
+            0.0137,
+            0.0024
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_mixed_warm",
+          "objects": 1000,
+          "p95Ratios": [
+            1.532567049808429,
+            0.5771144278606964,
+            0.9707112970711296
+          ],
+          "referenceP50Ms": [
+            0.023,
+            0.0391,
+            0.0235
+          ],
+          "candidateP50Ms": [
+            0.0385,
+            0.0231,
+            0.023
+          ],
+          "referenceP95Ms": [
+            0.0261,
+            0.0402,
+            0.0239
+          ],
+          "candidateP95Ms": [
+            0.04,
+            0.0232,
+            0.0232
+          ],
+          "candidateP99Ms": [
+            0.0439,
+            0.0261,
+            0.0269
+          ],
+          "candidateMaxMs": [
+            0.0467,
+            0.0274,
+            0.0411
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_mixed_warm",
+          "objects": 4096,
+          "p95Ratios": [
+            0.6390214797136038,
+            1.594569288389513,
+            1.0564568462037638
+          ],
+          "referenceP50Ms": [
+            0.1365,
+            0.0999,
+            0.0987
+          ],
+          "candidateP50Ms": [
+            0.0986,
+            0.1043,
+            0.1013
+          ],
+          "referenceP95Ms": [
+            0.1676,
+            0.1068,
+            0.1541
+          ],
+          "candidateP95Ms": [
+            0.1071,
+            0.1703,
+            0.1628
+          ],
+          "candidateP99Ms": [
+            0.1357,
+            0.1825,
+            0.1639
+          ],
+          "candidateMaxMs": [
+            0.1391,
+            0.2006,
+            0.1657
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_restore_rebuild",
+          "objects": 100,
+          "p95Ratios": [
+            1.138728323699422,
+            0.6081967213114754,
+            0.9302949061662199
+          ],
+          "referenceP50Ms": [
+            0.0231,
+            0.0244,
+            0.0226
+          ],
+          "candidateP50Ms": [
+            0.0239,
+            0.0231,
+            0.023
+          ],
+          "referenceP95Ms": [
+            0.0346,
+            0.061,
+            0.0373
+          ],
+          "candidateP95Ms": [
+            0.0394,
+            0.0371,
+            0.0347
+          ],
+          "candidateP99Ms": [
+            0.9258,
+            1.0819,
+            1.1438
+          ],
+          "candidateMaxMs": [
+            1.5476,
+            1.2919,
+            1.6537
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_restore_rebuild",
+          "objects": 1000,
+          "p95Ratios": [
+            1.0356294536817103,
+            1.022949902043101,
+            0.9860688956433638
+          ],
+          "referenceP50Ms": [
+            0.2324,
+            0.2167,
+            0.2278
+          ],
+          "candidateP50Ms": [
+            0.2448,
+            0.22,
+            0.2297
+          ],
+          "referenceP95Ms": [
+            0.421,
+            0.3573,
+            0.3948
+          ],
+          "candidateP95Ms": [
+            0.436,
+            0.3655,
+            0.3893
+          ],
+          "candidateP99Ms": [
+            0.4691,
+            0.6301,
+            0.4871
+          ],
+          "candidateMaxMs": [
+            0.5102,
+            0.7205,
+            0.6547
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_restore_rebuild",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9967203111890779,
+            0.9688981042654028,
+            1.206163229275339
+          ],
+          "referenceP50Ms": [
+            0.8239,
+            0.9279,
+            0.8717
+          ],
+          "candidateP50Ms": [
+            0.8356,
+            0.8229,
+            0.8411
+          ],
+          "referenceP95Ms": [
+            1.3111,
+            1.3504,
+            1.2461
+          ],
+          "candidateP95Ms": [
+            1.3068,
+            1.3084,
+            1.503
+          ],
+          "candidateP99Ms": [
+            1.3844,
+            1.3669,
+            1.7748
+          ],
+          "candidateMaxMs": [
+            1.5174,
+            1.3737,
+            4.3459
+          ],
+          "referenceMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "candidateMedianAllocatedBytes": [
+            131480,
+            131480,
+            131480
+          ],
+          "warmAllocationTarget": null
+        },
+        {
+          "workload": "query_warm",
+          "objects": 100,
+          "p95Ratios": [
+            1,
+            1.702127659574468,
+            1
+          ],
+          "referenceP50Ms": [
+            0.0046,
+            0.0047,
+            0.0046
+          ],
+          "candidateP50Ms": [
+            0.0046,
+            0.0078,
+            0.0046
+          ],
+          "referenceP95Ms": [
+            0.0047,
+            0.0047,
+            0.0047
+          ],
+          "candidateP95Ms": [
+            0.0047,
+            0.008,
+            0.0047
+          ],
+          "candidateP99Ms": [
+            0.0047,
+            0.0107,
+            0.0047
+          ],
+          "candidateMaxMs": [
+            0.0092,
+            0.0114,
+            0.009
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_warm",
+          "objects": 1000,
+          "p95Ratios": [
+            1.6012793176972282,
+            1.552465233881163,
+            0.9791666666666666
+          ],
+          "referenceP50Ms": [
+            0.0461,
+            0.0661,
+            0.0474
+          ],
+          "candidateP50Ms": [
+            0.061,
+            0.0618,
+            0.0463
+          ],
+          "referenceP95Ms": [
+            0.0469,
+            0.0791,
+            0.048
+          ],
+          "candidateP95Ms": [
+            0.0751,
+            0.1228,
+            0.047
+          ],
+          "candidateP99Ms": [
+            0.0784,
+            0.1255,
+            0.0476
+          ],
+          "candidateMaxMs": [
+            0.0904,
+            0.1277,
+            0.0479
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        },
+        {
+          "workload": "query_warm",
+          "objects": 4096,
+          "p95Ratios": [
+            0.9883004926108375,
+            1.3778054862842892,
+            0.9376788553259141
+          ],
+          "referenceP50Ms": [
+            0.1976,
+            0.1973,
+            0.1923
+          ],
+          "candidateP50Ms": [
+            0.1939,
+            0.1945,
+            0.1948
+          ],
+          "referenceP95Ms": [
+            0.3248,
+            0.2406,
+            0.3145
+          ],
+          "candidateP95Ms": [
+            0.321,
+            0.3315,
+            0.2949
+          ],
+          "candidateP99Ms": [
+            0.3245,
+            0.3617,
+            0.316
+          ],
+          "candidateMaxMs": [
+            0.3343,
+            0.3738,
+            0.3192
+          ],
+          "referenceMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "candidateMedianAllocatedBytes": [
+            0,
+            0,
+            0
+          ],
+          "warmAllocationTarget": true
+        }
+      ]
+    }
+  ],
+  "confirmation": {
+    "preregistration": {
+      "path": "out/verification/ecs-e5b/reads-confirmation-preregistration-first.json",
+      "sha256": "9AC5899921C24C79698D21909F730E5EC602858B7A88A7E707F73966D3A36D42"
+    },
+    "actualArchiveVerification": {
+      "path": "out/ecs-e5b-confirmation-verification-first.json",
+      "sha256": "13DA9485D4B6E263CC5EADB95B818C7E47B07E7DBBA63898D799BA2BA1FC389E"
+    },
+    "coldQuery1000": {
+      "workload": "query_cold",
+      "objects": 1000,
+      "firstRatios": [
+        1.089655172413793,
+        1.1114345114345114,
+        1.1004601226993864
+      ],
+      "firstInterval": [
+        1.0737596619862662,
+        1.127866671774608
+      ],
+      "confirmationRatios": [
+        1.0295708618824377,
+        0.7165087956698241,
+        0.9780342516753536
+      ],
+      "confirmationInterval": [
+        0.5509606524435543,
+        1.4600485749283199
+      ],
+      "firstRuns": [
+        {
+          "run": 1,
+          "referenceMs": {
+            "p50": 0.1617,
+            "p95": 0.2465,
+            "p99": 0.2879,
+            "max": 0.3311
+          },
+          "candidateMs": {
+            "p50": 0.1793,
+            "p95": 0.2686,
+            "p99": 0.2916,
+            "max": 0.3711
+          },
+          "referenceAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "candidateAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139208,
+            "max": 139592
+          },
+          "referenceGc": [
+            3,
+            3,
+            3
+          ],
+          "candidateGc": [
+            3,
+            3,
+            3
+          ]
+        },
+        {
+          "run": 2,
+          "referenceMs": {
+            "p50": 0.1611,
+            "p95": 0.2405,
+            "p99": 0.3016,
+            "max": 0.347
+          },
+          "candidateMs": {
+            "p50": 0.1711,
+            "p95": 0.2673,
+            "p99": 0.3099,
+            "max": 0.3565
+          },
+          "referenceAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "candidateAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "referenceGc": [
+            3,
+            3,
+            3
+          ],
+          "candidateGc": [
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "run": 3,
+          "referenceMs": {
+            "p50": 0.1613,
+            "p95": 0.2608,
+            "p99": 0.3339,
+            "max": 0.3759
+          },
+          "candidateMs": {
+            "p50": 0.1641,
+            "p95": 0.287,
+            "p99": 0.3366,
+            "max": 0.3592
+          },
+          "referenceAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "candidateAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139272,
+            "max": 139592
+          },
+          "referenceGc": [
+            3,
+            3,
+            3
+          ],
+          "candidateGc": [
+            4,
+            4,
+            4
+          ]
+        }
+      ],
+      "confirmationRuns": [
+        {
+          "run": 1,
+          "referenceMs": {
+            "p50": 0.1592,
+            "p95": 0.2773,
+            "p99": 0.304,
+            "max": 0.3532
+          },
+          "candidateMs": {
+            "p50": 0.1928,
+            "p95": 0.2855,
+            "p99": 0.3798,
+            "max": 0.4036
+          },
+          "referenceAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "candidateAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139208,
+            "max": 139592
+          },
+          "referenceGc": [
+            4,
+            4,
+            4
+          ],
+          "candidateGc": [
+            3,
+            3,
+            3
+          ]
+        },
+        {
+          "run": 2,
+          "referenceMs": {
+            "p50": 0.1641,
+            "p95": 0.2956,
+            "p99": 0.3779,
+            "max": 0.544
+          },
+          "candidateMs": {
+            "p50": 0.158,
+            "p95": 0.2118,
+            "p99": 0.2607,
+            "max": 0.2785
+          },
+          "referenceAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "candidateAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "referenceGc": [
+            3,
+            3,
+            3
+          ],
+          "candidateGc": [
+            3,
+            3,
+            3
+          ]
+        },
+        {
+          "run": 3,
+          "referenceMs": {
+            "p50": 0.1734,
+            "p95": 0.2686,
+            "p99": 0.3978,
+            "max": 0.4514
+          },
+          "candidateMs": {
+            "p50": 0.1612,
+            "p95": 0.2627,
+            "p99": 0.3,
+            "max": 0.3899
+          },
+          "referenceAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "candidateAllocatedBytes": {
+            "p50": 131480,
+            "p95": 131480,
+            "p99": 139592,
+            "max": 139592
+          },
+          "referenceGc": [
+            3,
+            3,
+            3
+          ],
+          "candidateGc": [
+            3,
+            3,
+            3
+          ]
+        }
+      ],
+      "warmAllocationTarget": null
+    },
+    "result": "First regression not consistently replicated; both cohorts retained. Wide interval does not prove no regression. Cause unknown; B remains unaccepted.",
+    "noPooledOrSelectedRuns": true
+  },
+  "evidence": {
+    "functionalPostPairs": {
+      "path": "out/ecs-e5b-delivery-verification-post-pairs-first.log",
+      "sha256": "F2842F016ED4B03B1BE45CD5BED84622FF211ADADF545752F37FC828FBE3589C"
+    },
+    "firstFiveArchives": {
+      "path": "out/ecs-e5b-final-evidence-first.log",
+      "sha256": "2D8A934BF5E3300AAAE932A12A3B06E07E325F16808559DCDEF8609A530DE248"
+    },
+    "historicalE3D": {
+      "path": "out/ecs-e5b-deferred-performance-first.log",
+      "sha256": "B4BE5E4CD20B71A6A32C18D01811ED5C864C83020C893559325BC7613923626A"
+    },
+    "diagnosticArchives": {
+      "path": "out/ecs-e5b-diagnostic-audit-second.json",
+      "sha256": "D09B5ABA5189BDD47357CF36C76EC8844807C8F1B4D7169C9603AFFCDD0431AF"
+    },
+    "postHocAllRows": {
+      "path": "out/ecs-e5b-regression-inspection-second.json",
+      "sha256": "DC25EFDFABBF4B92450837AD2F0AF0F1B2A8F8E11E26A76174D37801035227BF"
+    }
+  },
+  "environment": {
+    "cpu": "AMD Ryzen 5 5600X",
+    "runtime": ".NET 8.0.28",
+    "os": "Microsoft Windows 10.0.19045",
+    "serverGc": false,
+    "tieredCompilation": "0",
+    "powerPlan": "Balanced",
+    "observedPreRunLoadPercentRange": [
+      2,
+      40
+    ],
+    "warning": "Bounded pre-run snapshots, not idle-machine or continuous frequency proof; no concurrent task builds/tests/profiling during measurements."
+  },
+  "counts": {
+    "formalProcesses": 24,
+    "initialComparativeRows": 93,
+    "additionalIndependentReadRows": 27,
+    "rawTimeSamples": 72000,
+    "rawAllocationSamples": 72000,
+    "smokeProcesses": 4,
+    "archivedInputCopies": 108
+  },
+  "diagnosticsScope": "Exploratory phase/actual runtime GC-pause probes have different driver binary hashes across versions, despite matching test source. No same-driver attribution, allocation-stack/lifetime proof or final-candidate pause claim.",
+  "unresolved": [
+    "ECS-PERF-02 copied reads",
+    "cold-query repeatability/root cause",
+    "actual domain CPU/GPU/upload/memory/AI transport",
+    "precise residual cleanup",
+    "E5-F receipt and final noSkip gates",
+    "manual/target/self-contained/whole-frame/1h gates",
+    "historical File.Replace root causes"
+  ],
+  "installed": {
+    "generation": "7f3d3822dd39431b9c203e17194afb8c",
+    "manifestFiles": 144,
+    "actualFiles": 148,
+    "backupFiles": 148,
+    "exeSha256": "C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61"
+  },
+  "stageAccepted": false,
+  "fullPerformanceAccepted": false,
+  "deployed": false
+}

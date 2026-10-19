@@ -3,9 +3,10 @@ namespace Ncma.Runtime;
 public sealed partial class World
 {
     // Derived encoded metadata only; all values and identities remain owned by the sole World.
-    // Cached DTO arrays never leave this class. Snapshot callbacks receive fresh array shells.
-    private sealed record EncodedComponent(ComponentSnapshot Snapshot, int Bytes, bool Stable);
-    private sealed record EncodedObject(Entry Entry, ObjectSnapshot Snapshot, Dictionary<Type, EncodedComponent> Components, int HeaderBytes, int Bytes, bool Stable);
+    // Full object DTOs and sorted component arrays are materialized only for explicit snapshot
+    // observers. Fixed-step validation/typed prepared views need metadata and exact budgets only.
+    private readonly record struct EncodedComponent(Type Type, ComponentSnapshot Snapshot, int Bytes, bool Stable);
+    private sealed record EncodedObject(Entry Entry, EncodedComponent[] Components, int HeaderBytes, int Bytes, bool Stable);
     private sealed record EncodedWorld(Dictionary<int, EncodedObject> Objects, int HeaderBytes, int Bytes, bool Stable);
     private EncodedWorld? _committedEncoding, _stepEncodingBaseline, _stepPreparedEncoding;
     private ulong _encodingRevision, _stepMutation, _stepPreparedMutation;
@@ -76,12 +77,21 @@ public sealed partial class World
         int headerBytes = prior is not null && ReferenceEquals(prior.Entry, entry) ? prior.HeaderBytes :
             SceneJson.MeasureBounded(new ObjectSnapshot(entry.PersistentId, entry.Name, []), MaxSnapshotBytes);
         int bytes = headerBytes;
-        var components = new Dictionary<Type, EncodedComponent>(); bool stable = true;
+        // Immutable attempt-owned derived metadata, bounded by MaxComponentsPerObject. The common
+        // unchanged pool order uses the same index; membership changes fall back to identity lookup.
+        var components = new EncodedComponent[_stepStorage!.Count(entry.Slot)]; bool stable = true;
+        int index = 0;
         foreach (Type type in _stepStorage!.TypesAt(entry.Slot))
         {
             EncodedComponent current;
-            if (prior is not null && !_stepDirtyComponents!.Contains((entry.Slot, type)) &&
-                prior.Components.TryGetValue(type, out var cached) && cached.Stable) current = cached;
+            EncodedComponent? cached = null;
+            if (prior is not null && !_stepDirtyComponents!.Contains((entry.Slot, type)))
+            {
+                if (index < prior.Components.Length && prior.Components[index].Type == type) cached = prior.Components[index];
+                else foreach (var candidate in prior.Components)
+                    if (candidate.Type == type) { cached = candidate; break; }
+            }
+            if (cached is { Stable: true } reusable) current = reusable;
             else
             {
                 var descriptor = Components.Describe(type);
@@ -90,21 +100,20 @@ public sealed partial class World
                 var snapshot = new ComponentSnapshot(descriptor.TypeId, descriptor.Version, data);
                 Components.ValidateEncoding(snapshot);
                 int size = SceneJson.MeasureBounded(snapshot, MaxSnapshotBytes);
-                current = new(snapshot, size, Components.CanCacheEncoding(type)); _encodedComponentCount++;
+                current = new(type, snapshot, size, Components.CanCacheEncoding(type)); _encodedComponentCount++;
             }
-            bytes = checked(bytes + current.Bytes + (components.Count == 0 ? 0 : 1));
+            bytes = checked(bytes + current.Bytes + (index == 0 ? 0 : 1));
             if (bytes > MaxSnapshotBytes) throw new ArgumentException("Snapshot size limit exceeded.");
-            components.Add(type, current); stable &= current.Stable;
+            components[index++] = current; stable &= current.Stable;
         }
-        var result = new ObjectSnapshot(entry.PersistentId, entry.Name,
-            components.Values.Select(c => c.Snapshot).OrderBy(c => c.TypeId, StringComparer.Ordinal).ToArray());
-        return new(entry, result, components, headerBytes, bytes, stable);
+        return new(entry, components, headerBytes, bytes, stable);
     }
     private WorldSnapshot CopyValidationSnapshot(EncodedWorld encoded)
     {
         _copiedValidationSnapshotCount++;
         return new(1, _name, encoded.Objects.Values.OrderBy(o => o.Entry.CreationOrdinal)
-            .Select(o => o.Snapshot with { Components = (ComponentSnapshot[])o.Snapshot.Components.Clone() }).ToArray());
+            .Select(o => new ObjectSnapshot(o.Entry.PersistentId, o.Entry.Name,
+                o.Components.Select(c => c.Snapshot).OrderBy(c => c.TypeId, StringComparer.Ordinal).ToArray())).ToArray());
     }
 
     internal readonly record struct PreparedObject(Entity Entity, Guid Id, string Name, int ComponentArrayBytes);
@@ -156,8 +165,9 @@ public sealed partial class World
             VerifyCurrent();
             if (!_world._stepUuids!.TryGetValue(id, out int slot) || !_encoded.Objects.TryGetValue(slot, out var value))
                 throw new ArgumentException("Unknown prepared object.");
-            return value.Components.Values.FirstOrDefault(c => c.Snapshot.TypeId == typeId)?.Bytes
-                ?? throw new ArgumentException("Component is not attached.");
+            foreach (var component in value.Components)
+                if (component.Snapshot.TypeId == typeId) return component.Bytes;
+            throw new ArgumentException("Component is not attached.");
         }
         internal IEnumerable<PreparedObject> Objects
         {
@@ -167,7 +177,7 @@ public sealed partial class World
                 foreach (var value in _encoded.Objects.Values.OrderBy(o => o.Entry.CreationOrdinal))
                 {
                     VerifyCurrent();
-                    int bytes = checked(2 + value.Components.Values.Sum(c => c.Bytes) + Math.Max(0, value.Components.Count - 1));
+                    int bytes = checked(2 + value.Bytes - value.HeaderBytes);
                     yield return new(_world.IdentityOf(value.Entry), value.Entry.PersistentId, value.Entry.Name, bytes);
                     VerifyCurrent(); // Also reject stale resumption after the last yielded item.
                 }

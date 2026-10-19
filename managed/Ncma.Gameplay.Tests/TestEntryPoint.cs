@@ -8,9 +8,10 @@ internal static class TestEntryPoint
         {
             if (args.Any(a => a.StartsWith("--ecs-e5-", StringComparison.Ordinal)))
             {
-                if (args.Length != 1 || args[0] is not ("--ecs-e5-smoke" or "--ecs-e5-measure"))
+                if (args.Length != 1 || args[0] is not ("--ecs-e5-smoke" or "--ecs-e5-measure" or "--ecs-e5-diagnose" or "--ecs-e5-diagnose-smoke"))
                     throw new ArgumentException("E5 entry requires exactly one known mode.");
-                return EcsPairedEntry.Run(args[0] == "--ecs-e5-measure", e5: true);
+                return EcsPairedEntry.Run(args[0] is "--ecs-e5-measure" or "--ecs-e5-diagnose", e5: true,
+                    diagnostics: args[0].StartsWith("--ecs-e5-diagnose", StringComparison.Ordinal));
             }
             if (args.Contains("--ecs-paired-smoke") || args.Contains("--ecs-paired-measure"))
             {

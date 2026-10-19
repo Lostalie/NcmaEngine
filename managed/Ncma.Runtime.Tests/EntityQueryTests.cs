@@ -28,6 +28,9 @@ internal static class EntityQueryTests
         return result;
     }
     private static ComponentSnapshot Transform(World world) => new("ncma.transform", 1, world.Components.Encode(TransformData.Identity));
+    // Test-only observation; production queries never expose their result buffer.
+    private static Entity[] Buffer(EntityQuery query) =>
+        (Entity[])typeof(EntityQuery).GetField("_members", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(query)!;
     private static void Invalidated(ref EntityQuery.Enumerator iterator)
     {
         bool moveRejected = false, currentRejected = false;
@@ -39,6 +42,46 @@ internal static class EntityQueryTests
     {
         var cases = new (string Name, Action Run)[]
         {
+            ("cold query buffer follows committed size rather than maximum budget", () => {
+                foreach (int count in new[] { 0, 100, 1000 }) {
+                    var world = NewWorld();
+                    for (int i = 0; i < count; i++) world.Set(world.CreateEntity("item"), new Label("value"));
+                    for (int i = 0; i < 4; i++) Check(world.Query<Label>().Count == count);
+                    long before = GC.GetAllocatedBytesForCurrentThread();
+                    var query = world.Query<Label>(); int actual = query.Count;
+                    long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                    Check(actual == count && Buffer(query).Length == count && allocated < count * 48L + 4096);
+                    Console.WriteLine($"Query cold allocation: entities={count}, bytes={allocated}; API only, not timing acceptance.");
+                }
+            }),
+            ("lazy growth sees only committed entities and retains explicit result limit", () => {
+                var world = NewWorld(); var query = world.CreateQuery([], [], 2); Check(query.Count == 0);
+                var emptyBuffer = Buffer(query); var iterator = query.GetEnumerator();
+                world.BeginStep(); Guid pending = Guid.NewGuid(); world.StageCreate(pending, "aborted");
+                Check(query.Count == 0 && ReferenceEquals(Buffer(query), emptyBuffer));
+                world.AbortStep(); Check(!iterator.MoveNext() && ReferenceEquals(Buffer(query), emptyBuffer));
+                world.BeginStep(); world.StageCreate(Guid.NewGuid(), "A"); world.StageCreate(Guid.NewGuid(), "B");
+                Check(query.Count == 0); world.CommitStep(); Invalidated(ref iterator);
+                var expected = world.GetEntities().ToArray(); Check(Read(query).SequenceEqual(expected) && Buffer(query).Length == 2);
+                var fullBuffer = Buffer(query); var extra = world.CreateEntity("C"); Entity[] output = [expected[1], expected[0]];
+                Reject(() => query.CopyTo(output)); Check(output.SequenceEqual(new[] { expected[1], expected[0] }));
+                Check(ReferenceEquals(Buffer(query), fullBuffer)); world.Destroy(extra);
+                Check(Read(query).SequenceEqual(expected) && ReferenceEquals(Buffer(query), fullBuffer));
+            }),
+            ("retained query grows to 4096 without truncation or leaking a writable buffer", () => {
+                var world = NewWorld(); var query = world.Query<Label>(); Check(query.Count == 0);
+                var expected = new List<Entity>();
+                for (int i = 0; i < World.MaxObjects; i++) {
+                    var entity = world.CreateEntity("item"); world.Set(entity, new Label("value")); expected.Add(entity);
+                    if (i is 0 or 99 or 999 or 4095) {
+                        Check(Read(query).SequenceEqual(expected)); Check(Buffer(query).Length == i + 1);
+                    }
+                }
+                var copied = Read(query); copied[0] = default; Check(Read(query).SequenceEqual(expected));
+                var buffer = Buffer(query); var iterator = query.GetEnumerator();
+                world.RestoreSnapshot(world.CaptureSnapshot()); Reject(() => _ = query.Count); Invalidated(ref iterator);
+                Check(ReferenceEquals(buffer, Buffer(query)) && buffer.Length == World.MaxObjects);
+            }),
             ("All/None and typed intersections include only committed members", () => {
                 var world = NewWorld(); var a = world.CreateEntity("empty"); var b = world.CreateEntity("transform");
                 var c = world.CreateEntity("both"); var d = world.CreateEntity("three");
