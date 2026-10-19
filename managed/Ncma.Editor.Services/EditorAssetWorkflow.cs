@@ -184,10 +184,27 @@ public sealed class EditorAssetWorkflow : IDisposable
     {
         Verify();if(Prepared?.Ticket!=prepared.Ticket)throw new EditRejectedException("asset_import_ticket_mismatch");
         var ids=prepared.Record.Subassets.Select(s=>s.AssetId).Append(prepared.Record.AssetId).ToHashSet();
-        return _workspace.Owner.Document.World.GetEntities().Where(obj=>
-            _workspace.Owner.Document.World.Has<StaticMeshData>(obj)&&(ids.Contains(_workspace.Owner.Document.World.Get<StaticMeshData>(obj).MeshId)||ids.Contains(_workspace.Owner.Document.World.Get<StaticMeshData>(obj).MaterialSetId))||
-            _workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)&&(ids.Contains(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).CharacterId)||ids.Contains(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).MeshId)||ids.Contains(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).MaterialSetId))||
-            _workspace.Owner.Document.World.Has<Ncma.Animation.ClipPlaybackData>(obj)&&ids.Contains(_workspace.Owner.Document.World.Get<Ncma.Animation.ClipPlaybackData>(obj).ClipId)).Select(obj=>_workspace.Owner.Document.World.GetUuid(obj)).ToArray();
+        return CollectRenderReferences(_workspace.Owner.Document.World, ids);
+    }
+    // Off-frame import review. Query the union, including malformed/missing-Transform members;
+    // the report is not a renderability validator. Preserve creation order, not UUID order.
+    private static Guid[] CollectRenderReferences(World world, HashSet<Guid> ids)
+    {
+        using var read = world.ReadOnly();
+        var members = new HashSet<Entity>();
+        Add<StaticMeshData>(value => ids.Contains(value.MeshId) || ids.Contains(value.MaterialSetId));
+        Add<SkinnedMeshData>(value => ids.Contains(value.CharacterId) || ids.Contains(value.MeshId) || ids.Contains(value.MaterialSetId));
+        Add<Ncma.Animation.ClipPlaybackData>(value => ids.Contains(value.ClipId));
+        var ordered = members.ToArray();
+        Array.Sort(ordered, world.CompareCreationOrder);
+        return ordered.Select(world.GetUuid).ToArray();
+
+        void Add<T>(Func<T, bool> affected) where T : struct, IComponent
+        {
+            if (!world.Components.IsRegistered<T>()) return;
+            foreach (var entity in world.Query<T>())
+                if (affected(world.Get<T>(entity))) members.Add(entity);
+        }
     }
     public void Dispose()
     {

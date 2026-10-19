@@ -12,7 +12,7 @@ public sealed partial class EditSession
         int offset = request.Input.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
         int limit = request.Input.TryGetProperty("limit", out var l) ? l.GetInt32() : 16;
         if (offset < 0 || limit is < 1 or > 64) throw new ArgumentException("Invalid detail pagination.");
-        var obj = _document.CaptureSnapshot().Objects.FirstOrDefault(o => o.Id == id);
+        var obj = _document.ReadObject(id);
         if (obj is null) return Result(request, "error", "object_not_found", false, new { objectId = id });
         if (section != "exports" && request.Input.TryGetProperty("bindingId", out _)) throw new ArgumentException("bindingId is only valid for exports.");
         object[] values = section switch

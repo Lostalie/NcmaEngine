@@ -802,6 +802,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
 }).ToArray();
 cases = cases.Concat(EnvironmentAuthoringTests.Cases(output,root)).ToArray();
 cases = cases.Concat(PostProcessAuthoringTests.Cases(output,root)).ToArray();
+cases = cases.Concat(EcsReadConsumerTests.Cases()).ToArray();
 if (args.Length == 3 && args[2] == "--post-authoring-tests") cases=cases.Where(c=>c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-authoring-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal)).ToArray();

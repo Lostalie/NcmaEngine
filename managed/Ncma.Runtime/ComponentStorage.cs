@@ -118,6 +118,8 @@ internal sealed class ComponentStorage
 
     internal bool Has(int slot, Type type) => _pools.TryGetValue(type, out var pool) && pool.Has(slot);
     internal IComponentPool? FindPool(Type type) => _pools.GetValueOrDefault(type);
+    internal bool HasStableReadEncoding(ComponentRegistry registry) =>
+        _pools.All(pair => pair.Value.Count == 0 || registry.CanCacheEncoding(pair.Key));
     internal IEnumerable<Type> TypesAt(int slot) => _pools.Where(pair => pair.Value.Has(slot)).Select(pair => pair.Key);
     internal T Get<T>(int slot) where T : struct, IComponent =>
         _pools.TryGetValue(typeof(T), out var pool) ? ((ComponentPool<T>)pool).Get(slot) :

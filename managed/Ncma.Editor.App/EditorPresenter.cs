@@ -21,6 +21,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
 {
     private static readonly JsonSerializerOptions DataJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, IncludeFields = true, IgnoreReadOnlyProperties = true };
     private readonly Dictionary<Guid, ulong> _rowIds = [];
+    private Guid _rowWorld;
+    private ulong _rowMembership;
     private ulong _nextRowId;
     private sealed record ActionView(string Kind, Guid Object = default, string Field = "", int Index = 0, object? Operation = null);
     private readonly List<GuiItem> _items = [];
@@ -146,8 +148,12 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         {
             if (_lastSelection != _page.State.Selection || _lastDocument != _page.Stamp.Generation)
             { _componentOffset = 0; _bindingOffset = 0; _exportOffsets.Clear(); _jsonPageOffsets.Clear(); _jsonEdit = null; }
-            var alive = workspace.Owner.Document.World.GetEntities().Select(o => workspace.Owner.Document.World.GetUuid(o)).ToHashSet();
-            foreach (var id in _rowIds.Keys.Where(id => !alive.Contains(id)).ToArray()) _rowIds.Remove(id);
+            var rowWorld = workspace.Owner.Document.World;
+            if (_rowWorld != rowWorld.Identity || _rowMembership != rowWorld.MembershipVersion)
+            {
+                foreach (var id in _rowIds.Keys.Where(id => !rowWorld.TryFindEntity(id, out _)).ToArray()) _rowIds.Remove(id);
+                _rowWorld = rowWorld.Identity; _rowMembership = rowWorld.MembershipVersion;
+            }
             _generation = checked(_generation + 1); _deleteConfirmation = ""; _jsonPageCache.Clear();
             _lastRevision = _page.Stamp.Revision; _lastDocument = _page.Stamp.Generation; _lastSelection = _page.State.Selection; _lastCatalog = catalog.Generation;
         }

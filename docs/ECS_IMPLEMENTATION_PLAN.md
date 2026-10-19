@@ -589,3 +589,54 @@ E4-C自动候选完成，下一步限定21个任务文件提交推送并核对�
 读取测试须与旧完整codec结果对照：创建顺序与非UUID顺序、删除/复用、换场景与Restore、值更新、元数据排序/异常UTF-16规范化、offset边界/整数溢出、128/64条分页和256KiB输出、返回副本隔离、陈旧session/revision、外线程/未提交边界、编码回调试图写World；特别加入“页外异常编码/全局超预算仍拒绝”的负例。未知编码的冷路径是正确性回退，不是新兼容格式。使用现有捕获计数证明稳定路径没有整文档复制，另保留完整回归；该计数不能代替E5性能测量。
 
 读取与验证还须区分：原`CaptureSnapshot`执行codec/元数据/字节深度等读取检查，并不等于`PrepareRestore`的完整组件schema/作者组合验证。World直接Set的自定义值验证和载荷检查也不是完整schema验证。新检查戳/冷路径必须精确保持原读取前提，不能用`ValidateAuthoring`替换inspect从而隐藏原本可供诊断的数据；增加“可读但scene.validate拒绝”的对照用例，同时保持所有写入/安装的原校验不变。
+
+### 10.9 E4-D 场景、编辑与既有AI读取：自动候选验证完成
+
+E4-C已提交推送`14cf0dc3b832b36d29301c9cfe93e0fc437f0dda`并核对远端。E4-D现已完成以下实现及同冻结自动候选门禁，限定提交推送后进入E4-E；不表示整个E4或性能门禁完成：
+
+- `SceneDocument.ReadPage`（最多128对象）与`ReadObject`是既有Editor.Core能力的内部读取路径，不新增外部能力或写权限。第一次/修订变化执行原完整CaptureSnapshot与codec，检查全局预算和页外元数据；仅在所有在用组件的编码稳定性具有现役证明时，记录精确World身份、World Revision和文档Revision的成功读取戳。未保留完整文档或组件值副本作为第二存储。
+- 同一有效戳的后续读取只复制目标页/对象，复用创建顺序Query；返回前仍使用原codec规范化名字、JSON与Export。未知转换器/计算属性每次走原完整冷路径；缺失对象也不能跳过全局检查。读取不增加PrepareRestore/schema/作者组合要求，保留原本可诊断但不合法安装的数据。全程只读边界及冷编码重入拒绝，不允许编码回调修改World。
+- 既有`ncma.scene.inspect`和`ncma.scene.object.inspect`保留会话/revision检查、详情64条、输出256KiB、分页缩减、缺失对象错误优先级及原授权/Undo路径；没有新的MCP批准入口。文档修订变化仍会使读戳失效并完整冷读，不宣称消除每个修订的全部序列化或整帧性能问题。
+- `SceneDocument.ObserveWorld`仍观察每次World修订；仅在成员版本/World身份变化时用UUID查找清除失效绑定。Restore与运行时元数据提交同步观察戳，未被观察期间同UUID删除再创建的既有行为不变。`EditorPresenter`按身份/成员变化清理已有行ID，保留选择、草稿、分页和视图generation语义。
+- 导入影响检查用StaticMesh/SkinnedMesh/ClipPlayback可选类型查询的并集，去重后保持创建顺序；保留双几何、缺Transform和不可见对象的引用报告。该入口是离帧导入事件，原prepared ticket/项目/会话检查不变。用户显式GetObjects副本与ComponentAuthority冻结成员合同保留。
+
+新增13组场景读取测试覆盖完整codec对照、4096容量、offset溢出、值与成员版本、删除/复用/Restore、副本隔离、UTF-16/Export顺序、页外元数据错误、全局4MiB、未知编码冷读、可读但schema不合法、线程/步边界、回调写入与重入、UUID绑定观察。新增6组能力测试覆盖精确旧输出、128/64分页、session/revision/权限/Undo/Redo/Play冻结、诊断与validate区分、256KiB场景拒绝及详情缩减续页。新增3组消费者测试覆盖可选注册、4096混合导入引用、实际Presenter行ID/选择/删除/撤销恢复；原M3.6真实导入工作流仍执行。
+
+初步Debug：Scene原36/Runtime文档11/新增13、Editor.Core原36/新增6、Editor.Services157通过。首轮服务编译因误用`CreateQuery<T>`而CS0308失败，修正为已存在的`Query<T>`，日志`out/ecs-e4d-services-debug-targeted-first.log`保留，未放宽断言。最终源码定向双配置脚本为`out/verification/ecs-e4d/run-targeted-first.ps1`，总日志`out/ecs-e4d-targeted-first.log`；各轮状态按下文终态为准，不轮询已结束会话。ECS-PERF-01/02仍由E5统一修复与验收。
+
+最终定向会话83599已结束exit0：Debug/Release均通过原Scene36/Runtime文档11/新增读取13、原Editor.Core36/新增能力6、Editor.Services157（含3新增消费者），六次显式构建均0警告。日志`out/ecs-e4d-{scene,editor-core,editor-services}-{debug,release}-{build,tests}-targeted-first.log`，总日志同上。
+
+最终源码冻结**949文件**：`out/verification/ecs-e4d/source-freeze-first.json` SHA256 **AC7549B1C1EE09E208425DFD0D50DD8053DA3EE363711CCA54BB021E11F0261B**。在批准的正常Windows/TLS环境顺序执行标准Debug/Release构建（SkipTests、不部署）、外层完整89项、smoke/Python45/inspect及前后冻结核验；会话**55989已结束exit0**，所有本片测试会话均已结束，不重启或轮询旧会话。
+
+| 最终同源码门禁 | Debug FIRST | Release FIRST |
+| --- | --- | --- |
+| 标准构建 | 成功，0编译警告 | 成功，0编译警告 |
+| 完整CTest | 89/89，1122.43秒 | 89/89，1014.55秒 |
+| 原Scene / Runtime文档 / 新读取 | 36 / 11 / 13组通过 | 36 / 11 / 13组通过 |
+| 原Editor.Core / 新能力读取 / Editor.Services | 36 / 6 / 157组通过 | 36 / 6 / 157组通过 |
+| 真实源与搬移管线宿主 / TLS / 搬移客户端 | 657 / 4583 / 1174检查通过 | 657 / 4583 / 1174检查通过 |
+| 托管/原生smoke、Python45、inspect | 通过 | 通过 |
+
+日志为`out/ecs-e4d-build-{debug,release}-first.log`、`ctest-{debug,release}-first.log`、`ctest-{debug,release}-details-first.log`、`supplemental-{debug,release}-first.log`（后三类同样使用`out/ecs-e4d-`前缀）；总日志`out/ecs-e4d-gates-first.log`。原Runtime/身份/Query/结构批次/增量验证/Gameplay/Movement/UI/E0等回归标记均经最终交付脚本核对，不将新增组数混入原计数。
+
+最终交付核验`out/ecs-e4d-delivery-verification-first.log` SHA256 **987398AF120B4F276E1E453372E701EFB796139CE6C87507714F93DECFC1B26F**通过：
+
+- 同949源码冻结、双配置完整日志、十个候选包及其构建代次一致；Debug候选`7106b50f6f6449c6a9a1c802ffbe037c`，Release候选`b0da58e3418c4908ad90920752d318dd`。
+- 每配置Editor/Player Null/DX11/NullPhysics/DX11Physics清单为144/56/113/67/116文件；实际146/57/114/68/117（含manifest，Editor另含受检日志），SHA/大小/闭包通过。
+- 正式E1-B代次`7f3d3822dd39431b9c203e17194afb8c`、144清单/148实际/148备份未变；EXE SHA256 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61`。E0原18程序集、E3-A原8输入/9日志不变。
+- E4-C首轮7个失败目录、三轮失败日志及最终交付证明保留；File.Replace根因/失败前独立哈希仍未证明。E4-D首轮CS0308日志SHA256 `B169788127DEE697C0C8BAA531EDA7AFDA6E24292E884A65299504B62779A681`保留，未削弱产品或断言。
+- 原19消费者当前源码哈希及残留清单核对通过；本轮无原生ABI、MCP权限或部署策略变更。
+
+门禁结束后再次实际只读核对E3-D旧18输入/6日志/冻结/原证明：`out/ecs-e4d-deferred-performance-second.log` SHA256 **B4BE5E4CD20B71A6A32C18D01811ED5C864C83020C893559325BC7613923626A**，与first一致；没有重采样或关闭性能债务。辅助核验按源码managed/部署out各自边界检查路径，未放宽部署约束。
+
+本片限定20个源码/测试/文档文件提交推送并核对远端，排除4项IDE设置和out。**E4-D自动候选门禁完成；E4-E尚未实施；E3-D仍“功能验证通过、性能未达标”。** 未执行新的完整no-Skip/旧三profile/正式部署；E5及M8.3未开始，人工/目标机/自包含/整帧性能/1h与历史调查全部保留。
+
+### 10.10 E4-E 联合门禁准备核对（只读，待E4-D交付）
+
+等待E4-D完整回归期间，按E4-A原过滤规则重新检查：22处GetEntities匹配降为3处（1定义、2调用）；B/C/D分别消除原9/7/3处表达式，原审计JSON未改。剩余三处与原retain分类的源码原文一致：`World.GetEntities`现役显式副本API、`SceneWorld.GetObjects`高层用户副本、`ComponentAuthority`完整冻结成员覆盖检查。证据`out/ecs-e4d-consumer-residual-first.log` SHA256 **12CC5AD2EDA4DC011B26660B1FDB7B8341C047D211ABC241F555B811792414AC**同时记录原19消费者文件的当前哈希；这是词法与源码核对，不是完整调用图或性能测量，尚不构成E4-E验收。
+
+后续联合验证应保留三条现役路径：真实Editor/Player/Null及搬移包的管线宿主；真实Play固定步→Query/提取→完整codec冷对照；私有管道/MCP→当前EditSession的分页读、批准写、撤销/重做与撤权负例。沿用现役运行入口，不创建第二个模拟World或以fake替代原生物理/GPU门禁；新增交叉断言后须建立新冻结并完整双配置回归。E4-D已通过的独立领域测试与完整门禁不自动关闭E4-E。
+
+必须保留的完整冷路径还包括保存、恢复、Undo与作者验证、资源准备及隔离预览。`EditorWorkspace`的完整视图快照已有文档代次/revision缓存，选择/草稿预览与组件类别读取仍依赖这一合同；本片没有把它宣称为每帧新建或删除其缓存。AI读取戳在每次修订变化后仍需要完整冷读，所有这些成本须如实纳入E5，不将局部分页计数当作整帧性能验收。
+
+E5测量还应区分首次与暖态请求：当前页读取按需创建默认容量4096的EntityQuery结果缓存，即使小场景也存在首次缓存分配；页/对象返回仍拥有独立数组与JSON数据。当前13/6组测试验证的是语义、限制与完整捕获次数，不是分页读取0B或5%时间门禁。是否调整缓存容量须依据场景规模与实际测量，不在冻结回归期间修改源码或以这些计数代替性能数据。

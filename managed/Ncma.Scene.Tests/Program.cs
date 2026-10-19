@@ -267,6 +267,7 @@ foreach (var (name, run) in allCases) {
 }
 Console.WriteLine($"Scene document: {allCases.Length - failures}/{allCases.Length} passed.");
 failures += RuntimeValidationTests.Run();
+failures += SceneReadTests.Run();
 return failures == 0 ? 0 : 1;
 readonly record struct Health(int Points) : IComponent;
 readonly record struct Label(string Value) : IComponent;

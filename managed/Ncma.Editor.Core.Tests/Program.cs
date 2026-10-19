@@ -436,6 +436,7 @@ foreach (var test in cases)
     catch (Exception error) { ++failures; Console.Error.WriteLine("FAIL " + test.Name + ": " + error); }
 }
 Console.WriteLine($"Ncma Editor.Core: {cases.Length - failures}/{cases.Length} passed (no native DLL/Python).");
+failures += ReadQueryTests.Run();
 return failures == 0 ? 0 : 1;
 
 readonly record struct Health(int Points) : IComponent;

@@ -97,7 +97,7 @@ public sealed partial class SceneDocument
                 VerifyAccess(); World.VerifyWriteAccess();
                 if (_preparing || World.IsUpdating || World.Identity != identity || World.Revision != worldRevision || _revision != baseline)
                     throw new InvalidOperationException("Prepared document metadata is stale or not committed.");
-                _bindings = prepared; _runtimeBindingEncoding = encoding; _revision = revision; _knownWorldRevision = worldRevision;
+                _bindings = prepared; _runtimeBindingEncoding = encoding; _revision = revision; RememberWorld();
                 _runtimeHeaderName = name; _runtimeHeaderBytes = headerBytes;
             };
         }

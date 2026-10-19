@@ -6,6 +6,8 @@ public sealed partial class SceneDocument
 {
     private Dictionary<Guid, BehaviourBindingData[]> _bindings = [];
     private ulong _revision, _knownWorldRevision;
+    private Guid _knownWorldIdentity;
+    private ulong _knownMembership;
     private bool _preparing;
     private long _capturedDocumentCount;
     private readonly Action<SceneDocumentSnapshot>? _validateComposition;
@@ -15,7 +17,7 @@ public sealed partial class SceneDocument
     {
         World = new World(name, components);
         _validateComposition = validateComposition;
-        _knownWorldRevision = World.Revision;
+        RememberWorld();
     }
     public World World { get; }
     public Guid SessionId { get; } = Guid.NewGuid();
@@ -25,11 +27,13 @@ public sealed partial class SceneDocument
     {
         if (World.Revision == _knownWorldRevision) return;
         _revision = checked(_revision + 1);
-        _knownWorldRevision = World.Revision;
         // Runtime gameplay can destroy objects. Forget only metadata of no-longer-live UUIDs.
-        var live = World.GetEntities().Select(o => World.GetUuid(o)).ToHashSet();
-        foreach (Guid id in _bindings.Keys.Where(id => !live.Contains(id)).ToArray()) _bindings.Remove(id);
+        if (_knownWorldIdentity != World.Identity || _knownMembership != World.MembershipVersion)
+            foreach (Guid id in _bindings.Keys.Where(id => !World.TryFindEntity(id, out _)).ToArray()) _bindings.Remove(id);
+        RememberWorld();
     }
+    private void RememberWorld()
+    { _knownWorldRevision = World.Revision; _knownWorldIdentity = World.Identity; _knownMembership = World.MembershipVersion; }
     private void VerifyMutation()
     {
         VerifyAccess(); World.VerifyWriteAccess();
@@ -103,7 +107,7 @@ public sealed partial class SceneDocument
                 if (_revision != baseline) throw new InvalidOperationException("Document changed after preparation.");
                 commit(); // All data prepared/validated; no callbacks after World installation.
                 _bindings = bindings;
-                _knownWorldRevision = World.Revision;
+                RememberWorld();
                 _revision = revision;
             };
         }

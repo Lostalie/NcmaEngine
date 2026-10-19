@@ -1,10 +1,8 @@
 # NcmaEngine 引擎架构
 
-E4-C自动候选验证完成：只读场景组件读者持有有界查询计划，几何并集按World身份/成员版本缓存创建顺序；设置值仍读取已提交数据，原生会话的expectedWorld校验优先于计划重建。Editor保留重复设置last-valid告警，Player保持原错误并停止后续呈现。同一944冻结双配置完整89/89、基础134/134、真实源与搬移宿主657项检查、smoke/Python45/inspect及十包/正式安装/备份核验通过，0编译警告。无新World、写权限或原生ABI变更，不是完整性能验收。[实施记录](ECS_IMPLEMENTATION_PLAN.md#107-e4-c-渲染提取与设置查询自动候选验证完成)。
+E4-D自动候选验证完成：SceneDocument只缓存成功完整读取的精确身份/修订证明，不缓存第二份组件World；有效时仅复制请求页/对象，未知编码器或修订变化回到原完整codec检查。World对象编码须在已提交只读作用域，既有Editor.Core能力保留授权、唯一Undo、输出预算及错误语义；行ID/绑定用UUID存活查询，离帧导入引用按类型并集和创建顺序读取。同一949文件冻结，标准Debug/Release构建0编译警告，完整CTest各89/89（1122.43/1014.55秒），smoke/Python45/inspect及十包/正式安装/备份核验通过；本片不部署。限定提交推送后进入E4-E联合验证，E4整体与E5性能验收仍未完成。见 [E4-D实施记录](ECS_IMPLEMENTATION_PLAN.md#109-e4-d-场景编辑与既有ai读取自动候选验证完成)。
 
-首轮File.Replace失败及7个原目录保留、根因未证明；第二轮NuGet恢复失败和第三轮TLS失败也保留。第四轮在正常Windows/TLS环境重新执行完整双配置并通过，审计/鉴权/证书断言不变，未拼接独立复测结果。
-
-E4状态（2026-10-19）：消费者审计E4-A已交付；E4-B角色/动画已交付，同一942冻结Debug/Release各89/89及补充测试、十包/正式安装/备份/历史基线核验通过。角色、根运动、动作及Animator的离帧启动使用可选类型受检Query；保留原UUID/创建顺序、组合错误、冻结成员与原生资源权威。FollowView及Player相机以只读TryFindEntity解析已提交UUID，返回完整运行时身份，不持有跨恢复缓存；没有新增World或写权限。首轮Debug渲染超时保留，原240秒条件独立及完整复测通过，根因未证明。E4-C渲染自动候选验证完成；E4-D编辑/既有AI查询与E4-E联合验证未实施。迁移合同及证据见 [E4实施记录](ECS_IMPLEMENTATION_PLAN.md#106-e4-b-角色动画查询与身份访问自动候选验证完成)；本片不部署，也不将E3-D延期性能债务标记通过。
+已交付E4-B/C继续遵守同一World与原生插件边界：角色/动画启动使用可选类型受检Query；跟随相机及Player通过UUID解析当前Entity。渲染组件读者持有有界计划，几何并集保留创建顺序，原生会话先验证expectedWorld再重建计划；Editor重复设置保留last-valid并告警，Player按原错误停止后续呈现。独立双配置回归及历史失败证据见 [E4实施记录](ECS_IMPLEMENTATION_PLAN.md#10-e4-子系统迁移实施拆分与-e4-a-消费者审计)。E4-E尚未实施，不关闭E3-D性能债务或更新正式EXE。
 
 2026-10-19 ECS 增量：E1-A 的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典。E1-B 身份与单一门面迁移已完成：WorldIdentity/Index/Generation 的预约不随候选回滚，两种 ObjectReference 与 Runtime.GameObject 已删除；低层 World.CreateEntity/FindEntity/GetEntities 返回值身份，组件访问显式携带 Entity，用户 Ncma.GameObject 直接持有 Entity/服务并共享组件存储，信号/批次使用完整身份。旧低层签名没有兼容转发，直接引用它们的扩展须迁移重编译。E2-A 已实现调用者持有的 All/None 查询计划、1/2/3 类型组合、最小池交集、创建序号排序、已提交成员缓存及受检 ref-struct 迭代器；MembershipVersion 与 Identity/Revision 分开。E2-B 已实现共享 1024 条/1 MiB 预算的声明式结构批次、受检创建依赖、PendingEntity 和提交后回执；删除旧 PendingObject，不保留兼容壳。同一 World 的 step 候选分支通过完整预算/schema/绑定/权限预检后才接入原有最终提交，批次失败无前缀且毒化整步，回执/句柄检查 session、attempt、World 与代次。
 

@@ -16,10 +16,10 @@ public sealed partial class EditSession
                 int offset = request.Input.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
                 int limit = request.Input.TryGetProperty("limit", out var l) ? l.GetInt32() : 32;
                 if (offset < 0 || limit is < 1 or > 128) throw new ArgumentException("Invalid pagination.");
-                var snapshot = _document.CaptureSnapshot();
+                var snapshot = _document.ReadPage(offset, limit, out int totalCount);
                 data = new { worldId = _document.World.Identity, tick = _document.World.Tick,
-                    totalCount = snapshot.Objects.Length, offset, limit,
-                    scene = new { snapshot.Version, snapshot.Name, objects = snapshot.Objects.Skip(offset).Take(limit).Select(item => new {
+                    totalCount, offset, limit,
+                    scene = new { snapshot.Version, snapshot.Name, objects = snapshot.Objects.Select(item => new {
                         item.Id, item.Name, components = item.Components.Select(c => new { c.TypeId, c.Version }),
                         behaviours = item.Behaviours.Select(b => new { b.Id, b.TypeName, b.Enabled, exportCount = b.Exports.Length }) }) } };
                 break;
