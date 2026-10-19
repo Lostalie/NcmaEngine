@@ -108,6 +108,7 @@ internal static partial class Program
         RegisterPackageTests(tests);
         RegisterEnvironmentAssetTests(tests);
         RegisterShadowSelectionTests(tests);
+        RegisterStartupEntityTests(tests);
         tests.Add(("M3.7-A explicit character/rig/mesh/material/clip template references",PrefabRenderReferences));
         tests.Add(("M3.7-A render template composition preflight preserves source",PrefabRenderComposition));
         foreach (int count in new[] { 1, 256, 4096 }) tests.Add(($"bounded-{count}-instances", () => BatchTest(count)));

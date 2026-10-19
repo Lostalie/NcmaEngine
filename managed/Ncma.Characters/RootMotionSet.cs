@@ -31,7 +31,7 @@ internal sealed class RootMotionSet : IDisposable
     internal RootMotionSet(World world,PreparedSceneAssetLease? assets)
     {
         try {
-            foreach(global::Ncma.Runtime.Entity obj in world.GetEntities().Where(o=>world.Has<RootMotionData>(o)&&!world.Has<AnimatorData>(o))) {
+            foreach(global::Ncma.Runtime.Entity obj in SceneStartupEntities.Without<RootMotionData, AnimatorData>(world)) {
                 if(assets is null)throw new ArgumentException("Root motion requires off-frame immutable asset preparation, including Headless.");
                 _lease??=assets.Assets.AcquireLease();
                 var skin=world.Get<SkinnedMeshData>(obj);var settings=world.Get<ClipPlaybackData>(obj);var root=world.Get<RootMotionData>(obj);

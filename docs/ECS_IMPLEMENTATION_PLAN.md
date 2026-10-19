@@ -463,6 +463,8 @@ E3-C 本地和 GitHub main 已核对为 `28aecf523c6dfc6b2634549f7ab4cd67cf592dc
 5. 对未知UUID，现有`FindEntity`抛异常；FollowView等原先FirstOrDefault的可空行为不能直接替换为无保护FindEntity。E4-B优先评估一个只读、owner-thread、返回完整Entity的TryFindEntity，不以catch所有异常吞掉身份/线程问题；这是待实现项，不是已存在API。
 6. 资源与数值系统依旧使用持久UUID+受检World/session/tick映射到原生不透明句柄。Native批量ABI保持不变；不把Entity序列化，不新增World副本，不扩大组件写权威。
 
+E4-B回归等待期间的只读核对补充（非E4-C实现）：`EntityQuery`已有创建顺序比较及Scene.Rendering友元访问，因此几何并集可以在当前World的受检查询结果中合并、去重并按创建顺序缓存，无须新增公开序号或用UUID/槽位排序替代。缓存须同时记录World身份与MembershipVersion；组件值缓存仍观察Revision。`SceneEnvironmentState.VerifyBoundary`及原生资源会话持有的expectedWorld必须先验证，不能借“自动重建查询”让过期原生会话接受Restore后的World；纯数据Extractor重建查询与原生会话拒绝陈旧身份是不同合同。后续设置读取还须覆盖SceneRenderEnvironment/PostProcess/Shadows的间接消费者，不能只替换三个静态Read函数后每次显示重新分配查询计划。
+
 ### 10.5 测试映射与本片结果
 
 E4-B使用Runtime身份/Query/权威用例、Gameplay提交/Movement用例，并扩展真实角色、根运动、Animator、Headless宿主覆盖；fake Movement不能代替Jolt实测。E4-C使用SceneRendering提取/诊断用例及Rendering的SceneCandidateSafety、SceneExchangeSafety、SceneConstructionSafety、SceneCostJoint、GraphicsRecoveryJoint等现役产品测试。E4-D使用SceneDocument、EditorCore、EditorService、EditorTransport、ApplicationService以及UI路由/联合宿主测试。每片需新增对应失败/恢复/排序边界的断言，原测试不能削弱；E4-E回到完整Debug/Release产品组合，不以子集代替。
@@ -477,3 +479,40 @@ E4-B使用Runtime身份/Query/权威用例、Gameplay提交/Movement用例，并
 本机静态校验日志 `out/ecs-e4a-audit-first.log` SHA256 `BF0113D24B3B0FE74970D929FA1A0DC12BC71A82931FD5F7EF51C1A7708344AA`；只读完整性日志 `out/ecs-e4a-integrity-first.log` SHA256 `9F9876CFD48DA6112323B776A7132EF38DAAF6533013EDFBC123B179C0004F55`。清单文件SHA256 `DC7F75C8D7D871067836A6EDDD723AA783C26AF12DB04219601D8E8E1FB2B4FC`为本机原始字节哈希（Git换行规范化可能改变工作副本字节，字段/源码逐项匹配才是清单判定）。辅助脚本与日志只保留在ignored out，不作为新增产品入口。
 
 E4-A审计片完成，下一片是E4-B角色/动画查询与身份访问适配。E4-B/C/D/E尚未实现，E4整体与E5仍未验收，不进入M8.3。
+
+### 10.6 E4-B 角色/动画查询与身份访问：自动候选验证完成
+
+2026-10-19，基于已交付的E4-A `0ef48c38ab21b8c843e0b23500c173ef8c5124e0`继续实施。本节覆盖上节“E4-B尚未实现”的旧状态；**候选代码、双配置完整自动回归及交付核验已完成，待本片提交推送；不部署、不关闭ECS整体及性能门禁**。下文按发生顺序保留定向失败、首次完整失败和复测过程，末尾最终结果覆盖运行中记录。
+
+- Runtime新增只读 `World.TryFindEntity(Guid, out Entity)`：只读取已提交UUID索引，缺失/空UUID返回false/default，存在时返回完整WorldIdentity/Index/Generation；仍先检查owner线程。它不授予写权限、公开候选对象或持久化Entity。`ComponentRegistry.IsRegistered<T>()`只报告CLR类型注册，不表示成员存在或可写。
+- 内部 `SceneStartupEntities`只用于离帧组合准备：单类型、双类型交集、All/None及按UUID排序的双类型并集；返回拥有的Entity副本。可选类型未注册时沿用原Has的缺省语义，并集去重且最多World.MaxObjects。没有每帧重建Query、第二份组件存储、跨恢复Entity缓存或新增原生ABI。
+- 已迁移CharacterPlayRuntime的角色/碰撞体、FollowCamera启动集合；RootMotionSet/GraphRootMotionSet分流；ActionController的Health/动作并集；SceneAnimatorRuntime的Animator收集。既有UUID顺序/创建顺序分别保留；缺蒙皮、缺资源、预算、冻结成员、共享动画时钟与物理fail-stop检查保留。
+- FollowView改用TryFindEntity，保留缺相机返回null及缺FollowCamera/Camera行为；Player启动相机也改为精确查找。Player的Headless动画存在性改为RootMotion/Animator Query；该宿主在创建World时明确注册这两个类型，未扩大纯2D/无Python依赖。角色固定步仍遍历受控绑定，动画仍使用原有候选/提交生命周期。
+- 按E4-A相同生产源码过滤规则复核：原22行/19文件的GetEntities匹配现为13行/13文件（含1定义、12调用）；本片6个消费者文件中的9处旧遍历已替换。其余为E4-C/D待迁移及ComponentAuthority、高层GetObjects等现役合同；没有为了清零搜索结果删除受检复制API，也未改写原E4-A基线JSON。词法残留核对不是性能证明。
+- 新增Runtime查找8组：缺失/空UUID、同UUID删除复用、恢复/跨World、未提交创建、候选槽位替换/撤销、只读/线程、注册≠成员、预热查找无列表分配。新增领域查询8组：可选注册、UUID/创建顺序、并集去重、恢复/复制隔离、300轮固定种子结构变化对照、4096容量、线程、错误组合不被过滤、真实Play跟随相机删除/重建（其中组合项合计8组）。
+- 定向第三轮两配置Runtime新增8/8、原Runtime13/storage14/identity15/Query17/候选8/Paged10/增量25/Schema6通过；SceneRendering **121/121**（新增8组）通过；Gameplay53/结构26/增量3/提交12/联合15、Movement38 fake、UI18、E0fixtures11通过。会话65326已结束exit0，不轮询。日志 `out/ecs-e4b-{Ncma.Runtime.Tests,Ncma.Scene.Rendering.Tests,Ncma.Gameplay.Tests}-{Debug,Release}-targeted-third.log`，无编译警告。这不是实际Jolt/DX11产品联合验收或E5性能证明。
+- 早期定向失败保留：第一轮新测试把旧Entity拒绝误认为只能抛InvalidOperationException，实际原契约为ArgumentException；第二轮测试在同一候选步删除后重复创建同UUID，被既有StageCreate规则正确拒绝。修正测试为原异常合同及不同UUID的槽位替换，并保留独立安全边界同UUID复用用例；未放宽产品规则。首轮PowerShell stderr提前中止的日志同样保留，后续显式捕获进程退出码。
+- 新源码冻结 `out/verification/ecs-e4b/source-freeze-first.json` 共 **942文件**，SHA256 `216E02F6DA690BF15194765D9AB777346FB3FE7180603D6A3B312BCF3DB75931`。顺序完整门禁会话 **51807** 正在执行：标准Build.bat -SkipTests构建两配置，各全89项CTest及smoke/Python45/inspect；脚本 `out/verification/ecs-e4b/run-gates-first.ps1`，总日志 `out/ecs-e4b-gates-first.log`。构建Skip只表示测试由外层单独执行且禁止部署，不表示跳过本片完整验证。期间不修改冻结源码或启动重复构建。
+
+待完整双配置结束后执行 `out/verification/ecs-e4b/verify-delivery-first.ps1`核对新冻结、完整结果、候选包、正式安装与备份，再更新交付状态及提交推送。E4-A JSON保留为6f4d666基线，不将其旧调用行号冒充当前源码；迁移后残留由本片重新扫描。ECS-PERF-01/02、人工/目标机/自包含/整帧/1h、历史File.Replace调查保持开放。
+
+首轮完整门禁终态（覆盖上文运行中记录）：Debug标准构建通过，候选 `0015eda4cd854d43a39e5eaaa570a154`，未发现编译警告；会话51807已结束exit1。Debug **88/89，1203.78秒**，唯一失败是 `NcmaRenderingTests` 超过原240秒上限（240.06秒），Release及补充门禁未启动。此前进度消息将CTest继续执行后续用例误认为主渲染通过，现明确更正；不能据此宣称完整门禁通过。完整失败报告保留于 `out/ecs-e4b-ctest-debug-first.log` 和 `out/ecs-e4b-ctest-debug-details-first.log`，输出停在M6.6-B真实NCA用例后，未出现最终生命周期汇总；根因尚未证明。
+
+只读进程核对未发现残留dotnet/Editor/Player/Rendering测试进程，未终止进程或删除文件。独立原CTest及其fixture复测会话63307已结束exit0，2/2通过，渲染耗时168.06秒（合计168.52秒），最终32次生命周期及validation0/0通过；保持240秒上限和所有断言，不能以独立通过代替完整双配置回归，也不能据此证明首次超时根因。
+
+第二轮完整门禁会话36824正在执行 `run-gates-second.ps1`（总日志 `out/ecs-e4b-gates-second.log`）：同一942冻结，重新标准Debug/Release构建、完整89项及补充验证。build/CTest/details/补充入口使用second日志；尚未执行过的smoke/Python/inspect使用first日志。终态后使用 `verify-delivery-second.ps1`核验，不覆盖首轮失败。未提交、推送、部署或开始E4-C。
+
+第二轮Debug已完整通过：**89/89，1099.17秒**，主渲染170.05秒；托管/原生smoke、Python45、inspect与942源码冻结通过。候选 `cc6067a8935347408d99eb50ddd32bc4`，无编译警告；Release标准构建在同一36824会话继续。此记录只确认Debug，不提前确认Release或最终包/备份核验；首次超时根因仍未证明。
+
+另运行只读 `out/verification/ecs-e4b/verify-deferred-performance-first.ps1`，E3-D修复后性能归档 `ff40e2cf71514201943d7304632ed924` 的18输入、6日志、原939冻结和配对分位数证明全部匹配；日志 `out/ecs-e4b-deferred-performance-first.log` SHA256 `B4BE5E4CD20B71A6A32C18D01811ED5C864C83020C893559325BC7613923626A`。只证明历史证据保留，不是本轮新性能采样或性能通过。
+
+#### E4-B 最终自动验证结果
+
+- 同一942文件冻结，标准Build.bat两配置第二轮构建均成功、无编译警告。SkipTests只把测试移到外层独立完整执行，禁止部署；未宣称新no-Skip/旧三轮历史性能门禁。
+- Debug **89/89，1099.17秒**；Release **89/89，996.57秒**。主渲染分别170.05/167.79秒，保持原240秒上限和全部断言。两配置smoke、Python45、inspect及冻结前后核验通过；新Lookup8、SceneRendering121与原Runtime/Gameplay/Movement/UI等完整用例通过。
+- 十个候选包清单逐文件SHA/大小与实际闭包通过：每配置Editor144、Player-Null56、DX11113、Null-Physics67、DX11-Physics116项；实际文件分别146/57/114/68/117，额外文件仅为清单及Editor既有允许日志。候选Debug `cc6067a8935347408d99eb50ddd32bc4`、Release `5411fe4c6b824d118b54cd7fdc620ec5`。
+- 正式E1-B generation `7f3d3822dd39431b9c203e17194afb8c`仍为144清单/148实际，原148备份逐文件一致；EXE SHA `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61`。E0原始18程序集、E3-A原始8输入/9日志完整。
+- 最终核验 `out/verification/ecs-e4b/verify-delivery-second.ps1` exit0，日志 `out/ecs-e4b-delivery-verification-second.log` SHA256 **037B7E4D6CEC3FD0DB9FB3B00E579E7091BBF3877697854A2DF7C82624B1557E**。会话36824已结束exit0；51807和63307也均已终态，不再轮询或重启。
+- 首轮Debug88/89渲染超时和早期测试夹具错误完整保留，首次超时根因仍未证明；未修改产品、超时或断言来换取通过，没有终止残留进程或删除失败文件。双配置自动候选通过不等于无偶发故障保证或性能验收。
+
+本片自动候选完成，提交推送后再推进E4-C渲染提取/设置查询。E4-C/D/E、E5、M8.3尚未完成/开始；ECS-PERF-01/02以及人工、目标机、自包含、完整整帧性能、1h和历史File.Replace调查保持开放。正式EXE未更新。

@@ -3,6 +3,7 @@ using System.Text;
 using Ncma.Animation;
 using Ncma.Gameplay;
 using Ncma.Runtime;
+using Ncma.Scene.Rendering;
 namespace Ncma.Characters;
 
 public enum CharacterAction { Idle, Run, Attack, Dodge }
@@ -44,7 +45,7 @@ internal sealed class ActionController
     internal ActionController(World world,RootMotionSet roots)
     {
         _roots=roots;
-        foreach(global::Ncma.Runtime.Entity obj in world.GetEntities().OrderBy(o=>world.GetUuid(o))) {
+        foreach(global::Ncma.Runtime.Entity obj in SceneStartupEntities.EitherByUuid<HealthData, ActionDefinitionData>(world)) {
             if(world.Has<HealthData>(obj))_startupHealth.Add(world.GetUuid(obj),world.Get<HealthData>(obj));
             if(!world.Has<ActionDefinitionData>(obj))continue;
             var d=world.Get<ActionDefinitionData>(obj);_=ActionDefinitionData.Validate(d);

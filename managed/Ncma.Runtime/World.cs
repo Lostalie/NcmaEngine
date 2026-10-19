@@ -81,6 +81,14 @@ public sealed partial class World
         return IdentityOf(_objects[slot]);
     }
 
+    /// <summary>Looks up a committed UUID without treating an absent object as an error.</summary>
+    public bool TryFindEntity(Guid uuid, out Entity entity)
+    {
+        VerifyAccess();
+        entity = _uuidIndex.TryGetValue(uuid, out int slot) ? IdentityOf(_objects[slot]) : default;
+        return entity != default;
+    }
+
     public IReadOnlyList<Entity> GetEntities()
     {
         VerifyAccess();

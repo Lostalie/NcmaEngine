@@ -66,7 +66,7 @@ public sealed partial class PlayerRunner
                 }
                 bool hasPhysics = Ncma.Characters.CharacterComponents.HasPhysics(document.CaptureSnapshot());
                 if(hasPhysics && !project.Configuration.PhysicsEnabled)throw new ArgumentException("physics_bindings_require_enabled_project");
-                if (options.Headless && (project.Configuration.AssetPackage is not null || document.World.GetEntities().Any(o=>document.World.Has<Ncma.Animation.RootMotionData>(o) || document.World.Has<Ncma.Animation.AnimatorData>(o)))) {
+                if (options.Headless && (project.Configuration.AssetPackage is not null || document.World.Query<Ncma.Animation.RootMotionData>().Count != 0 || document.World.Query<Ncma.Animation.AnimatorData>().Count != 0)) {
                     phase = "dependencies";
                     renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, document.CaptureSnapshot(), true, project.Configuration.AssetPackage);
                 }
@@ -88,7 +88,7 @@ public sealed partial class PlayerRunner
                     {
                         phase = "configuration";
                         if (project.Configuration.SceneCamera is not { } camera ||
-                            !document.World.GetEntities().Any(o => document.World.GetUuid(o) == camera && document.World.Has<Ncma.Scene.Rendering.CameraData>(o)))
+                            !document.World.TryFindEntity(camera, out var cameraEntity) || !document.World.Has<Ncma.Scene.Rendering.CameraData>(cameraEntity))
                             throw new ArgumentException("scene_camera_selection_required");
                     }
                 }

@@ -46,7 +46,7 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
             _assets = assets.Assets.AcquireLease();
             var programs = new Dictionary<Guid, AnimationProgram>(); var actors = new List<Actor>(); int bones = 0;
             var poseSources=new Dictionary<Guid,GraphPoseSnapshotSource>();int poseScratch=0;
-            foreach (global::Ncma.Runtime.Entity obj in World.GetEntities().Where(o => World.Has<AnimatorData>(o)).OrderBy(o => World.GetUuid(o))) {
+            foreach (global::Ncma.Runtime.Entity obj in SceneStartupEntities.WithByUuid<AnimatorData>(World)) {
                 if (actors.Count >= 32) throw new ArgumentException("Animator actor budget is 32.");
                 var source = World.Get<AnimatorData>(obj); var skin = World.Get<SkinnedMeshData>(obj);
                 var graph = (RuntimeAnimationGraphAsset)_assets.Require(source.GraphId, AssetKind.AnimationGraph);

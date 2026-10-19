@@ -91,6 +91,9 @@ public sealed class ComponentRegistry
     public IReadOnlyList<ComponentDescriptor> Describe() => _byId.Values.Select(r => r.Descriptor)
         .OrderBy(d => d.TypeId, StringComparer.Ordinal).ToArray();
 
+    /// <summary>Type registration only, not live membership or write permission.</summary>
+    public bool IsRegistered<T>() where T : struct, IComponent => _byType.ContainsKey(typeof(T));
+
     public JsonElement Encode<T>(T value) where T : struct, IComponent => JsonSerializer.SerializeToElement(Validate(value), SceneJson.Options);
     public T Decode<T>(ComponentSnapshot component) where T : struct, IComponent
     {

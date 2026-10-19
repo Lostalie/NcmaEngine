@@ -30,7 +30,7 @@ internal sealed class GraphRootMotionSet : IDisposable
         _animators = animators;
         var tracks = new Dictionary<(Guid, int), RootMotionTrack>(); int keys = 0;
         try {
-            foreach (global::Ncma.Runtime.Entity obj in world.GetEntities().Where(o => world.Has<RootMotionData>(o) && world.Has<AnimatorData>(o))) {
+            foreach (global::Ncma.Runtime.Entity obj in SceneStartupEntities.WithBoth<RootMotionData, AnimatorData>(world)) {
                 if (assets is null || animators is null) throw new ArgumentException("Graph root requires the shared prepared Animator host.");
                 _lease ??= assets.Assets.AcquireLease();
                 var source = world.Get<AnimatorData>(obj); var skin = world.Get<SkinnedMeshData>(obj); var root = world.Get<RootMotionData>(obj);

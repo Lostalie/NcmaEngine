@@ -1,6 +1,6 @@
 # NcmaEngine 引擎架构
 
-E4状态（2026-10-19）：消费者审计E4-A已完成，生产/测试源码未变；E4-B角色/动画、E4-C渲染、E4-D编辑/既有AI查询、E4-E联合验证仍待实施。迁移合同见 [E4审计](ECS_IMPLEMENTATION_PLAN.md#10-e4-子系统迁移实施拆分与-e4-a-消费者审计)，不以基础Query已存在代替领域迁移完成，也不将E3-D延期性能债务标记通过。
+E4状态（2026-10-19）：消费者审计E4-A已交付；E4-B角色/动画自动候选验证完成，同一942冻结Debug/Release各89/89及补充测试、十包/正式安装/备份/历史基线核验通过。角色、根运动、动作及Animator的离帧启动使用可选类型受检Query；保留原UUID/创建顺序、组合错误、冻结成员与原生资源权威。FollowView及Player相机以只读TryFindEntity解析已提交UUID，返回完整运行时身份，不持有跨恢复缓存；没有新增World或写权限。首轮Debug渲染超时保留，原240秒条件独立及完整复测通过，根因未证明。E4-C渲染、E4-D编辑/既有AI查询、E4-E联合验证仍待实施。迁移合同及证据见 [E4实施记录](ECS_IMPLEMENTATION_PLAN.md#106-e4-b-角色动画查询与身份访问自动候选验证完成)；本片不部署，也不将E3-D延期性能债务标记通过。
 
 2026-10-19 ECS 增量：E1-A 的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典。E1-B 身份与单一门面迁移已完成：WorldIdentity/Index/Generation 的预约不随候选回滚，两种 ObjectReference 与 Runtime.GameObject 已删除；低层 World.CreateEntity/FindEntity/GetEntities 返回值身份，组件访问显式携带 Entity，用户 Ncma.GameObject 直接持有 Entity/服务并共享组件存储，信号/批次使用完整身份。旧低层签名没有兼容转发，直接引用它们的扩展须迁移重编译。E2-A 已实现调用者持有的 All/None 查询计划、1/2/3 类型组合、最小池交集、创建序号排序、已提交成员缓存及受检 ref-struct 迭代器；MembershipVersion 与 Identity/Revision 分开。E2-B 已实现共享 1024 条/1 MiB 预算的声明式结构批次、受检创建依赖、PendingEntity 和提交后回执；删除旧 PendingObject，不保留兼容壳。同一 World 的 step 候选分支通过完整预算/schema/绑定/权限预检后才接入原有最终提交，批次失败无前缀且毒化整步，回执/句柄检查 session、attempt、World 与代次。
 
@@ -80,7 +80,7 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 |---|---|---|
 | Application / Services | Editor、Player、Headless 入口和服务生命周期 | C# apphost 与共享运行服务已实现；默认 Editor 已切换，部署/恢复自动回归通过；自包含/人工待验 |
 | World / Entity / GameObject | 扁平实体存储、UUID、代次身份、创建/销毁及高层门面 | C# World 唯一权威；低层直接使用 Entity，仅保留 Ncma.GameObject 高层门面；旧 Runtime.GameObject 及旧创建/查找/枚举入口已删除；C++ 插件只接收有界复制数据/资源句柄 |
-| Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | E1-A 类型池已接入源码并通过双配置候选验证；既有 schema/预算保留；通用 Query 与增量提交未实现 |
+| Component / TypeRegistry | 稳定 TypeId、类型池、字段/schema、通用查询 | E1/E2 强类型池、有界 All/None Query、结构批次与回执已交付；E3 使用32值分页惰性COW、受检增量验证/提交，schema与权限预算保留；E4领域消费者迁移进行中，完整ECS性能未验收 |
 | Behaviour Host | C# 生命周期、实例绑定、Export、程序集加载/重载 | 已接入托管 World；私有状态迁移、自动重建未实现 |
 | WorldRunner / Systems | 固定步、呈现步、依赖和结构命令提交 | PlaySession 固定步/顺序 Systems 已接入编辑器；输入/插值/运行结构命令已实现基础 |
 | SceneAsset / Serialization | 通用组件记录、资产引用、版本迁移 | C# `.ncmascene` JSON v1 通用组件读写/原子保存已实现；旧 .ncscene 不兼容；资产引用/迁移流水线未实现 |
@@ -88,8 +88,8 @@ UUID 用于持久身份；World/对象运行时引用用于访问校验，删除
 | Gameplay Services | 输入、角色、动作、战斗、任务等游戏 API | 未实现完整 SDK；当前只有基础门面/示例 |
 | Movement Coordination | 绑定组件唯一发布、数值边界/有界意图与跨域故障 | M4.1 C# `Ncma.Movement`；M4.2真实Jolt数值；M4.3固定步角色/跟随相机；M4.4 XZ/Yaw根运动及视觉去重；M4.5同量子Health发布/动作战斗；M4.6复制Debug与审批只读MCP |
 
-M4.7增加默认关闭的可信Character分段测量及联合压力测试。托管snapshot/boxing/校验路径仍是
-正确性底座，不是已验证高性能ECS；本机程序化测量记录实际CPU/GC/upload成本，不作FPS承诺。
+M4.7增加默认关闭的可信Character分段测量及联合压力测试。原逐对象装箱字典存储与固定步完整文档snapshot路径已由E1–E3的类型池与受检增量提交替代；作者事务、保存及恢复仍保留完整快照合同。
+当前不是已验证高性能ECS，E3-D尾部性能债务仍开放；本机程序化测量记录实际CPU/GC/upload成本，不作FPS承诺。
 现有GPU last-valid统计没有sample-frame ID，不能冒充独立逐帧GPU样本。见[M4.7交付](M4_7_DELIVERY_REPORT.md)。
 
 当前 C# Behaviour 已支持挂载、禁用、删除、数值/布尔 Export 编辑及隔离 Play。
