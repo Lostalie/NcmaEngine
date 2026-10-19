@@ -6,6 +6,12 @@ internal static class TestEntryPoint
     {
         try
         {
+            if (args.Any(a => a.StartsWith("--ecs-e5-", StringComparison.Ordinal)))
+            {
+                if (args.Length != 1 || args[0] is not ("--ecs-e5-smoke" or "--ecs-e5-measure"))
+                    throw new ArgumentException("E5 entry requires exactly one known mode.");
+                return EcsPairedEntry.Run(args[0] == "--ecs-e5-measure", e5: true);
+            }
             if (args.Contains("--ecs-paired-smoke") || args.Contains("--ecs-paired-measure"))
             {
                 if (args.Length != 1) { Console.Error.WriteLine("Paired entry requires exactly one mode argument."); return 1; }

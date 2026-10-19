@@ -1,6 +1,6 @@
 # NcmaEngine 引擎架构
 
-E4-E联合自动功能门禁完成：真实Editor/Player/Null和严格搬移产品检查同一World查询、活动EditSession读取、提交只读权威及共享Undo；私有管道和实际MCP stdio保留原配对/批准/撤权路径。同一950源码，Debug/Release各89项及补充/包核验通过，不改生产架构或正式EXE。E3-D性能未达标状态不变，下一步先审阅 [E5详细方案](ECS_IMPLEMENTATION_PLAN.md#11-e5-详细实施方案)，不自动开始实现。
+E4-E联合自动功能门禁完成：真实Editor/Player/Null和严格搬移产品检查同一World查询、活动EditSession读取、提交只读权威及共享Undo；私有管道和实际MCP stdio保留原配对/批准/撤权路径。同一950源码，Debug/Release各89项及补充/包核验通过，不改生产架构或正式EXE。随后E5-A仅增加测量驱动、合同与证据验证，同一955源码双配置各89/89、Python53/53与18个正式配对进程验证通过；4096全写尾部与小场景5%债务仍开放，运行时未优化、正式EXE不部署。下一片E5-B先诊断再修复，见 [E5-A结果](ECS_IMPLEMENTATION_PLAN.md#1111-e5-a-最终结果功能与基线证据通过性能债务仍开放)。
 
 E4-D自动候选验证完成：SceneDocument只缓存成功完整读取的精确身份/修订证明，不缓存第二份组件World；有效时仅复制请求页/对象，未知编码器或修订变化回到原完整codec检查。World对象编码须在已提交只读作用域，既有Editor.Core能力保留授权、唯一Undo、输出预算及错误语义；行ID/绑定用UUID存活查询，离帧导入引用按类型并集和创建顺序读取。同一949文件冻结，标准Debug/Release构建0编译警告，完整CTest各89/89（1122.43/1014.55秒），smoke/Python45/inspect及十包/正式安装/备份核验通过；本片不部署。E4-D已交付，E4-E最终结果见上；E5性能验收未完成。见 [E4-D实施记录](ECS_IMPLEMENTATION_PLAN.md#109-e4-d-场景编辑与既有ai读取自动候选验证完成)。
 

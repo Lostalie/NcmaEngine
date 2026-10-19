@@ -10,7 +10,7 @@ internal static class EcsPairedEntry
     private static readonly string[] Products = ["Ncma.Runtime", "Ncma.Scene", "Ncma.Managed", "Ncma.Gameplay", "Ncma.Movement", "Ncma.Editor.Core"];
     private static string Hash(string path) { using var stream = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)); }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal static int Run(bool measured)
+    internal static int Run(bool measured, bool e5 = false)
     {
         try
         {
@@ -21,7 +21,15 @@ internal static class EcsPairedEntry
             if (new FileInfo(manifestPath).Length > 65536) throw new InvalidOperationException("Oversized paired manifest.");
             using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath)); var input = manifest.RootElement;
             string? variant = input.GetProperty("variant").GetString();
-            if (input.GetProperty("schema").GetInt32() != 1 || variant is not ("e2b" or "candidate")) throw new InvalidOperationException("Invalid paired identity.");
+            if (input.GetProperty("schema").GetInt32() != (e5 ? 2 : 1) ||
+                (e5 ? variant is not ("e2b" or "e4e" or "candidate") : variant is not ("e2b" or "candidate")))
+                throw new InvalidOperationException("Invalid paired identity.");
+            string cohort = e5 ? input.GetProperty("cohort").GetString()! : "common";
+            if (cohort is not ("common" or "reads") || (cohort == "reads" && variant == "e2b"))
+                throw new InvalidOperationException("Unsupported measurement cohort.");
+            string? contractHash = e5 ? input.GetProperty("contractSha256").GetString() : null;
+            if (e5 && (contractHash is null || contractHash.Length != 64 || contractHash.Any(c => !char.IsAsciiHexDigit(c))))
+                throw new InvalidOperationException("Missing E5 measurement contract identity.");
             var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var file in input.GetProperty("files").EnumerateArray())
             {
@@ -31,7 +39,8 @@ internal static class EcsPairedEntry
                 if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0 || new FileInfo(path).Length != file.GetProperty("size").GetInt64() || Hash(path) != hashes[name])
                     throw new InvalidOperationException("Paired input hash/size mismatch.");
             }
-            if (hashes.Count != required.Count || Directory.GetFiles(root).Select(Path.GetFileName).Any(n => n != "paired-inputs.json" && !required.Contains(n!)))
+            if (hashes.Count != required.Count || Directory.GetDirectories(root).Length != 0 ||
+                Directory.GetFiles(root).Select(Path.GetFileName).Any(n => n != "paired-inputs.json" && !required.Contains(n!)))
                 throw new InvalidOperationException("Incomplete/extra paired file closure.");
             foreach (string product in Products) _ = Assembly.Load(new AssemblyName(product));
             void VerifyLoaded()
@@ -44,16 +53,21 @@ internal static class EcsPairedEntry
                 }
             }
             VerifyLoaded();
-            Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e3_paired_environment", schema = 1, variant,
+            Console.WriteLine(JsonSerializer.Serialize(new { kind = e5 ? "ecs_e5_paired_environment" : "ecs_e3_paired_environment", schema = e5 ? 2 : 1, variant,
+                cohort, contractSha256 = contractHash,
                 measured, files = hashes, tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
                 scope = "Same driver, real product assemblies; CPU workload evidence, not E5/full-engine acceptance" }));
-            EcsBaseline.Run(measured, (name, count, document) => {
+            void Verified(string name, int count, SceneDocument document) {
                 // Not part of timed/allocation samples. Checks all persistent values with the real codec.
                 byte[] bytes = document.CaptureBytes();
-                Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e3_semantic", workload = name, objects = count,
+                Console.WriteLine(JsonSerializer.Serialize(new { kind = e5 ? "ecs_e5_semantic" : "ecs_e3_semantic", workload = name, objects = count,
                     tick = document.World.Tick, sceneBytes = bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(bytes)) }));
-            });
-            VerifyLoaded(); Console.WriteLine("E3 paired closure verified before and after workloads."); return 0;
+            }
+            EcsBaseline.E5Events = e5;
+            if (cohort == "common") EcsBaseline.Run(measured, Verified);
+            else EcsReadBaseline.Run(measured, Verified);
+            VerifyLoaded(); Console.WriteLine(e5 ? "E5 paired closure verified before and after workloads." :
+                "E3 paired closure verified before and after workloads."); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine("E3 paired run failed: " + error); return 1; }
     }

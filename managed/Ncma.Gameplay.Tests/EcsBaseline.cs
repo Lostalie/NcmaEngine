@@ -9,6 +9,8 @@ using Ncma.Scene;
 // Keep workload semantics fixed when adapting calls to E1/E2 APIs.
 internal static class EcsBaseline
 {
+    // Test-process-only event namespace; workload/timing boundaries remain identical to E0/E3.
+    internal static bool E5Events { get; set; }
     private readonly record struct Marker(int Value) : IComponent;
     private sealed class System(Action<World> update) : IWorldSystem
     {
@@ -78,7 +80,7 @@ internal static class EcsBaseline
             layerMs.Add(names[i], Distribution(layerSamples.Select(s => s[i] * 1000d / Stopwatch.Frequency).ToArray()));
         Console.WriteLine(JsonSerializer.Serialize(new
         {
-            kind = "ecs_e0_baseline", schema = 1, workload = name, objects = count, sceneBytes,
+            kind = E5Events ? "ecs_e5_sample" : "ecs_e0_baseline", schema = 1, workload = name, objects = count, sceneBytes,
             warmup, samples, operationsPerSample = operations, ms = Distribution(elapsed),
             allocatedThreadBytes = Distribution(allocations), gcCollections = collections,
             managedBeforeBytes = managedBefore, managedAfterBytes = managedAfter,
@@ -92,7 +94,7 @@ internal static class EcsBaseline
         if (measured)
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                kind = "ecs_e0_environment", schema = 1, utc = DateTimeOffset.UtcNow,
+                kind = E5Events ? "ecs_e5_environment" : "ecs_e0_environment", schema = 1, utc = DateTimeOffset.UtcNow,
                 runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
                 architecture = RuntimeInformation.ProcessArchitecture.ToString(), cpuCount = Environment.ProcessorCount,
                 stopwatchFrequency = Stopwatch.Frequency, serverGc = global::System.Runtime.GCSettings.IsServerGC,

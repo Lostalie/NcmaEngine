@@ -1,0 +1,195 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-a-v1",
+  "scope": "CPU API baseline only; not deployment, GPU, transport, whole-frame or E5 acceptance",
+  "configuration": "Release",
+  "runs": 3,
+  "order": [
+    "AB",
+    "BA",
+    "AB"
+  ],
+  "warmup": 12,
+  "samples": 100,
+  "counts": [
+    100,
+    1000,
+    4096
+  ],
+  "smokeCount": 8,
+  "tieredCompilation": "0",
+  "quantile": "nearest-rank",
+  "processStatistic": "Two-sided 95% Student-t interval of mean paired log(P95 ratio), n=3, df=2, t=4.302652729911275. Require every run and interval upper bound <= threshold. Interval crossing threshold = unproven. Assumes independent process pairs; no frame-level pseudo-replication.",
+  "continuation": "If noisy, preserve all 3 pairs; preregister a separate additional cohort before running it. Never select best runs or merge incompatible schedules.",
+  "references": {
+    "e2b": {
+      "commit": "cb50b4f25e9acfaa85ddf9568717ec30e1e254ea",
+      "generation": "47f4cceb6906453e9ba274442320fde8",
+      "manifestSha256": "C8A6B120D70F3A5DEF4F0088088E5239D1DC4EBD831A7AD1E295682C8C80F8F8"
+    },
+    "e4e": {
+      "commit": "e51ac6a89e3546a490a676410197787679768c98",
+      "generation": "444ac639667440fba4568309e10725f9",
+      "manifestSha256": "73F53A65BBD11B8EF5B1CEE868D8C59FFE33AD6E923CDA09638644A5A1658D0E"
+    }
+  },
+  "cohorts": {
+    "common": [
+      {
+        "name": "read_transform",
+        "operations": 16,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "read_transform_and_marker",
+        "operations": 16,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "world_step_stride_0",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "world_step_stride_100",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "world_step_stride_1",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "play_step_stride_0",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "play_step_stride_100",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "play_step_stride_1",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "play_step_stride_-1",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "play_behaviour_full_write",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      },
+      {
+        "name": "play_replace_one_percent",
+        "operations": 1,
+        "setup": "Original EcsBaseline fixture/warmup/timed API guards unchanged"
+      }
+    ],
+    "reads": [
+      {
+        "name": "query_cold",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "query_warm",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "query_mixed_warm",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "query_membership_rebuild",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "query_restore_rebuild",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "editor_page_cold",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "editor_page_warm_first",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "editor_page_warm_last",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      },
+      {
+        "name": "editor_object_warm",
+        "operations": 1,
+        "setup": "Setup outside timed API: request identity construction; cold-page Rename; membership Marker toggle; restore full bytes. GC/memory totals include setup. Query creation is timed in cold/restore; ordering/UUID/value checks are timed."
+      }
+    ]
+  },
+  "targets": [
+    {
+      "id": "ECS-PERF-01",
+      "reference": "e2b",
+      "cohort": "common",
+      "workloads": [
+        "world_step_stride_1"
+      ],
+      "counts": [
+        4096
+      ],
+      "maximumP95Ratio": 1
+    },
+    {
+      "id": "ECS-PERF-02",
+      "reference": "e2b",
+      "cohort": "common",
+      "workloads": [
+        "read_transform",
+        "read_transform_and_marker"
+      ],
+      "counts": [
+        100
+      ],
+      "maximumP95Ratio": 1.05
+    },
+    {
+      "id": "HOTSPOT-20",
+      "reference": "e2b",
+      "cohort": "common",
+      "workloads": [
+        "world_step_stride_0",
+        "world_step_stride_100",
+        "play_step_stride_0",
+        "play_step_stride_100"
+      ],
+      "counts": [
+        1000,
+        4096
+      ],
+      "maximumP95Ratio": 0.8
+    }
+  ],
+  "allocationTargets": {
+    "cohort": "reads",
+    "workloads": [
+      "query_warm",
+      "query_mixed_warm"
+    ],
+    "maximumAllocatedThreadBytes": 0
+  },
+  "reportOnly": "All other rows, P99, GC counts and memory are mandatory diagnostics; real-domain budgets are frozen separately in E5-D. E4-E ratios are attribution, never debt closure.",
+  "acceptance": false
+}

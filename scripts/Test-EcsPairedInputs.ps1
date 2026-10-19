@@ -1,16 +1,18 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$VerifiedClosure)
+param([Parameter(Mandatory=$true)][string]$VerifiedClosure, [switch]$E5)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repository = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 . (Join-Path $PSScriptRoot 'EditorDeployment.ps1')
 $source = Assert-DeploymentPath $repository $VerifiedClosure
-$evidenceRoot = [IO.Path]::GetFullPath((Join-Path $repository 'out\verification\ecs-e3d')) + '\'
+$stage = if ($E5) { 'ecs-e5a' } else { 'ecs-e3d' }
+$evidenceRoot = [IO.Path]::GetFullPath((Join-Path $repository "out\verification\$stage")) + '\'
 if (-not $source.StartsWith($evidenceRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Use an archived paired closure.' }
 $manifestPath = Join-Path $source 'paired-inputs.json'
 $originalJson = Get-Content -Raw -LiteralPath $manifestPath
 $original = $originalJson | ConvertFrom-Json
-if ($original.schema -ne 1 -or $original.files.Count -ne 9) { throw 'Wrong original fixture.' }
+$schema = if ($E5) { 2 } else { 1 }
+if ($original.schema -ne $schema -or $original.files.Count -ne 9) { throw 'Wrong original fixture.' }
 $originalHashes = @{}
 foreach ($file in $original.files) {
     if ([IO.Path]::GetFileName($file.name) -cne $file.name -or $originalHashes.ContainsKey($file.name)) { throw 'Invalid source name.' }
@@ -21,6 +23,7 @@ foreach ($file in $original.files) {
 $destination = Join-Path $evidenceRoot ('negative-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $destination | Out-Null
 $cases = @('missing-file','altered-bytes','hash','size','duplicate','unknown','schema','variant','extra','json','arguments')
+if ($E5) { $cases += @('contract','cohort','directory') }
 $results = @()
 foreach ($case in $cases) {
     $directory = Join-Path $destination $case
@@ -36,20 +39,25 @@ foreach ($case in $cases) {
         'size' { $manifest.files[0].size = $manifest.files[0].size + 1 }
         'duplicate' { $manifest.files += $manifest.files[0] }
         'unknown' { $manifest.files[0].name = '..\outside.dll' }
-        'schema' { $manifest.schema = 2 }
+        'schema' { $manifest.schema = 99 }
         'variant' { $manifest.variant = 'unreviewed' }
         'extra' { [IO.File]::WriteAllText((Join-Path $directory 'extra.txt'), 'negative fixture') }
+        'contract' { $manifest.contractSha256 = 'bad' }
+        'cohort' { $manifest.cohort = 'unknown' }
+        'directory' { New-Item -ItemType Directory -Path (Join-Path $directory 'unexpected') | Out-Null }
     }
     $json = if ($case -eq 'json') { '{' } else { $manifest | ConvertTo-Json -Depth 6 }
     [IO.File]::WriteAllText((Join-Path $directory 'paired-inputs.json'), $json, [Text.UTF8Encoding]::new($false))
-    [string[]]$modeArguments = if ($case -eq 'arguments') { @('--ecs-paired-smoke','--ecs-paired-measure') } else { @('--ecs-paired-smoke') }
+    $mode = if ($E5) { '--ecs-e5-smoke' } else { '--ecs-paired-smoke' }
+    [string[]]$modeArguments = if ($case -eq 'arguments') { @($mode,$mode) } else { @($mode) }
     $log = Join-Path $destination "$case.log"
     $ErrorActionPreference = 'Continue'
     & dotnet (Join-Path $directory 'Ncma.Gameplay.Tests.dll') @modeArguments *> $log
     $result = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     $text = Get-Content -Raw -LiteralPath $log
-    if ($result -eq 0 -or $text.Contains('ecs_e3_semantic') -or $text.Contains('E3 paired closure verified before and after workloads.')) {
+    if ($result -eq 0 -or $text.Contains('ecs_e3_semantic') -or $text.Contains('ecs_e5_semantic') -or
+        $text.Contains('E3 paired closure verified before and after workloads.') -or $text.Contains('E5 paired closure verified before and after workloads.')) {
         throw "Invalid paired fixture was accepted or executed workloads: $case"
     }
     $results += [ordered]@{ case=$case; exitCode=$result; log=$log; sha256=(Get-DeploymentHash $log) }
