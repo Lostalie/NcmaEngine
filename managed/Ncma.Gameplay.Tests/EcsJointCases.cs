@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Text.Json;
+using Ncma.Editor.Core;
 using Ncma.Gameplay;
 using Ncma.Runtime;
 using Ncma.Scene;
@@ -77,8 +79,43 @@ internal static class EcsJointCases
             // Complete document comparison is an independent cold oracle, outside the checked step window.
             var copy = new SceneDocument("copy", registry); copy.RestoreBytes(document.CaptureBytes());
             Check(copy.CaptureBytes().SequenceEqual(document.CaptureBytes()));
+            VerifyInspection(document, query, rendered.Keys.ToHashSet());
             passed++; Console.WriteLine($"PASS E3 joint {workload} objects={count}: no full World/Scene snapshots; values/queries/render/codec agree.");
         }
         Console.WriteLine($"E3 joint fixed-step tests: {passed}/15 passed.");
+        Console.WriteLine($"E4-E committed Play/query/render/inspection joint cases: {passed}/15 passed.");
+    }
+
+    private static void VerifyInspection(SceneDocument document, EntityQuery query, HashSet<Guid> rendered)
+    {
+        // Cold oracle and editor reads are OUTSIDE the measured/checked simulation window.
+        var snapshot = document.CaptureSnapshot(); var edit = new EditSession(document); edit.SetFrozen(true);
+        long before = Count(document, "_capturedDocumentCount"); var inspected = new List<Guid>();
+        CapabilityRequest Request(string name, object input) => new(EditSession.ContractVersion, Guid.NewGuid(),
+            edit.SessionId, edit.Revision, name, JsonSerializer.SerializeToElement(input));
+        for (int offset = 0; offset < snapshot.Objects.Length; offset += 128)
+        {
+            var result = edit.Invoke(Request("ncma.scene.inspect", new { offset, limit = 128 }));
+            Check(result.Status == "ok" && !result.Changed && result.Data.GetProperty("totalCount").GetInt32() == snapshot.Objects.Length);
+            Check(result.Data.GetProperty("worldId").GetGuid() == document.World.Identity && result.Data.GetProperty("tick").GetUInt64() == document.World.Tick);
+            var objects = result.Data.GetProperty("scene").GetProperty("objects").EnumerateArray().ToArray();
+            for (int i = 0; i < objects.Length; i++)
+            {
+                var expected = snapshot.Objects[offset + i]; Guid id = objects[i].GetProperty("id").GetGuid(); inspected.Add(id);
+                Check(id == expected.Id && objects[i].GetProperty("name").GetString() == expected.Name && rendered.Contains(id));
+            }
+        }
+        foreach (var entity in query) Check(inspected.Contains(document.World.GetUuid(entity)));
+        foreach (var expected in new[] { snapshot.Objects[0], snapshot.Objects[^1] })
+        {
+            var result = edit.Invoke(Request("ncma.scene.object.inspect", new { objectId = expected.Id, section = "components", limit = 64 }));
+            Check(result.Status == "ok");
+            var actual = result.Data.GetProperty("items").EnumerateArray().ToArray();
+            Check(actual.Length == expected.Components.Length);
+            foreach (var component in expected.Components)
+                Check(actual.Single(c => c.GetProperty("typeId").GetString() == component.TypeId).GetProperty("data").GetRawText() == component.Data.GetRawText());
+        }
+        Check(Count(document, "_capturedDocumentCount") == before + 1);
+        Check(edit.State.UndoCount == 0 && edit.State.RedoCount == 0 && document.World.Tick > 0);
     }
 }

@@ -39,9 +39,22 @@ internal static class PipelineHostProbe
             PlayerReport Run(Func<float,float,bool,RenderPipeline>? factory, Action<byte[],uint,uint>? capture = null)
             {
                 using var playerRunOwner = new PlayerRunner();
-                return headless
-                    ? playerRunOwner.Run(Options(), pluginRoot: plugins, visible: false, postModules: modules, pipelineFactory: factory)
-                    : playerRunOwner.RunForVerification(Options(), plugins, capture ?? ((_,_,_)=>{}), postModules: modules, pipelineFactory: factory);
+                EcsCommittedProbe? probe = null;
+                void Observe(Ncma.Gameplay.PlaySession play, ulong nextTick)
+                {
+                    if (probe is null) { probe = new(play.Document.World); play.AddCommittedObserver(probe); }
+                    // Caller boundary, not an IPC or snapshot operation inside a simulation callback.
+                    var snapshot = play.Document.CaptureSnapshot(); var ids = new List<Guid>();
+                    foreach (var entity in probe.Query) ids.Add(play.Document.World.GetUuid(entity));
+                    var expected = snapshot.Objects.Where(o => o.Components.Any(c => c.TypeId == "ncma.transform")).Select(o => o.Id).ToArray();
+                    if (!ids.SequenceEqual(expected) || nextTick != play.Tick + 1 || probe.LastTick != play.Tick)
+                        throw new Exception("E4-E Player committed query/cold snapshot disagree.");
+                }
+                var report = headless
+                    ? playerRunOwner.Run(Options(), pluginRoot: plugins, visible: false, trustedInput: Observe, postModules: modules, pipelineFactory: factory)
+                    : playerRunOwner.RunForVerification(Options(), plugins, capture ?? ((_,_,_)=>{}), trustedInput: Observe, postModules: modules, pipelineFactory: factory);
+                if(report.ExitCode==0)Pass(probe is not null && probe.Steps >= 4 && probe.LastTick == report.Tick, "E4-E actual Player/Null committed observer/query lifetime");
+                return report;
             }
             void Healthy(PlayerReport report) => Pass(report.ExitCode == 0 && report.Tick >= 4 && report.ShutdownErrors.Length == 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0, "Player ticks/close/API0/0: " + JsonSerializer.Serialize(report));
             Healthy(Run(null, (p,_,_)=>baseline??=p));
@@ -148,6 +161,28 @@ internal static class PipelineHostProbe
                     Pass(!image.SequenceEqual(defaultImage!),"Editor uses custom stage/final Tone");
                     if(mode==1)stageImage=image;else Pass(image.SequenceEqual(stageImage!),"Editor full graph/stage parity");
                     var owner=editor.VerificationEditor;var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;
+                    void InspectCurrent()
+                    {
+                        var expected=owner.Document.CaptureSnapshot();
+                        long Captures()=>(long)typeof(Ncma.Scene.SceneDocument).GetField("_capturedDocumentCount",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(owner.Document)!;
+                        var captureBefore=Captures();
+                        CapabilityRequest Read(string capability,object input)=>new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,capability,JsonSerializer.SerializeToElement(input));
+                        for(int repeat=0;repeat<2;repeat++){
+                            var inspected=edit.Invoke(Read("ncma.scene.inspect",new{offset=0,limit=128}));
+                            Pass(inspected.Status=="ok"&&!inspected.Changed&&inspected.Data.GetProperty("worldId").GetGuid()==owner.Document.World.Identity,"E4-E actual Editor committed page");
+                            var objects=inspected.Data.GetProperty("scene").GetProperty("objects").EnumerateArray().ToArray();
+                            Pass(objects.Select(o=>o.GetProperty("id").GetGuid()).SequenceEqual(expected.Objects.Take(128).Select(o=>o.Id)),"E4-E rendered Editor page creation order");
+                            foreach(var obj in expected.Objects.Take(128)){
+                                var detail=edit.Invoke(Read("ncma.scene.object.inspect",new{objectId=obj.Id,section="components",limit=64}));
+                                Pass(detail.Status=="ok","E4-E actual Editor component details");
+                                var items=detail.Data.GetProperty("items").EnumerateArray().ToArray();
+                                Pass(items.Length==obj.Components.Length&&obj.Components.All(c=>items.Single(i=>i.GetProperty("typeId").GetString()==c.TypeId).GetProperty("data").GetRawText()==c.Data.GetRawText()),"E4-E rendered Editor component/cold codec equality");
+                            }
+                        }
+                        // This fixture uses stable built-in component encodings; an existing valid proof may already be warm.
+                        Pass(Captures()-captureBefore is 0 or 1,"E4-E no repeated complete document capture on stable Editor reads");
+                    }
+                    InspectCurrent();
                     global::Ncma.Runtime.Entity setting=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<PostProcessData>(o));Guid id=owner.Document.World.GetUuid(setting);var active=owner.Document.World.Get<PostProcessData>(setting);
                     void Set(PostProcessData value)
                     {
@@ -155,15 +190,15 @@ internal static class PipelineHostProbe
                         Pass(edit.Invoke(command).Status=="denied","default Agent remains read-only");
                         Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[id],componentScope:[PostProcessData.TypeId])).Changed,"original scoped post command");
                     }
-                    Set(active with{ExposureEv=-1});var changed=Draw();Pass(!changed.SequenceEqual(image),"command changes custom graph pixels");
-                    workspace.History(workspace.Stamp,false);Pass(Draw().SequenceEqual(image),"sole Undo exact custom pixels");
-                    workspace.History(workspace.Stamp,true);Pass(Draw().SequenceEqual(changed),"sole Redo exact custom pixels");
+                    Set(active with{ExposureEv=-1});var changed=Draw();Pass(!changed.SequenceEqual(image),"command changes custom graph pixels");InspectCurrent();
+                    workspace.History(workspace.Stamp,false);Pass(Draw().SequenceEqual(image),"sole Undo exact custom pixels");InspectCurrent();
+                    workspace.History(workspace.Stamp,true);Pass(Draw().SequenceEqual(changed),"sole Redo exact custom pixels");InspectCurrent();
                     Set(active);Pass(Draw().SequenceEqual(image),"restore custom baseline");
                     owner.RefreshAssets(true);owner.Assets?.PrepareStoredGenerationsAsync().GetAwaiter().GetResult();
                     for(int cycle=0;cycle<2;cycle++){
                         int before=builds;var play=owner.StartPlay();Pass(builds==before+2,"Play preflight before callbacks");
                         Pass(Draw().SequenceEqual(image),"isolated Play custom graph");play.Pause();owner.ReloadGameplay(context.GameplayAssemblyPath);
-                        Pass(Draw().SequenceEqual(image),"Reload custom graph");owner.StopPlay();Pass(Draw().SequenceEqual(image),"Stop restores Edit");
+                        Pass(Draw().SequenceEqual(image),"Reload custom graph");InspectCurrent();owner.StopPlay();Pass(Draw().SequenceEqual(image),"Stop restores Edit");InspectCurrent();
                     }
                     var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
                     foreach(Action forbidden in new Action[]{()=>owner.Document.World.CreateEntity("forbidden Build write"),()=>renderer.Dispose()})
@@ -195,5 +230,21 @@ internal static class PipelineHostProbe
         File.WriteAllText(Path.Combine(output,"probe.json"),JsonSerializer.Serialize(new{checks,builds,kind,relocated,images,costs,manualAccepted=false},new JsonSerializerOptions{IncludeFields=true,WriteIndented=true}));
     }
     private static bool GraphicsLoaded()=>Process.GetCurrentProcess().Modules.Cast<ProcessModule>().Any(m=>m.ModuleName is "NcmaRenderer.dll" or "NcmaPlatform.dll" or "NcmaGui.dll");
+    private sealed class EcsCommittedProbe : Ncma.Runtime.ICommittedStepObserver
+    {
+        private readonly Ncma.Runtime.World _world;
+        internal readonly Ncma.Runtime.EntityQuery Query;
+        internal ulong LastTick;
+        internal int Steps;
+        internal EcsCommittedProbe(Ncma.Runtime.World world) { _world=world;Query=world.Query<Ncma.Runtime.TransformData>();LastTick=world.Tick; }
+        public void StepCommitted(Ncma.Runtime.World world,double delta)
+        {
+            if(!ReferenceEquals(world,_world)||world.Tick!=LastTick+1||Query.Count==0)throw new Exception("E4-E committed Player query identity/tick.");
+            foreach(var entity in Query){_ = world.Get<Ncma.Runtime.TransformData>(entity);if(world.FindEntity(world.GetUuid(entity))!=entity)throw new Exception("E4-E Player UUID resolution.");}
+            bool refused=false;try{world.CreateEntity("forbidden observer write");}catch(InvalidOperationException){refused=true;}
+            if(!refused)throw new Exception("E4-E observer gained World write authority.");
+            LastTick=world.Tick;Steps++;
+        }
+    }
     private sealed class CallbackPipeline(Func<uint,uint,RenderGraph> build):RenderPipeline {public override RenderGraph Build(uint w,uint h)=>build(w,h);}
 }

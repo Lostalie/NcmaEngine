@@ -143,6 +143,7 @@ RunMcp(endpoint.DescriptorPath, false, () => {
 Check(Task.Run(() => { try { endpoint.Pump(); return false; } catch (InvalidOperationException) { return true; } }).Result, "Foreign thread pumped the model");
 Concurrency.Run(root);
 Lifetimes.Run(root);
+EcsReadTransportCases.Run(root);
 endpoint.Dispose(); Check(!File.Exists(endpoint.DescriptorPath), "Owned discovery descriptor leaked");
 Console.WriteLine("Local IPC owner-thread pairing, active document, default read-only, shutdown and real stdio subprocess passed.");
 return 0;
@@ -186,6 +187,11 @@ static void RunMcp(string descriptorPath, bool live, Action progress)
         }
         var inspected = Call("ncma.scene.inspect", new { }); var revision = inspected.GetProperty("revision").GetUInt64();
         var objects = inspected.GetProperty("data").GetProperty("scene").GetProperty("objects"); Check(objects.GetArrayLength() > 0, "Live scene is empty");
+        var warmPage = Call("ncma.scene.inspect", new { offset = 0, limit = 1 }, revision);
+        Check(warmPage.GetProperty("status").GetString() == "ok" && warmPage.GetProperty("data").GetProperty("worldId").GetGuid() == inspected.GetProperty("data").GetProperty("worldId").GetGuid() &&
+            warmPage.GetProperty("data").GetProperty("scene").GetProperty("objects")[0].GetProperty("id").GetGuid() == objects[0].GetProperty("id").GetGuid(), "E4-E actual stdio warm page changed world/order");
+        Check(Call("ncma.scene.inspect", new { limit = 129 }, revision).GetProperty("code").GetString() == "invalid_input", "E4-E stdio bypassed page budget");
+        Console.WriteLine("E4-E real MCP stdio bounded warm scene reads passed.");
         Guid id = (live ? objects.EnumerateArray().Single(o => o.GetProperty("name").GetString() == "Live MCP fixture") : objects[0]).GetProperty("id").GetGuid();
         if (live) Check(objects.EnumerateArray().Any(o => o.GetProperty("name").GetString() == "Live MCP fixture"), "Did not inspect trusted UI fixture");
         var detail = Call("ncma.scene.object.inspect", new { objectId = id, section = "components", limit = 1 }, revision);

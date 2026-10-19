@@ -1,8 +1,10 @@
 # NcmaEngine 引擎架构
 
-E4-D自动候选验证完成：SceneDocument只缓存成功完整读取的精确身份/修订证明，不缓存第二份组件World；有效时仅复制请求页/对象，未知编码器或修订变化回到原完整codec检查。World对象编码须在已提交只读作用域，既有Editor.Core能力保留授权、唯一Undo、输出预算及错误语义；行ID/绑定用UUID存活查询，离帧导入引用按类型并集和创建顺序读取。同一949文件冻结，标准Debug/Release构建0编译警告，完整CTest各89/89（1122.43/1014.55秒），smoke/Python45/inspect及十包/正式安装/备份核验通过；本片不部署。限定提交推送后进入E4-E联合验证，E4整体与E5性能验收仍未完成。见 [E4-D实施记录](ECS_IMPLEMENTATION_PLAN.md#109-e4-d-场景编辑与既有ai读取自动候选验证完成)。
+E4-E联合自动功能门禁完成：真实Editor/Player/Null和严格搬移产品检查同一World查询、活动EditSession读取、提交只读权威及共享Undo；私有管道和实际MCP stdio保留原配对/批准/撤权路径。同一950源码，Debug/Release各89项及补充/包核验通过，不改生产架构或正式EXE。E3-D性能未达标状态不变，下一步先审阅 [E5详细方案](ECS_IMPLEMENTATION_PLAN.md#11-e5-详细实施方案)，不自动开始实现。
 
-已交付E4-B/C继续遵守同一World与原生插件边界：角色/动画启动使用可选类型受检Query；跟随相机及Player通过UUID解析当前Entity。渲染组件读者持有有界计划，几何并集保留创建顺序，原生会话先验证expectedWorld再重建计划；Editor重复设置保留last-valid并告警，Player按原错误停止后续呈现。独立双配置回归及历史失败证据见 [E4实施记录](ECS_IMPLEMENTATION_PLAN.md#10-e4-子系统迁移实施拆分与-e4-a-消费者审计)。E4-E尚未实施，不关闭E3-D性能债务或更新正式EXE。
+E4-D自动候选验证完成：SceneDocument只缓存成功完整读取的精确身份/修订证明，不缓存第二份组件World；有效时仅复制请求页/对象，未知编码器或修订变化回到原完整codec检查。World对象编码须在已提交只读作用域，既有Editor.Core能力保留授权、唯一Undo、输出预算及错误语义；行ID/绑定用UUID存活查询，离帧导入引用按类型并集和创建顺序读取。同一949文件冻结，标准Debug/Release构建0编译警告，完整CTest各89/89（1122.43/1014.55秒），smoke/Python45/inspect及十包/正式安装/备份核验通过；本片不部署。E4-D已交付，E4-E最终结果见上；E5性能验收未完成。见 [E4-D实施记录](ECS_IMPLEMENTATION_PLAN.md#109-e4-d-场景编辑与既有ai读取自动候选验证完成)。
+
+已交付E4-B/C继续遵守同一World与原生插件边界：角色/动画启动使用可选类型受检Query；跟随相机及Player通过UUID解析当前Entity。渲染组件读者持有有界计划，几何并集保留创建顺序，原生会话先验证expectedWorld再重建计划；Editor重复设置保留last-valid并告警，Player按原错误停止后续呈现。独立双配置回归及历史失败证据见 [E4实施记录](ECS_IMPLEMENTATION_PLAN.md#10-e4-子系统迁移实施拆分与-e4-a-消费者审计)。E4-E联合自动功能门禁已通过，不关闭E3-D性能债务或更新正式EXE。
 
 2026-10-19 ECS 增量：E1-A 的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典。E1-B 身份与单一门面迁移已完成：WorldIdentity/Index/Generation 的预约不随候选回滚，两种 ObjectReference 与 Runtime.GameObject 已删除；低层 World.CreateEntity/FindEntity/GetEntities 返回值身份，组件访问显式携带 Entity，用户 Ncma.GameObject 直接持有 Entity/服务并共享组件存储，信号/批次使用完整身份。旧低层签名没有兼容转发，直接引用它们的扩展须迁移重编译。E2-A 已实现调用者持有的 All/None 查询计划、1/2/3 类型组合、最小池交集、创建序号排序、已提交成员缓存及受检 ref-struct 迭代器；MembershipVersion 与 Identity/Revision 分开。E2-B 已实现共享 1024 条/1 MiB 预算的声明式结构批次、受检创建依赖、PendingEntity 和提交后回执；删除旧 PendingObject，不保留兼容壳。同一 World 的 step 候选分支通过完整预算/schema/绑定/权限预检后才接入原有最终提交，批次失败无前缀且毒化整步，回执/句柄检查 session、attempt、World 与代次。
 
