@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "baselineCommit": "6f4d666ab5686b15cafda29edf23d8facc5fb230",
+  "date": "2026-10-19",
+  "scope": "Lexical GetEntities( inventory in managed C# excluding bin, obj, *Tests, *SmokeTest and Ncma.Samples; includes API definition. Not a profiler or complete call graph.",
+  "matchingLines": 22,
+  "files": 19,
+  "entries": [
+    {
+      "path": "managed/Ncma.Characters/ActionController.cs",
+      "line": 47,
+      "text": "foreach(global::Ncma.Runtime.Entity obj in world.GetEntities().OrderBy(o=>world.GetUuid(o))) {",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "Health OR ActionDefinition union; retain UUID order, action budget and root requirements."
+    },
+    {
+      "path": "managed/Ncma.Characters/CharacterPlayRuntime.cs",
+      "line": 41,
+      "text": "_bindings = play.Document.World.GetEntities().Where(o => play.Document.World.Has<CharacterData>(o) || play.Document.World.Has<BoxColliderData>(o)).OrderBy(o => play.Document.World.GetUuid(o))",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "Character OR BoxCollider union, deduplicate and retain UUID order; preserve membership freezes."
+    },
+    {
+      "path": "managed/Ncma.Characters/CharacterPlayRuntime.cs",
+      "line": 48,
+      "text": "Guid[] cameras = play.Document.World.GetEntities().Where(o => play.Document.World.Has<FollowCameraData>(o)).Select(o => play.Document.World.GetUuid(o)).ToArray();",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "FollowCamera membership including empty set; retain creation order."
+    },
+    {
+      "path": "managed/Ncma.Characters/CharacterPlayRuntime.cs",
+      "line": 160,
+      "text": "global::Ncma.Runtime.Entity obj = play.Document.World.GetEntities().FirstOrDefault(o => play.Document.World.GetUuid(o) == camera);",
+      "frequency": "presentation",
+      "stage": "E4-B",
+      "constraint": "Exact UUID lookup; absent camera returns null, no stale Entity cache."
+    },
+    {
+      "path": "managed/Ncma.Characters/GraphRootMotionSet.cs",
+      "line": 33,
+      "text": "foreach (global::Ncma.Runtime.Entity obj in world.GetEntities().Where(o => world.Has<RootMotionData>(o) && world.Has<AnimatorData>(o))) {",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "RootMotionData + AnimatorData; preserve asset generation closure and shared clock."
+    },
+    {
+      "path": "managed/Ncma.Characters/RootMotionSet.cs",
+      "line": 34,
+      "text": "foreach(global::Ncma.Runtime.Entity obj in world.GetEntities().Where(o=>world.Has<RootMotionData>(o)&&!world.Has<AnimatorData>(o))) {",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "RootMotionData All / AnimatorData None; retain creation order and asset requirements."
+    },
+    {
+      "path": "managed/Ncma.Editor.App/EditorPresenter.cs",
+      "line": 149,
+      "text": "var alive = workspace.Owner.Document.World.GetEntities().Select(o => workspace.Owner.Document.World.GetUuid(o)).ToHashSet();",
+      "frequency": "revision-selection-catalog-gated",
+      "stage": "E4-D",
+      "constraint": "Bounded live UUID membership for row cleanup; no new scene store."
+    },
+    {
+      "path": "managed/Ncma.Editor.App/Program.cs",
+      "line": 431,
+      "text": "var objects = configurationWorld.GetEntities();",
+      "frequency": "revision-gated-presentation",
+      "stage": "E4-C",
+      "constraint": "RenderConfiguration selection; preserve warning and last-valid policy, distinct from Player."
+    },
+    {
+      "path": "managed/Ncma.Editor.Services/EditorAssetWorkflow.cs",
+      "line": 187,
+      "text": "return _workspace.Owner.Document.World.GetEntities().Where(obj=>",
+      "frequency": "authoring-event",
+      "stage": "E4-D",
+      "constraint": "Static/skinned/clip reference union; preserve deduplication, order and exact import ticket."
+    },
+    {
+      "path": "managed/Ncma.Managed/SceneWorld.cs",
+      "line": 23,
+      "text": "public IReadOnlyList<GameObject> GetObjects() { Verify(); return Runtime.GetEntities().Select(o => new GameObject(this, o)).ToArray(); }",
+      "frequency": "public-copy-contract",
+      "stage": "retain",
+      "constraint": "Intentional high-level copied GameObject list over the same World, not an obsolete compatibility layer."
+    },
+    {
+      "path": "managed/Ncma.Player.App/PlayerPresentation.cs",
+      "line": 140,
+      "text": "var objects = play.Document.World.GetEntities();",
+      "frequency": "presentation",
+      "stage": "E4-C",
+      "constraint": "RenderConfiguration and EnvironmentLighting selections; preserve ambiguity rejection and clear-on-failure."
+    },
+    {
+      "path": "managed/Ncma.Player.App/PlayerRunner.cs",
+      "line": 69,
+      "text": "if (options.Headless && (project.Configuration.AssetPackage is not null || document.World.GetEntities().Any(o=>document.World.Has<Ncma.Animation.RootMotionData>(o) || document.World.Has<Ncma.Animation.AnimatorData>(o)))) {",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "RootMotion OR Animator existence; no new optional native dependencies."
+    },
+    {
+      "path": "managed/Ncma.Player.App/PlayerRunner.cs",
+      "line": 91,
+      "text": "!document.World.GetEntities().Any(o => document.World.GetUuid(o) == camera && document.World.Has<Ncma.Scene.Rendering.CameraData>(o)))",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "Exact UUID camera lookup; retain camera missing rejection and exception boundary."
+    },
+    {
+      "path": "managed/Ncma.Rendering.Scene/ScenePipelineStartup.cs",
+      "line": 38,
+      "text": "var settings = world.GetEntities().Where(o => world.Has<RenderConfiguration>(o)).Take(2).ToArray();",
+      "frequency": "startup",
+      "stage": "E4-C",
+      "constraint": "RenderConfiguration uniqueness plus frozen scene/World comparisons and read-only factory boundary."
+    },
+    {
+      "path": "managed/Ncma.Runtime/ComponentAuthority.cs",
+      "line": 48,
+      "text": "if (freezeMembership && GetEntities().Count(o => Has<T>(o)) != owned.Length)",
+      "frequency": "authority-startup",
+      "stage": "retain",
+      "constraint": "Complete frozen-membership coverage is a safety check; no silent subset or budget truncation."
+    },
+    {
+      "path": "managed/Ncma.Runtime/World.cs",
+      "line": 84,
+      "text": "public IReadOnlyList<Entity> GetEntities()",
+      "frequency": "definition",
+      "stage": "retain",
+      "constraint": "Live explicit copied enumeration API; keep tests and E0 baseline unchanged."
+    },
+    {
+      "path": "managed/Ncma.Scene.Rendering/RenderSceneExtractor.cs",
+      "line": 58,
+      "text": "var objects = _world.GetEntities(); var diagnostics = new List<SceneRenderDiagnostic>();",
+      "frequency": "cache-miss-presentation",
+      "stage": "E4-C",
+      "constraint": "Keep conflicts, missing Transform and multi-light diagnostics; geometry union in creation order, frame indices and independent shadow casters."
+    },
+    {
+      "path": "managed/Ncma.Scene.Rendering/SceneAnimatorRuntime.cs",
+      "line": 49,
+      "text": "foreach (global::Ncma.Runtime.Entity obj in World.GetEntities().Where(o => World.Has<AnimatorData>(o)).OrderBy(o => World.GetUuid(o))) {",
+      "frequency": "startup",
+      "stage": "E4-B",
+      "constraint": "Animator membership in UUID order; do not filter out invalid missing skin; keep resource and actor/bone budgets."
+    },
+    {
+      "path": "managed/Ncma.Scene.Rendering/SceneEnvironmentState.cs",
+      "line": 19,
+      "text": "foreach(global::Ncma.Runtime.Entity obj in world.GetEntities()) if(world.Has<EnvironmentLightingData>(obj)) {",
+      "frequency": "shared-startup-presentation",
+      "stage": "E4-C",
+      "constraint": "Preserve exact World/committed boundary, absent-Off and duplicate rejection."
+    },
+    {
+      "path": "managed/Ncma.Scene.Rendering/ScenePostProcessState.cs",
+      "line": 12,
+      "text": "foreach (global::Ncma.Runtime.Entity obj in world.GetEntities()) if (world.Has<PostProcessData>(obj)) {",
+      "frequency": "shared-startup-presentation",
+      "stage": "E4-C",
+      "constraint": "Preserve exact World/committed boundary, absent-Off and duplicates including Off."
+    },
+    {
+      "path": "managed/Ncma.Scene.Rendering/SceneShadowData.cs",
+      "line": 31,
+      "text": "foreach (global::Ncma.Runtime.Entity obj in world.GetEntities()) if (world.Has<SceneShadowData>(obj)) {",
+      "frequency": "shared-startup-presentation",
+      "stage": "E4-C",
+      "constraint": "Preserve absent-null vs explicit Off, duplicate rejection and World boundary."
+    },
+    {
+      "path": "managed/Ncma.Scene/SceneDocument.cs",
+      "line": 30,
+      "text": "var live = World.GetEntities().Select(o => World.GetUuid(o)).ToHashSet();",
+      "frequency": "revision-observation",
+      "stage": "E4-D",
+      "constraint": "Preserve external-change detection and removal of dead UUID bindings; distinguish membership from data revision."
+    }
+  ]
+}

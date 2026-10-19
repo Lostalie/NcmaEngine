@@ -1,5 +1,7 @@
 # NcmaEngine 引擎架构
 
+E4状态（2026-10-19）：消费者审计E4-A已完成，生产/测试源码未变；E4-B角色/动画、E4-C渲染、E4-D编辑/既有AI查询、E4-E联合验证仍待实施。迁移合同见 [E4审计](ECS_IMPLEMENTATION_PLAN.md#10-e4-子系统迁移实施拆分与-e4-a-消费者审计)，不以基础Query已存在代替领域迁移完成，也不将E3-D延期性能债务标记通过。
+
 2026-10-19 ECS 增量：E1-A 的唯一 World 已用强类型 Sparse Set 替换逐对象组件值字典。E1-B 身份与单一门面迁移已完成：WorldIdentity/Index/Generation 的预约不随候选回滚，两种 ObjectReference 与 Runtime.GameObject 已删除；低层 World.CreateEntity/FindEntity/GetEntities 返回值身份，组件访问显式携带 Entity，用户 Ncma.GameObject 直接持有 Entity/服务并共享组件存储，信号/批次使用完整身份。旧低层签名没有兼容转发，直接引用它们的扩展须迁移重编译。E2-A 已实现调用者持有的 All/None 查询计划、1/2/3 类型组合、最小池交集、创建序号排序、已提交成员缓存及受检 ref-struct 迭代器；MembershipVersion 与 Identity/Revision 分开。E2-B 已实现共享 1024 条/1 MiB 预算的声明式结构批次、受检创建依赖、PendingEntity 和提交后回执；删除旧 PendingObject，不保留兼容壳。同一 World 的 step 候选分支通过完整预算/schema/绑定/权限预检后才接入原有最终提交，批次失败无前缀且毒化整步，回执/句柄检查 session、attempt、World 与代次。
 
 E3-A 已完成混合分页存储自动候选：强类型值使用惰性 32 值/页 COW，连续 sparse/dense slot 索引仅在结构性修改时复制，普通值写不复制整值池。Fork 撤销双方原写所有权，跨池删除先准备全部分配再发布，不增加 ref、并发或外部写权限。

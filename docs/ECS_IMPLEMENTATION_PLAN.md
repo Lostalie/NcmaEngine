@@ -398,3 +398,82 @@ E3-C 本地和 GitHub main 已核对为 `28aecf523c6dfc6b2634549f7ab4cd67cf592dc
 | ECS-PERF-02 小场景读性能 | 未证明5%门禁；E0复制枚举样本P95最大比值约1.387，不是typed Query测量，也不直接断言为已确证退化 | E5控制测量噪声、区分复制枚举与typed Query，对100/1000/4096分别复核耗时、分配和GC；存在回退则修复，不挑样本或放宽标准 |
 
 完整整帧性能、真实素材/目标机、自包含、人工和1h门禁继续独立开放。File.Replace首轮失败及根因未证实的调查保留。提交不覆盖原939修复与937退化归档、失败日志、正式安装或备份。
+
+## 10. E4 子系统迁移：实施拆分与 E4-A 消费者审计
+
+2026-10-19用户授权“开始E4阶段”。基线为已提交推送的 `6f4d666ab5686b15cafda29edf23d8facc5fb230`（E3-D：功能验证通过、性能未达标）。本片 **E4-A仅完成消费者审计、迁移合同与静态验证，不修改运行时代码，不宣称E4整体完成**。ECS-PERF-01/02继续由E5统一修复；不恢复历史“禁止进入E4”的排期限制，也不将延期视为性能通过。
+
+### 10.1 E4实施顺序
+
+| 分片 | 具体交付 | 放行条件 |
+| --- | --- | --- |
+| E4-A 消费者审计 | 可核对的调用清单；区分显示/启动/编辑/保存；明确排序、身份、缺失与冲突语义 | 清单与源码逐项一致；漏项/重复/行号/源码/分类负例拒绝；验证既有源码、候选包、正式安装与备份未变 |
+| E4-B 角色与动画 | 角色/碰撞体、根运动、Animator启动查询；跟随相机与Player启动精确UUID查找；保留冻结成员与原生资源映射 | 创建顺序及既有UUID顺序分别等价；组件缺失仍拒绝；不存在的相机仍返回原有结果；恢复/换World/暂停/重启/故障/成员冻结联合回归 |
+| E4-C 渲染提取与设置 | 复用按World身份绑定的查询；静态/蒙皮几何并集、灯光、设置读取；Editor/Player共同数据读取但保留各自错误处理 | 不漏诊断、不变绘制和FrameIndex顺序；独立阴影集合、资源代次、插值、2D隔离、DX11参考/API/恢复测试 |
+| E4-D 场景、编辑与既有AI查询 | 对象列表/属性读取及导入影响列表；元数据成员观察；现有分页能力的有界读取 | 唯一EditSession/Undo；UUID、文档代次、revision、授权与大小限制不变；编辑撤销/重做、选择/换场景、陈旧请求与MCP权限负例 |
+| E4-E 联合验证与残留核对 | Editor/Player/Headless跨领域组合；逐项复核已替代消费者与必须保留的冷路径 | 同一新冻结下完整Debug/Release、原生/托管smoke、Python/inspect、格式/ABI/权限/无Python产品/包与备份核验；不代替E5性能验收 |
+
+每片先验证再提交推送。E4-B及后续凡修改产品/测试/构建脚本，必须建立新源码冻结，不能沿用E3-D的939文件验证结论。替代消费者就绪时删除对应旧实现，不引入兼容壳；显式复制API、编辑快照等现役合同不是“旧类型”，不一概删除。正式EXE仍为E1-B，本次不部署。
+
+### 10.2 枚举调用清单（E4-A基线，非性能采样）
+
+机器可核对清单：[ECS_E4_CONSUMER_AUDIT.json](ECS_E4_CONSUMER_AUDIT.json)。扫描 `managed` 下C#，排除 `bin`、`obj`、`*Tests`、`*SmokeTest` 和 `Ncma.Samples`；匹配 `GetEntities(` 共 **22行/19文件，其中1行是API定义，21处是调用**。该数字是词法入口盘点，不是完整调用图或热点耗时证明。当前生产扫描中 `CreateQuery(`/`.Query<` 只出现在Runtime的查询定义/转发实现，不能把E2查询基础已完成等同于领域消费者已迁移。
+
+下列路径均相对 `managed/`；精确基线行号和原文见JSON，后续迁移不要为保持清单数字而保留旧调用。
+
+| 消费者 | 执行时机 | 处理与必须保留的语义 |
+| --- | --- | --- |
+| Ncma.Characters/CharacterPlayRuntime.cs:41 | 启动 | E4-B：Character OR BoxCollider并集、去重、UUID顺序；不能把OR改成AND |
+| 同文件:48 | 启动 | E4-B：FollowCamera成员集合，包括空集合的冻结 |
+| 同文件:160 | 显示帧FollowView | E4-B：精确UUID读取，缺失返回null；不缓存可跨恢复使用的Entity |
+| Ncma.Characters/RootMotionSet.cs:34 | 启动 | E4-B：All RootMotion / None Animator，保留创建顺序及资源/组件缺失拒绝 |
+| Ncma.Characters/GraphRootMotionSet.cs:33 | 启动 | E4-B：RootMotion与Animator交集，保持同一动画时钟与资源代次 |
+| Ncma.Characters/ActionController.cs:47 | 启动 | E4-B：Health与ActionDefinition并集，保持UUID顺序、动作32预算和根运动要求 |
+| Ncma.Scene.Rendering/SceneAnimatorRuntime.cs:49 | 启动 | E4-B：Animator查询后验证SkinnedMesh，不能把缺少蒙皮的Animator静默过滤；保持UUID顺序、32角色/32768骨骼预算 |
+| Ncma.Player.App/PlayerRunner.cs:69、91 | 启动 | E4-B：RootMotion/Animator存在性及精确相机UUID，保留Headless资源准备与启动失败 |
+| Ncma.Scene.Rendering/RenderSceneExtractor.cs:58 | 缓存未命中的显示提取 | E4-C：几何并集和灯光筛选；缺Transform、双几何、多主灯诊断；创建顺序、FrameIndex与独立阴影集合 |
+| Ncma.Scene.Rendering/SceneEnvironmentState.cs:19 | 启动/显示共享入口 | E4-C：缺省Off、重复设置拒绝、精确World与已提交边界 |
+| Ncma.Scene.Rendering/ScenePostProcessState.cs:12 | 启动/显示共享入口 | E4-C：缺省Off，两个Off也属于重复；不能只查Enabled |
+| Ncma.Scene.Rendering/SceneShadowData.cs:31 | 启动/显示共享入口 | E4-C：缺省null与显式Off不同，保留重复拒绝 |
+| Ncma.Rendering.Scene/ScenePipelineStartup.cs:38 | 启动 | E4-C：设置唯一性、快照与World一致性、工厂只读边界 |
+| Ncma.Player.App/PlayerPresentation.cs:140 | 每次有效显示提交 | E4-C：RenderConfiguration/Environment筛选；Player重复设置报错与失败清屏 |
+| Ncma.Editor.App/Program.cs:431 | World身份/revision变化 | E4-C：设置筛选；Editor警告并保留上次有效设置，不能统一成Player策略 |
+| Ncma.Editor.App/EditorPresenter.cs:149 | revision/选择/目录/文档变化 | E4-D：清理失效行ID；不是稳定每帧都全扫描 |
+| Ncma.Editor.Services/EditorAssetWorkflow.cs:187 | 导入影响检查事件 | E4-D：静态/蒙皮/ClipPlayback引用并集、去重和顺序；保留导入ticket验证 |
+| Ncma.Scene/SceneDocument.cs:30 | 观察外部World revision变化 | E4-D：失效UUID绑定清理，区分成员变化与值变化；保留文档revision与历史失效 |
+| Ncma.Runtime/ComponentAuthority.cs:48 | 权威申请 | 保留完整冻结成员覆盖校验，不因消除扫描而接受子集；不是逐帧角色扫描 |
+| Ncma.Managed/SceneWorld.cs:23 | 用户显式GetObjects调用 | 保留高级GameObject副本列表合同；同一World存储，不是废弃Runtime.GameObject |
+| Ncma.Runtime/World.cs:84 | API定义 | 保留显式复制枚举API和E0对照；不是待删除兼容入口 |
+
+### 10.3 快照与间接消费者：保留和迁移的边界
+
+- `CharacterPlayRuntime.Compose`、`SceneAnimatorRuntime.Compose`的组合验证和资源准备、`MovementCoordinator`构造/Start的原启动字节对照、`RuntimeSessionOwner.Preflight`及PlaySession启动/重载是冷路径，保留完整验证。固定步已经使用受控绑定/演员列表，不应重写成每步动态重新收集角色。
+- `RenderSceneExtractor.Extract`目前没有完整文档序列化，且具备World身份/revision/资产/相机/尺寸/蒙皮/显示变换引用缓存；只在缓存未命中时复制实体列表。E4-C减少该复制/筛选，不将其描述为已存在的“每帧JSON路径”。`SceneRenderEnvironment`、`SceneRenderPostProcess`、`SceneRenderShadows`和两宿主间接调用设置读取，须一起验证，不只改静态Read方法。
+- `EditorWorkspace.Snapshot`按文档generation/revision缓存；`EditorSceneHud.RefreshEditSceneHud`在编辑revision变化或显式启动时读取快照，Play时无参路径直接返回。`EditorAnimationGraphPreview`使用隔离预览场景，其资源Open准备与每帧Draw不同。E4-D可优化面板读取，但不把这些已有缓存/隔离全部移除。
+- `EditSession`的Documents/CommandParticipants/CommandImpacts/Interactions/InteractionGate/CaptureBytes，以及`SceneDocumentFiles.Save`、Prefab制作/验证、场景克隆、资源重建/显卡恢复、Player最终摘要属于事务、完整验证、保存或恢复合同，保留完整文档路径；不重写Undo存储、场景格式或File.Replace策略。
+- `Capabilities.Inspect(ncma.scene.inspect)`和`ObjectDetails`目前为一次请求捕获完整文档再分页；E4-D评估只复制请求对象/页的受检读取。必须保持创建顺序、组件/绑定/Export原有排序、offset非负、limit分别为1..128/1..64的分页限制、256KiB对象详情输出限制、请求授权/身份/revision与复制隔离。`ncma.scene.validate`仍需完整组合验证，不替换成局部Query。
+- UI自身的UiDocument/UiRuntime/UiCanvas数据和骨骼内部层次不迁移成场景父子树。2D/UI路径不因“统一ECS”引入3D/物理资源，也不添加Python游戏逻辑、推理服务或Agent直接写权限。
+
+### 10.4 查询适配的具体约束
+
+1. Query计划由消费者拥有并复用；World实例替换或同一实例Restore导致Identity变化时重新建立，不能只观察对象引用。成员列表看MembershipVersion，值/设置缓存仍看Revision；成员版本未变不代表Transform/设置未变。不持有跨结构提交的枚举器。
+2. `World.Has<T>`对不存在的类型池返回false，而`Query<T>`要求类型已注册。迁移需覆盖默认/精简注册表，不能让原先“无此可选功能”变成初始化异常。只能在需要该领域且类型注册成立时建立相应计划，不能给纯2D额外注册/初始化所有3D模块。
+3. Query默认创建顺序；角色/动作/Animator原有UUID排序继续保持。多查询并集去重后按原消费者顺序输出，不能直接拼接导致双处理或顺序变化。
+4. 渲染查询以几何组件为筛选条件，后续仍检查Transform；不能通过Transform交集把错误对象过滤。Static+Skinned冲突、多主灯、重复Off设置仍必须被看到。顺序变化会影响FrameIndex/拾取/诊断，必须逐项对照。
+5. 对未知UUID，现有`FindEntity`抛异常；FollowView等原先FirstOrDefault的可空行为不能直接替换为无保护FindEntity。E4-B优先评估一个只读、owner-thread、返回完整Entity的TryFindEntity，不以catch所有异常吞掉身份/线程问题；这是待实现项，不是已存在API。
+6. 资源与数值系统依旧使用持久UUID+受检World/session/tick映射到原生不透明句柄。Native批量ABI保持不变；不把Entity序列化，不新增World副本，不扩大组件写权威。
+
+### 10.5 测试映射与本片结果
+
+E4-B使用Runtime身份/Query/权威用例、Gameplay提交/Movement用例，并扩展真实角色、根运动、Animator、Headless宿主覆盖；fake Movement不能代替Jolt实测。E4-C使用SceneRendering提取/诊断用例及Rendering的SceneCandidateSafety、SceneExchangeSafety、SceneConstructionSafety、SceneCostJoint、GraphicsRecoveryJoint等现役产品测试。E4-D使用SceneDocument、EditorCore、EditorService、EditorTransport、ApplicationService以及UI路由/联合宿主测试。每片需新增对应失败/恢复/排序边界的断言，原测试不能削弱；E4-E回到完整Debug/Release产品组合，不以子集代替。
+
+本片为审计文档变更，不新增运行时代码或测试用例，**未重新构建或运行完整89项回归，也不冒称新性能测试**。验证包括：
+
+- `out/verification/ecs-e4a/verify-audit-first.ps1`：实际清单逐项匹配，以及内存中模拟漏项、重复、错误行号、错误源码、错误分类5类负例均拒绝；生产Query使用基线匹配，合计 **7/7**。原文件不被负例改写。
+- E3-D同一939文件源码冻结再次通过；SHA仍为 `47905BDD40B61E63ED8B89D5DF5D8EABC6E329D735C3C364DCB8442FCE288BFC`。因此本片引用上轮双配置89/89功能结果，不重跑未改变的产品。
+- 重新执行只读交付核验：10个候选包、正式144清单/148文件及148备份、E0原始18程序集、E3-A原始8输入/9日志全部保持完整。正式E1-B EXE SHA仍为 `C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61`。
+- 原939修复与937退化性能证据、File.Replace首轮失败以及4项无关IDE修改均保留。源代码只读盘点不是整帧成本证据；ECS-PERF-01/02不关闭。
+
+本机静态校验日志 `out/ecs-e4a-audit-first.log` SHA256 `BF0113D24B3B0FE74970D929FA1A0DC12BC71A82931FD5F7EF51C1A7708344AA`；只读完整性日志 `out/ecs-e4a-integrity-first.log` SHA256 `9F9876CFD48DA6112323B776A7132EF38DAAF6533013EDFBC123B179C0004F55`。清单文件SHA256 `DC7F75C8D7D871067836A6EDDD723AA783C26AF12DB04219601D8E8E1FB2B4FC`为本机原始字节哈希（Git换行规范化可能改变工作副本字节，字段/源码逐项匹配才是清单判定）。辅助脚本与日志只保留在ignored out，不作为新增产品入口。
+
+E4-A审计片完成，下一片是E4-B角色/动画查询与身份访问适配。E4-B/C/D/E尚未实现，E4整体与E5仍未验收，不进入M8.3。
