@@ -6,12 +6,19 @@ internal static class TestEntryPoint
     {
         try
         {
+            if (args.Any(a => a.StartsWith("--ecs-e5-v2-", StringComparison.Ordinal)))
+            {
+                if (args.Length != 1 || args[0] is not ("--ecs-e5-v2-smoke" or "--ecs-e5-v2-measure"))
+                    throw new ArgumentException("E5 v2 entry requires exactly one known mode.");
+                return EcsPairedV2Entry.Run(args[0] == "--ecs-e5-v2-measure");
+            }
             if (args.Any(a => a.StartsWith("--ecs-e5-", StringComparison.Ordinal)))
             {
-                if (args.Length != 1 || args[0] is not ("--ecs-e5-smoke" or "--ecs-e5-measure" or "--ecs-e5-diagnose" or "--ecs-e5-diagnose-smoke"))
+                if (args.Length != 1 || args[0] is not ("--ecs-e5-smoke" or "--ecs-e5-measure" or "--ecs-e5-diagnose" or "--ecs-e5-diagnose-smoke" or "--ecs-e5-read-diagnose" or "--ecs-e5-read-diagnose-smoke"))
                     throw new ArgumentException("E5 entry requires exactly one known mode.");
-                return EcsPairedEntry.Run(args[0] is "--ecs-e5-measure" or "--ecs-e5-diagnose", e5: true,
-                    diagnostics: args[0].StartsWith("--ecs-e5-diagnose", StringComparison.Ordinal));
+                return EcsPairedEntry.Run(args[0] is "--ecs-e5-measure" or "--ecs-e5-diagnose" or "--ecs-e5-read-diagnose", e5: true,
+                    diagnostics: args[0].StartsWith("--ecs-e5-diagnose", StringComparison.Ordinal),
+                    readDiagnostics: args[0].StartsWith("--ecs-e5-read-diagnose", StringComparison.Ordinal));
             }
             if (args.Contains("--ecs-paired-smoke") || args.Contains("--ecs-paired-measure"))
             {

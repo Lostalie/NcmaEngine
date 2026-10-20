@@ -1,11 +1,12 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$VerifiedClosure, [switch]$E5)
+param([Parameter(Mandatory=$true)][string]$VerifiedClosure, [switch]$E5, [switch]$ReadDiagnostics)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repository = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 . (Join-Path $PSScriptRoot 'EditorDeployment.ps1')
 $source = Assert-DeploymentPath $repository $VerifiedClosure
-$stage = if ($E5) { 'ecs-e5a' } else { 'ecs-e3d' }
+if ($ReadDiagnostics -and -not $E5) { throw 'Read diagnostics require the E5 input contract.' }
+$stage = if ($ReadDiagnostics) { 'ecs-e5c' } elseif ($E5) { 'ecs-e5a' } else { 'ecs-e3d' }
 $evidenceRoot = [IO.Path]::GetFullPath((Join-Path $repository "out\verification\$stage")) + '\'
 if (-not $source.StartsWith($evidenceRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'Use an archived paired closure.' }
 $manifestPath = Join-Path $source 'paired-inputs.json'
@@ -13,6 +14,7 @@ $originalJson = Get-Content -Raw -LiteralPath $manifestPath
 $original = $originalJson | ConvertFrom-Json
 $schema = if ($E5) { 2 } else { 1 }
 if ($original.schema -ne $schema -or $original.files.Count -ne 9) { throw 'Wrong original fixture.' }
+if ($ReadDiagnostics -and ($original.cohort -cne 'read-diagnostics' -or $original.variant -cne 'candidate')) { throw 'Wrong read diagnostic fixture.' }
 $originalHashes = @{}
 foreach ($file in $original.files) {
     if ([IO.Path]::GetFileName($file.name) -cne $file.name -or $originalHashes.ContainsKey($file.name)) { throw 'Invalid source name.' }
@@ -24,6 +26,7 @@ $destination = Join-Path $evidenceRoot ('negative-' + [Guid]::NewGuid().ToString
 New-Item -ItemType Directory -Path $destination | Out-Null
 $cases = @('missing-file','altered-bytes','hash','size','duplicate','unknown','schema','variant','extra','json','arguments')
 if ($E5) { $cases += @('contract','cohort','directory') }
+if ($ReadDiagnostics) { $cases += @('forbidden-e2b','wrong-mode','other-diagnostic-cohort') }
 $results = @()
 foreach ($case in $cases) {
     $directory = Join-Path $destination $case
@@ -44,11 +47,14 @@ foreach ($case in $cases) {
         'extra' { [IO.File]::WriteAllText((Join-Path $directory 'extra.txt'), 'negative fixture') }
         'contract' { $manifest.contractSha256 = 'bad' }
         'cohort' { $manifest.cohort = 'unknown' }
+        'forbidden-e2b' { $manifest.variant = 'e2b' }
+        'other-diagnostic-cohort' { $manifest.cohort = 'dense-diagnostics' }
         'directory' { New-Item -ItemType Directory -Path (Join-Path $directory 'unexpected') | Out-Null }
     }
     $json = if ($case -eq 'json') { '{' } else { $manifest | ConvertTo-Json -Depth 6 }
     [IO.File]::WriteAllText((Join-Path $directory 'paired-inputs.json'), $json, [Text.UTF8Encoding]::new($false))
-    $mode = if ($E5) { '--ecs-e5-smoke' } else { '--ecs-paired-smoke' }
+    $mode = if ($ReadDiagnostics) { '--ecs-e5-read-diagnose-smoke' } elseif ($E5) { '--ecs-e5-smoke' } else { '--ecs-paired-smoke' }
+    if ($case -eq 'wrong-mode') { $mode = '--ecs-e5-diagnose-smoke' }
     [string[]]$modeArguments = if ($case -eq 'arguments') { @($mode,$mode) } else { @($mode) }
     $log = Join-Path $destination "$case.log"
     $ErrorActionPreference = 'Continue'
@@ -56,7 +62,8 @@ foreach ($case in $cases) {
     $result = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     $text = Get-Content -Raw -LiteralPath $log
-    if ($result -eq 0 -or $text.Contains('ecs_e3_semantic') -or $text.Contains('ecs_e5_semantic') -or
+    if ($result -eq 0 -or $text.Contains('ecs_e3_semantic') -or $text.Contains('ecs_e5_semantic') -or $text.Contains('ecs_e5_diagnostic_semantic') -or
+        $text.Contains('E5 diagnostic closure verified before and after workloads.') -or
         $text.Contains('E3 paired closure verified before and after workloads.') -or $text.Contains('E5 paired closure verified before and after workloads.')) {
         throw "Invalid paired fixture was accepted or executed workloads: $case"
     }

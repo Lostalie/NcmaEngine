@@ -149,6 +149,7 @@ failures += PagedStorageTests.Run();
 failures += IncrementalValidationTests.Run();
 failures += ComponentShapeTests.Run();
 failures += EntityLookupTests.Run();
+failures += EntityCopyReadTests.Run();
 if (failures == 0 && args.Contains("--ecs-pool-benchmark")) PoolMeasurements.Run();
 return failures == 0 ? 0 : 1;
 

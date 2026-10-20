@@ -10,7 +10,7 @@ internal static class EcsPairedEntry
     private static readonly string[] Products = ["Ncma.Runtime", "Ncma.Scene", "Ncma.Managed", "Ncma.Gameplay", "Ncma.Movement", "Ncma.Editor.Core"];
     private static string Hash(string path) { using var stream = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)); }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal static int Run(bool measured, bool e5 = false, bool diagnostics = false)
+    internal static int Run(bool measured, bool e5 = false, bool diagnostics = false, bool readDiagnostics = false)
     {
         try
         {
@@ -25,7 +25,9 @@ internal static class EcsPairedEntry
                 (e5 ? variant is not ("e2b" or "e4e" or "candidate") : variant is not ("e2b" or "candidate")))
                 throw new InvalidOperationException("Invalid paired identity.");
             string cohort = e5 ? input.GetProperty("cohort").GetString()! : "common";
-            if (diagnostics ? (!e5 || cohort != "dense-diagnostics" || variant == "e2b") :
+            if (diagnostics && readDiagnostics) throw new InvalidOperationException("Conflicting diagnostic modes.");
+            bool diagnostic = diagnostics || readDiagnostics;
+            if (diagnostic ? (!e5 || cohort != (readDiagnostics ? "read-diagnostics" : "dense-diagnostics") || variant == "e2b") :
                 (cohort is not ("common" or "reads") || (cohort == "reads" && variant == "e2b")))
                 throw new InvalidOperationException("Unsupported measurement cohort.");
             string? contractHash = e5 ? input.GetProperty("contractSha256").GetString() : null;
@@ -54,21 +56,22 @@ internal static class EcsPairedEntry
                 }
             }
             VerifyLoaded();
-            Console.WriteLine(JsonSerializer.Serialize(new { kind = diagnostics ? "ecs_e5_diagnostic_inputs" : e5 ? "ecs_e5_paired_environment" : "ecs_e3_paired_environment", schema = e5 ? 2 : 1, variant,
+            Console.WriteLine(JsonSerializer.Serialize(new { kind = diagnostic ? "ecs_e5_diagnostic_inputs" : e5 ? "ecs_e5_paired_environment" : "ecs_e3_paired_environment", schema = e5 ? 2 : 1, variant,
                 cohort, contractSha256 = contractHash,
                 measured, files = hashes, tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
                 scope = "Same driver, real product assemblies; CPU workload evidence, not E5/full-engine acceptance" }));
             void Verified(string name, int count, SceneDocument document) {
                 // Not part of timed/allocation samples. Checks all persistent values with the real codec.
                 byte[] bytes = document.CaptureBytes();
-                Console.WriteLine(JsonSerializer.Serialize(new { kind = diagnostics ? "ecs_e5_diagnostic_semantic" : e5 ? "ecs_e5_semantic" : "ecs_e3_semantic", workload = name, objects = count,
+                Console.WriteLine(JsonSerializer.Serialize(new { kind = diagnostic ? "ecs_e5_diagnostic_semantic" : e5 ? "ecs_e5_semantic" : "ecs_e3_semantic", workload = name, objects = count,
                     tick = document.World.Tick, sceneBytes = bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(bytes)) }));
             }
             EcsBaseline.E5Events = e5;
-            if (diagnostics) EcsDenseDiagnostics.Run(measured, Verified);
+            if (readDiagnostics) EcsReadDiagnostics.Run(measured, Verified);
+            else if (diagnostics) EcsDenseDiagnostics.Run(measured, Verified);
             else if (cohort == "common") EcsBaseline.Run(measured, Verified);
             else EcsReadBaseline.Run(measured, Verified);
-            VerifyLoaded(); Console.WriteLine(diagnostics ? "E5 diagnostic closure verified before and after workloads." : e5 ? "E5 paired closure verified before and after workloads." :
+            VerifyLoaded(); Console.WriteLine(diagnostic ? "E5 diagnostic closure verified before and after workloads." : e5 ? "E5 paired closure verified before and after workloads." :
                 "E3 paired closure verified before and after workloads."); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine("E3 paired run failed: " + error); return 1; }

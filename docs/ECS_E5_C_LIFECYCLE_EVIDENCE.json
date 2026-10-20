@@ -1,0 +1,3636 @@
+{
+  "archive": "F:\\NcmaEngine\\out\\verification\\ecs-e5c\\read-diagnostic-45df9e97a297414caca4b3db74085d57",
+  "sourceFiles": 960,
+  "sourceFreezeSha256": "25F9CBADE86E302D583034EC88ECD332A33F1B1EA75B8E8AD2F620AC05C776D9",
+  "inputsSha256": "3E97792F53E8DB5B832EFC37669A7217A2B30DA34F57E44A841DC95722E44AA1",
+  "contractSha256": "A211DBBCD69312DD8ADF908ED472303D5727CC57E2AA1756DC32C3EA1FB16520",
+  "executionSha256": "F6AC3CFCEE8F60FB03AB3622CC3C09A7AF89FCE8C9811BFACAAD04D4A6D5E88C",
+  "measured": true,
+  "actualInputsRawSamplesAndSemanticsVerified": true,
+  "reports": [
+    {
+      "run": 1,
+      "logSha256": "3DA4EF57D6F0C0E404B503ABC080F58823B92EE1F8AB87541FC306C829A4C2FB",
+      "cases": 40,
+      "rows": [
+        {
+          "workload": "copy_cold_first",
+          "objects": 0,
+          "ms": {
+            "p50": 0.0003,
+            "p95": 0.0007,
+            "p99": 0.0011,
+            "max": 0.0014
+          },
+          "allocatedThreadBytes": {
+            "p50": 224,
+            "p95": 224,
+            "p99": 224,
+            "max": 224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 1421848,
+          "managedAfterBytesIncludingSetup": 7369440,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0058,
+            "p95": 0.0079,
+            "p99": 0.0088,
+            "max": 0.0089
+          },
+          "allocatedThreadBytes": {
+            "p50": 8928,
+            "p95": 8928,
+            "p99": 8928,
+            "max": 8928
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 3225608,
+          "managedAfterBytesIncludingSetup": 2187656,
+          "gcCollectionsIncludingSetup": [
+            2,
+            1,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0449,
+            "p95": 0.0853,
+            "p99": 0.3744,
+            "max": 0.5197
+          },
+          "allocatedThreadBytes": {
+            "p50": 84528,
+            "p95": 84528,
+            "p99": 84528,
+            "max": 84528
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.326,
+            "max": 0.45
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 16284640,
+          "managedAfterBytesIncludingSetup": 10017560,
+          "gcCollectionsIncludingSetup": [
+            14,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.207,
+            "p95": 0.3562,
+            "p99": 0.4642,
+            "max": 4.0661
+          },
+          "allocatedThreadBytes": {
+            "p50": 344592,
+            "p95": 344592,
+            "p99": 344592,
+            "max": 344592
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.044,
+            "max": 3.848
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 30497936,
+          "managedAfterBytesIncludingSetup": 23682264,
+          "gcCollectionsIncludingSetup": [
+            60,
+            25,
+            9
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7786528,
+          "managedAfterBytesIncludingSetup": 7786528,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0033,
+            "p95": 0.0035,
+            "p99": 0.0037,
+            "max": 0.0041
+          },
+          "allocatedThreadBytes": {
+            "p50": 8904,
+            "p95": 8904,
+            "p99": 8904,
+            "max": 8904
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 10173448,
+          "managedAfterBytesIncludingSetup": 11076040,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0365,
+            "p95": 0.0409,
+            "p99": 0.0566,
+            "max": 0.0752
+          },
+          "allocatedThreadBytes": {
+            "p50": 84504,
+            "p95": 84504,
+            "p99": 84504,
+            "max": 84504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 8249232,
+          "managedAfterBytesIncludingSetup": 16719120,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.2113,
+            "p95": 0.3273,
+            "p99": 0.7983,
+            "max": 1.3467
+          },
+          "allocatedThreadBytes": {
+            "p50": 344568,
+            "p95": 344568,
+            "p99": 344568,
+            "max": 352584
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.076,
+            "max": 0.552
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 36746608,
+          "managedAfterBytesIncludingSetup": 24563040,
+          "gcCollectionsIncludingSetup": [
+            3,
+            3,
+            2
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7868688,
+          "managedAfterBytesIncludingSetup": 7868688,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0033,
+            "p95": 0.0055,
+            "p99": 0.0056,
+            "max": 0.0065
+          },
+          "allocatedThreadBytes": {
+            "p50": 8904,
+            "p95": 8904,
+            "p99": 8904,
+            "max": 8904
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 13544888,
+          "managedAfterBytesIncludingSetup": 14627552,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0533,
+            "p95": 0.0634,
+            "p99": 0.103,
+            "max": 0.4783
+          },
+          "allocatedThreadBytes": {
+            "p50": 84504,
+            "p95": 84504,
+            "p99": 84504,
+            "max": 84504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.42
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 17555840,
+          "managedAfterBytesIncludingSetup": 13325064,
+          "gcCollectionsIncludingSetup": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.2528,
+            "p95": 0.347,
+            "p99": 0.3559,
+            "max": 0.3812
+          },
+          "allocatedThreadBytes": {
+            "p50": 344568,
+            "p95": 344568,
+            "p99": 344568,
+            "max": 344568
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 15556912,
+          "managedAfterBytesIncludingSetup": 50221200,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 0,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0004,
+            "p99": 0.002,
+            "max": 0.0021
+          },
+          "allocatedThreadBytes": {
+            "p50": 224,
+            "p95": 224,
+            "p99": 224,
+            "max": 224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 8537184,
+          "managedAfterBytesIncludingSetup": 13046000,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0065,
+            "p95": 0.01,
+            "p99": 0.0118,
+            "max": 0.1813
+          },
+          "allocatedThreadBytes": {
+            "p50": 8928,
+            "p95": 8928,
+            "p99": 8928,
+            "max": 8928
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.164
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 7965752,
+          "managedAfterBytesIncludingSetup": 5161136,
+          "gcCollectionsIncludingSetup": [
+            12,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0507,
+            "p95": 0.0943,
+            "p99": 0.1328,
+            "max": 0.2832
+          },
+          "allocatedThreadBytes": {
+            "p50": 84528,
+            "p95": 84528,
+            "p99": 84528,
+            "max": 84528
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 20227048,
+          "managedAfterBytesIncludingSetup": 7433080,
+          "gcCollectionsIncludingSetup": [
+            230,
+            230,
+            134
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1859,
+            "p95": 0.3775,
+            "p99": 0.9259,
+            "max": 3.2589
+          },
+          "allocatedThreadBytes": {
+            "p50": 344592,
+            "p95": 344592,
+            "p99": 344592,
+            "max": 344592
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.051,
+            "max": 3.081
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 26658248,
+          "managedAfterBytesIncludingSetup": 31600440,
+          "gcCollectionsIncludingSetup": [
+            516,
+            332,
+            205
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7704368,
+          "managedAfterBytesIncludingSetup": 7704368,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0012,
+            "p99": 0.0019,
+            "max": 0.0032
+          },
+          "allocatedThreadBytes": {
+            "p50": 3224,
+            "p95": 3224,
+            "p99": 3224,
+            "max": 3224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 7273512,
+          "managedAfterBytesIncludingSetup": 7730120,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0013,
+            "p95": 0.0023,
+            "p99": 0.0081,
+            "max": 0.0141
+          },
+          "allocatedThreadBytes": {
+            "p50": 32024,
+            "p95": 32024,
+            "p99": 32024,
+            "max": 32024
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 20805488,
+          "managedAfterBytesIncludingSetup": 15525040,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0308,
+            "p95": 0.0428,
+            "p99": 0.0517,
+            "max": 0.0531
+          },
+          "allocatedThreadBytes": {
+            "p50": 131096,
+            "p95": 131096,
+            "p99": 131096,
+            "max": 131096
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 19163232,
+          "managedAfterBytesIncludingSetup": 32396192,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7622560,
+          "managedAfterBytesIncludingSetup": 7622560,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0003,
+            "p99": 0.0005,
+            "max": 0.0006
+          },
+          "allocatedThreadBytes": {
+            "p50": 3224,
+            "p95": 3224,
+            "p99": 3224,
+            "max": 3224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 4564608,
+          "managedAfterBytesIncludingSetup": 4884120,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0019,
+            "p95": 0.0023,
+            "p99": 0.0025,
+            "max": 0.0029
+          },
+          "allocatedThreadBytes": {
+            "p50": 32024,
+            "p95": 32024,
+            "p99": 32024,
+            "max": 32024
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 13573976,
+          "managedAfterBytesIncludingSetup": 16773488,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0079,
+            "p95": 0.0388,
+            "p99": 0.2054,
+            "max": 1.3333
+          },
+          "allocatedThreadBytes": {
+            "p50": 131096,
+            "p95": 131096,
+            "p99": 131096,
+            "max": 131096
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.053,
+            "max": 1.313
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 27243968,
+          "managedAfterBytesIncludingSetup": 15722720,
+          "gcCollectionsIncludingSetup": [
+            2,
+            2,
+            2
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13381360,
+          "managedAfterBytesIncludingSetup": 13381360,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 100,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 15060368,
+          "managedAfterBytesIncludingSetup": 15060368,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 1000,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 20621112,
+          "managedAfterBytesIncludingSetup": 20621112,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 4096,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 10508208,
+          "managedAfterBytesIncludingSetup": 10508208,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13299376,
+          "managedAfterBytesIncludingSetup": 13299376,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0035,
+            "p95": 0.0035,
+            "p99": 0.0035,
+            "max": 0.0036
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 12733888,
+          "managedAfterBytesIncludingSetup": 12733888,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0347,
+            "p95": 0.0354,
+            "p99": 0.0414,
+            "max": 0.0516
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 9637616,
+          "managedAfterBytesIncludingSetup": 9637616,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1458,
+            "p95": 0.2435,
+            "p99": 0.2457,
+            "max": 0.2541
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 14710456,
+          "managedAfterBytesIncludingSetup": 14710456,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13217824,
+          "managedAfterBytesIncludingSetup": 13217824,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0012,
+            "p95": 0.0013,
+            "p99": 0.0022,
+            "max": 0.0064
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 10407400,
+          "managedAfterBytesIncludingSetup": 10407400,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0118,
+            "p95": 0.012,
+            "p99": 0.0137,
+            "max": 0.0148
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 18229976,
+          "managedAfterBytesIncludingSetup": 10096664,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0584,
+            "p95": 0.0918,
+            "p99": 0.121,
+            "max": 0.168
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 34285640,
+          "managedAfterBytesIncludingSetup": 34285640,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13135664,
+          "managedAfterBytesIncludingSetup": 13135664,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0048,
+            "p95": 0.0048,
+            "p99": 0.005,
+            "max": 0.0097
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7952688,
+          "managedAfterBytesIncludingSetup": 8076048,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0481,
+            "p95": 0.0762,
+            "p99": 0.0812,
+            "max": 0.128
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 14222224,
+          "managedAfterBytesIncludingSetup": 14353808,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1921,
+            "p95": 0.2016,
+            "p99": 0.2271,
+            "max": 0.2279
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 25252176,
+          "managedAfterBytesIncludingSetup": 25375536,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "logSha256": "33A289287B961AE59BE2C90C042D141A5966523DDCA09C27CBF498923FEB5C34",
+      "cases": 40,
+      "rows": [
+        {
+          "workload": "copy_cold_first",
+          "objects": 0,
+          "ms": {
+            "p50": 0.0003,
+            "p95": 0.0006,
+            "p99": 0.0021,
+            "max": 0.0021
+          },
+          "allocatedThreadBytes": {
+            "p50": 224,
+            "p95": 224,
+            "p99": 224,
+            "max": 224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 1437944,
+          "managedAfterBytesIncludingSetup": 7384896,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0053,
+            "p95": 0.0094,
+            "p99": 0.0115,
+            "max": 0.0138
+          },
+          "allocatedThreadBytes": {
+            "p50": 8928,
+            "p95": 8928,
+            "p99": 8928,
+            "max": 8928
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 3168064,
+          "managedAfterBytesIncludingSetup": 2135872,
+          "gcCollectionsIncludingSetup": [
+            2,
+            1,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0441,
+            "p95": 0.0824,
+            "p99": 0.4775,
+            "max": 0.5972
+          },
+          "allocatedThreadBytes": {
+            "p50": 84528,
+            "p95": 84528,
+            "p99": 84528,
+            "max": 84528
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.425,
+            "max": 0.522
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 16260064,
+          "managedAfterBytesIncludingSetup": 9992984,
+          "gcCollectionsIncludingSetup": [
+            14,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.2456,
+            "p95": 0.3836,
+            "p99": 0.4386,
+            "max": 7.6755
+          },
+          "allocatedThreadBytes": {
+            "p50": 344592,
+            "p95": 344592,
+            "p99": 344592,
+            "max": 344592
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.038,
+            "max": 7.415
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 30623376,
+          "managedAfterBytesIncludingSetup": 23480264,
+          "gcCollectionsIncludingSetup": [
+            60,
+            23,
+            9
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7786336,
+          "managedAfterBytesIncludingSetup": 7786336,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0032,
+            "p95": 0.0034,
+            "p99": 0.0037,
+            "max": 0.0081
+          },
+          "allocatedThreadBytes": {
+            "p50": 8904,
+            "p95": 8904,
+            "p99": 8904,
+            "max": 8904
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 10117712,
+          "managedAfterBytesIncludingSetup": 11020304,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0353,
+            "p95": 0.0389,
+            "p99": 0.0432,
+            "max": 0.0497
+          },
+          "allocatedThreadBytes": {
+            "p50": 84504,
+            "p95": 84504,
+            "p99": 84504,
+            "max": 84504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 8240648,
+          "managedAfterBytesIncludingSetup": 16710560,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.307,
+            "p95": 1.0628,
+            "p99": 4.5186,
+            "max": 9.3631
+          },
+          "allocatedThreadBytes": {
+            "p50": 344568,
+            "p95": 344568,
+            "p99": 347464,
+            "max": 350720
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.192,
+            "max": 0.204
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 23353888,
+          "managedAfterBytesIncludingSetup": 32446528,
+          "gcCollectionsIncludingSetup": [
+            2,
+            2,
+            2
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7868144,
+          "managedAfterBytesIncludingSetup": 7868144,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0032,
+            "p95": 0.0048,
+            "p99": 0.0055,
+            "max": 0.0056
+          },
+          "allocatedThreadBytes": {
+            "p50": 8904,
+            "p95": 8904,
+            "p99": 8904,
+            "max": 8904
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 13489200,
+          "managedAfterBytesIncludingSetup": 14571888,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0367,
+            "p95": 0.0794,
+            "p99": 0.0857,
+            "max": 0.4338
+          },
+          "allocatedThreadBytes": {
+            "p50": 84504,
+            "p95": 84504,
+            "p99": 84504,
+            "max": 84504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.378
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 17536552,
+          "managedAfterBytesIncludingSetup": 13300512,
+          "gcCollectionsIncludingSetup": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.311,
+            "p95": 0.334,
+            "p99": 0.3438,
+            "max": 2.2334
+          },
+          "allocatedThreadBytes": {
+            "p50": 344568,
+            "p95": 344568,
+            "p99": 344568,
+            "max": 350480
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.062,
+            "max": 0.095
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 46771456,
+          "managedAfterBytesIncludingSetup": 29204808,
+          "gcCollectionsIncludingSetup": [
+            2,
+            2,
+            2
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 0,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0003,
+            "p99": 0.0021,
+            "max": 0.0033
+          },
+          "allocatedThreadBytes": {
+            "p50": 224,
+            "p95": 224,
+            "p99": 224,
+            "max": 224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 8541480,
+          "managedAfterBytesIncludingSetup": 13050296,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0063,
+            "p95": 0.0104,
+            "p99": 0.0123,
+            "max": 0.0123
+          },
+          "allocatedThreadBytes": {
+            "p50": 8928,
+            "p95": 8928,
+            "p99": 8928,
+            "max": 8928
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 7913296,
+          "managedAfterBytesIncludingSetup": 5546160,
+          "gcCollectionsIncludingSetup": [
+            12,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0502,
+            "p95": 0.087,
+            "p99": 0.1311,
+            "max": 0.1549
+          },
+          "allocatedThreadBytes": {
+            "p50": 84528,
+            "p95": 84528,
+            "p99": 84528,
+            "max": 84528
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 20202472,
+          "managedAfterBytesIncludingSetup": 7408880,
+          "gcCollectionsIncludingSetup": [
+            230,
+            230,
+            134
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1939,
+            "p95": 0.8469,
+            "p99": 3.2478,
+            "max": 3.276
+          },
+          "allocatedThreadBytes": {
+            "p50": 344592,
+            "p95": 344592,
+            "p99": 344592,
+            "max": 344592
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0.058,
+            "p99": 3.069,
+            "max": 3.091
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 24759472,
+          "managedAfterBytesIncludingSetup": 31575864,
+          "gcCollectionsIncludingSetup": [
+            522,
+            350,
+            210
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7704784,
+          "managedAfterBytesIncludingSetup": 7704784,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0003,
+            "p99": 0.0003,
+            "max": 0.0004
+          },
+          "allocatedThreadBytes": {
+            "p50": 3224,
+            "p95": 3224,
+            "p99": 3224,
+            "max": 3224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 7217856,
+          "managedAfterBytesIncludingSetup": 7670704,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0014,
+            "p95": 0.0025,
+            "p99": 0.004,
+            "max": 0.0121
+          },
+          "allocatedThreadBytes": {
+            "p50": 32024,
+            "p95": 32024,
+            "p99": 32024,
+            "max": 32024
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 20407088,
+          "managedAfterBytesIncludingSetup": 15530856,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0413,
+            "p95": 0.0504,
+            "p99": 0.0937,
+            "max": 1.796
+          },
+          "allocatedThreadBytes": {
+            "p50": 131096,
+            "p95": 131096,
+            "p99": 131096,
+            "max": 131096
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 1.778
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 24527992,
+          "managedAfterBytesIncludingSetup": 24350296,
+          "gcCollectionsIncludingSetup": [
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7622624,
+          "managedAfterBytesIncludingSetup": 7622624,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0003,
+            "p95": 0.0004,
+            "p99": 0.0006,
+            "max": 0.0034
+          },
+          "allocatedThreadBytes": {
+            "p50": 3224,
+            "p95": 3224,
+            "p99": 3224,
+            "max": 3224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 4510424,
+          "managedAfterBytesIncludingSetup": 4829936,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0019,
+            "p95": 0.0023,
+            "p99": 0.0026,
+            "max": 0.0027
+          },
+          "allocatedThreadBytes": {
+            "p50": 32024,
+            "p95": 32024,
+            "p99": 32024,
+            "max": 32024
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 13556000,
+          "managedAfterBytesIncludingSetup": 16755512,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0075,
+            "p95": 0.0483,
+            "p99": 0.0531,
+            "max": 0.1136
+          },
+          "allocatedThreadBytes": {
+            "p50": 131096,
+            "p95": 131096,
+            "p99": 131096,
+            "max": 131096
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.059
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 19373312,
+          "managedAfterBytesIncludingSetup": 26209648,
+          "gcCollectionsIncludingSetup": [
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13377688,
+          "managedAfterBytesIncludingSetup": 13377688,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 100,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 15007872,
+          "managedAfterBytesIncludingSetup": 15007872,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 1000,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 20606000,
+          "managedAfterBytesIncludingSetup": 20606000,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 4096,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 17769704,
+          "managedAfterBytesIncludingSetup": 17769704,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13295528,
+          "managedAfterBytesIncludingSetup": 13295528,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0035,
+            "p95": 0.0036,
+            "p99": 0.0036,
+            "max": 0.0036
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 12681392,
+          "managedAfterBytesIncludingSetup": 12681392,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.035,
+            "p95": 0.0357,
+            "p99": 0.0361,
+            "max": 0.0369
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 9605032,
+          "managedAfterBytesIncludingSetup": 9605032,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1456,
+            "p95": 0.1494,
+            "p99": 0.154,
+            "max": 0.1625
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 32026464,
+          "managedAfterBytesIncludingSetup": 32026464,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13213368,
+          "managedAfterBytesIncludingSetup": 13213368,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.002,
+            "p95": 0.0021,
+            "p99": 0.0021,
+            "max": 0.0021
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 10355008,
+          "managedAfterBytesIncludingSetup": 10355008,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0214,
+            "p95": 0.0232,
+            "p99": 0.0258,
+            "max": 0.0263
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 18297920,
+          "managedAfterBytesIncludingSetup": 9947856,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0521,
+            "p95": 0.0539,
+            "p99": 0.0598,
+            "max": 0.0608
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 27221784,
+          "managedAfterBytesIncludingSetup": 27221784,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13131560,
+          "managedAfterBytesIncludingSetup": 13131560,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0047,
+            "p95": 0.0048,
+            "p99": 0.0048,
+            "max": 0.0048
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7900320,
+          "managedAfterBytesIncludingSetup": 8023680,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0459,
+            "p95": 0.0528,
+            "p99": 0.0627,
+            "max": 0.0645
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 14308152,
+          "managedAfterBytesIncludingSetup": 14439736,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1986,
+            "p95": 0.3406,
+            "p99": 0.3461,
+            "max": 0.3547
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 22388768,
+          "managedAfterBytesIncludingSetup": 22520352,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "logSha256": "27572F0163424348B784046D2160C530CE70FCDB0D32D485E814A1ED7554B89B",
+      "cases": 40,
+      "rows": [
+        {
+          "workload": "copy_cold_first",
+          "objects": 0,
+          "ms": {
+            "p50": 0.0003,
+            "p95": 0.0009,
+            "p99": 0.0019,
+            "max": 0.002
+          },
+          "allocatedThreadBytes": {
+            "p50": 224,
+            "p95": 224,
+            "p99": 224,
+            "max": 224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 1421848,
+          "managedAfterBytesIncludingSetup": 7377616,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0046,
+            "p95": 0.0079,
+            "p99": 0.0097,
+            "max": 0.0113
+          },
+          "allocatedThreadBytes": {
+            "p50": 8928,
+            "p95": 8928,
+            "p99": 8928,
+            "max": 8928
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 3132112,
+          "managedAfterBytesIncludingSetup": 2099992,
+          "gcCollectionsIncludingSetup": [
+            2,
+            1,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0432,
+            "p95": 0.1417,
+            "p99": 0.4821,
+            "max": 0.4932
+          },
+          "allocatedThreadBytes": {
+            "p50": 84528,
+            "p95": 84528,
+            "p99": 84528,
+            "max": 84528
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.42,
+            "max": 0.429
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 16252704,
+          "managedAfterBytesIncludingSetup": 9985624,
+          "gcCollectionsIncludingSetup": [
+            14,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_cold_first",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.2104,
+            "p95": 0.336,
+            "p99": 0.6838,
+            "max": 2.2474
+          },
+          "allocatedThreadBytes": {
+            "p50": 344592,
+            "p95": 344592,
+            "p99": 344592,
+            "max": 347296
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.476,
+            "max": 2.004
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 30630616,
+          "managedAfterBytesIncludingSetup": 24025296,
+          "gcCollectionsIncludingSetup": [
+            60,
+            24,
+            9
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7786480,
+          "managedAfterBytesIncludingSetup": 7786480,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0032,
+            "p95": 0.0035,
+            "p99": 0.0037,
+            "max": 0.0068
+          },
+          "allocatedThreadBytes": {
+            "p50": 8904,
+            "p95": 8904,
+            "p99": 8904,
+            "max": 8904
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 10084224,
+          "managedAfterBytesIncludingSetup": 10986816,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0352,
+            "p95": 0.0517,
+            "p99": 0.0534,
+            "max": 0.056
+          },
+          "allocatedThreadBytes": {
+            "p50": 84504,
+            "p95": 84504,
+            "p99": 84504,
+            "max": 84504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 8233288,
+          "managedAfterBytesIncludingSetup": 16703200,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_component_membership",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1686,
+            "p95": 0.2471,
+            "p99": 0.3427,
+            "max": 0.4601
+          },
+          "allocatedThreadBytes": {
+            "p50": 344568,
+            "p95": 344568,
+            "p99": 352448,
+            "max": 352504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0.037,
+            "p99": 0.092,
+            "max": 0.093
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 41716008,
+          "managedAfterBytesIncludingSetup": 18543432,
+          "gcCollectionsIncludingSetup": [
+            4,
+            4,
+            4
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7868640,
+          "managedAfterBytesIncludingSetup": 7868640,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0032,
+            "p95": 0.0034,
+            "p99": 0.0038,
+            "max": 0.0042
+          },
+          "allocatedThreadBytes": {
+            "p50": 8904,
+            "p95": 8904,
+            "p99": 8904,
+            "max": 8904
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 13455688,
+          "managedAfterBytesIncludingSetup": 14538352,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0552,
+            "p95": 0.0583,
+            "p99": 0.0637,
+            "max": 0.5686
+          },
+          "allocatedThreadBytes": {
+            "p50": 84504,
+            "p95": 84504,
+            "p99": 84504,
+            "max": 84504
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.507
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 17530656,
+          "managedAfterBytesIncludingSetup": 13293152,
+          "gcCollectionsIncludingSetup": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_recreate",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.2192,
+            "p95": 0.321,
+            "p99": 0.3317,
+            "max": 0.336
+          },
+          "allocatedThreadBytes": {
+            "p50": 344568,
+            "p95": 344568,
+            "p99": 344568,
+            "max": 344568
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 19442464,
+          "managedAfterBytesIncludingSetup": 54103224,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 0,
+          "ms": {
+            "p50": 0.0001,
+            "p95": 0.0002,
+            "p99": 0.0023,
+            "max": 0.0034
+          },
+          "allocatedThreadBytes": {
+            "p50": 224,
+            "p95": 224,
+            "p99": 224,
+            "max": 224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 8538976,
+          "managedAfterBytesIncludingSetup": 13047792,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0064,
+            "p95": 0.01,
+            "p99": 0.0115,
+            "max": 0.0143
+          },
+          "allocatedThreadBytes": {
+            "p50": 8928,
+            "p95": 8928,
+            "p99": 8928,
+            "max": 8928
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 3809360,
+          "managedAfterBytesIncludingSetup": 5122760,
+          "gcCollectionsIncludingSetup": [
+            12,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0499,
+            "p95": 0.0948,
+            "p99": 0.1717,
+            "max": 0.6238
+          },
+          "allocatedThreadBytes": {
+            "p50": 84528,
+            "p95": 84528,
+            "p99": 84528,
+            "max": 84528
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.55
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 20195240,
+          "managedAfterBytesIncludingSetup": 7415752,
+          "gcCollectionsIncludingSetup": [
+            230,
+            229,
+            134
+          ]
+        },
+        {
+          "workload": "copy_restore",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1919,
+            "p95": 0.4602,
+            "p99": 0.6965,
+            "max": 3.2962
+          },
+          "allocatedThreadBytes": {
+            "p50": 344592,
+            "p95": 344592,
+            "p99": 344592,
+            "max": 344592
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0.064,
+            "max": 3.037
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 27201720,
+          "managedAfterBytesIncludingSetup": 41888040,
+          "gcCollectionsIncludingSetup": [
+            518,
+            339,
+            204
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7704320,
+          "managedAfterBytesIncludingSetup": 7704320,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0005,
+            "p99": 0.0006,
+            "max": 0.0018
+          },
+          "allocatedThreadBytes": {
+            "p50": 3224,
+            "p95": 3224,
+            "p99": 3224,
+            "max": 3224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 7184368,
+          "managedAfterBytesIncludingSetup": 7637216,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0013,
+            "p95": 0.0028,
+            "p99": 0.0049,
+            "max": 0.0105
+          },
+          "allocatedThreadBytes": {
+            "p50": 32024,
+            "p95": 32024,
+            "p99": 32024,
+            "max": 32024
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 20397648,
+          "managedAfterBytesIncludingSetup": 15473904,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_value_change",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0425,
+            "p95": 0.0715,
+            "p99": 0.0865,
+            "max": 0.0905
+          },
+          "allocatedThreadBytes": {
+            "p50": 131096,
+            "p95": 131096,
+            "p99": 131096,
+            "max": 131096
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 48526000,
+          "managedAfterBytesIncludingSetup": 61767184,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7622512,
+          "managedAfterBytesIncludingSetup": 7622512,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0002,
+            "p95": 0.0004,
+            "p99": 0.0005,
+            "max": 0.0006
+          },
+          "allocatedThreadBytes": {
+            "p50": 3224,
+            "p95": 3224,
+            "p99": 3224,
+            "max": 3224
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 3200,
+          "managedBeforeBytesIncludingSetup": 4476936,
+          "managedAfterBytesIncludingSetup": 4796448,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0019,
+            "p95": 0.0024,
+            "p99": 0.0077,
+            "max": 0.0081
+          },
+          "allocatedThreadBytes": {
+            "p50": 32024,
+            "p95": 32024,
+            "p99": 32024,
+            "max": 32024
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 32000,
+          "managedBeforeBytesIncludingSetup": 13547376,
+          "managedAfterBytesIncludingSetup": 16746888,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "copy_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0069,
+            "p95": 0.0409,
+            "p99": 0.0587,
+            "max": 0.0915
+          },
+          "allocatedThreadBytes": {
+            "p50": 131096,
+            "p95": 131096,
+            "p99": 131096,
+            "max": 131096
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0.046
+          },
+          "retainedIdentityPayloadBytes": 131072,
+          "managedBeforeBytesIncludingSetup": 20309976,
+          "managedAfterBytesIncludingSetup": 30023432,
+          "gcCollectionsIncludingSetup": [
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13383152,
+          "managedAfterBytesIncludingSetup": 13383152,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 100,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 15007104,
+          "managedAfterBytesIncludingSetup": 15007104,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 1000,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 20593888,
+          "managedAfterBytesIncludingSetup": 20593888,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_empty_pool",
+          "objects": 4096,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 10476608,
+          "managedAfterBytesIncludingSetup": 10476608,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13301168,
+          "managedAfterBytesIncludingSetup": 13301168,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0035,
+            "p95": 0.0036,
+            "p99": 0.0036,
+            "max": 0.0036
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 12680624,
+          "managedAfterBytesIncludingSetup": 12680624,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.035,
+            "p95": 0.0357,
+            "p99": 0.0369,
+            "max": 0.037
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 9597864,
+          "managedAfterBytesIncludingSetup": 9597864,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_none_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1462,
+            "p95": 0.2485,
+            "p99": 0.255,
+            "max": 0.2675
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 14678360,
+          "managedAfterBytesIncludingSetup": 14678360,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13219616,
+          "managedAfterBytesIncludingSetup": 13219616,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0019,
+            "p95": 0.0021,
+            "p99": 0.0023,
+            "max": 0.006
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 10354208,
+          "managedAfterBytesIncludingSetup": 10354208,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0119,
+            "p95": 0.0172,
+            "p99": 0.0204,
+            "max": 0.025
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 18296240,
+          "managedAfterBytesIncludingSetup": 9933496,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_three_warm",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.0529,
+            "p95": 0.0554,
+            "p99": 0.0715,
+            "max": 0.0761
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 34639728,
+          "managedAfterBytesIncludingSetup": 34639728,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 0,
+          "ms": {
+            "p50": 0,
+            "p95": 0.0001,
+            "p99": 0.0001,
+            "max": 0.0001
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 13137456,
+          "managedAfterBytesIncludingSetup": 13137456,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 100,
+          "ms": {
+            "p50": 0.0048,
+            "p95": 0.0049,
+            "p99": 0.0063,
+            "max": 0.0082
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 7899496,
+          "managedAfterBytesIncludingSetup": 8022856,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 1000,
+          "ms": {
+            "p50": 0.0466,
+            "p95": 0.0482,
+            "p99": 0.0597,
+            "max": 0.0634
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 14299880,
+          "managedAfterBytesIncludingSetup": 14431464,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "workload": "query_value_change",
+          "objects": 4096,
+          "ms": {
+            "p50": 0.1934,
+            "p95": 0.2053,
+            "p99": 0.2661,
+            "max": 0.3462
+          },
+          "allocatedThreadBytes": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "runtimeGcPauseMs": {
+            "p50": 0,
+            "p95": 0,
+            "p99": 0,
+            "max": 0
+          },
+          "retainedIdentityPayloadBytes": 0,
+          "managedBeforeBytesIncludingSetup": 27500232,
+          "managedAfterBytesIncludingSetup": 27631816,
+          "gcCollectionsIncludingSetup": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "formalPerformanceAccepted": false,
+  "heapResidencyMeasured": false,
+  "deployed": false
+}

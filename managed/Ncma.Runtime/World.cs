@@ -92,7 +92,7 @@ public sealed partial class World
     public IReadOnlyList<Entity> GetEntities()
     {
         VerifyAccess();
-        return _objects.Values.OrderBy(e => e.CreationOrdinal).Select(IdentityOf).ToArray();
+        return CopyEntitiesInCreationOrder();
     }
 
     public WorldSnapshot CaptureSnapshot()
