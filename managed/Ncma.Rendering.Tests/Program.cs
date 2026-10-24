@@ -52,7 +52,7 @@ internal static unsafe partial class Program
         Check(edit.Invoke(settings,permission).Changed,"Configure via Core.");
         byte[] saved=owner.Document.CaptureBytes();
         var copy=new SceneDocument("Copy",RenderConfiguration.CreateRegistry());copy.RestoreBytes(saved);
-        Check(copy.World.Get<RenderConfiguration>(copy.World.FindEntity(objectId))==config,"Persisted configuration value/UUID.");
+        Check(copy.GetComponent<RenderConfiguration>(objectId)==config,"Persisted configuration value/UUID.");
         using var service=new RenderPipelineService(renderer);service.Configure(config,256,256);
         var generation=service.Generation;service.Configure(config,256,256);Check(service.Generation==generation,"Unchanged plan not reused.");
         RenderingEditorAdapter.RegisterInspections(edit,service,renderer);
@@ -320,6 +320,12 @@ internal static unsafe partial class Program
         if(args.Length==4 && args[0]=="--graph-root-player-child")
             return playerRunOwner0.Run(Ncma.Player.App.PlayerOptions.Parse(["--project",args[2],"--ticks","8","--report",args[3]]),pluginRoot:args[1],visible:false).ExitCode;
         try {
+            if (args.Length == 2 && args[0] == "--report-serialization-tests") return ReportSerializationTests(args[1]);
+            if (args.Length == 3 && args[0] == "--report-serialization-file") return ReportSerializationTests(args[2], args[1]);
+            if (args.Length == 3 && args[0] == "--resource-ledger-tests") return ResourceLedgerTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--renderer-memory-tests") return RendererMemoryTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--memory-operation-cost-tests") return MemoryObservationCostTests(args[1], args[2]);
+            if (args.Length == 3 && args[0] == "--renderer-memory-unsupported-tests") return RendererMemoryTests(args[1], args[2],true);
             if (args.Length == 3 && args[0] == "--scene-candidate-safety-tests") return SceneCandidateSafetyTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--scene-exchange-safety-tests") return SceneExchangeSafetyTests(args[1], args[2]);
             if (args.Length == 3 && args[0] == "--scene-construction-safety-tests") return SceneConstructionSafetyTests(args[1], args[2]);

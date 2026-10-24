@@ -31,26 +31,26 @@ internal static unsafe partial class Program
         SceneDocument Document(int count,bool root) {
             var d=new SceneDocument("Interruptions",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
             for(int i=0;i<count;i++) {
-                global::Ncma.Runtime.Entity o=d.World.CreateEntity("Actor");d.World.Set(o, TransformData.Identity with{Position=new(0,0,i*3)});
-                d.World.Set(o, new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
-                d.World.Set(o, new AnimatorData(graph.AssetId,graph.SkeletonId));
-                if(root){d.World.Set(o, new RootMotionData(0));d.World.Set(o, CharacterData.Default with{Controlled=false});}
+                Guid o=d.CreateObject("Actor");d.SetComponent(o, TransformData.Identity with{Position=new(0,0,i*3)});
+                d.SetComponent(o, new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
+                d.SetComponent(o, new AnimatorData(graph.AssetId,graph.SkeletonId));
+                if(root){d.SetComponent(o, new RootMotionData(0));d.SetComponent(o, CharacterData.Default with{Controlled=false});}
             }
-            if(root){global::Ncma.Runtime.Entity ground=d.World.CreateEntity("Ground");d.World.Set(ground, TransformData.Identity with{Position=new(0,-.2f,0)});d.World.Set(ground, new BoxColliderData(100,.2f,100,1000,1,false));}
-            global::Ncma.Runtime.Entity camera=d.World.CreateEntity("Camera");d.World.Set(camera, TransformData.Identity with{Position=new(0,0,5)});d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
-            global::Ncma.Runtime.Entity light=d.World.CreateEntity("Light");d.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.3f,-.5f,0)});d.World.Set(light, DirectionalLightData.Default);return d;
+            if(root){Guid ground=d.CreateObject("Ground");d.SetComponent(ground, TransformData.Identity with{Position=new(0,-.2f,0)});d.SetComponent(ground, new BoxColliderData(100,.2f,100,1000,1,false));}
+            Guid camera=d.CreateObject("Camera");d.SetComponent(camera, TransformData.Identity with{Position=new(0,0,5)});d.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
+            Guid light=d.CreateObject("Light");d.SetComponent(light, TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.3f,-.5f,0)});d.SetComponent(light, DirectionalLightData.Default);return d;
         }
         using var physics=new PhysicsService(Path.Combine(native,"m2/plugins"),characterSupport:true);
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
         double maxError=0;
         foreach(bool root in new[]{false,true}) {
-            var d=Document(1,root);Guid id=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<AnimatorData>(o))),camera=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<CameraData>(o)));
+            var d=Document(1,root);Guid id=d.GetObjectIds().Single(o=>d.HasComponent<AnimatorData>(o)),camera=d.GetObjectIds().Single(o=>d.HasComponent<CameraData>(o));
             using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
-            using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
+            using var play=new PlaySession(d.BakeRuntime(d.Revision).Image.Instantiate(d.Components),FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
             using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
             play.Start(_=>throw new Exception("No behaviours"));play.Pause();
             try {
-                using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
+                using var cache=new RenderResourceCache(renderer);using var scene=new SceneRenderSession(renderer,cache,play.Scene.World);scene.Prepare(assets,play.Scene.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime.Characters,animators:runtime.Animators);
                 using var target=renderer.CreateViewTarget(256,256);var captured=new byte[4*48];var frozen=new AnimationLocalTransform[2];
                 float expectedX=0,expectedYaw=.2f;
                 for(int step=0;step<128;step++) {
@@ -88,7 +88,7 @@ internal static unsafe partial class Program
             }finally{play.Stop();}
             Check(kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&renderer.SkinStats.Meshes==0&&physics.Inspect().Worlds==0,"Interrupted resources close baseline");
         }
-        var previewDocument=Document(1,false);var previewId=previewDocument.World.GetUuid(previewDocument.World.GetEntities().Single(o=>previewDocument.World.Has<AnimatorData>(o)));
+        var previewDocument=Document(1,false);var previewId=previewDocument.GetObjectIds().Single(o=>previewDocument.HasComponent<AnimatorData>(o));
         using(var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,previewDocument.CaptureSnapshot(),true)) {
             var program=((RuntimeAnimationGraphAsset)assets.Assets.Require(graph.AssetId,AssetKind.AnimationGraph)).PrepareProgram(assets.Assets);
             var source=GraphPoseSnapshotPreparation.Prepare(program,assets.Assets);var instance=new AnimationGraphInstance(program,new(Guid.NewGuid(),Guid.NewGuid(),0),source);
@@ -101,19 +101,20 @@ internal static unsafe partial class Program
             var invalid=(AnimationPoseInstruction[])rows.Clone();invalid[^1]=invalid[^1] with{Weight=float.NaN};Reject(()=>source.Evaluate(invalid,instance.Frame.Output,locals,instance.Frame.FrozenPoseGeneration,untouched));
             Check(untouched.All(v=>v.Position==new Vector3(7,8,9)),"Rejected complete pose must not copy partial outputs");
             Reject(()=>source.Evaluate(rows,instance.Frame.Output,locals,instance.Frame.FrozenPoseGeneration+1,untouched));
-            byte[] original=previewDocument.CaptureBytes();
-            using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,previewDocument.World))using(var target=renderer.CreateViewTarget(256,256)) {scene.Prepare(assets,previewDocument.CaptureSnapshot(),poseKernel:kernel);
+            byte[] original=previewDocument.CaptureBytes();var previewRuntime=BakeRenderScene(previewDocument);
+            byte[] runtimeBefore=previewRuntime.CaptureCheckpoint().CopyBytes();
+            using(var cache=new RenderResourceCache(renderer))using(var scene=new SceneRenderSession(renderer,cache,previewRuntime.World))using(var target=renderer.CreateViewTarget(256,256)) {scene.Prepare(assets,previewRuntime.CaptureSnapshot(),poseKernel:kernel);
                 scene.Animation!.ControlPreview(previewId,parameter.Id,AnimationParameterKind.Bool,1);scene.Animation.AdvancePreview(1d/60);
                 scene.Animation.ControlPreview(previewId,parameter.Id,AnimationParameterKind.Bool,0);scene.Animation.AdvancePreview(1d/60);
-                Check(scene.Animation.PreviewFrame(previewId).FrozenPoseGeneration==1&&previewDocument.World.Tick==0,"Independent preview interruption uses no Play/World tick");
-                Check(scene.Submit(frame++,256,256,previewDocument.World.GetUuid(previewDocument.World.GetEntities().Single(o=>previewDocument.World.Has<CameraData>(o))),target:target),"Independent interrupted preview native submit");renderer.Present();
-                Check(original.SequenceEqual(previewDocument.CaptureBytes()),"Preview leaves authoring document/history intact");
+                Check(scene.Animation.PreviewFrame(previewId).FrozenPoseGeneration==1&&previewRuntime.World.Tick==0,"Independent preview interruption uses no Play/World tick");
+                Check(scene.Submit(frame++,256,256,previewDocument.GetObjectIds().Single(o=>previewDocument.HasComponent<CameraData>(o)),target:target),"Independent interrupted preview native submit");renderer.Present();
+                Check(original.SequenceEqual(previewDocument.CaptureBytes())&&runtimeBefore.SequenceEqual(previewRuntime.CaptureCheckpoint().CopyBytes()),"Preview leaves authoring and runtime ECS values intact");
             }
             Check(kernel.Statistics.Rigs==0&&renderer.SkinStats.Meshes==0,"Independent preview resource drain");
         }
         foreach(int count in new[]{0,1,8,32}) {
-            var d=Document(count,false);var ids=d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o)).Select(o=>d.World.GetUuid(o)).ToArray();
-            using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
+            var d=Document(count,false);var ids=d.GetObjectIds().Where(o=>d.HasComponent<AnimatorData>(o)).ToArray();
+            using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);using var play=new PlaySession(d.BakeRuntime(d.Revision).Image.Instantiate(d.Components),FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps);
             using var runtime=ScenePlayRuntime.Compose(play,physics,assets);play.Start(_=>throw new Exception("No behaviours"));
             try {
                 foreach(Guid id in ids)runtime.Animators!.SetBool(id,parameter.Id,true);Check(play.AdvanceFixedStep().State==PlayState.Running,"Many interruption first quantum");
@@ -123,8 +124,8 @@ internal static unsafe partial class Program
                 Check(kernel.Statistics.Rigs==0,"Headless interruptions must not create native pose/GPU");
             }finally{play.Stop();}
         }
-        var failedDocument=Document(1,false);var failedId=failedDocument.World.GetUuid(failedDocument.World.GetEntities().Single(o=>failedDocument.World.Has<AnimatorData>(o)));
-        using(var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,failedDocument.CaptureSnapshot(),true))using(var play=new PlaySession(failedDocument,FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps))using(var runtime=ScenePlayRuntime.Compose(play,physics,assets)) {
+        var failedDocument=Document(1,false);var failedId=failedDocument.GetObjectIds().Single(o=>failedDocument.HasComponent<AnimatorData>(o));
+        using(var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,failedDocument.CaptureSnapshot(),true))using(var play=new PlaySession(failedDocument.BakeRuntime(failedDocument.Revision).Image.Instantiate(failedDocument.Components),FrameTimePolicy.Strict,fixedDeltaSeconds:.1,advanceMode:PlayAdvanceMode.FixedSteps))using(var runtime=ScenePlayRuntime.Compose(play,physics,assets)) {
             bool fail=false;play.AddSystem(new GraphFailure(_=>{if(fail)throw new InvalidOperationException("Prepared interruption must not publish");}));play.Start(_=>throw new Exception("No behaviours"));
             try{runtime.Animators!.SetBool(failedId,parameter.Id,true);Check(play.AdvanceFixedStep().State==PlayState.Running,"Failed cache baseline");runtime.Animators.SetBool(failedId,parameter.Id,false);fail=true;
                 Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==1,"Failed interruption quantum preserves committed tick");Reject(()=>runtime.Animators.CopyFrozenPose(failedId,1,new AnimationLocalTransform[2]));

@@ -14,8 +14,8 @@ internal static unsafe partial class Program
     {
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);int cases=0;
         void Pass(bool ok,string label){Check(ok,"M7.6 pipeline startup: "+label);cases++;}
-        plugins=Path.GetFullPath(plugins);var fixture=new SceneGpuFixture(output);var(document,_,_,_)=fixture.Scene();
-        var snapshot=document.CaptureSnapshot();var original=document.CaptureBytes();
+        plugins=Path.GetFullPath(plugins);var fixture=new SceneGpuFixture(output);var(authoring,_,_,_)=fixture.Scene();var authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
+        var snapshot=document.CaptureSnapshot();var original=document.CaptureCheckpoint().CopyBytes();
         FieldInfo Field(object owner,string name)=>owner.GetType().GetField(name,BindingFlags.Instance|BindingFlags.NonPublic)??throw new Exception("Missing owner field "+name);
         using(var loader=new PluginLoader()) {
             loader.Load(plugins,Specs().Take(2).ToArray());
@@ -55,7 +55,7 @@ internal static unsafe partial class Program
             startup.Dispose();Pass(!startup.HasRetainedProbe&&renderer.PipelineStats.Pipelines==0,"explicit no-post close retry drains retained probe");
             Reject(()=>Prepare(()=>true));
             using var fresh=new ScenePipelineStartup(renderer);fresh.Prepare(document.World,snapshot,Factory,null,()=>true);
-            Pass(!fresh.HasRetainedProbe&&renderer.PipelineStats.Pipelines==0&&original.SequenceEqual(document.CaptureBytes())&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"fresh owner retains complete validation and immutable World/API0/0");
+            Pass(!fresh.HasRetainedProbe&&renderer.PipelineStats.Pipelines==0&&original.SequenceEqual(document.CaptureCheckpoint().CopyBytes())&&authoringBytes.SequenceEqual(authoring.CaptureBytes())&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"fresh owner retains complete validation and immutable World/API0/0");
         }
         foreach(bool editorHost in new[]{false,true}) {
             IDisposable host;

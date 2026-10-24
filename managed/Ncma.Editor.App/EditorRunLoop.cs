@@ -26,12 +26,12 @@ internal static class EditorRunLoop
         public bool IsReady=>_restored&&owner.GraphicsPhase==EditorGraphicsPhase.Ready;
     }
     internal static ulong Run(ApplicationLifetime lifetime,CandidatePresentation presentation,IFrameClock clock,ulong maxFrames,
-        Func<EditorRecoveryRequest,bool>? confirm=null)
+        Func<EditorRecoveryRequest,bool>? confirm=null,LoopCostCapture? costs=null,FramePacer? pacer=null)
     {
         if(maxFrames==0)throw new ArgumentException("Positive frame budget required.");
         ulong start=lifetime.LastFrameId;
         while(lifetime.LastFrameId-start<maxFrames) {
-            try{lifetime.Run(clock,presentation,maxFrames-(lifetime.LastFrameId-start));return lifetime.LastFrameId-start;}
+            try{lifetime.Run(clock,presentation,maxFrames-(lifetime.LastFrameId-start),costs,pacer);return lifetime.LastFrameId-start;}
             catch(Exception error)when(error is not OutOfMemoryException) {
                 if(confirm is null||!TryRestore(lifetime,presentation,confirm))throw;
             }

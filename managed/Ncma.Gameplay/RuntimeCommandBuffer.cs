@@ -23,7 +23,7 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
     internal void Begin()
     {
         _attempt = checked(_attempt + 1);
-        var document = session.Document;
+        var document = session.Scene;
         if (_committedBindings is null || _bindingRevision != document.Revision || _bindingWorld != document.World.Identity)
             _committedBindings = document.CopyRuntimeBindings();
         _bindings = _committedBindings; _bindingsShared = true;
@@ -32,7 +32,7 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
     internal Dictionary<Guid, BehaviourBindingData[]> Bindings => _bindings;
     private CommandToken Queue(Guid target, Func<int> measure, Action stage, bool changesBindings = false)
     {
-        session.Document.VerifyAccess(); session.Document.World.VerifyWriteAccess();
+        session.Scene.VerifyAccess(); session.Scene.World.VerifyWriteAccess();
         if (!_active) throw new InvalidOperationException("Runtime commands require a fixed step.");
         try
         {
@@ -45,7 +45,7 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
             var token = new CommandToken(session.SessionId, _generation, ++_sequence);
             _pending.Add((token, target)); _bytes += bytes; return token;
         }
-        catch (Exception error) { session.Document.World.RejectStep(error); throw; }
+        catch (Exception error) { session.Scene.World.RejectStep(error); throw; }
     }
     public PendingEntity SpawnEmpty(string name, Guid? objectId = null)
     {
@@ -53,22 +53,22 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
         var token = Queue(id, () => Encoding.UTF8.GetByteCount(name), () =>
         {
             if (!_created.Add(id)) throw new ArgumentException("Duplicate reserved UUID.");
-            session.Document.World.StageCreate(id, name); _bindings.Add(id, []);
+            session.Scene.World.StageCreate(id, name); _bindings.Add(id, []);
         }, changesBindings: true);
-        try { return new(id, token, _attempt, session.Document.World.CandidateEntity(id)); }
-        catch (Exception error) { session.Document.World.RejectStep(error); throw; }
+        try { return new(id, token, _attempt, session.Scene.World.CandidateEntity(id)); }
+        catch (Exception error) { session.Scene.World.RejectStep(error); throw; }
     }
     public CommandToken Destroy(Guid id) => Queue(id, () => 16, () =>
-    { session.Document.World.StageDestroy(id); _bindings.Remove(id); }, changesBindings: true);
-    public CommandToken Rename(Guid id, string name) => Queue(id, () => Encoding.UTF8.GetByteCount(name), () => session.Document.World.StageRename(id, name));
+    { session.Scene.World.StageDestroy(id); _bindings.Remove(id); }, changesBindings: true);
+    public CommandToken Rename(Guid id, string name) => Queue(id, () => Encoding.UTF8.GetByteCount(name), () => session.Scene.World.StageRename(id, name));
     public CommandToken AddComponent(Guid id, ComponentSnapshot component) => Queue(id, () =>
         component is null ? 0 : Encoding.UTF8.GetByteCount(component.Data.GetRawText()) + 128, () =>
-        session.Document.World.StageAdd(id, component ?? throw new ArgumentNullException(nameof(component))));
-    public CommandToken RemoveComponent(Guid id, string typeId) => Queue(id, () => Encoding.UTF8.GetByteCount(typeId), () => session.Document.World.StageRemove(id, typeId));
+        session.Scene.World.StageAdd(id, component ?? throw new ArgumentNullException(nameof(component))));
+    public CommandToken RemoveComponent(Guid id, string typeId) => Queue(id, () => Encoding.UTF8.GetByteCount(typeId), () => session.Scene.World.StageRemove(id, typeId));
     public CommandToken AttachBehaviour(Guid id, RuntimeBinding binding) => Queue(id, () =>
         binding is null ? 0 : JsonSerializer.SerializeToUtf8Bytes(binding).Length, () =>
     {
-        session.Document.World.RequireCommandTarget(id); ArgumentNullException.ThrowIfNull(binding);
+        session.Scene.World.RequireCommandTarget(id); ArgumentNullException.ThrowIfNull(binding);
         if (_bindings.Values.SelectMany(b => b).Any(b => b.Id == binding.Id)) throw new ArgumentException("Duplicate binding UUID.");
         if (binding.Exports is null) throw new ArgumentException("Missing Exports.");
         var value = new BehaviourBindingData(binding.Id, binding.TypeName, binding.Enabled,
@@ -77,13 +77,13 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
     }, changesBindings: true);
     public CommandToken RemoveBehaviour(Guid id, Guid bindingId) => Queue(id, () => 32, () =>
     {
-        session.Document.World.RequireCommandTarget(id); var old = _bindings.GetValueOrDefault(id, []);
+        session.Scene.World.RequireCommandTarget(id); var old = _bindings.GetValueOrDefault(id, []);
         if (!old.Any(b => b.Id == bindingId)) throw new ArgumentException("Unknown binding.");
         _bindings[id] = old.Where(b => b.Id != bindingId).ToArray();
     }, changesBindings: true);
     public CommandToken SetBehaviourEnabled(Guid id, Guid bindingId, bool enabled) => Queue(id, () => 33, () =>
     {
-        session.Document.World.RequireCommandTarget(id); var old = _bindings.GetValueOrDefault(id, []);
+        session.Scene.World.RequireCommandTarget(id); var old = _bindings.GetValueOrDefault(id, []);
         if (!old.Any(b => b.Id == bindingId)) throw new ArgumentException("Unknown binding.");
         _bindings[id] = old.Select(b => b.Id == bindingId ? b with { Enabled = enabled } : b).ToArray();
     }, changesBindings: true);
@@ -91,11 +91,11 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
     {
         ulong tick = checked(session.Tick + 1);
         var values = _receipts.Values.OrderBy(r => r.Token.Sequence)
-            .Where(r => r.WorldIdentity == session.Document.World.Identity)
+            .Where(r => r.WorldIdentity == session.Scene.World.Identity)
             .Concat(_pending.Select(p => {
                 bool alive = candidate.TryResolve(p.Target, out var entity);
                 return new CommandReceipt(p.Token, p.Target, tick, alive ? "committed" : "removed",
-                    alive ? entity : null, session.Document.World.Identity);
+                    alive ? entity : null, session.Scene.World.Identity);
             }))
             .TakeLast(Capacity).ToDictionary(r => r.Token);
         // Other trusted runtime producers may delete an entity without using this command owner.
@@ -106,27 +106,27 @@ internal sealed partial class RuntimeCommandBuffer(PlaySession session) : IRunti
         // Rare noncanonical strings follow the same metadata-only normalization at the next
         // Begin that the old full-document copy performed; stable normal metadata stays shared.
         bool needsNormalization = !ReferenceEquals(bindings, _committedBindings) &&
-            SceneDocument.NeedsRuntimeBindingNormalization(bindings.Values.SelectMany(b => b));
+            RuntimeSceneInstance.NeedsRuntimeBindingNormalization(bindings.Values.SelectMany(b => b));
         return () => {
             _receipts = values; _pending.Clear(); _active = false;
             _committedBindings = needsNormalization ? null : bindings;
-            _bindingRevision = session.Document.Revision; _bindingWorld = session.Document.World.Identity;
+            _bindingRevision = session.Scene.Revision; _bindingWorld = session.Scene.World.Identity;
         };
     }
     public CommandReceipt GetReceipt(CommandToken token)
     {
-        session.Document.VerifyAccess();
-        if (token.SessionId != session.SessionId || token.Generation != _generation || !_receipts.TryGetValue(token, out var result) || result.WorldIdentity != session.Document.World.Identity)
+        session.Scene.VerifyAccess();
+        if (token.SessionId != session.SessionId || token.Generation != _generation || !_receipts.TryGetValue(token, out var result) || result.WorldIdentity != session.Scene.World.Identity)
             throw new ArgumentException("Unknown, pending, expired or stale command receipt.");
         return result;
     }
     public Entity Resolve(PendingEntity pending)
     {
-        session.Document.VerifyAccess(); ArgumentNullException.ThrowIfNull(pending);
+        session.Scene.VerifyAccess(); ArgumentNullException.ThrowIfNull(pending);
         var receipt = GetReceipt(pending.Token);
         if (receipt.ObjectId != pending.ObjectId || receipt.Entity != pending.Entity || receipt.Disposition != "committed")
             throw new ArgumentException("Pending creation did not survive a successful commit.");
-        return session.Document.World.Resolve(pending.Entity);
+        return session.Scene.World.Resolve(pending.Entity);
     }
     internal void Abort() { _pending.Clear(); _bindings = []; _created.Clear(); _active = false; _bytes = 0; }
     internal void Reset() { Abort(); _committedBindings = null; _receipts.Clear(); _generation = checked(_generation + 1); }

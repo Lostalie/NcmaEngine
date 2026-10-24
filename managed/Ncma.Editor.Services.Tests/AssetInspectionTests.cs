@@ -104,9 +104,9 @@ internal static class AssetInspectionTests
             using var owner = new EditorSessionOwner("Batch"); var edit = owner.Edit!; var descriptors = AssetInspectionSchemas.Descriptors(); int count = edit.Describe().Count;
             Reject(() => edit.RegisterInspections([(descriptors[0], _ => new { }), (descriptors[1] with { Risk = MutationRisk.Reversible }, _ => new { })])); Check(edit.Describe().Count == count);
             Reject(() => edit.RegisterInspections([(descriptors[0], _ => new { }), (descriptors[0], _ => new { })])); Check(edit.Describe().Count == count);
-            edit.RegisterInspection(descriptors[2], _ => { owner.Document.World.CreateEntity("Forbidden"); return new { }; });
+            edit.RegisterInspection(descriptors[2], _ => { owner.Document.CreateObject("Forbidden"); return new { }; });
             var result = edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, descriptors[2].Name, JsonSerializer.SerializeToElement(new { })));
-            Check(result.Status == "error" && owner.Document.World.Count == 0);
+            Check(result.Status == "error" && owner.Document.ObjectCount == 0);
         });
         yield return ("M3.8 live paired IPC reads approved metadata, revoked scope blocks repeat IDs", () => {
             using var f = new Fixture(); f.Owner.ConfigureEndpoint(true, output); var endpoint = f.Owner.Endpoint!;

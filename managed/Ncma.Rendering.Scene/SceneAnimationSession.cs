@@ -55,7 +55,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
         ArgumentNullException.ThrowIfNull(world);ArgumentNullException.ThrowIfNull(kernel);
         _world=world;WorldId=world.Identity;_kernel=kernel;Diagnostics=_diagnostics.AsReadOnly();
     }
-    public void Prepare(PreparedSceneAssetLease prepared,SceneDocumentSnapshot startup,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false)
+    public void Prepare(PreparedSceneAssetLease prepared,ISceneContent startup,IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false)
     {
         _lifetime.Begin();
         try {
@@ -120,7 +120,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     }
     public void Attach(PlaySession play)
     {
-        Verify();ArgumentNullException.ThrowIfNull(play);if(_play is not null||play.Document.World!=_world)throw new ArgumentException("Attach animation at its prepared committed Play boundary.");
+        Verify();ArgumentNullException.ThrowIfNull(play);if(_play is not null||play.Scene.World!=_world)throw new ArgumentException("Attach animation at its prepared committed Play boundary.");
         if (_characters.Any(c=>c.GraphPose is not null) && _animators is null) throw new ArgumentException("Graph presentation requires the shared committed Animator runtime.");
         play.AddCommittedObserver(this);_play=play;
         if(_characters.Any(c=>_world.Has<RootMotionData>(c.Object)) && _rootMotion is null)throw new ArgumentException("Root motion Play presentation requires its sole committed motion source.");
@@ -133,7 +133,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
     }
     public void ResynchronizeAfterReload(PlaySession play)
     {
-        Verify();if(_play!=play||play.Document.World!=_world)throw new ArgumentException("Reload must retain the original animation World and leases.");
+        Verify();if(_play!=play||play.Scene.World!=_world)throw new ArgumentException("Reload must retain the original animation World and leases.");
         // Reload changes Play identity but not its successful tick count. Retain elapsed clocks/resources;
         // reconcile only explicitly changed persistent settings at this trusted committed boundary.
         foreach(var c in _characters)if(Live(c)&&_world.Has<ClipPlaybackData>(c.Object)) {

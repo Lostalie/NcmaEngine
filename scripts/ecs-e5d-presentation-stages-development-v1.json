@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-d-presentation-stages-development-v1",
+  "entry": "--presentation-stages (default off, independent of existing cost flags)",
+  "scope": "owner-thread CPU-side wall intervals and allocated bytes, includes nested operations and observation overhead; not exclusive CPU usage, GPU timing, native allocation/residency or complete upload counters",
+  "stages": ["Control","Observer","Surface","GuiBegin","GuiBuild","ViewPreparation","GuiDraw","SceneSubmission","GuiGpu","DiagnosticCapture","NativePresent","Cleanup","Diagnostics"],
+  "boundaries": "Editor BeginPresentation/Present and Player Present after readiness guards; excludes entry JIT and startup/shutdown; pair with unchanged outer --loop-costs to see uncovered boundary overhead",
+  "visits": "host phase entries, may repeat and include branch bookkeeping; NOT native operation counts",
+  "identity": "unique sequence; frame hint may repeat after suspend/failure/recovery and is not a GPU source identity",
+  "capacity": 64,
+  "overflow": "retain first 64 calls, count every omitted call, never replace with later/faster rows",
+  "failures": "failed call retained with Completed=false, phases already entered preserved; successful fail-closed native Present is not equivalent to completed host call",
+  "headless": "opt-in report with zero calls, no graphics services/resources created",
+  "recovery": "same capture survives native renderer recovery, sequence not reset",
+  "safety": "no callbacks, GPU waits, new ECS authority, forced GC, native counters or workload changes",
+  "acceptance": "development evidence only; no timing thresholds altered; raw cold frames retained; not a JIT or upload root-cause proof",
+  "performanceAccepted": false,
+  "memoryAcceptance": "pending"
+}

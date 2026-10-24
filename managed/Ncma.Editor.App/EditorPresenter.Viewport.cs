@@ -13,14 +13,16 @@ internal sealed unsafe partial class EditorPresenter
     private SceneRenderSession? _pickScene;
     private Guid _pickView;
     private ulong _pickFrame;
+    private EditorSceneSourceStamp? _pickSource;
     private double? _pendingScrub;
     private double _previewScrub;
     public bool EditPreviewPaused {get;private set;}
     public SceneCameraView BrowserCamera(uint width,uint height)=>_orbit.View(width,height);
     public double? ConsumeScrub(){var value=_pendingScrub;_pendingScrub=null;return value;}
-    public void SetViewportFrame(SceneRenderSession? scene,ulong frame)
+    public void SetViewportFrame(SceneRenderSession? scene,ulong frame,EditorSceneSourceStamp? source=null)
     {
-        _pickScene=scene is {Costs.GpuSubmitted:true}?scene:null;_pickView=_pickScene?.View?.FrameIdentity??Guid.Empty;_pickFrame=frame;
+        _pickSource=source;
+        _pickScene=scene is {Costs.GpuSubmitted:true}&&source?.Matches(workspace.Owner)==true?scene:null;_pickView=_pickScene?.View?.FrameIdentity??Guid.Empty;_pickFrame=frame;
     }
     private void BuildBrowserControls()
     {
@@ -37,7 +39,7 @@ internal sealed unsafe partial class EditorPresenter
     {
         switch(action.Kind) {
             case "viewport":
-                if(workspace.Owner.Play is not null||workspace.HasDraft||_pickFrame!=_frame.Frame)throw new InvalidOperationException("stale_or_frozen_pick");
+                if(workspace.Owner.Play is not null||workspace.HasDraft||_pickFrame!=_frame.Frame||_pickSource?.Matches(workspace.Owner)!=true)throw new InvalidOperationException("stale_or_frozen_pick");
                 if(value==1) {
                     if(_assetWorkflow is null||!Guid.TryParseExact(text,"D",out Guid id))throw new ArgumentException("Invalid model drop UUID.");
                     Ncma.Assets.AssetRecord root;

@@ -68,11 +68,11 @@ internal static class EcsDenseDiagnostics
         double P(double p) => sorted[Math.Max(0, (int)Math.Ceiling(sorted.Length * p) - 1)];
         return new { p50 = P(.50), p95 = P(.95), p99 = P(.99), max = sorted[^1] };
     }
-    internal static void Run(bool measured, Action<string, int, SceneDocument>? verified = null)
+    internal static void Run(bool measured, Action<string, int, EcsDiagnosticState>? verified = null)
     {
         int warmup = measured ? 12 : 1, samples = measured ? 100 : 2;
         if (measured) Console.WriteLine(JsonSerializer.Serialize(new {
-            kind = "ecs_e5_diagnostic_environment", schema = 1, runtime = RuntimeInformation.FrameworkDescription,
+            kind = "ecs_e6_diagnostic_environment", schema = 2, historicalPairedContractCompatible = false, runtime = RuntimeInformation.FrameworkDescription,
             os = RuntimeInformation.OSDescription, cpuCount = Environment.ProcessorCount,
             serverGc = global::System.Runtime.GCSettings.IsServerGC, stopwatchFrequency = Stopwatch.Frequency,
             configuration =
@@ -87,7 +87,7 @@ internal static class EcsDenseDiagnostics
         int cases = 0;
         foreach (int count in measured ? new[] { 100, 1000, 4096 } : new[] { 8 })
         {
-            var document = EcsBaseline.Fixture(count); _ = document.CaptureBytes();
+            var document = EcsBaseline.RuntimeFixture(count); _ = RuntimeSceneCodec.Encode(document.CaptureSnapshot());
             var step = new Step(document.World, samples);
             for (int i = 0; i < warmup; i++) step.Run(-1);
             long managedBefore = GC.GetTotalMemory(false), pauseBefore = GC.GetTotalPauseDuration().Ticks;
@@ -98,22 +98,22 @@ internal static class EcsDenseDiagnostics
             int[] collections = Enumerable.Range(0, 3).Select(i => GC.CollectionCount(i) - collectionsBefore[i]).ToArray();
             EcsBaseline.VerifyMoves(document.World, count, 1, warmup + samples);
             // Independent PUBLIC scheduler oracle outside diagnostic timings, including full codec bytes.
-            var oracle = EcsBaseline.Fixture(count); _ = oracle.CaptureBytes();
+            var oracle = EcsBaseline.RuntimeFixture(count); _ = RuntimeSceneCodec.Encode(oracle.CaptureSnapshot());
             var runner = new WorldRunner(oracle.World); runner.AddSystem(new MovingSystem());
             for (int i = 0; i < warmup + samples; i++)
                 if (runner.Advance(1d / 60) != 1) throw new InvalidOperationException("Diagnostic oracle missed a step.");
-            if (!document.CaptureBytes().AsSpan().SequenceEqual(oracle.CaptureBytes()))
+            if (!RuntimeSceneCodec.Encode(document.CaptureSnapshot()).AsSpan().SequenceEqual(RuntimeSceneCodec.Encode(oracle.CaptureSnapshot())))
                 throw new InvalidOperationException("Diagnostic step differs from public WorldRunner.");
             if (measured)
             {
                 string[] names = ["begin", "callback_including_value_encoding", "prepare_including_schema_and_budget", "install_including_abort_clear", "finally_abort_clear"];
-                Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e5_diagnostic_phases", schema = 1, objects = count,
+                Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_phases", schema = 2, historicalPairedContractCompatible = false, objects = count,
                     warmup, samples, total = total.Output(), phases = names.Select((n, i) => new { name = n, samples = step.Phases[i].Output() }),
                     managedBeforeBytes = managedBefore, managedAfterBytes = managedAfter, gcCollections = collections,
                     runtimeGcPauseMs = (pauseAfter - pauseBefore) / (double)TimeSpan.TicksPerMillisecond,
                     note = "No output/codec/oracle in timed loop. Install owns its existing clear; final clear measured separately. Phase percentiles do not sum." }));
             }
-            verified?.Invoke("diagnostic_world_full_write", count, document); cases++;
+            verified?.Invoke("diagnostic_world_full_write", count, EcsDiagnosticState.FromRuntime(document)); cases++;
             ProbeComponents(document.World.Components, count, warmup, samples, measured); cases++;
         }
         Console.WriteLine($"E5 dense diagnostic fixture checks: {cases}/{cases} passed; measured={measured}.");
@@ -149,7 +149,7 @@ internal static class EcsDenseDiagnostics
                 for (int j = 0; j < count; j++) operation();
                 values.Record(i, start);
             }
-            if (measured) Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e5_diagnostic_probe", schema = 1,
+            if (measured) Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_probe", schema = 2, historicalPairedContractCompatible = false,
                 probe = name, operationsPerSample = count, warmup, samples, values = values.Output(),
                 scope = "Repeated single immutable Transform payload, isolated cost only. Nested probes are not additive, not a World allocation stack." }));
         }

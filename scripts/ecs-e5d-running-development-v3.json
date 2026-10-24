@@ -1,0 +1,33 @@
+{
+  "schema": 3,
+  "id": "ecs-e5-d-running-development-v3-gpu-snapshots",
+  "developmentOnly": true,
+  "formalCohort": false,
+  "priorEvidence": "v1/v2 contracts, validators, drivers, reports and failures retained unchanged; no backfilling or cross-version timing acceptance",
+  "configurations": ["Release", "Debug"],
+  "hosts": ["relocated Editor trusted frame API", "relocated Player trusted SDK within actual runner"],
+  "sourceFormats": ["ASCII FBX", "binary FBX"],
+  "pipelineModes": [0, 1, 2],
+  "warmupFrames": 12,
+  "sampleFrames": 100,
+  "inputDeltaSeconds": 0.016666666666666666,
+  "capture": false,
+  "forcedGc": false,
+  "gpuWait": false,
+  "presentationReportVersion": 2,
+  "sampling": "one complete fresh development invocation per configuration after integration; retain failed invocations, no timing-based selection",
+  "scope": "trusted product SDK frame callbacks and report reads, not ordinary scheduler or paced target frame intervals",
+  "gpu": {
+    "raw": "both current and last-resolved slots per domain; warm baseline plus every measured report",
+    "dedup": "only last-resolved Valid/Disjoint/Invalid entries by generation/domain/sequence; every repeated source must agree in state, origin, resource, revision and duration",
+    "coverage": "separate valid measured/outside-window sources, invalid resolved sources, current state counts, admission sequence jumps, unobserved resolution sequence slots and unobserved tail slots",
+    "gapMeaning": "sequence slots not observed in a resolved snapshot; may include abandoned work, not a fabricated count of valid lost timings; warm prefix excluded by baseline; no final GPU drain",
+    "aggregation": "domains not summed; pending/invalid/absent are not zero-cost valid samples; one retained result does not guarantee full coverage"
+  },
+  "memory": "unchanged signed raw heap validity, last-GC diagnostic supplement, process private/working set; no native-by-subtraction estimate",
+  "rawPreservation": "CreateNew raw prefix before validation; post-loop diagnostic failure preserves completed rows; persistence failure reported alongside original exception",
+  "functionalGates": ["one actual committed quantum per row", "stable identity", "API0/0", "no warm immutable reuploads", "selected live-resource counts stable", "native counters intact", "all original image/recovery/permission/Null gates retained"],
+  "framePacingMeasured": false,
+  "targetPerformanceAccepted": false,
+  "memoryAcceptance": "pending"
+}

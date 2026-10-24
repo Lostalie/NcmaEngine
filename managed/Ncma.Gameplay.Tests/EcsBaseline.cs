@@ -5,12 +5,10 @@ using Ncma.Gameplay;
 using Ncma.Runtime;
 using Ncma.Scene;
 
-// E0 measures the shipping APIs, not a second ECS or a proposed storage prototype.
-// Keep workload semantics fixed when adapting calls to E1/E2 APIs.
+// E6 adaptation of the E0 workload shapes. Runtime state encoding and setup changed;
+// diagnostics are explicitly NOT an E3/E5 paired contract or a performance acceptance.
 internal static class EcsBaseline
 {
-    // Test-process-only event namespace; workload/timing boundaries remain identical to E0/E3.
-    internal static bool E5Events { get; set; }
     private readonly record struct Marker(int Value) : IComponent;
     private sealed class System(Action<World> update) : IWorldSystem
     {
@@ -36,13 +34,19 @@ internal static class EcsBaseline
         registry.Register<Marker>("e0.marker", 1,
             """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
         var document = new SceneDocument("E0 deterministic fixture", registry);
-        for (int i = 0; i < count; i++)
-        {
-            global::Ncma.Runtime.Entity item = document.World.CreateEntity("Object " + i, Id(i));
-            document.World.Set(item, TransformData.Identity with { Position = new(i, 0, 0) });
-            if (i % 2 == 0) document.World.Set(item, new Marker(i));
-        }
+        // Cold, fully owned authoring input; no simulation World is stored in the document.
+        document.RestoreSnapshot(new(1, document.Name, Enumerable.Range(0, count).Select(i => {
+            var components = new List<ComponentSnapshot> {
+                new("ncma.transform", 1, registry.Encode(TransformData.Identity with { Position = new(i, 0, 0) })) };
+            if (i % 2 == 0) components.Add(new("e0.marker", 1, registry.Encode(new Marker(i))));
+            return new SceneObjectData(Id(i), "Object " + i, components.ToArray(), []);
+        }).ToArray()));
         return document;
+    }
+    internal static RuntimeSceneInstance RuntimeFixture(int count)
+    {
+        var source = Fixture(count);
+        return source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
     }
     private static object Distribution(double[] values)
     {
@@ -80,7 +84,9 @@ internal static class EcsBaseline
             layerMs.Add(names[i], Distribution(layerSamples.Select(s => s[i] * 1000d / Stopwatch.Frequency).ToArray()));
         Console.WriteLine(JsonSerializer.Serialize(new
         {
-            kind = E5Events ? "ecs_e5_sample" : "ecs_e0_baseline", schema = 1, workload = name, objects = count, sceneBytes,
+            kind = "ecs_e6_diagnostic_sample", schema = 1, workload = name, objects = count, sceneBytes,
+            stateFormat = RuntimeSceneImage.Format, stateVersion = 1,
+            historicalPairedContractCompatible = false,
             warmup, samples, operationsPerSample = operations, ms = Distribution(elapsed),
             allocatedThreadBytes = Distribution(allocations), gcCollections = collections,
             managedBeforeBytes = managedBefore, managedAfterBytes = managedAfter,
@@ -89,12 +95,12 @@ internal static class EcsBaseline
             scope = "CPU shipping APIs; no GPU, physics, inference or whole-frame claim"
         }));
     }
-    internal static void Run(bool measured, Action<string, int, SceneDocument>? verified = null)
+    internal static void Run(bool measured)
     {
         if (measured)
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                kind = E5Events ? "ecs_e5_environment" : "ecs_e0_environment", schema = 1, utc = DateTimeOffset.UtcNow,
+                kind = "ecs_e6_diagnostic_environment", schema = 1, utc = DateTimeOffset.UtcNow,
                 runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
                 architecture = RuntimeInformation.ProcessArchitecture.ToString(), cpuCount = Environment.ProcessorCount,
                 stopwatchFrequency = Stopwatch.Frequency, serverGc = global::System.Runtime.GCSettings.IsServerGC,
@@ -113,8 +119,8 @@ internal static class EcsBaseline
         {
             foreach (bool joint in new[] { false, true })
             {
-                var doc = Fixture(count); double sum = 0; int matches = 0;
-                Measure(joint ? "read_transform_and_marker" : "read_transform", count, doc.CaptureBytes().Length, measured, 16,
+                var doc = RuntimeFixture(count); double sum = 0; int matches = 0;
+                Measure(joint ? "read_transform_and_marker" : "read_transform", count, doc.CaptureCheckpoint().CopyBytes().Length, measured, 16,
                     () =>
                     {
                         sum = 0; matches = 0;
@@ -123,24 +129,25 @@ internal static class EcsBaseline
                     },
                     () => Require(matches == (joint ? (count + 1) / 2 : count) &&
                         sum == Enumerable.Range(0, count).Where(i => !joint || i % 2 == 0).Sum(i => (double)i)));
-                verified?.Invoke(joint ? "read_transform_and_marker" : "read_transform", count, doc); cases++;
+                ReportRuntimeState(joint ? "read_transform_and_marker" : "read_transform", count, doc, measured); cases++;
             }
             foreach (int stride in new[] { 0, 100, 1 })
             {
-                var doc = Fixture(count); int steps = 0;
+                var doc = RuntimeFixture(count); int steps = 0;
                 var runner = new WorldRunner(doc.World);
                 runner.AddSystem(new System(w => Move(w, stride)));
-                Measure("world_step_stride_" + stride, count, doc.CaptureBytes().Length, measured, 1,
+                Measure("world_step_stride_" + stride, count, doc.CaptureCheckpoint().CopyBytes().Length, measured, 1,
                     () => { Require(runner.Advance(1d / 60) == 1); steps++; },
                     () => VerifyMoves(doc.World, count, stride, steps));
-                verified?.Invoke("world_step_stride_" + stride, count, doc); cases++;
+                ReportRuntimeState("world_step_stride_" + stride, count, doc, measured); cases++;
             }
             foreach (int stride in new[] { 0, 100, 1, -1 })
             {
                 var doc = Fixture(count); int steps = 0;
-                using var play = new PlaySession(doc, FrameTimePolicy.Strict) { MeasureSteps = measured };
+                var runtime = doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);
+                using var play = new PlaySession(runtime, FrameTimePolicy.Strict) { MeasureSteps = measured };
                 bool markerPresent = true;
-                var marker = new ComponentSnapshot("e0.marker", 1, doc.World.Components.Encode(new Marker(0)));
+                var marker = new ComponentSnapshot("e0.marker", 1, runtime.World.Components.Encode(new Marker(0)));
                 play.AddSystem(new System(w =>
                 {
                     if (stride != -1) { Move(w, stride); return; }
@@ -153,13 +160,13 @@ internal static class EcsBaseline
                     markerPresent = !markerPresent;
                 }));
                 play.Start(_ => throw new InvalidOperationException("Fixture has no Behaviour bindings."));
-                Measure("play_step_stride_" + stride, count, doc.CaptureBytes().Length, measured, 1,
+                Measure("play_step_stride_" + stride, count, runtime.CaptureCheckpoint().CopyBytes().Length, measured, 1,
                     () => { var result = play.AdvanceFrame(1d / 60); Require(result.State == PlayState.Running && result.StepsExecuted == 1); steps++; },
                     () =>
                     {
-                        VerifyMoves(doc.World, count, Math.Max(0, stride), steps);
+                        VerifyMoves(runtime.World, count, Math.Max(0, stride), steps);
                         Require(play.Tick == (ulong)steps && play.RenderView.Objects.Length == count);
-                        if (stride == -1) for (int i = 0; i < count; i += 100) Require(doc.World.Has<Marker>(doc.World.FindEntity(Id(i))) == markerPresent);
+                        if (stride == -1) for (int i = 0; i < count; i += 100) Require(runtime.World.Has<Marker>(runtime.World.FindEntity(Id(i))) == markerPresent);
                     },
                     () =>
                     {
@@ -167,7 +174,7 @@ internal static class EcsBaseline
                         return [p.Setup, p.Callbacks, p.InputPrepare, p.WorldSignalsPrepare, p.MetadataPrepare,
                             p.InstancesPrepare, p.ReceiptsPrepare, p.RenderPrepare, p.Install];
                     });
-                verified?.Invoke("play_step_stride_" + stride, count, doc); cases++;
+                ReportRuntimeState("play_step_stride_" + stride, count, runtime, measured); cases++;
             }
             {
                 var doc = Fixture(count); int steps = 0;
@@ -179,21 +186,23 @@ internal static class EcsBaseline
                         Behaviours = [new BehaviourBindingData(Id(count + i), "E0.Moving", true, [])]
                     }).ToArray()
                 });
-                using var play = new PlaySession(doc, FrameTimePolicy.Strict) { MeasureSteps = measured };
+                var runtime = doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);
+                using var play = new PlaySession(runtime, FrameTimePolicy.Strict) { MeasureSteps = measured };
                 play.Start(_ => new MovingBehaviour());
-                Measure("play_behaviour_full_write", count, doc.CaptureBytes().Length, measured, 1,
+                Measure("play_behaviour_full_write", count, runtime.CaptureCheckpoint().CopyBytes().Length, measured, 1,
                     () => { var result = play.AdvanceFrame(1d / 60); Require(result.State == PlayState.Running && result.StepsExecuted == 1); steps++; },
-                    () => { VerifyMoves(doc.World, count, 1, steps); Require(play.BehaviourCount == count); },
+                    () => { VerifyMoves(runtime.World, count, 1, steps); Require(play.BehaviourCount == count); },
                     () => Layers(play));
-                verified?.Invoke("play_behaviour_full_write", count, doc); cases++;
+                ReportRuntimeState("play_behaviour_full_write", count, runtime, measured); cases++;
             }
             {
                 var doc = Fixture(count); int steps = 0, nextId = count;
                 int[] targets = Enumerable.Range(0, count).Where(i => i % 100 == 0).ToArray();
                 Guid[] live = targets.Select(Id).ToArray();
                 var transforms = targets.Select(i => new ComponentSnapshot("ncma.transform", 1,
-                    doc.World.Components.Encode(TransformData.Identity with { Position = new(i, 0, 0) }))).ToArray();
-                using var play = new PlaySession(doc, FrameTimePolicy.Strict) { MeasureSteps = measured };
+                    doc.Components.Encode(TransformData.Identity with { Position = new(i, 0, 0) }))).ToArray();
+                var runtime = doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);
+                using var play = new PlaySession(runtime, FrameTimePolicy.Strict) { MeasureSteps = measured };
                 play.AddSystem(new System(_ =>
                 {
                     for (int i = 0; i < targets.Length; i++)
@@ -203,24 +212,32 @@ internal static class EcsBaseline
                         var pending = play.Commands.SpawnEmpty("Object " + targets[i], live[i]);
                         play.Commands.AddComponent(pending.ObjectId, transforms[i]);
                         if (targets[i] % 2 == 0) play.Commands.AddComponent(pending.ObjectId,
-                            new ComponentSnapshot("e0.marker", 1, doc.World.Components.Encode(new Marker(targets[i]))));
+                            new ComponentSnapshot("e0.marker", 1, runtime.World.Components.Encode(new Marker(targets[i]))));
                     }
                 }));
                 play.Start(_ => throw new InvalidOperationException("Fixture has no Behaviour bindings."));
-                Measure("play_replace_one_percent", count, doc.CaptureBytes().Length, measured, 1,
+                Measure("play_replace_one_percent", count, runtime.CaptureCheckpoint().CopyBytes().Length, measured, 1,
                     () => { var result = play.AdvanceFrame(1d / 60); Require(result.State == PlayState.Running && result.StepsExecuted == 1); steps++; },
                     () =>
                     {
-                        Require(doc.World.Count == count && play.Tick == (ulong)steps && play.RenderView.Objects.Length == count);
+                        Require(runtime.World.Count == count && play.Tick == (ulong)steps && play.RenderView.Objects.Length == count);
                         for (int i = 0; i < targets.Length; i++)
-                            Require(doc.World.Get<TransformData>(doc.World.FindEntity(live[i])).Position.X == targets[i]);
-                        Require(doc.World.GetEntities().Sum(o => (double)doc.World.Get<TransformData>(o).Position.X) == count * (count - 1d) / 2);
+                            Require(runtime.World.Get<TransformData>(runtime.World.FindEntity(live[i])).Position.X == targets[i]);
+                        Require(runtime.World.GetEntities().Sum(o => (double)runtime.World.Get<TransformData>(o).Position.X) == count * (count - 1d) / 2);
                     }, () => Layers(play));
-                verified?.Invoke("play_replace_one_percent", count, doc); cases++;
+                ReportRuntimeState("play_replace_one_percent", count, runtime, measured); cases++;
             }
         }
-        Console.WriteLine($"E0 fixture checks: {cases}/{cases} passed; measured={measured}.");
+        Console.WriteLine($"E6 adapted fixture checks: {cases}/{cases} passed; measured={measured}; no performance acceptance.");
     }
+    // Cold semantic evidence uses the actual model format, never an authoring compatibility copy.
+    private static void ReportRuntimeState(string name, int count, RuntimeSceneInstance scene, bool measured)
+    { if (measured) ReportState(name, count, scene.World.Tick, scene.CaptureCheckpoint().CopyBytes(), RuntimeSceneImage.Format); }
+    private static void ReportState(string name, int count, ulong tick, byte[] bytes, string format) =>
+        Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_semantic", schema = 1,
+            workload = name, objects = count, tick, stateFormat = format, stateVersion = 1, sceneBytes = bytes.Length,
+            sha256 = Convert.ToHexString(global::System.Security.Cryptography.SHA256.HashData(bytes)),
+            historicalPairedContractCompatible = false }));
     private static long[] Layers(PlaySession play)
     {
         var p = play.LastStepProfile;

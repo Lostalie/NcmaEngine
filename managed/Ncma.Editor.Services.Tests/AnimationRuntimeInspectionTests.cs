@@ -38,7 +38,7 @@ internal static class AnimationRuntimeInspectionTests
         using var owner=new EditorSessionOwner("Graph runtime",components:CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),validateComposition:CharacterComponents.RequireComposition,
             composePreparedPlay:(play,assets)=>{runtime=ScenePlayRuntime.Compose(play,physics,assets);play.AddSystem(new Failure(()=>injectFailure));return runtime;});
         SceneDocumentFiles.Load(owner.Document,Path.Combine(sample.Root,"start.ncmascene"));
-        foreach(Guid id in sample.Actors){global::Ncma.Runtime.Entity actor=owner.Document.World.FindEntity(id);owner.Document.World.Remove<ActionDefinitionData>(actor);owner.Document.World.Remove<ClipPlaybackData>(actor);owner.Document.World.Set(actor, new AnimatorData(graph.AssetId,rig));}
+        foreach(Guid id in sample.Actors){owner.Document.RemoveComponent<ActionDefinitionData>(id);owner.Document.RemoveComponent<ClipPlaybackData>(id);owner.Document.SetComponent(id, new AnimatorData(graph.AssetId,rig));}
         owner.Edit!.Resynchronize();owner.PrepareRenderAssets(sample.Root,sample.ProjectId);var workspace=new EditorWorkspace(owner);var clock=new Clock();
         SceneRenderSession? presentation=null;
         var service=new AnimationRuntimeInspectionService(owner,()=>runtime,presentation:()=>presentation,clock:clock);service.Register();owner.ConfigureEndpoint(true,output);var endpoint=owner.Endpoint!;
@@ -47,7 +47,7 @@ internal static class AnimationRuntimeInspectionTests
         using var client=Process.Start(launch)!;var errors=client.StandardError.ReadToEndAsync();int counter=1;Guid request=Guid.NewGuid();
         JsonElement Send(object message){client.StandardInput.WriteLine(JsonSerializer.Serialize(message,Wire.Json));client.StandardInput.Flush();var pending=client.StandardOutput.ReadLineAsync();var watch=Stopwatch.StartNew();while(!pending.IsCompleted){if(watch.ElapsedMilliseconds>10000)throw new TimeoutException("Runtime MCP timeout");foreach(var c in endpoint.View.Connections.Where(c=>!c.Paired&&c.Connected))endpoint.Pair(c.ConnectionId,true);endpoint.Pump();Thread.Sleep(1);}using var parsed=JsonDocument.Parse(pending.GetAwaiter().GetResult()??throw new IOException("Runtime MCP closed"));return parsed.RootElement.Clone();}
         JsonElement Call(object input)=>Send(new{jsonrpc="2.0",id=counter++,method="tools/call",@params=new{name="ncma.animgraph.runtime",arguments=new{contractVersion=2,requestId=request,sessionId=owner.Edit.SessionId,expectedRevision=owner.Edit.Revision,input}}}).GetProperty("result").GetProperty("structuredContent");
-        object Input(Guid id,Guid? play=null,ulong? tick=null)=>new{playSessionId=play??owner.Play!.SessionId,worldId=owner.Play!.Document.World.Identity,objectId=id,expectedTick=tick??owner.Play.Tick,offset=0,limit=1};
+        object Input(Guid id,Guid? play=null,ulong? tick=null)=>new{playSessionId=play??owner.Play!.SessionId,worldId=owner.Play!.Scene.World.Identity,objectId=id,expectedTick=tick??owner.Play.Tick,offset=0,limit=1};
         try {
             Send(new{jsonrpc="2.0",id=counter++,method="initialize",@params=new{protocolVersion="2025-11-25"}});client.StandardInput.WriteLine("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");client.StandardInput.Flush();
             var tool=Send(new{jsonrpc="2.0",id=counter++,method="tools/list"}).GetProperty("result").GetProperty("tools").EnumerateArray().Single(t=>t.GetProperty("name").GetString()=="ncma.animgraph.runtime");
@@ -61,20 +61,20 @@ internal static class AnimationRuntimeInspectionTests
             var observation=read.GetProperty("data").GetProperty("observation");Check(observation.GetProperty("binding").GetProperty("graphId").GetGuid()==graph.AssetId&&observation.GetProperty("pose").ValueKind==JsonValueKind.Null,"Headless observation must not manufacture pose evidence");
             Check(!read.GetRawText().Contains(sample.Root,StringComparison.OrdinalIgnoreCase));Check(Call(Input(sample.Actors[1])).GetProperty("code").GetString()=="animator_not_visible");
             Check(Call(Input(sample.Actors[0],Guid.NewGuid())).GetProperty("code").GetString()=="animator_snapshot_stale");
-            Check(Call(new{playSessionId=play.SessionId,worldId=play.Document.World.Identity,objectId=sample.Actors[0],step=true}).GetProperty("code").GetString()=="animator_input_invalid");
-            Check(Call(new{playSessionId=play.SessionId,worldId=play.Document.World.Identity,objectId=sample.Actors[0],limit="1"}).GetProperty("code").GetString()=="animator_input_invalid");
+            Check(Call(new{playSessionId=play.SessionId,worldId=play.Scene.World.Identity,objectId=sample.Actors[0],step=true}).GetProperty("code").GetString()=="animator_input_invalid");
+            Check(Call(new{playSessionId=play.SessionId,worldId=play.Scene.World.Identity,objectId=sample.Actors[0],limit="1"}).GetProperty("code").GetString()=="animator_input_invalid");
             Check(play.AdvanceFrame(1d/60).State==PlayState.Running);Check(Call(Input(sample.Actors[0],tick:0)).GetProperty("code").GetString()=="animator_snapshot_stale");
             read=Call(Input(sample.Actors[0]));CharacterInspectionTests.Schema(read,descriptor.OutputSchema);Check(read.GetProperty("data").GetProperty("observation").GetProperty("sequence").GetUInt64()==1);
-            ulong tick=play.Tick;var before=play.Document.CaptureBytes();
+            ulong tick=play.Tick;var before=play.Scene.CaptureCheckpoint().CopyBytes();
             using(var file=new FileStream(graphFile,FileMode.Open,FileAccess.Read,FileShare.None))for(int i=0;i<16;i++)Check(Call(Input(sample.Actors[0])).GetProperty("status").GetString()=="ok");
-            Check(play.Tick==tick&&before.SequenceEqual(play.Document.CaptureBytes()),"Observation does not read graph file, step or mutate World");
+            Check(play.Tick==tick&&before.SequenceEqual(play.Scene.CaptureCheckpoint().CopyBytes()),"Observation does not read graph file, step or mutate World");
             using(var loader=new PluginLoader()) {
                 loader.Load(plugins,[new("platform",ModuleKind.Platform,"NcmaPlatform.dll","NcmaPlatform.dll",1,0,[]),new("renderer",ModuleKind.Renderer,"NcmaRenderer.dll","NcmaRenderer.dll",1,2,["platform"])]);
                 using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"M6.3-D current pose observation",320,240,false);
                 using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,320,240);using var cache=new RenderResourceCache(renderer);
                 string kernelPath=Path.Combine(plugins,"NcmaAnimationKernel.dll");using var kernel=new Ncma.Animation.Native.PoseKernel(kernelPath,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(kernelPath))),blendSupport:true);
-                using var scene=new SceneRenderSession(renderer,cache,play.Document.World);scene.Prepare(owner.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime!.Characters,animators:runtime.Animators);
-                presentation=scene;Guid camera=play.Document.World.GetUuid(play.Document.World.GetEntities().Single(o=>play.Document.World.Has<CameraData>(o)));
+                using var scene=new SceneRenderSession(renderer,cache,play.Scene.World);scene.Prepare(owner.PlayRenderAssets!,play.Scene.CaptureSnapshot(),poseKernel:kernel,play:play,rootMotion:runtime!.Characters,animators:runtime.Animators);
+                presentation=scene;Guid camera=play.Scene.World.GetUuid(play.Scene.World.GetEntities().Single(o=>play.Scene.World.Has<CameraData>(o)));
                 Check(scene.Submit(1,320,240,camera),"Runtime observation requires actual successful skin/shadow submission");renderer.Present();
                 var pose=Call(Input(sample.Actors[0])).GetProperty("data").GetProperty("observation").GetProperty("pose");Check(pose.GetProperty("rendererFrame").GetUInt64()==1&&pose.GetProperty("geometryDraws").GetInt32()==2,"Current exact publication/tick pose evidence");
                 Check(play.AdvanceFrame(1d/60).State==PlayState.Running);Check(Call(Input(sample.Actors[0])).GetProperty("data").GetProperty("observation").GetProperty("pose").ValueKind==JsonValueKind.Null,"Previous successful pose cannot label a new graph tick");
@@ -96,7 +96,7 @@ internal static class AnimationRuntimeInspectionTests
             owner.StopPlay();
         }finally{client.StandardInput.Close();if(!client.WaitForExit(5000))throw new TimeoutException("Runtime MCP close");if(owner.Play is not null)owner.StopPlay();}
         Check(client.ExitCode==0&&errors.GetAwaiter().GetResult().Length==0,"Runtime MCP stdout/log and lifecycle");
-        var d=owner.Document.CreateIsolatedCopy();using var prepared=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,d.CaptureSnapshot(),true);
+        var d=owner.Document.BakeRuntime(owner.Document.Revision).Image.Instantiate(owner.Document.Components);using var prepared=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,d.CaptureSnapshot(),true);
         using var isolated=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var failed=ScenePlayRuntime.Compose(isolated,physics,prepared);isolated.AddSystem(new Failure());
         isolated.Start(_=>throw new Exception("No behaviours"));try{Check(isolated.AdvanceFixedStep().State==PlayState.Faulted&&isolated.Tick==0);Reject(()=>failed.Animators!.ReadDebug(sample.Actors[0]));}finally{isolated.Stop();}
         File.WriteAllText(Path.Combine(output,"m6-3-d-runtime-mcp-results.json"),JsonSerializer.Serialize(new{realStdio=true,closedSchema=true,exactNcaGraphReview=true,uiReview=true,noTickIo=true,currentGpuPose=true,stalePoseRejected=true,expiry=true,audienceEpoch=true,reload=true,liveControls=false,manualThirdPartyAccepted=false}));

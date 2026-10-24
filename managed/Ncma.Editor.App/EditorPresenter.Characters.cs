@@ -12,6 +12,12 @@ internal sealed unsafe partial class EditorPresenter
     internal void AttachCharacters(CharacterInspectionService service)=>_characters=service;
     private void BuildCharacterDebug(float width,float height,ref ulong labelId)
     {
+        // Keep the closed-panel path small; do not compile the inspection body until opened.
+        if (_showCharacters) BuildCharacterDebugVisible(width, height, ref labelId);
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void BuildCharacterDebugVisible(float width,float height,ref ulong labelId)
+    {
         if(!_showCharacters||_characters is null)return;
         Panel(6,"Character / Combat Debug (read-only)",width*.15f,height*.15f,width*.65f,height*.7f);
         var frame=_characters.LocalFrame();
@@ -32,7 +38,7 @@ internal sealed unsafe partial class EditorPresenter
         Add(GuiItemKind.Button,22,2,"Review exact Play/object scope and paired audience",new("character_review"),enabled:frame.SnapshotValid&&_characterSelection.Count>0&&workspace.Owner.Endpoint is {} ep&&ep.View.Connections.Any(c=>c.Paired&&c.Connected));
         Add(GuiItemKind.Button,22,5,"Revoke all character read grants",new("character_revoke"));
         if(_characterReview is {} review) {
-            Add(GuiItemKind.Label,3,labelId++,$"Read-only Play {review.PlaySessionId:D}; World {review.WorldId:D}; endpoint {review.EndpointId:D}");
+            Add(GuiItemKind.Label,3,labelId++,$"Read-only Play {review.PlaySessionId:D}; World {review.WorldId:D}; endpoint {review.EndpointId:D}; audience epoch {review.AudienceRevision}");
             foreach(Guid id in review.ObjectIds)Add(GuiItemKind.Label,3,labelId++,"Read ONLY object "+id.ToString("D"));
             foreach(Guid id in review.Audience)Add(GuiItemKind.Label,3,labelId++,"Paired audience "+id.ToString("D"));
             Add(GuiItemKind.Checkbox,22,3,"I reviewed every UUID and the complete paired audience",new("character_reviewed"),number:_characterReviewed?1:0,max:1);

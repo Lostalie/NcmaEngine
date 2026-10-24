@@ -24,7 +24,7 @@ public sealed class SceneGpuResources : IDisposable
     private PreparedSceneAssetLease Assets { get { Verify(); return _assets!; } }
     public IReadOnlyList<SceneRenderDiagnostic> Diagnostics { get; private set; } = [];
     private void Verify() => _lifetime.RequireReady();
-    public void Prepare(RenderResourceCache cache, PreparedSceneAssetLease prepared, SceneDocumentSnapshot scene,
+    public void Prepare(RenderResourceCache cache, PreparedSceneAssetLease prepared, ISceneContent scene,
         RendererSession? renderer = null, SceneAnimationSession? animation = null,RegisteredSkinShader? skinShader=null)
     {
         _lifetime.Begin();

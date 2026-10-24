@@ -27,11 +27,11 @@ internal static class EditorPrefabTests
         .AllowComponent("game.label", 1, []);
     private static (EditorWorkspace Ui, EditorPrefabWorkspace Flow, Guid[] Ids, Guid Asset) Setup(EditorSessionOwner owner)
     {
-        global::Ncma.Runtime.Entity a = owner.Document.World.CreateEntity("Spatial");
-        global::Ncma.Runtime.Entity b = owner.Document.World.CreateEntity("Empty");
-        Guid asset = Guid.NewGuid(); owner.Document.World.Set(a, TransformData.Identity); owner.Document.World.Set(a, new AssetValue(asset));
+        Guid a = owner.Document.CreateObject("Spatial");
+        Guid b = owner.Document.CreateObject("Empty");
+        Guid asset = Guid.NewGuid(); owner.Document.SetComponent(a, TransformData.Identity); owner.Document.SetComponent(a, new AssetValue(asset));
         owner.ActivateEditor(); var ui = new EditorWorkspace(owner);
-        return (ui, new(ui, Policy(owner.Document.World.Components)), [owner.Document.World.GetUuid(a), owner.Document.World.GetUuid(b)], asset);
+        return (ui, new(ui, Policy(owner.Document.Components)), [a, b], asset);
     }
     private static PrefabDocument Extract(EditorPrefabWorkspace flow, EditorWorkspace ui, Guid[] ids) =>
         flow.Extract(ui.Stamp, ids, Guid.NewGuid(), "Hero", new(1, 2, 3));
@@ -41,18 +41,18 @@ internal static class EditorPrefabTests
             using var owner = new EditorSessionOwner("Prefab", activateEditor: false, components: Registry());
             var (ui, flow, ids, asset) = Setup(owner); ui.Select(ui.Stamp, ids[0]);
             byte[] before = owner.Document.CaptureBytes(); var state = owner.Edit!.State;
-            var reference = owner.Document.World.FindEntity(ids[0]);
-            var prefab = Extract(flow, ui, ids); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components));
+            var documentSession = owner.Document.SessionId;
+            var prefab = Extract(flow, ui, ids); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.Components));
             var plan = flow.InspectPlacement(ui.Stamp, bytes, 1, new(10, 20, 30), d => d == new PrefabDependency(asset, "StaticMesh"));
-            Check(plan.Stamp == ui.Stamp && plan.WorldId == owner.Document.World.Identity && plan.TemplateHash.Length == 64);
+            Check(plan.Stamp == ui.Stamp && plan.DocumentSessionId == owner.Document.SessionId && plan.TemplateHash.Length == 64);
             Check(plan.CandidateBytes > before.Length && plan.ReservedOperations == 6 && plan.Preview.Objects.Length == 2);
             Check(plan.Preview.Objects.Single(o => o.Name == "Empty").Components.Length == 0);
             var spatial = plan.Preview.Objects.Single(o => o.Name == "Spatial");
-            Check(owner.Document.World.Components.Decode<TransformData>(spatial.Components.Single(c => c.TypeId == "ncma.transform")).Position == new System.Numerics.Vector3(9, 18, 27));
+            Check(owner.Document.Components.Decode<TransformData>(spatial.Components.Single(c => c.TypeId == "ncma.transform")).Position == new System.Numerics.Vector3(9, 18, 27));
             plan.Preview.Objects[0] = plan.Preview.Objects[0] with { Name = "Caller tamper" };
             var second = flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => true);
             Check(second.Preview.Objects.All(o => o.Name != "Caller tamper") && second.Preview.InstanceId != plan.Preview.InstanceId);
-            Check(owner.Edit.State == state && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Document.World.FindEntity(ids[0]) == reference);
+            Check(owner.Edit.State == state && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Document.ContainsObject(ids[0]) && owner.Document.SessionId == documentSession);
             Check(!owner.Edit.Describe().Any(d => d.Name.Contains("prefab", StringComparison.OrdinalIgnoreCase)));
         });
         yield return ("M3.7 editor rejects stale/draft/Play/frozen/foreign registry and thread", () => {
@@ -66,44 +66,49 @@ internal static class EditorPrefabTests
             owner.Edit!.SetFrozen(true); Reject(() => Extract(flow, ui, ids)); owner.Edit.SetFrozen(false);
             Reject(() => new EditorPrefabWorkspace(ui, Policy(Registry())));
             Task.Run(() => Reject(() => Extract(flow, ui, ids))).GetAwaiter().GetResult();
-            owner.Document.World.Rename(owner.Document.World.FindEntity(ids[0]), "External change"); Reject(() => Extract(flow, ui, ids));
+            owner.Document.RenameObject(ids[0], "External change"); Reject(() => Extract(flow, ui, ids));
         });
         yield return ("M3.7 editor dependency/type identity/base version and callback guards", () => {
             using var owner = new EditorSessionOwner("Prefab", activateEditor: false, components: Registry());
             var (ui, flow, ids, _) = Setup(owner); var prefab = Extract(flow, ui, ids);
-            byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components)); byte[] before = owner.Document.CaptureBytes();
+            byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.Components)); byte[] before = owner.Document.CaptureBytes();
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 2, new(0, 0, 0), _ => true));
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => false));
-            Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { owner.Document.World.CreateEntity("Callback write"); return true; }));
+            Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { owner.Document.CreateObject("Callback write"); return true; }));
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { Extract(flow, ui, ids); return true; }));
             Reject(() => flow.InspectPlacement(ui.Stamp, bytes, 1, new(0, 0, 0), _ => { owner.Edit!.SetFrozen(true); return true; })); owner.Edit!.SetFrozen(false);
             var collision = prefab with { AssetId = ids[0] };
-            byte[] colliding = PrefabDocumentCodec.Encode(collision, Policy(owner.Document.World.Components));
+            byte[] colliding = PrefabDocumentCodec.Encode(collision, Policy(owner.Document.Components));
             Reject(() => flow.InspectPlacement(ui.Stamp, colliding, 1, new(0, 0, 0), _ => true));
             Check(before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Edit.State.UndoCount == 0);
         });
         yield return ("M3.7 editor validates combined scene host composition and object capacity", () => {
             using (var owner = new EditorSessionOwner("Prefab", activateEditor: false, components: Registry(), validateComposition: s => { if (s.Objects.Length > 2) throw new ArgumentException("Host scene budget"); })) {
                 var (ui, flow, ids, _) = Setup(owner); var prefab = Extract(flow, ui, ids);
-                byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components)); var stamp = ui.Stamp;
-                Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.World.Count == 2);
+                byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.Components)); var stamp = ui.Stamp;
+                Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.ObjectCount == 2);
             }
             using (var owner = new EditorSessionOwner("Full", activateEditor: false)) {
-                for (int i = 0; i < World.MaxObjects; i++) owner.Document.World.CreateEntity("Empty");
-                owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var flow = new EditorPrefabWorkspace(ui, new(owner.Document.World.Components));
+                owner.Document.RestoreSnapshot(owner.Document.CaptureSnapshot() with {
+                    Objects = Enumerable.Range(0, World.MaxObjects).Select(_ => new SceneObjectData(Guid.NewGuid(), "Empty", [], [])).ToArray()
+                });
+                owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var flow = new EditorPrefabWorkspace(ui, new(owner.Document.Components));
                 Guid id = owner.Document.CaptureSnapshot().Objects[0].Id;
-                var prefab = Extract(flow, ui, [id]); byte[] bytes = PrefabDocumentCodec.Encode(prefab, new(owner.Document.World.Components)); var stamp = ui.Stamp;
-                Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.World.Count == World.MaxObjects);
+                var prefab = Extract(flow, ui, [id]); byte[] bytes = PrefabDocumentCodec.Encode(prefab, new(owner.Document.Components)); var stamp = ui.Stamp;
+                Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.ObjectCount == World.MaxObjects);
             }
         });
         yield return ("M3.7 editor complete scene byte budget rejects otherwise valid small template", () => {
             using var owner = new EditorSessionOwner("Bytes", activateEditor: false, components: Registry());
             var ids = new List<Guid>(); string text = new('x', 60000);
-            for (int i = 0; i < 65; i++) { global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Large value"); owner.Document.World.Set(obj, new Label(text)); if (i < 5) ids.Add(owner.Document.World.GetUuid(obj)); }
-            owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var flow = new EditorPrefabWorkspace(ui, Policy(owner.Document.World.Components));
-            var prefab = Extract(flow, ui, ids.ToArray()); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.World.Components));
+            var objects = Enumerable.Range(0, 65).Select(_ => new SceneObjectData(Guid.NewGuid(), "Large value",
+                [new("game.label", 1, owner.Document.Components.Encode(new Label(text)))], [])).ToArray();
+            ids.AddRange(objects.Take(5).Select(o => o.Id));
+            owner.Document.RestoreSnapshot(owner.Document.CaptureSnapshot() with { Objects = objects });
+            owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var flow = new EditorPrefabWorkspace(ui, Policy(owner.Document.Components));
+            var prefab = Extract(flow, ui, ids.ToArray()); byte[] bytes = PrefabDocumentCodec.Encode(prefab, Policy(owner.Document.Components));
             Check(bytes.Length < World.MaxSnapshotBytes && owner.Document.CaptureBytes().Length < World.MaxSnapshotBytes); var stamp = ui.Stamp;
-            Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.World.Count == 65);
+            Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.ObjectCount == 65);
         });
         yield return ("M3.7 editor reserves membership operations instead of splitting publication", () => {
             var registry = ComponentRegistry.CreateDefault();
@@ -115,8 +120,8 @@ internal static class EditorPrefabTests
             using var owner = new EditorSessionOwner("Operations", activateEditor: false, components: registry);
             var ids = new List<Guid>();
             for (int i = 0; i < 16; i++) {
-                global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Values"); ids.Add(owner.Document.World.GetUuid(obj));
-                owner.Document.World.Set(obj, new C0()); owner.Document.World.Set(obj, new C1()); owner.Document.World.Set(obj, new C2()); owner.Document.World.Set(obj, new C3()); owner.Document.World.Set(obj, new C4()); owner.Document.World.Set(obj, new C5()); owner.Document.World.Set(obj, new C6());
+                Guid obj = owner.Document.CreateObject("Values"); ids.Add(obj);
+                owner.Document.SetComponent(obj, new C0()); owner.Document.SetComponent(obj, new C1()); owner.Document.SetComponent(obj, new C2()); owner.Document.SetComponent(obj, new C3()); owner.Document.SetComponent(obj, new C4()); owner.Document.SetComponent(obj, new C5()); owner.Document.SetComponent(obj, new C6());
             }
             owner.ActivateEditor(); var ui = new EditorWorkspace(owner); var policy = new PrefabPolicy(registry);
             for (int i = 0; i < 7; i++) policy.AllowComponent("game.c" + i, 1, []);
@@ -124,7 +129,7 @@ internal static class EditorPrefabTests
             Check(PrefabTemplates.PreviewExpansion(prefab, policy, new(0, 0, 0), []).OperationCount == 128);
             var stamp = ui.Stamp; byte[] bytes = PrefabDocumentCodec.Encode(prefab, policy);
             Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true));
-            Check(ui.Stamp == stamp && owner.Document.World.Count == 16 && owner.Edit!.State.UndoCount == 0);
+            Check(ui.Stamp == stamp && owner.Document.ObjectCount == 16 && owner.Edit!.State.UndoCount == 0);
         });
     }
     private readonly record struct AssetValue(Guid Asset) : IComponent;

@@ -10,7 +10,7 @@ internal static class Program
         try { options = PlayerOptions.Parse(args); }
         catch (Exception e) when (e is ArgumentException or IOException or NotSupportedException)
         { Console.Error.WriteLine("invalid_arguments"); return 2; }
-        if (options.Help) { Console.WriteLine("NcmaPlayer --project <file.ncmaproject> [--headless --ticks N] [--renderer d3d11|null|vulkan] [--fixed-delta h] [--max-runtime-seconds N] [--report file.json] [--presentation-costs]"); return 0; }
+        if (options.Help) { Console.WriteLine("NcmaPlayer --project <file.ncmaproject> [--headless --ticks N] [--renderer d3d11|null|vulkan] [--fixed-delta h] [--max-runtime-seconds N] [--report file.json] [--presentation-costs] [--presentation-stages] [--simulation-costs] [--loop-costs] [--loop-stream new-file.ncloop (existing parent)] [--memory-checkpoints (opt-in lifecycle reads, not peak/native/GPU acceptance)] [--max-fps 1..240 (graphical only)] [--window-width W --window-height H (both 1..8192; report contains actual framebuffer)] [--window-mode windowed|borderless-pixels (graphical only; default windowed, borderless is fixed pixels at primary origin, not exclusive fullscreen)]"); return 0; }
         if (options.Version) { Console.WriteLine("NcmaPlayer M2.7 / report v1 / scene JSON v1"); return 0; }
         int cancelled = 0;
         ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; Interlocked.Exchange(ref cancelled, 1); };

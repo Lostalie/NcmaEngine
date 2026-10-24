@@ -25,7 +25,8 @@ internal static unsafe partial class Program
         using var runtime=new PostProcessRuntime(renderer,shaderFiles,library,PostProcessModules.Official(),()=>{onApproval?.Invoke();return approved;});
         var fixture=new SceneGpuFixture(output);var(source,camera,_,_)=fixture.Scene();
         var registry=RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry());
-        var document=new SceneDocument("Post scene",registry,s=>{SceneRenderValidation.RequireComposition(s);_=ScenePostProcessState.Read(s);});document.RestoreSnapshot(source.CaptureSnapshot());
+        var authoring=new SceneDocument("Post scene",registry,s=>{SceneRenderValidation.RequireComposition(s);_=ScenePostProcessState.Read(s);});authoring.RestoreSnapshot(source.CaptureSnapshot());
+        var authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
         global::Ncma.Runtime.Entity settings=document.World.CreateEntity("Post settings");document.World.Set(settings, PostProcessData.Off);
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
@@ -75,6 +76,7 @@ internal static unsafe partial class Program
         }
         Prepare();Tick();runtime.Dispose();document.World.Set(settings, active with{ExposureEv=-2});Bad(()=>Prepare());Bad(()=>session.Submit(frame++,128,128,camera,target:target));
         session.Dispose();cache.Trim();Pass(renderer.PostStats.Bindings==0&&renderer.PipelineStats.Pipelines==0&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"close returns baseline API0/0");
+        Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()),"runtime post changes leave authoring source unchanged");
         File.WriteAllText(Path.Combine(output,"post-scene-results.json"),JsonSerializer.Serialize(new{cases,allocated,apiErrors=0,apiWarnings=0,formalHosts=false,manualAccepted=false}));
         Console.WriteLine($"PASS M7.4-C2 shared scene: {cases} checks; allocation={allocated}; API0/0; {output}");return 0;
     }

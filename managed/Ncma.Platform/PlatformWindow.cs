@@ -26,6 +26,15 @@ internal unsafe struct WindowDescription
     public byte* Title;
     public uint TitleLength, Reserved;
 }
+public enum WindowMode { Windowed = 0, BorderlessPixels = 1 }
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct PixelWindowDescription
+{
+    public WindowDescription Window;
+    public uint Mode, Reserved;
+}
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal unsafe delegate uint CreatePixelWindow(ulong context, PixelWindowDescription* description, ulong* window, PluginError* error);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal unsafe delegate uint CreateWindow(ulong context, WindowDescription* description, ulong* window, PluginError* error);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -60,9 +69,12 @@ public sealed unsafe class PlatformWindow : IDisposable
     public double LastPollMilliseconds { get; private set; }
     internal PluginModule Module => _lease.Module;
     internal ulong Handle { get { Verify(); return _handle; } }
-    public PlatformWindow(PluginModule module, string title, uint width = 1280, uint height = 720, bool visible = true)
+    public PlatformWindow(PluginModule module, string title, uint width = 1280, uint height = 720, bool visible = true, WindowMode mode = WindowMode.Windowed)
     {
+        if(mode is not (WindowMode.Windowed or WindowMode.BorderlessPixels))throw new ArgumentOutOfRangeException(nameof(mode));
         if (module.Kind != ModuleKind.Platform) throw new ArgumentException("Platform module required.");
+        if(mode==WindowMode.BorderlessPixels && (module.AbiMajor!=1||module.AbiMinor!=2))
+            throw new ArgumentException("Explicit Platform 1.2 required for borderless pixels.",nameof(module));
         _lease = module.AcquireLease();
         try {
             _create = module.ReadFunction<CreateWindow>(56); _destroy = module.ReadFunction<DestroyWindow>(64);
@@ -74,7 +86,13 @@ public sealed unsafe class PlatformWindow : IDisposable
                 WindowDescription description = new() { StructSize = (uint)sizeof(WindowDescription), Width = width, Height = height,
                     Visible = visible ? 1u : 0u, Title = text, TitleLength = (uint)bytes.Length };
                 PluginError error = default; ulong handle = 0;
-                PluginModule.Check(module.Id, "create_window", _create(module.Context, &description, &handle, &error), error);
+                if(mode==WindowMode.BorderlessPixels) {
+                    var createPixels=module.ReadFunction<CreatePixelWindow>(144);
+                    description.StructSize=(uint)sizeof(PixelWindowDescription);
+                    PixelWindowDescription pixels=new(){Window=description,Mode=(uint)mode};
+                    PluginModule.Check(module.Id,"create_pixel_window",createPixels(module.Context,&pixels,&handle,&error),error);
+                } else
+                    PluginModule.Check(module.Id, "create_window", _create(module.Context, &description, &handle, &error), error);
                 _handle = handle;
             }
         } catch { _lease.Dispose(); throw; }

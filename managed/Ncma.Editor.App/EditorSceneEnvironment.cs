@@ -13,7 +13,7 @@ internal sealed unsafe partial class CandidatePresentation
     private SceneEnvironmentPreflight? _environmentStartup;
     private SceneEnvironmentPreflight? _playEnvironmentStartup;
     private bool _sceneSynchronizationOk;
-    private (Guid World,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld)? _failedSceneSync;
+    private (Guid Document,ulong Generation,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld)? _failedSceneSync;
     private (SceneRenderSession Scene,EnvironmentLightingData Environment,Guid Assets,ulong Revision,uint Width,uint Height,float Exposure,float Ambient)? _failedEnvironment;
     private string? _scenePreparationError;
     private ulong? _failedEnvironmentCatalog;
@@ -42,10 +42,10 @@ internal sealed unsafe partial class CandidatePresentation
         RequireGraphicsReady();
         if(_playEnvironmentStartup is not null)throw new InvalidOperationException("A retained Play startup preflight must close before another Play attempt.");
         PreparePlayHud(play);
-        PreflightPost(play.Document.World,play.Document.CaptureSnapshot());
+        PreflightPost(play.Scene.World,play.Scene.CaptureSnapshot());
         if(_renderer is not null&&assets is not null) {
             _playEnvironmentStartup=new(_renderer,_sceneCache!);
-            try{_playEnvironmentStartup.Prepare(play.Document.World,assets,play.Document.CaptureSnapshot(),()=>!_closed);}
+            try{_playEnvironmentStartup.Prepare(play.Scene.World,assets,play.Scene.CaptureSnapshot(),()=>!_closed);}
             catch(Exception preparationFailure){
                 try{_playEnvironmentStartup.Dispose();_playEnvironmentStartup=null;}
                 catch(Exception closeFailure){throw new AggregateException("Play environment preparation and close failed; host retains preflight.",preparationFailure,closeFailure);}
@@ -54,9 +54,9 @@ internal sealed unsafe partial class CandidatePresentation
             // Complete and retire the GPU-only probe BEFORE creating gameplay/solver state.
             _playEnvironmentStartup.Dispose();_playEnvironmentStartup=null;
         }
-        _sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics??throw new InvalidOperationException("Physics service not initialized."),assets);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;
+        _sceneRuntime=Ncma.Characters.ScenePlayRuntime.Compose(play,_physics??throw new InvalidOperationException("Physics service not initialized."),assets,profile:simulationCosts);_characterRuntime=_sceneRuntime.Characters;return _sceneRuntime;
     }
-    private PreparedSceneAssetLease PrepareCurrentEnvironmentAssets(PreparedSceneAssetLease assets,SceneDocumentSnapshot snapshot)
+    private PreparedSceneAssetLease PrepareCurrentEnvironmentAssets(PreparedSceneAssetLease assets,ISceneContent snapshot)
     {
         var value=SceneEnvironmentState.Read(snapshot);if(!value.Enabled)return assets;
         if(assets.Assets.TryResolve(value.AssetId,AssetKind.Environment,out var found)&&found is RuntimeEnvironmentAsset env&&env.Generation==value.Generation&&env.ContentHash==value.ContentHash)return assets;
@@ -70,9 +70,9 @@ internal sealed unsafe partial class CandidatePresentation
         _scenePreparationError=message;
     }
     private static bool PreparationError(Exception error)=>error is ArgumentException or InvalidOperationException or IOException or NotSupportedException or PluginException or RenderGraphException;
-    private (Guid World,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld) SceneSyncKey()=>
-        (_editor!.Document.World.Identity,_editor.Document.Revision,_editor.RenderAssets?.Assets.Identity??Guid.Empty,
-         _editor.Play?.SessionId??Guid.Empty,_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty,_editor.Play?.Document.World.Identity??Guid.Empty);
+    private (Guid Document,ulong Generation,ulong Revision,Guid Assets,Guid Play,Guid PlayAssets,Guid PlayWorld) SceneSyncKey()=>
+        (_editor!.Document.SessionId,_editor.Edit!.DocumentGeneration,_editor.Document.Revision,_editor.RenderAssets?.Assets.Identity??Guid.Empty,
+         _editor.Play?.SessionId??Guid.Empty,_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty,_editor.Play?.Scene.World.Identity??Guid.Empty);
     private void SynchronizeSceneResourcesChecked()
     {
         if(_renderer is null||_editor is null)return;
@@ -81,11 +81,11 @@ internal sealed unsafe partial class CandidatePresentation
             // A new committed scene/resource request is the explicit recovery boundary.
             // Never retry on an unchanged failing stamp or overwrite a retained owner.
             if(_pendingScene is not null&&_failedSceneSync is {} failed&&failed!=key) {
-                using var read=SceneEnvironmentState.BeginRead(_editor.Document.World,key.World);
+                using var read=_editor.Document.ReadOnly();
                 var frameState=_renderer.ReadFrameState();
                 if(frameState.Active||frameState.Failed||_closed||SceneSyncKey()!=key)
                     throw new InvalidOperationException("Candidate retirement requires an unchanged request and a healthy off-frame renderer.");
-                _pendingScene.Dispose();_pendingScene=null;
+                _pendingScene.Dispose();_pendingScene=null;_pendingEditProjection=null;
                 if(SceneSyncKey()!=key)throw new InvalidOperationException("Scene changed during candidate retirement.");
             }
             SynchronizeSceneResources();_sceneSynchronizationOk=true;_failedSceneSync=null;
@@ -97,7 +97,7 @@ internal sealed unsafe partial class CandidatePresentation
         var assets=_editor!.Play is null?_editor.RenderAssets:_editor.PlayRenderAssets;
         if(assets is null)return false;
         try {
-            var world=_editor.Play?.Document.World??_editor.Document.World;
+            var world=_editor.Play?.Scene.World??CurrentEditWorld;
             var value=ReadEnvironmentSettings(world,scene.WorldId);
             var request=(scene,value,assets.Assets.Identity,world.Revision,width,height,config.Exposure,config.Ambient);
             if(_failedEnvironment==request)return false;
@@ -107,7 +107,7 @@ internal sealed unsafe partial class CandidatePresentation
         }catch(Exception error)when(PreparationError(error)){
             ScenePreparationFailed(error);
             // Preserve installed resources but never submit/pick old pixels as a new World.
-            try{var world=_editor.Play?.Document.World??_editor.Document.World;_failedEnvironment=(scene,ReadEnvironmentSettings(world,scene.WorldId),assets.Assets.Identity,world.Revision,width,height,config.Exposure,config.Ambient);}catch(Exception e)when(e is ArgumentException or InvalidOperationException){_failedEnvironment=null;}
+            try{var world=_editor.Play?.Scene.World??CurrentEditWorld;_failedEnvironment=(scene,ReadEnvironmentSettings(world,scene.WorldId),assets.Assets.Identity,world.Revision,width,height,config.Exposure,config.Ambient);}catch(Exception e)when(e is ArgumentException or InvalidOperationException){_failedEnvironment=null;}
             return false;
         }
     }

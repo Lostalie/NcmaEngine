@@ -55,7 +55,7 @@ internal static class CharacterInspectionTests
             using var doc=JsonDocument.Parse(pending.GetAwaiter().GetResult()??throw new IOException("MCP closed"));return doc.RootElement.Clone();
         }
         int call=10;Guid retry=Guid.NewGuid();
-        object Input(Guid[] ids,Guid? play=null,Guid? world=null)=>new{playSessionId=play??owner.Play!.SessionId,worldId=world??owner.Play!.Document.World.Identity,objectIds=ids};
+        object Input(Guid[] ids,Guid? play=null,Guid? world=null)=>new{playSessionId=play??owner.Play!.SessionId,worldId=world??owner.Play!.Scene.World.Identity,objectIds=ids};
         JsonElement Call(string name,object input)=>Send(new{jsonrpc="2.0",id=call++,method="tools/call",@params=new{name,arguments=new{contractVersion=2,requestId=retry,sessionId=owner.Edit.SessionId,expectedRevision=owner.Edit.Revision,input}}}).GetProperty("result").GetProperty("structuredContent");
         var descriptors=CharacterInspectionSchemas.Descriptors();
         try {
@@ -70,16 +70,27 @@ internal static class CharacterInspectionTests
             Check(Call(descriptors[0].Name,Input([sample.Actors[1]])).GetProperty("code").GetString()=="character_not_visible","foreign exact object scope");
             Check(Call(descriptors[0].Name,Input([sample.Actors[0]],Guid.NewGuid())).GetProperty("code").GetString()=="character_snapshot_stale");
             Check(Call(descriptors[0].Name,Input([sample.Actors[0],sample.Actors[0]])).GetProperty("code").GetString()=="character_input_invalid");
-            Check(Call(descriptors[0].Name,new{playSessionId=play.SessionId,worldId=play.Document.World.Identity,objectIds=sample.Actors,step=true}).GetProperty("code").GetString()=="character_input_invalid");
+            Check(Call(descriptors[0].Name,new{playSessionId=play.SessionId,worldId=play.Scene.World.Identity,objectIds=sample.Actors,step=true}).GetProperty("code").GetString()=="character_input_invalid");
             var local=runtime!.ReadDebugFrame();local.Characters[0]=local.Characters[0] with{Health=0};Check(runtime.ReadDebugFrame().Characters[0].Health==100,"local copied diagnostics");
             runtime.RequestAction(sample.Actors[0],ActionRequest.Attack);bool hit=false;
             for(int i=0;i<24;i++){Check(play.AdvanceFrame(1d/60).State==PlayState.Running);if(runtime.ReadCombatEvents().Any(e=>e.Kind==CombatEventKind.Hit)) {
                 var events=Call(descriptors[1].Name,Input([sample.Actors[0]]));Schema(events,descriptors[1].OutputSchema);
                 var e=events.GetProperty("data").GetProperty("events").EnumerateArray().Single(e=>e.GetProperty("kind").GetString()=="Hit");Check(e.GetProperty("target").ValueKind==JsonValueKind.Null&&e.GetProperty("damage").ValueKind==JsonValueKind.Null,"hidden target and damage redacted");hit=true;
             }}Check(hit,"actual sample combat hit");
-            ulong tick=play.Tick;byte[] before=play.Document.CaptureBytes();for(int i=0;i<8;i++)Call(descriptors[0].Name,Input([sample.Actors[0]]));Check(play.Tick==tick&&before.SequenceEqual(play.Document.CaptureBytes()),"MCP cannot step/write/replay damage");
+            ulong tick=play.Tick;byte[] before=play.Scene.CaptureCheckpoint().CopyBytes();for(int i=0;i<8;i++)Call(descriptors[0].Name,Input([sample.Actors[0]]));Check(play.Tick==tick&&before.SequenceEqual(play.Scene.CaptureCheckpoint().CopyBytes()),"MCP cannot step/write/replay damage");
             clock.Time=60*TimeSpan.TicksPerSecond;Check(Call(descriptors[0].Name,Input([sample.Actors[0]])).GetProperty("code").GetString()=="character_not_visible","expiry exact boundary");
             service.Approve(service.Capture([sample.Actors[0]]),service.Capture([sample.Actors[0]]).Fingerprint,true);service.Revoke();Check(Call(descriptors[0].Name,Input([sample.Actors[0]])).GetProperty("code").GetString()=="character_not_visible","same request ID rechecks authority");
+            var epochReview=service.Capture([sample.Actors[0]]);service.Approve(epochReview,epochReview.Fingerprint,true);
+            var pairedConnection=endpoint.View.Connections.Single(c=>c.Paired&&c.Connected).ConnectionId;
+            // No intervening Grant/Inspect read: revocation must survive restoration of identical IDs.
+            endpoint.Revoke(pairedConnection);endpoint.Pair(pairedConnection,true);
+            Check(!service.IsCurrent(epochReview),"old review cannot authorize a new pairing epoch");
+            Reject(()=>service.Approve(epochReview,epochReview.Fingerprint,true));
+            Check(Call(descriptors[0].Name,Input([sample.Actors[0]])).GetProperty("code").GetString()=="character_not_visible","same connection IDs cannot revive revoked character grant");
+            var freshReview=service.Capture([sample.Actors[0]]);Check(freshReview.AudienceRevision!=epochReview.AudienceRevision);
+            service.Approve(freshReview,freshReview.Fingerprint,true);
+            Check(Call(descriptors[0].Name,Input([sample.Actors[0]])).GetProperty("status").GetString()=="ok","new human review grants the new pairing epoch");
+            service.Revoke();
             var presenter=new EditorPresenter(workspace,null);presenter.AttachCharacters(service);
             void Press(string label,double value=0){presenter.Build((ulong)call++,1280,720);var item=presenter.Items.ToArray().Single(i=>Encoding.UTF8.GetString(presenter.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))==label);var f=presenter.Frame;presenter.Apply([new(){Kind=item.Kind,WidgetHigh=item.WidgetHigh,WidgetLow=item.WidgetLow,Phase=3,Frame=f.Frame,ViewGeneration=f.ViewGeneration,DocumentGeneration=f.DocumentGeneration,Revision=f.Revision,Value=value}],[]);}
             Press("Character Debug");presenter.Build((ulong)call++,1280,720);Check(presenter.Items.ToArray().Any(i=>Encoding.UTF8.GetString(presenter.Text.Slice((int)i.LabelOffset,(int)i.LabelLength)).Contains("Snapshot",StringComparison.OrdinalIgnoreCase)));
@@ -103,7 +114,7 @@ internal static class CharacterInspectionTests
         // Actual owner callback safety test in an independent coupled Play.
         var doc=new Ncma.Scene.SceneDocument("K6 safe read",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);
         Ncma.Scene.SceneDocumentFiles.Load(doc,Path.Combine(sample.Root,"start.ncmascene"));
-        using var assets=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,doc.CaptureSnapshot(),true);using var isolated=new PlaySession(doc,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
+        using var assets=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,doc.CaptureSnapshot(),true);var runtimeScene=doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);using var isolated=new PlaySession(runtimeScene,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
         using var isolatedRuntime=CharacterPlayRuntime.Compose(isolated,physics,assets)!;bool fail=false;
         isolated.AddSystem(new StepAction(()=>{if(fail){var pending=isolated.Commands.SpawnEmpty("late");isolated.Commands.AttachBehaviour(pending.ObjectId,new(Guid.NewGuid(),"Missing",true,[]));}else{Reject(()=>isolatedRuntime.ReadDebugFrame());Reject(()=>isolatedRuntime.InspectRootMotion(sample.Actors[0]));}}));
         isolated.Start(_=>throw new Exception("No behaviours"));try{

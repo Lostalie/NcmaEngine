@@ -37,7 +37,7 @@ internal sealed class AnimationRuntimeInspectionService(EditorSessionOwner owner
         if(selected.Sum(b=>b.Resources.Count)>4096)throw new EditRejectedException("animator_review_budget");
         if(requireValid)foreach(var b in selected){if(s.Play.State==PlayState.Faulted||s.Graphs.ReadFrame(b.ObjectId).Context.Tick!=s.Play.Tick)throw new EditRejectedException("animator_snapshot_stale");}
         var audience=Audience(endpoint);if(audience.Length==0)throw new EditRejectedException("animator_audience_missing");
-        var page=new AnimationRuntimeReview(owner.Edit!.SessionId,owner.Edit.DocumentGeneration,s.Play.SessionId,s.Play.Document.World.Identity,endpoint.View.InstanceId,endpoint.AudienceRevision,audience,selected,"");
+        var page=new AnimationRuntimeReview(owner.Edit!.SessionId,owner.Edit.DocumentGeneration,s.Play.SessionId,s.Play.Scene.World.Identity,endpoint.View.InstanceId,endpoint.AudienceRevision,audience,selected,"");
         return page with{Fingerprint=Hash(page)};
     }
     internal AnimationRuntimeReview Capture(Guid[] exact)=>Page(exact,true);
@@ -74,12 +74,12 @@ internal sealed class AnimationRuntimeInspectionService(EditorSessionOwner owner
     private object Observe(Guid actor,int offset,int limit,ulong? expected)
     {
         var s=Source();if(s.Play.Tick>9007199254740991||expected.HasValue&&s.Play.Tick!=expected)throw new EditCommandRejectedException("animator_snapshot_stale");
-        object Result(bool valid,string fault,object? observation)=>new{playSessionId=s.Play.SessionId,worldId=s.Play.Document.World.Identity,tick=s.Play.Tick,snapshotValid=valid,faultCode=fault,observation};
+        object Result(bool valid,string fault,object? observation)=>new{playSessionId=s.Play.SessionId,worldId=s.Play.Scene.World.Identity,tick=s.Play.Tick,snapshotValid=valid,faultCode=fault,observation};
         if(s.Play.State==PlayState.Faulted)return Result(false,"play_faulted",null);
         var binding=s.Graphs.DescribeBindings().SingleOrDefault(b=>b.ObjectId==actor)??throw Invalid();
         var debug=s.Graphs.ReadDebug(actor);if(!debug.SnapshotValid||debug.CommittedSequence>9007199254740991)return Result(false,"snapshot_invalid",null);
-        object? root=null;global::Ncma.Runtime.Entity obj=s.Play.Document.World.FindEntity(actor);
-        if(s.Play.Document.World.Has<RootMotionData>(obj)) {
+        object? root=null;global::Ncma.Runtime.Entity obj=s.Play.Scene.World.FindEntity(actor);
+        if(s.Play.Scene.World.Has<RootMotionData>(obj)) {
             if(s.Runtime.Characters is not {} characters||!characters.Status.SnapshotValid)return Result(false,"movement_invalid",null);
             var motion=characters.InspectRootMotion(actor);if(motion.Tick!=s.Play.Tick||characters.Status.CommittedSequence>9007199254740991)return Result(false,"movement_invalid",null);
             root=new{desired=motion.DesiredDisplacement,accepted=motion.AcceptedDisplacement,yaw=motion.DesiredYaw,numericalEpoch=characters.NumericalEpoch,numericalSequence=characters.Status.CommittedSequence};

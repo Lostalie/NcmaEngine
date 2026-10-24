@@ -30,10 +30,10 @@ public sealed class SceneAnimatorRuntime : IDisposable, IWorldSystem, ICommitted
     private Guid _session, _world;
     private bool _disposed;
     private readonly bool _interruptions;
-    private World World => _play.Document.World;
+    private World World => _play.Scene.World;
     public static SceneAnimatorRuntime? Compose(PlaySession play, PreparedSceneAssetLease? assets,bool interruptTransitions=false)
     {
-        var snapshot = play.Document.CaptureSnapshot(); SceneRenderValidation.RequireComposition(snapshot);
+        var snapshot = play.Scene.CaptureSnapshot(); SceneRenderValidation.RequireComposition(snapshot);
         if (!snapshot.Objects.Any(o => o.Components.Any(c => c.TypeId == AnimatorData.TypeId))) return null;
         if (assets is null) throw new ArgumentException("Animator requires prepared assets, including Headless.");
         return new(play, assets,interruptTransitions);

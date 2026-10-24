@@ -22,7 +22,7 @@ public sealed partial class EditSession
         permissions ??= CapabilityPermissions.ReadOnly;
         Writable(permissions, "ncma.scene.transaction");
         if (expectedRevision != Revision) throw new EditRejectedException("revision_conflict");
-        _ = _document.World.FindEntity(objectId);
+        if (!_document.ContainsObject(objectId)) throw new ArgumentException("Unknown authoring object UUID.");
         Ncma.Runtime.World.ValidateName(label);
         Guid token = Guid.NewGuid();
         _draft = new(token, Revision, objectId, label, Json("""{"operations":[]}"""));

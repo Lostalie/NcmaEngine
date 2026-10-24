@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-d-loop-development-v3-precision",
+  "kind": "default-off development observation; not performance acceptance",
+  "previousEvidence": "v1 and v2 contracts, raw evidence and failures remain historical unchanged",
+  "reportVersion": 2,
+  "entryOptions": ["--loop-costs", "--max-fps 1..240"],
+  "pacingDefault": "uncapped; Platform 1.0; no timer allocation",
+  "cappedHosts": "Editor including CPU-only and graphical Player explicitly request Platform 1.1; owned native high-resolution wait timer; no coarse fallback",
+  "headless": "frame cap rejected",
+  "pacingPolicy": "unchanged ceil(Stopwatch.Frequency/fps) minimum owner-loop admission interval; first admission immediate; late work rebases from actual admission with no catch-up bursts",
+  "waiting": "C# chooses 1..8000us relative native waits leaving final <=1ms SpinWait; Windows high-resolution waitable timer, zero tolerable delay, non-alertable, no callbacks/event pumping/global timer resolution change or GPU waits; wake precision is not guaranteed",
+  "ownership": "one timer per Platform module; owner-thread resource lease; retained across renderer recovery, explicit shutdown before module unload, close failure retains owner and blocks unload",
+  "failure": "unsupported timer, arm/wait/close error is explicit; no forced cleanup, fallback or implicit retry",
+  "scope": "unchanged wall loop timing includes waits/observation; actual admission timestamps and native Present-return intervals are not physical display evidence",
+  "rawCapacity": 512,
+  "overflow": "first prefix retained, omissions explicit",
+  "simulation": "unchanged supplied clock/deltas/fixed steps",
+  "targetHardwareVerified": false,
+  "performanceAccepted": false,
+  "memoryAcceptance": "pending"
+}

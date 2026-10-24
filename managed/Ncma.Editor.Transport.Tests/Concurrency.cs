@@ -13,7 +13,7 @@ internal static class Concurrency
         void Check(bool yes, string reason) { if (!yes) throw new Exception(reason); }
         void Until(Func<bool> complete, Action progress) { var timer = Stopwatch.StartNew(); while (!complete()) {
             if (timer.Elapsed.TotalSeconds > 12) throw new TimeoutException("Concurrency fixture"); progress(); Thread.Sleep(1); } }
-        var doc = new SceneDocument("Four clients"); Guid objectId = doc.World.GetUuid(doc.World.CreateEntity("Shared"));
+        var doc = new SceneDocument("Four clients"); Guid objectId = doc.CreateObject("Shared");
         var edit = new EditSession(doc); using var endpoint = new EditorEndpoint(edit, root);
         var descriptor = Wire.Decode<EndpointDescriptor>(File.ReadAllBytes(endpoint.DescriptorPath));
         var clients = new List<NamedPipeClientStream>(); var hellos = new List<HelloResult>();

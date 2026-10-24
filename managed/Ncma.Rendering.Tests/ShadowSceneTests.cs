@@ -29,7 +29,8 @@ internal static unsafe partial class Program
         bool approved=true;Action? callback=null;bool Approval(){callback?.Invoke();return approved;}
         var high=highFiles.Prepare(renderer,files,Approval);using var post=new PostProcessRuntime(renderer,files,postFiles,PostProcessModules.Official(),Approval);
         var fixture=new SceneGpuFixture(output);var(source,camera,_,_)=fixture.Scene();
-        var doc=new SceneDocument("Shadow selection",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);doc.RestoreSnapshot(source.CaptureSnapshot());
+        var authoring=new SceneDocument("Shadow selection",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);authoring.RestoreSnapshot(source.CaptureSnapshot());
+        var authoringBytes=authoring.CaptureBytes();var doc=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity setting=doc.World.CreateEntity("Shadows");doc.World.Set(setting, new SceneShadowData(1,SceneShadowQuality.Off));
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,doc.CaptureSnapshot(),true);using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(128,128);byte[] image=new byte[128*128*4];
         using var session=new SceneRenderSession(renderer,cache,doc.World);session.Prepare(assets,doc.CaptureSnapshot(),highShadows:high,environmentPreparationAllowed:Approval);
@@ -78,6 +79,7 @@ internal static unsafe partial class Program
             doc.World.Set(setting, new SceneShadowData(1,SceneShadowQuality.Off));Joint();Pass(joint.Costs.ShadowDraws==0&&!joint.Plan!.Resources.Any(r=>r.Role==RenderRole.SceneShadow)&&renderer.PostStats.Bindings==1,"Off keeps IBL/Bloom but no shadow resources");
         }
         cache.Trim();Pass(renderer.PipelineStats.Pipelines==0&&renderer.PostStats.Bindings==0&&renderer.EnvironmentStats.Live==0&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"all leases close API0/0");
+        Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()),"runtime shadow changes leave authoring source unchanged");
         File.WriteAllText(Path.Combine(output,"shadow-scene-results.json"),JsonSerializer.Serialize(new{cases,allocated,defaultPreparationBytes,apiErrors=0,apiWarnings=0,formalHosts=false,animatedOracle=false}));Console.WriteLine($"PASS M7.5 shared shadow: {cases} checks; warm64 allocation={allocated}; default preparation={defaultPreparationBytes}; API0/0; {output}");return 0;
     }
 }

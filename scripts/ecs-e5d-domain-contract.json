@@ -1,0 +1,54 @@
+{
+  "schema": 2,
+  "id": "ecs-e5-d-domain-v2-audit-inclusive",
+  "configuration": "Release",
+  "sampling": { "processes": 3, "warmup": 12, "samples": 100, "quantile": "nearest-rank", "selection": "all processes; no best-run selection or automatic resampling" },
+  "pipeReads": {
+    "counts": [100, 1000, 4096],
+    "smokeCount": 8,
+    "workloads": ["page_cold_revision", "page_warm_first", "page_warm_last", "object_warm"],
+    "pageLimit": 128,
+    "detailLimit": 64,
+    "maxOutputBytes": 262144,
+    "scope": "real current-user private pipe; encode/write/pump/wait/read/decode including production audit IO; request construction and semantic checks excluded",
+    "pumpScope": "nested owner-thread EditorEndpoint.Pump including production audit IO; not additive to roundtrip",
+    "allocationScope": "owner thread only; excludes async pipe worker allocations; not total process allocation",
+    "coldSetup": "trusted local rename outside timed request; next read must perform one full codec proof",
+    "pollSleepMilliseconds": 1,
+    "maxRequestSeconds": 10
+  },
+  "pipeHistory": {
+    "counts": [100, 1000, 4096],
+    "smokeCount": 8,
+    "workloads": ["approved_transaction", "undo", "redo"],
+    "setup": "explicit isolated TEST pairing and exact proposal approval outside timing; no automatic grant in production",
+    "scope": "actual pipe roundtrip and nested Pump including production audit IO and production document serialization; independent full-codec semantic oracle and harness IO outside timing",
+    "checks": ["default-deny", "exact-proposal", "idempotent-retry", "single-history", "restore-invalidates-handles", "revoked-grant", "revoked-connection", "persisted-audit"]
+  },
+  "requiredDomains": [
+    "editor-edit-play-pause-step-reload-stop",
+    "player-dx11-null-relocated",
+    "real-fbx-animation-root-jolt-box2d-0-small-budget",
+    "pure-2d-ui-no-3d-resources",
+    "gpu-origin-frame-unique-samples",
+    "immutable-upload-and-resource-lifecycle",
+    "managed-and-native-memory-residency",
+    "private-pipe-reads",
+    "private-pipe-approved-transactions-history-revocation-queue",
+    "mcp-stdio-reads-transactions"
+  ],
+  "existingHardLimits": { "actionActors": 32, "worldObjects": 4096, "pipeConnections": 4, "pipeQueue": 64, "perConnectionQueue": 16, "requestsPerPump": 4 },
+  "invariants": [
+    "same active EditSession and sole history; no new approval capability",
+    "no harness capture/waitIdle/forcedGC or harness file IO in timed windows; production transport audit IO remains enabled and included",
+    "GPU elapsed domains are not additive; stale/repeated samples never relabeled current",
+    "pending or invalid counters never prove memory acceptance",
+    "raw samples, fixture hashes, loaded products and independent semantic checks required",
+    "resource lifetime bounds and zero API errors/warnings remain mandatory"
+  ],
+  "targetHardwareBudget": { "status": "awaiting-human-confirmation", "hardware": null, "width": null, "height": null, "framesPerSecond": null },
+  "cpuGpuAbsoluteAcceptance": "pending target budget; do not invent FPS guarantees from local probes",
+  "memoryAcceptance": "pending",
+  "fullPerformanceAccepted": false,
+  "deployed": false
+}

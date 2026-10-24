@@ -53,10 +53,12 @@ internal static class ActionJointChecks
         var rows=new List<object>();ulong frame=0;
         foreach(int count in new[]{0,1,8,32}) {
             var sample=ActionSample.Create(evidence,assembly,count);
-            var doc=Load(sample);global::Ncma.Runtime.Entity camera=doc.World.FindEntity(sample.Camera);
-            doc.World.Set(camera, TransformData.Identity with{Position=new(Math.Max(0,(count-1)*1.5f),1,7)});
-            doc.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=100});
-            byte[] startup=doc.CaptureBytes();
+            var source=Load(sample);Guid camera=sample.Camera;
+            source.SetComponent(camera, TransformData.Identity with{Position=new(Math.Max(0,(count-1)*1.5f),1,7)});
+            source.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=100});
+            byte[] authoring=source.CaptureBytes();
+            var doc=source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
+            byte[] startup=doc.CaptureCheckpoint().CopyBytes();
             using var assets=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,doc.CaptureSnapshot(),true,"assets/action.ncpak");
             using var physics=new PhysicsService(plugins,enabled:count!=0,characterSupport:count!=0);
             using var play=new PlaySession(doc,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
@@ -95,16 +97,18 @@ internal static class ActionJointChecks
                     gcCollections=Enumerable.Range(0,3).Select(g=>GC.CollectionCount(g)-gc[g]).ToArray(),scene.SkinBackpressureFrames,
                     skinGpu=Summary(values.Where(v=>v.SkinGpuMs is not null).Select(v=>v.SkinGpuMs!.Value)),sceneGpu=Summary(values.Where(v=>v.SceneGpuMs is not null).Select(v=>v.SceneGpuMs!.Value))});
             }finally{play.Stop();}
+            Check(authoring.SequenceEqual(source.CaptureBytes()),"Joint simulation never writes authoring source");
             Check(physics.Inspect().Worlds==0&&kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&cache.Count==0&&renderer.SkinStats.Meshes==0&&renderer.PipelineStats.Pipelines==0&&renderer.SceneStats.LiveMeshes==0&&renderer.ResourceStats.Textures==0&&renderer.ResourceStats.Materials==0&&renderer.ResourceStats.Targets==0,"Full coupled workload returns to numerical/pose/GPU baseline");
         }
         // Reuse one service/cache/kernel across 32 fault/reload/Stop cycles, not 32 fresh processes hiding retained resources.
         var cycleSample=ActionSample.Create(evidence,assembly,1);var original=Load(cycleSample);
+        byte[] originalAuthoring=original.CaptureBytes();
+        var startupImage=original.BakeRuntime(original.Revision).Image;
         using(var assets=SceneAssetPreparation.Prepare(cycleSample.Root,cycleSample.ProjectId,original.CaptureSnapshot(),true,"assets/action.ncpak"))
         using(var physics=new PhysicsService(plugins,characterSupport:true)) {
             var identities=new HashSet<Guid>();
             for(int cycle=0;cycle<32;cycle++) {
-                var doc=original.CreateIsolatedCopy();byte[] startup=doc.CaptureBytes();
-                using var play=new PlaySession(doc,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
+                var doc=startupImage.Instantiate(original.Components);using var play=new PlaySession(doc,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
                 using var runtime=CharacterPlayRuntime.Compose(play,physics,assets,profile:cycle%2==0)!;bool fail=false;
                 play.AddSystem(new FaultSystem(()=>{if(fail){var pending=play.Commands.SpawnEmpty("fault");play.Commands.AttachBehaviour(pending.ObjectId,new(Guid.NewGuid(),"InjectedMissing",true,[]));}}));
                 play.Start(_=>throw new Exception("Injected missing behaviour factory"));
@@ -116,13 +120,13 @@ internal static class ActionJointChecks
                     for(int i=0;i<12;i++){Check(play.AdvanceFixedStep().State==PlayState.Running,"Cycle committed attack");if(!scene.Submit(++frame,320,240,cycleSample.Camera))renderer.Submit(clear,null,RenderFrame.Reference(frame,320,240));renderer.Present();}
                     Check(doc.World.Get<HealthData>(doc.World.FindEntity(cycleSample.Targets[0])).Current==75,"Cycle real damage");
                     if(cycle%2!=0)Reject(()=>runtime.ReadStepProfile());
-                    fail=true;byte[] before=doc.CaptureBytes();ulong tick=play.Tick;
-                    Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==tick&&before.SequenceEqual(doc.CaptureBytes()),"Post-solver injected failure never installs candidate movement/health");
+                    fail=true;byte[] before=doc.CaptureCheckpoint().CopyBytes();ulong tick=play.Tick;
+                    Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==tick&&before.SequenceEqual(doc.CaptureCheckpoint().CopyBytes()),"Post-solver injected failure never installs candidate movement/health");
                     Check(!runtime.ReadDebugFrame().SnapshotValid,"Fault invalidates presentation");Reject(()=>runtime.ReadStepProfile());
                     scene.Dispose();scene=null; // GPU/pose before numerical rebuild.
                     Reject(()=>play.Reload(_=>throw new Exception("No behaviours"))); // A faulted session cannot silently resume/reload.
                     play.Stop();runtime.Dispose();
-                    var recoveryDoc=original.CreateIsolatedCopy();
+                    var recoveryDoc=startupImage.Instantiate(original.Components);
                     using var recovered=new PlaySession(recoveryDoc,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
                     using var recoveredRuntime=CharacterPlayRuntime.Compose(recovered,physics,assets,profile:true)!;
                     recovered.Start(_=>throw new Exception("No behaviours"));
@@ -136,12 +140,12 @@ internal static class ActionJointChecks
                     }finally{recovered.Stop();}
                 } finally{scene?.Dispose();play.Stop();}
                 Check(physics.Inspect().Worlds==0&&kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&cache.Count==0&&renderer.SkinStats.Meshes==0&&renderer.PipelineStats.Pipelines==0&&renderer.SceneStats.LiveMeshes==0&&renderer.ResourceStats.Textures==0&&renderer.ResourceStats.Materials==0&&renderer.ResourceStats.Targets==0,"Cycle resource baselines");
-                Check(original.CaptureBytes().SequenceEqual(startup),"Edit startup is isolated from cycles");
+                Check(original.CaptureBytes().SequenceEqual(originalAuthoring),"Edit startup is isolated from cycles");
             }
         }
         Check(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"Joint final API validation 0/0");
         string report=Path.Combine(evidence,"profile.json");using(var stream=new FileStream(report,FileMode.CreateNew,FileAccess.Write,FileShare.None))JsonSerializer.Serialize(stream,new{
-            schemaVersion=1,configuration=plugins.Contains("windows-ninja-release",StringComparison.OrdinalIgnoreCase)?"Release":"Debug",warmup=Warmup,samples=Samples,
+            schemaVersion=2,stateFormat=RuntimeSceneImage.Format,stateFormatVersion=RuntimeSceneImage.FormatVersion,configuration=plugins.Contains("windows-ninja-release",StringComparison.OrdinalIgnoreCase)?"Release":"Debug",warmup=Warmup,samples=Samples,
             width=320,height=240,fixedSeconds=1d/60,vsync=false,hardware=Hardware(),runtime=System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,Environment.ProcessorCount,
             adapterSelection="DX11 default adapter; registry inventory only, active-adapter attribution pending",synthetic=true,budgetAccepted=false,manualAccepted=false,longRunAccepted=false,
             gpuSemantics="Nonblocking asynchronous last-valid observations; the existing ABI has no GPU sample-frame ID, observations may repeat. Not 32 independent GPU samples or per-frame attribution.",

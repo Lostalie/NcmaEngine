@@ -65,6 +65,9 @@ public sealed partial class EditSession
             int index = request.Capability == "ncma.history.undo" ? _cursor - 1 : _cursor;
             if (index < 0 || index >= _history.Length) throw new EditRejectedException("history_empty");
             var entry = _history[index];
+            // Current remote approval UI can confirm only one original destructive command.
+            // Never downgrade a local atomic batch into its ordinary transaction capability.
+            if (entry.DestructiveTargets.Length != 0) throw new EditRejectedException("history_local_batch_required");
             if (entry.Impact.DocumentReplacement) throw new EditRejectedException("history_scope_denied");
             return (entry.Impact with { Objects = (Guid[])entry.Impact.Objects.Clone(), CreatedObjects = (Guid[])entry.Impact.CreatedObjects.Clone(),
                 ComponentTypes = (string[])entry.Impact.ComponentTypes.Clone(), Bindings = (Guid[])entry.Impact.Bindings.Clone() }, entry.Capability, entry.Target);
@@ -90,7 +93,7 @@ public sealed partial class EditSession
             foreach (var op in impactRequest.Input.GetProperty("operations").EnumerateArray()) candidate = Apply(candidate, op);
         }
         else if (_participants.TryGetValue(request.Capability, out var participant) && participant is IEditCommandProposal proposal) {
-            using (_document.World.ReadOnly()) proposal.ValidateProposal(request.Input);
+            using (_document.ReadOnly()) proposal.ValidateProposal(request.Input);
             return (new([], [], [], [], false), request.Capability, null); // Independent participant scope owns file/resource authority.
         }
         else throw new ArgumentException("Not a mutation proposal.");

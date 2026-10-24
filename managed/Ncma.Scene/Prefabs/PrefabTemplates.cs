@@ -6,13 +6,13 @@ namespace Ncma.Scene.Prefabs;
 public static class PrefabTemplates
 {
     public static PrefabDocument Extract(SceneDocument edit,Guid[] selected,PrefabExtractionScope scope,PrefabPolicy policy,
-        Guid prefabId,string name,PrefabPoint pivot,ulong expectedRevision,Guid expectedWorldId)
+        Guid prefabId,string name,PrefabPoint pivot,ulong expectedRevision,Guid expectedDocumentSessionId)
     {
         ArgumentNullException.ThrowIfNull(edit);ArgumentNullException.ThrowIfNull(policy);ArgumentNullException.ThrowIfNull(selected);ArgumentNullException.ThrowIfNull(scope);edit.VerifyAccess();
         selected=(Guid[])selected.Clone();
         if(selected.Length is <1 or >PrefabDocumentCodec.MaxObjects||selected.Any(id=>id==Guid.Empty)||selected.Distinct().Count()!=selected.Length)throw new ArgumentException("Invalid exact extraction set.");
-        if(edit.Revision!=expectedRevision||edit.World.Identity!=expectedWorldId)throw new InvalidOperationException("prefab_extract_stale");
-        using var read=edit.World.ReadOnly();scope.Require(edit,selected);
+        if(edit.Revision!=expectedRevision||edit.SessionId!=expectedDocumentSessionId)throw new InvalidOperationException("prefab_extract_stale");
+        using var read=edit.ReadOnly();scope.Require(edit,selected);
         var source=edit.CaptureSnapshot();var chosen=selected.Select(id=>source.Objects.SingleOrDefault(o=>o.Id==id)??throw new ArgumentException("Unknown source object.")).ToArray();
         // Validate all policy/reference intent before allocating persistent template identities.
         foreach(var obj in chosen){foreach(var component in obj.Components){foreach(var field in policy.Rule(component).References){Guid id=policy.Reference(component,field);if(field.Role==PrefabReferenceRole.Object&&id!=Guid.Empty&&!selected.Contains(id))throw new ArgumentException("prefab_external_object_reference");}}
@@ -34,7 +34,7 @@ public static class PrefabTemplates
         }).ToArray();
         var document=new PrefabDocument(1,prefabId,1,name,pivot,result,references.OrderBy(r=>r.ObjectId).ThenBy(r=>r.TypeId,StringComparer.Ordinal).ThenBy(r=>r.FieldPath,StringComparer.Ordinal).ToArray(),dependencies.OrderBy(d=>d.AssetId).ToArray());
         byte[] bytes=PrefabDocumentCodec.Encode(document,policy);scope.Require(edit,selected);
-        if(edit.Revision!=expectedRevision||edit.World.Identity!=expectedWorldId)throw new InvalidOperationException("prefab_extract_stale");return PrefabDocumentCodec.Decode(bytes,policy);
+        if(edit.Revision!=expectedRevision||edit.SessionId!=expectedDocumentSessionId)throw new InvalidOperationException("prefab_extract_stale");return PrefabDocumentCodec.Decode(bytes,policy);
     }
     public static PrefabExpansionPreview PreviewExpansion(PrefabDocument prefab,PrefabPolicy policy,PrefabPoint placement,IEnumerable<Guid> occupiedIdentities)
     {

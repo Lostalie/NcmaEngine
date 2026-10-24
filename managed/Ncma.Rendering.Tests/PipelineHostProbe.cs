@@ -42,10 +42,10 @@ internal static class PipelineHostProbe
                 EcsCommittedProbe? probe = null;
                 void Observe(Ncma.Gameplay.PlaySession play, ulong nextTick)
                 {
-                    if (probe is null) { probe = new(play.Document.World); play.AddCommittedObserver(probe); }
+                    if (probe is null) { probe = new(play.Scene.World); play.AddCommittedObserver(probe); }
                     // Caller boundary, not an IPC or snapshot operation inside a simulation callback.
-                    var snapshot = play.Document.CaptureSnapshot(); var ids = new List<Guid>();
-                    foreach (var entity in probe.Query) ids.Add(play.Document.World.GetUuid(entity));
+                    var snapshot = play.Scene.CaptureSnapshot(); var ids = new List<Guid>();
+                    foreach (var entity in probe.Query) ids.Add(play.Scene.World.GetUuid(entity));
                     var expected = snapshot.Objects.Where(o => o.Components.Any(c => c.TypeId == "ncma.transform")).Select(o => o.Id).ToArray();
                     if (!ids.SequenceEqual(expected) || nextTick != play.Tick + 1 || probe.LastTick != play.Tick)
                         throw new Exception("E4-E Player committed query/cold snapshot disagree.");
@@ -98,9 +98,9 @@ internal static class PipelineHostProbe
                             presentation.Present(play, (_,_,_) => frames++); // Warm the real host and retained query plans.
                             // Trusted test fault injection at a committed boundary, not a gameplay/Agent capability.
                             for (int i = 0; i < 2; i++) {
-                                var obj = play.Document.World.CreateEntity("E4-C duplicate setting");
-                                if (environmentConflict) play.Document.World.Set(obj, EnvironmentLightingData.Off);
-                                else play.Document.World.Set(obj, RenderConfiguration.Default(Guid.NewGuid()));
+                                var obj = play.Scene.World.CreateEntity("E4-C duplicate setting");
+                                if (environmentConflict) play.Scene.World.Set(obj, EnvironmentLightingData.Off);
+                                else play.Scene.World.Set(obj, RenderConfiguration.Default(Guid.NewGuid()));
                             }
                             try { presentation.Present(play, (_,_,_) => frames++); }
                             catch (ArgumentException error) { rejected = error.Message; throw; }
@@ -137,25 +137,25 @@ internal static class PipelineHostProbe
                     var image=Draw(); Image(image,"Editor mode "+mode); var size=editor.VerificationViewport;
                     if(mode==0){
                         defaultImage=image;
-                        var editorOwner=editor.VerificationEditor;var world=editorOwner.Document.World;
-                        var original=editorOwner.Document.CaptureSnapshot();Guid oldWorld=world.Identity;
+                        var editorOwner=editor.VerificationEditor;var authoring=editorOwner.Document;
+                        var original=editorOwner.Document.CaptureSnapshot();var oldProjection=EnvironmentProductEvidence.Field<EditorSceneProjection>(editor,"_editProjection");Guid oldWorld=oldProjection.Scene.World.Identity;
                         var reader=EnvironmentProductEvidence.Field<SceneComponentReader<RenderConfiguration>>(editor,"_configurationReader");
                         var originalConfig=EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration");
                         // Deliberately malformed trusted extension state, not an authoring permission bypass.
-                        var first=world.CreateEntity("E4-C setting");var selected=RenderConfiguration.Default(Guid.NewGuid()) with{Exposure=.5f};world.Set(first,selected);
+                        var first=authoring.CreateObject("E4-C setting");var selected=RenderConfiguration.Default(Guid.NewGuid()) with{Exposure=.5f};authoring.SetComponent(first,selected);
                         Draw();Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==selected,"E4-C Editor observes one setting");
-                        var second=world.CreateEntity("E4-C duplicate");world.Set(second,selected with{Exposure=2});Draw();
+                        var second=authoring.CreateObject("E4-C duplicate");authoring.SetComponent(second,selected with{Exposure=2});Draw();
                         Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==selected,"E4-C Editor duplicate preserves last valid setting");
                         var log=EnvironmentProductEvidence.Field<ApplicationLog>(editor,"_log");
                         Pass(log.Snapshot.Any(e=>e.Code=="render.ambiguous_configuration"&&e.Level=="warning"),"E4-C duplicate warning remains visible");
-                        world.Set(first,selected with{Exposure=.25f});Draw();
+                        authoring.SetComponent(first,selected with{Exposure=.25f});Draw();
                         Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==selected,"E4-C value mutation does not pick an ambiguous setting");
-                        world.Destroy(second);Draw();
+                        authoring.DeleteObject(second);Draw();
                         Pass(EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")== (selected with{Exposure=.25f}),"E4-C unique setting recovers after member removal");
                         editorOwner.Document.RestoreSnapshot(original);
-                        Pass(Draw().SequenceEqual(image)&&world.Identity!=oldWorld,"E4-C Restore rebuilds resources and restores exact viewport");
-                        Pass(ReferenceEquals(reader,EnvironmentProductEvidence.Field<SceneComponentReader<RenderConfiguration>>(editor,"_configurationReader"))&&
-                            EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==originalConfig,"E4-C retained reader rebuilds its plan, absent setting uses original default");
+                        Pass(Draw().SequenceEqual(image)&&EnvironmentProductEvidence.Field<EditorSceneProjection>(editor,"_editProjection").Scene.World.Identity!=oldWorld,"E4-C Restore rebuilds resources and restores exact viewport");
+                        Pass(!ReferenceEquals(reader,EnvironmentProductEvidence.Field<SceneComponentReader<RenderConfiguration>>(editor,"_configurationReader"))&&
+                            EnvironmentProductEvidence.Field<RenderConfiguration>(editor,"_configuration")==originalConfig,"E4-C new projection gets its own reader, absent setting uses original default");
                         continue;
                     }
                     Pass(!image.SequenceEqual(defaultImage!),"Editor uses custom stage/final Tone");
@@ -169,7 +169,7 @@ internal static class PipelineHostProbe
                         CapabilityRequest Read(string capability,object input)=>new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,capability,JsonSerializer.SerializeToElement(input));
                         for(int repeat=0;repeat<2;repeat++){
                             var inspected=edit.Invoke(Read("ncma.scene.inspect",new{offset=0,limit=128}));
-                            Pass(inspected.Status=="ok"&&!inspected.Changed&&inspected.Data.GetProperty("worldId").GetGuid()==owner.Document.World.Identity,"E4-E actual Editor committed page");
+                            Pass(inspected.Status=="ok"&&!inspected.Changed&&inspected.Data.GetProperty("model").GetString()=="ncma.authoring-scene"&&inspected.Data.GetProperty("modelVersion").GetInt32()==1&&inspected.Data.GetProperty("documentSessionId").GetGuid()==owner.Document.SessionId&&inspected.Data.GetProperty("documentRevision").GetUInt64()==owner.Document.Revision,"E4-E actual Editor committed page");
                             var objects=inspected.Data.GetProperty("scene").GetProperty("objects").EnumerateArray().ToArray();
                             Pass(objects.Select(o=>o.GetProperty("id").GetGuid()).SequenceEqual(expected.Objects.Take(128).Select(o=>o.Id)),"E4-E rendered Editor page creation order");
                             foreach(var obj in expected.Objects.Take(128)){
@@ -179,14 +179,14 @@ internal static class PipelineHostProbe
                                 Pass(items.Length==obj.Components.Length&&obj.Components.All(c=>items.Single(i=>i.GetProperty("typeId").GetString()==c.TypeId).GetProperty("data").GetRawText()==c.Data.GetRawText()),"E4-E rendered Editor component/cold codec equality");
                             }
                         }
-                        // This fixture uses stable built-in component encodings; an existing valid proof may already be warm.
-                        Pass(Captures()-captureBefore is 0 or 1,"E4-E no repeated complete document capture on stable Editor reads");
+                        // Pure authoring pages use stored normalized values; neither cold nor warm reads capture the whole document.
+                        Pass(Captures()==captureBefore,"E4-E no repeated complete document capture on stable Editor reads");
                     }
                     InspectCurrent();
-                    global::Ncma.Runtime.Entity setting=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<PostProcessData>(o));Guid id=owner.Document.World.GetUuid(setting);var active=owner.Document.World.Get<PostProcessData>(setting);
+                    Guid setting=owner.Document.GetObjectIds().Single(o=>owner.Document.HasComponent<PostProcessData>(o));Guid id=setting;var active=owner.Document.GetComponent<PostProcessData>(setting);
                     void Set(PostProcessData value)
                     {
-                        var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=id,typeId=PostProcessData.TypeId,version=1,data=owner.Document.World.Components.Encode(value)}}}));
+                        var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=id,typeId=PostProcessData.TypeId,version=1,data=owner.Document.Components.Encode(value)}}}));
                         Pass(edit.Invoke(command).Status=="denied","default Agent remains read-only");
                         Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[id],componentScope:[PostProcessData.TypeId])).Changed,"original scoped post command");
                     }
@@ -201,13 +201,13 @@ internal static class PipelineHostProbe
                         Pass(Draw().SequenceEqual(image),"Reload custom graph");InspectCurrent();owner.StopPlay();Pass(Draw().SequenceEqual(image),"Stop restores Edit");InspectCurrent();
                     }
                     var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
-                    foreach(Action forbidden in new Action[]{()=>owner.Document.World.CreateEntity("forbidden Build write"),()=>renderer.Dispose()})
+                    foreach(Action forbidden in new Action[]{()=>owner.Document.CreateObject("forbidden Build write"),()=>renderer.Dispose()})
                     {
                         onBuild=forbidden;Set(active with{ExposureEv=-1});var clear=Draw();
                         Pass(clear.Where((b,i)=>b!=clear[i%4]).Any()==false,"Build callback rejects World write/renderer unload and clears");
                         onBuild=null;Set(active);Pass(Draw().SequenceEqual(image),"explicit recovery after callback fault");
                     }
-                    Pass(owner.Document.World.GetEntities().All(o=>owner.Document.World.GetName(o)!="forbidden Build write"),"no callback World mutation");
+                    Pass(owner.Document.GetObjectIds().All(o=>owner.Document.GetObjectName(o)!="forbidden Build write"),"no callback World mutation");
                     broken=true;Set(active with{ExposureEv=-1});var fault=Draw();Pass(fault.Where((b,i)=>b!=fault[i%4]).Any()==false,"late invalid graph themed clear");
                     broken=false;Set(active);Pass(Draw().SequenceEqual(image),"invalid graph recovery");
                     var view=editor.VerificationPresenter;view.AttachLayout(new(Path.Combine(output,$"layout-{mode}.json")));Draw();var vf=view.Frame;

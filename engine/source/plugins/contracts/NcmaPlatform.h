@@ -42,6 +42,39 @@ typedef struct NcmaPlatformApiV1 {
     NcmaRequestCloseV1 request_close;
     NcmaWaitEventsV1 wait_events;
 } NcmaPlatformApiV1;
+/* Explicit 1.1 request only; 1.0 remains exactly 120 bytes. At most one timer per
+   module, independent of windows/renderers. No timer exists until create succeeds.
+   Owner-thread, synchronous, non-alertable, no callbacks/event pump/global timer
+   resolution change. Wait requests are 1..8000 microseconds, not a wake deadline
+   guarantee. C# owns clock, admission policy, final spin and cancellation checks.
+   Unsupported high-resolution timers fail explicitly (no coarse fallback).
+   Shutdown is busy while timer exists. Failed destroy retains ownership. */
+typedef uint32_t (NCMA_CALL *NcmaCreatePrecisionWaitV1)(uint64_t, uint64_t*, NcmaErrorV1*);
+typedef uint32_t (NCMA_CALL *NcmaPrecisionWaitV1)(uint64_t, uint64_t, uint32_t, NcmaErrorV1*);
+typedef uint32_t (NCMA_CALL *NcmaDestroyPrecisionWaitV1)(uint64_t, uint64_t, NcmaErrorV1*);
+typedef struct NcmaPlatformApiV1_1 {
+    NcmaPlatformApiV1 base;
+    NcmaCreatePrecisionWaitV1 create_precision_wait;
+    NcmaPrecisionWaitV1 precision_wait;
+    NcmaDestroyPrecisionWaitV1 destroy_precision_wait;
+} NcmaPlatformApiV1_1;
+/* Explicit 1.2 request; earlier tables retain their exact sizes. Pixel creation is
+   a non-resizable, undecorated window at the primary monitor origin. Width/height
+   are requested framebuffer pixels, not DPI-scaled content points. Not exclusive
+   fullscreen; does not change display mode, topmost state or global DPI policy.
+   Exact initial dimensions must be verified before publishing a handle; mismatch
+   destroys the candidate and returns UNSUPPORTED_FEATURE. Later OS changes remain
+   observable through normal WindowState/Poll, not an eternal pixel-size guarantee. */
+typedef enum NcmaPixelWindowMode { NCMA_BORDERLESS_PIXELS = 1 } NcmaPixelWindowMode;
+typedef struct NcmaPixelWindowDescriptionV1 {
+    NcmaWindowDescriptionV1 window;
+    uint32_t mode, reserved;
+} NcmaPixelWindowDescriptionV1;
+typedef uint32_t (NCMA_CALL *NcmaCreatePixelWindowV1)(uint64_t, const NcmaPixelWindowDescriptionV1*, uint64_t*, NcmaErrorV1*);
+typedef struct NcmaPlatformApiV1_2 {
+    NcmaPlatformApiV1_1 base;
+    NcmaCreatePixelWindowV1 create_pixel_window;
+} NcmaPlatformApiV1_2;
 /* Poll requires capacity >=4096; capacity errors do not pump/drain. Overflow returns no transient
    events, current held/focus, and overflow=1. Input text is Unicode scalars, never gameplay key bits.
    Callback events are recorded even outside Poll. WindowState uses logical points vs framebuffer
@@ -52,5 +85,8 @@ static_assert(sizeof(NcmaInputEventV1) == 40);
 static_assert(sizeof(NcmaWindowStateV1) == 136);
 static_assert(sizeof(NcmaWindowDescriptionV1) == 32);
 static_assert(sizeof(NcmaPlatformApiV1) == 120);
+static_assert(sizeof(NcmaPlatformApiV1_1) == 144 && offsetof(NcmaPlatformApiV1_1, create_precision_wait) == 120);
+static_assert(sizeof(NcmaPixelWindowDescriptionV1) == 40 && offsetof(NcmaPixelWindowDescriptionV1, mode) == 32);
+static_assert(sizeof(NcmaPlatformApiV1_2) == 152 && offsetof(NcmaPlatformApiV1_2, create_pixel_window) == 144);
 #endif
 #endif

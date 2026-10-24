@@ -18,7 +18,7 @@ uint32_t CreateSkinPrepared(uint64_t context,uint64_t handle,const NcmaSkinMeshV
   for(auto index:indices)if(index>=m.vertex_count)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"Skin index.");
   BusyScope scope;std::string message;auto mesh=std::make_unique<Rendering::StaticMesh>(*renderer->backend);auto skin=std::make_unique<Rendering::SkinInstance>();std::unique_ptr<Rendering::SkinKernel> kernel;
   if(registered&&renderer->skinKernel&&!renderer->skinKernel->Matches(*registered))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"skin_existing_program_requires_explicit_replace");
-  if(!renderer->skinKernel){kernel=std::make_unique<Rendering::SkinKernel>(*renderer->backend,renderer->skinSample);if(!kernel->Initialize(message,registered))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
+  if(!renderer->skinKernel){kernel=std::make_unique<Rendering::SkinKernel>(*renderer->backend,renderer->skinSample,renderer->skinResolved);if(!kernel->Initialize(message,registered))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
   auto owned=d;owned.mesh.vertices=vertices.data();owned.mesh.indices=indices.data();if(!skin->Initialize(*renderer->backend,*mesh,owned,message))return FAILED(renderer->backend->GetDevice()->GetDeviceRemovedReason())?Failure(error,message):NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);
  #ifdef NCMA_RENDERER_TEST_WAIT
   if(registered&&testTonePreparationThrow)throw std::runtime_error("Injected pre-publication diagnostic failure");

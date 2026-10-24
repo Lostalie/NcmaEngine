@@ -22,86 +22,86 @@ internal static class MovementCases
         {
             ("Managed value publication shares numerical commit and rejects caught gameplay writes", () => {
                 var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
-                using var f=new Fixture(components:registry,prepare:(world,t)=>world.Set(t,new OwnedValue(100)));
+                using var f=new Fixture(components:registry,prepare:(document,id)=>document.SetComponent(id,new OwnedValue(100)));
                 f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));Reject(()=>f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(1)));
-                f.Start();f.Play.AdvanceFixedStep();Check(f.Document.World.Get<OwnedValue>(f.Target).Value==75&&f.Play.Tick==1);
-                byte[] before=f.Document.CaptureBytes();f.Probe.Fixed=_=>{try{f.Document.World.Set(f.Target, new OwnedValue(0));}catch(InvalidOperationException){}};
-                f.Play.AdvanceFixedStep();Check(f.Play.State==PlayState.Faulted&&f.Play.Tick==1&&f.Adapter.Steps==1&&before.SequenceEqual(f.Document.CaptureBytes()));
+                f.Start();f.Play.AdvanceFixedStep();Check(f.Scene.World.Get<OwnedValue>(f.Target).Value==75&&f.Play.Tick==1);
+                byte[] before=f.Scene.CaptureCheckpoint().CopyBytes();f.Probe.Fixed=_=>{try{f.Scene.World.Set(f.Target, new OwnedValue(0));}catch(InvalidOperationException){}};
+                f.Play.AdvanceFixedStep();Check(f.Play.State==PlayState.Faulted&&f.Play.Tick==1&&f.Adapter.Steps==1&&before.SequenceEqual(f.Scene.CaptureCheckpoint().CopyBytes()));
             }),
             ("Changed validator publication fails after solver without managed partial commit", () => {
                 var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v.Value==75?new(74):v);
-                using var f=new Fixture(components:registry,prepare:(world,t)=>world.Set(t,new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));f.Start();
-                byte[] before=f.Document.CaptureBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
+                using var f=new Fixture(components:registry,prepare:(document,id)=>document.SetComponent(id,new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));f.Start();
+                byte[] before=f.Scene.CaptureCheckpoint().CopyBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
             }),
             ("Managed publication source cannot smuggle an ordinary World write", () => {
                 var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
-                using var f=new Fixture(components:registry,prepare:(world,t)=>world.Set(t,new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>{try{f.Document.World.Rename(f.Other, "illegal");}catch(InvalidOperationException){}return new(75);});f.Start();
-                byte[] before=f.Document.CaptureBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
+                using var f=new Fixture(components:registry,prepare:(document,id)=>document.SetComponent(id,new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>{try{f.Scene.World.Rename(f.Other, "illegal");}catch(InvalidOperationException){}return new(75);});f.Start();
+                byte[] before=f.Scene.CaptureCheckpoint().CopyBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
             }),
             ("Movement authority permits one validated publication and copied committed reads", () => {
                 using var f = new Fixture(); f.Start();
-                f.Probe.Fixed = _ => { f.Submit(Vector3.UnitX); Check(f.Document.World.Get<TransformData>(f.Target).Position == Vector3.Zero); };
+                f.Probe.Fixed = _ => { f.Submit(Vector3.UnitX); Check(f.Scene.World.Get<TransformData>(f.Target).Position == Vector3.Zero); };
                 var state = f.Play.AdvanceFixedStep();
                 Check(state.State == PlayState.Running && state.Tick == 1 && f.Adapter.Steps == 1);
-                Check(f.Document.World.Get<TransformData>(f.Target).Position == Vector3.UnitX && f.Move.Status.CommittedSequence == 1);
+                Check(f.Scene.World.Get<TransformData>(f.Target).Position == Vector3.UnitX && f.Move.Status.CommittedSequence == 1);
                 var copy = f.Move.ReadCommitted(); copy[0] = default;
                 Check(f.Move.ReadCommitted()[0].Transform.Position == Vector3.UnitX);
                 Check(f.Move.Status.SnapshotValid && !f.Move.Status.NumericalExecutionStarted);
             }),
             ("Caught SDK Behaviour writes poison candidate before any numerical call", () => {
                 using var f = new Fixture(); f.Start();
-                var before = f.Document.CaptureBytes();
+                var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Probe.Fixed = _ => { Reject(() => f.Probe.GameObject.LocalTransform = Transform.Identity); f.Submit(Vector3.UnitX); };
                 f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
             }),
             ("Caught System writes cannot impersonate movement authority", () => {
                 using var f = new Fixture();
-                f.Play.AddSystem(new TestSystem((_, _) => Reject(() => f.Document.World.Set(f.Target, TransformData.Identity))));
-                f.Start(); var before = f.Document.CaptureBytes(); f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
+                f.Play.AddSystem(new TestSystem((_, _) => Reject(() => f.Scene.World.Set(f.Target, TransformData.Identity))));
+                f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes(); f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
             }),
             ("Batch authority preflight prevents an unbound prefix from being installed", () => {
-                using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 var sdkOther = f.Play.Facade.GetObjects().Single(o => o.Name == "Other");
                 Reject(() => f.Play.Facade.WriteTransforms([
                     new(sdkOther, Transform.Identity with { Position = new Ncma.Vector3(9, 0, 0) }),
                     new(f.Probe.GameObject, Transform.Identity)]));
-                Check(f.Document.CaptureBytes().SequenceEqual(before));
+                Check(f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
                 f.Probe.Fixed = _ => Reject(() => f.Play.Facade.WriteTransforms([new(f.Probe.GameObject, Transform.Identity)]));
                 f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
             }),
             ("Bound structure is rejected in command and direct paths even if caught", () => {
                 foreach (int mode in Enumerable.Range(0, 5))
                 {
-                    using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
+                    using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                     f.Probe.Fixed = _ => Reject(() => {
                         switch (mode)
                         {
-                            case 0: f.Play.Commands.Destroy(f.Document.World.GetUuid(f.Target)); break;
-                            case 1: f.Play.Commands.RemoveComponent(f.Document.World.GetUuid(f.Target), "ncma.transform"); break;
-                            case 2: f.Play.Commands.AddComponent(f.Document.World.GetUuid(f.Target), new("ncma.transform", 1, f.Document.World.Components.Encode(TransformData.Identity))); break;
-                            case 3: f.Document.World.Destroy(f.Target); break;
-                            case 4: f.Document.World.Remove<TransformData>(f.Target); break;
+                            case 0: f.Play.Commands.Destroy(f.Scene.World.GetUuid(f.Target)); break;
+                            case 1: f.Play.Commands.RemoveComponent(f.Scene.World.GetUuid(f.Target), "ncma.transform"); break;
+                            case 2: f.Play.Commands.AddComponent(f.Scene.World.GetUuid(f.Target), new("ncma.transform", 1, f.Scene.World.Components.Encode(TransformData.Identity))); break;
+                            case 3: f.Scene.World.Destroy(f.Target); break;
+                            case 4: f.Scene.World.Remove<TransformData>(f.Target); break;
                         }
                     });
                     f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
                 }
             }),
             ("Outside-step Transform, structure and restore stay locked until Stop", () => {
-                using var f = new Fixture(); f.Start(); var bytes = f.Document.CaptureBytes();
-                Reject(() => f.Document.World.Set(f.Target, TransformData.Identity)); Reject(() => f.Document.World.Destroy(f.Target));
-                Reject(() => f.Document.World.Remove<TransformData>(f.Target)); Reject(() => f.Document.RestoreBytes(bytes));
-                f.Play.Stop(); f.Document.World.Set(f.Target, TransformData.Identity); f.Document.RestoreBytes(bytes);
+                using var f = new Fixture(); f.Start(); var checkpoint = f.Scene.CaptureCheckpoint();
+                Reject(() => f.Scene.World.Set(f.Target, TransformData.Identity)); Reject(() => f.Scene.World.Destroy(f.Target));
+                Reject(() => f.Scene.World.Remove<TransformData>(f.Target)); Reject(() => f.Scene.RestoreCheckpoint(checkpoint, f.Scene.Revision));
+                f.Play.Stop(); f.Scene.World.Set(f.Target, TransformData.Identity); f.Scene.RestoreCheckpoint(checkpoint, f.Scene.Revision);
             }),
             ("Unbound writes and structural commands preserve their original transaction", () => {
                 using var f = new Fixture(); f.Start();
                 f.Probe.Fixed = _ => {
-                    f.Document.World.Set(f.Other, TransformData.Identity with { Position = Vector3.UnitZ });
+                    f.Scene.World.Set(f.Other, TransformData.Identity with { Position = Vector3.UnitZ });
                     var created = f.Play.Commands.SpawnEmpty("Unbound spawn");
-                    f.Play.Commands.AddComponent(created.ObjectId, new("ncma.transform", 1, f.Document.World.Components.Encode(TransformData.Identity)));
-                    f.Play.Commands.Rename(f.Document.World.GetUuid(f.Target), "Renamed bound object");
+                    f.Play.Commands.AddComponent(created.ObjectId, new("ncma.transform", 1, f.Scene.World.Components.Encode(TransformData.Identity)));
+                    f.Play.Commands.Rename(f.Scene.World.GetUuid(f.Target), "Renamed bound object");
                 };
-                f.Play.AdvanceFixedStep(); Check(f.Play.State == PlayState.Running && f.Document.World.Count == 3);
-                Check(f.Document.World.Get<TransformData>(f.Other).Position == Vector3.UnitZ && f.Document.World.GetName(f.Target) == "Renamed bound object");
+                f.Play.AdvanceFixedStep(); Check(f.Play.State == PlayState.Running && f.Scene.World.Count == 3);
+                Check(f.Scene.World.Get<TransformData>(f.Other).Position == Vector3.UnitZ && f.Scene.World.GetName(f.Target) == "Renamed bound object");
             }),
             ("Initialization cannot write reserved Transform and never steps numerics", () => {
                 using var f = new Fixture(); f.Probe.Create = () => Reject(() => f.Probe.GameObject.LocalTransform = Transform.Identity);
@@ -110,13 +110,13 @@ internal static class MovementCases
             ("Old tick, revision, world, session and numerical sequence intents poison step", () => {
                 foreach (int mode in Enumerable.Range(0, 5))
                 {
-                    using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
+                    using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                     f.Probe.Fixed = _ => {
                         var stamp = f.Move.CurrentStep;
                         stamp = mode switch { 0 => stamp with { FromTick = stamp.FromTick + 1 },
                             1 => stamp with { Revision = stamp.Revision + 1 }, 2 => stamp with { WorldId = Guid.NewGuid() },
                             3 => stamp with { SessionId = Guid.NewGuid() }, _ => stamp with { Sequence = stamp.Sequence + 1 } };
-                        Reject(() => f.Move.Submit(new(stamp, f.Document.World.GetUuid(f.Target), Vector3.UnitX, 0)));
+                        Reject(() => f.Move.Submit(new(stamp, f.Scene.World.GetUuid(f.Target), Vector3.UnitX, 0)));
                     };
                     f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
                 }
@@ -124,10 +124,10 @@ internal static class MovementCases
             ("Duplicate foreign and nonfinite intents are bounded and fail closed", () => {
                 foreach (int mode in Enumerable.Range(0, 6))
                 {
-                    using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
+                    using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                     f.Probe.Fixed = _ => {
                         if (mode == 0) f.Submit(Vector3.UnitX);
-                        Reject(() => f.Move.Submit(new(f.Move.CurrentStep, mode == 1 ? f.Document.World.GetUuid(f.Other) : f.Document.World.GetUuid(f.Target),
+                        Reject(() => f.Move.Submit(new(f.Move.CurrentStep, mode == 1 ? f.Scene.World.GetUuid(f.Other) : f.Scene.World.GetUuid(f.Target),
                             mode switch { 2 => new(float.NaN, 0, 0), 3 => new(1001, 0, 0), _ => Vector3.UnitX },
                             mode switch { 4 => float.PositiveInfinity, 5 => 4, _ => 0 })));
                     };
@@ -141,56 +141,56 @@ internal static class MovementCases
                 f.Play.AdvanceFrame(1d / 60); Check(f.Play.State == PlayState.Running && f.Adapter.Steps == 1);
             }),
             ("Gameplay error aborts input, signal sends and receives before numerics", () => {
-                using var f = new Fixture(); f.Start(); f.SeedInputAndSignal(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(); f.Start(); f.SeedInputAndSignal(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Probe.Fixed = _ => { f.StageSignals(); throw new InvalidOperationException("gameplay fault"); };
                 f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before); f.CheckUnconsumedInputAndSignal();
             }),
             ("Numerical preflight error does not advance numerical state", () => {
-                using var f = new Fixture(); f.Adapter.FailPreflight = true; f.Start(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(); f.Adapter.FailPreflight = true; f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
                 Check(f.Play.Fault!.Phase == "coupled_preflight");
             }),
             ("Caught preflight callback write poisons candidate before Execute", () => {
-                using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
-                f.Adapter.PreflightAction = () => Reject(() => f.Document.World.Set(f.Other, TransformData.Identity));
+                using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
+                f.Adapter.PreflightAction = () => Reject(() => f.Scene.World.Set(f.Other, TransformData.Identity));
                 f.Play.AdvanceFixedStep(); f.CheckPreExecutionFailure(before);
             }),
             ("Partial numerical failure invalidates coupled snapshot without lying about rollback", () => {
-                using var f = new Fixture(); f.Start(); f.SeedInputAndSignal(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(); f.Start(); f.SeedInputAndSignal(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Adapter.FailExecute = true; f.Probe.Fixed = _ => { f.StageSignals(); f.Submit(Vector3.UnitX); };
                 f.Play.AdvanceFixedStep(); f.CheckPostExecutionFailure(before); f.CheckUnconsumedInputAndSignal();
-                Check(f.Adapter.Position == Vector3.UnitX && f.Document.World.Get<TransformData>(f.Target).Position == Vector3.Zero);
+                Check(f.Adapter.Position == Vector3.UnitX && f.Scene.World.Get<TransformData>(f.Target).Position == Vector3.Zero);
                 Reject(() => f.Play.Resume()); Reject(() => f.Play.AdvanceFixedStep()); Reject(() => f.Move.ReadCommitted());
             }),
             ("Malformed stamp/count/target/finite/scale/quaternion results reject the whole candidate", () => {
                 foreach (int mode in Enumerable.Range(0, 7))
                 {
-                    using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes(); f.Adapter.BadResult = mode;
+                    using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes(); f.Adapter.BadResult = mode;
                     f.Probe.Fixed = _ => f.Submit(Vector3.UnitX);
                     f.Play.AdvanceFixedStep(); f.CheckPostExecutionFailure(before);
                 }
             }),
             ("Caught numerical callback write causes post-execution fail-stop", () => {
-                using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
-                f.Adapter.ExecuteAction = () => Reject(() => f.Document.World.Set(f.Other, TransformData.Identity));
+                using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
+                f.Adapter.ExecuteAction = () => Reject(() => f.Scene.World.Set(f.Other, TransformData.Identity));
                 f.Play.AdvanceFixedStep(); f.CheckPostExecutionFailure(before);
             }),
             ("Final managed prepare may fail after numerical execution and retains prior World", () => {
-                using var f = new Fixture(); f.Start(); f.SeedInputAndSignal(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(); f.Start(); f.SeedInputAndSignal(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Probe.Fixed = _ => {
                     f.StageSignals(); f.Submit(Vector3.UnitX);
                     var pending = f.Play.Commands.SpawnEmpty("Factory fails after numeric boundary");
                     f.Play.Commands.AttachBehaviour(pending.ObjectId, new(Guid.NewGuid(), "Test.Missing", true, []));
                 };
                 f.Play.AdvanceFixedStep(); f.CheckPostExecutionFailure(before); f.CheckUnconsumedInputAndSignal();
-                Check(f.Play.Fault!.Phase == "prepare" && f.Document.World.Count == 2);
+                Check(f.Play.Fault!.Phase == "prepare" && f.Scene.World.Count == 2);
             }),
             ("A later failed quantum preserves earlier committed World and sequence", () => {
                 using var f = new Fixture(); f.Start(); f.Probe.Fixed = _ => f.Submit(Vector3.UnitX);
-                f.Play.AdvanceFixedStep(); var before = f.Document.CaptureBytes();
+                f.Play.AdvanceFixedStep(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Adapter.FailExecute = true; f.Play.AdvanceFixedStep();
                 Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 1 && f.Move.Status.CommittedSequence == 1);
-                Check(f.Document.CaptureBytes().SequenceEqual(before) && f.Adapter.Steps == 2 && !f.Move.Status.SnapshotValid);
+                Check(f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && f.Adapter.Steps == 2 && !f.Move.Status.SnapshotValid);
             }),
             ("Committed observer fault never rolls back a successful quantum", () => {
                 using var f = new Fixture(); f.Play.AddCommittedObserver(new FaultObserver()); f.Start(); f.Probe.Fixed = _ => f.Submit(Vector3.UnitX);
@@ -207,33 +207,33 @@ internal static class MovementCases
                 f.Play.Resume(); f.Play.AdvanceFrame(1d / 60); Check(f.Adapter.Steps == 2);
             }),
             ("Coupled Reload closes adapter and rebuilds startup with fresh world/session identity", () => {
-                using var f = new Fixture(); f.Start(); var world = f.Document.World.Identity; var epoch = f.Play.SessionId;
+                using var f = new Fixture(); f.Start(); var world = f.Scene.World.Identity; var epoch = f.Play.SessionId;
                 f.Probe.Fixed = _ => f.Submit(Vector3.UnitX); f.Play.AdvanceFixedStep(); var old = f.Adapter;
                 var freshProbe = new Probe(); f.Play.Reload(_ => freshProbe);
-                Check(f.Play.State == PlayState.Paused && f.Play.SessionId != epoch && f.Document.World.Identity != world);
+                Check(f.Play.State == PlayState.Paused && f.Play.SessionId != epoch && f.Scene.World.Identity != world);
                 Check(old.Closed && f.Adapters.Count == 2 && f.Adapter.Steps == 0 && f.Play.Tick == 1);
-                Check(f.Document.World.Get<TransformData>(f.Document.World.FindEntity(f.TargetId)).Position == Vector3.Zero);
+                Check(f.Scene.World.Get<TransformData>(f.Scene.World.FindEntity(f.TargetId)).Position == Vector3.Zero);
                 Check(f.Move.Status.CommittedSequence == 0 && f.Move.Status.SnapshotValid);
-                Reject(() => _ = f.Document.World.GetName(f.Target)); f.Play.Step(); Check(f.Play.Tick == 2 && f.Adapter.Steps == 1);
+                Reject(() => _ = f.Scene.World.GetName(f.Target)); f.Play.Step(); Check(f.Play.Tick == 2 && f.Adapter.Steps == 1);
             }),
             ("Fault recovery needs Stop and rebuilt startup, not Start on mutated identity", () => {
-                using var f = new Fixture(); byte[] startup = f.Document.CaptureBytes(); f.Start(); var oldSession = f.Play.SessionId;
+                using var f = new Fixture(); var startup = f.Scene.CaptureCheckpoint(); f.Start(); var oldSession = f.Play.SessionId;
                 f.Adapter.FailExecute = true; f.Play.AdvanceFixedStep(); f.Play.Stop();
                 Reject(f.Start); Check(f.Play.State == PlayState.Faulted); f.Play.Stop();
-                f.Document.RestoreBytes(startup); f.Start(); Check(f.Play.SessionId != oldSession && f.Adapter.Steps == 0);
+                f.Scene.RestoreCheckpoint(startup, f.Scene.Revision); f.Start(); Check(f.Play.SessionId != oldSession && f.Adapter.Steps == 0);
                 f.Play.AdvanceFixedStep(); Check(f.Play.State == PlayState.Running && f.Move.Status.SnapshotValid);
             }),
             ("Close failure retains ownership and authority; retry Stop releases them", () => {
                 using var f = new Fixture(); f.Start(); f.Adapter.FailClose = true;
                 Reject(() => f.Play.Dispose()); Check(f.Play.State == PlayState.Faulted && f.Move.Status.ResourcesOwned);
-                Check(!f.Move.Status.SnapshotValid); Reject(() => f.Document.World.Set(f.Target, TransformData.Identity)); Reject(() => f.Move.Dispose());
+                Check(!f.Move.Status.SnapshotValid); Reject(() => f.Scene.World.Set(f.Target, TransformData.Identity)); Reject(() => f.Move.Dispose());
                 f.Adapter.FailClose = false; f.Play.Stop(); Check(!f.Move.Status.ResourcesOwned && f.Adapter.Closed);
-                f.Document.World.Set(f.Target, TransformData.Identity); Check(f.Probe.Destroyed == 1);
+                f.Scene.World.Set(f.Target, TransformData.Identity); Check(f.Probe.Destroyed == 1);
             }),
             ("Coupled Reload never starts a new adapter if close fails", () => {
-                using var f = new Fixture(); f.Start(); var world = f.Document.World.Identity;
+                using var f = new Fixture(); f.Start(); var world = f.Scene.World.Identity;
                 f.Adapter.FailClose = true; Reject(() => f.Play.Reload(_ => new Probe()));
-                Check(f.Play.State == PlayState.Faulted && f.Adapters.Count == 1 && f.Document.World.Identity == world);
+                Check(f.Play.State == PlayState.Faulted && f.Adapters.Count == 1 && f.Scene.World.Identity == world);
                 f.Adapter.FailClose = false; f.Play.Stop();
             }),
             ("Failed initialization retains adapter until explicit Stop", () => {
@@ -241,22 +241,26 @@ internal static class MovementCases
                 Reject(f.Start); Check(f.Play.State == PlayState.Faulted && f.Move.Status.ResourcesOwned && f.Adapter.Steps == 0);
                 f.Play.Stop(); Check(f.Adapter.Closed && !f.Move.Status.ResourcesOwned);
             }),
-            ("Runtime authority is neither serialized nor copied to an isolated edit clone", () => {
-                using var f = new Fixture(); f.Start(); var bytes = f.Document.CaptureBytes();
-                var clone = new SceneDocument(); clone.RestoreBytes(bytes); clone.World.Set(clone.World.FindEntity(f.TargetId), TransformData.Identity);
-                Check(!System.Text.Encoding.UTF8.GetString(bytes).Contains("authority", StringComparison.OrdinalIgnoreCase));
+            ("Runtime authority is neither serialized nor copied into an independent image instance", () => {
+                using var f = new Fixture(); f.Start(); var bytes = f.Scene.CaptureCheckpoint().CopyBytes();
+                var clone = f.Image.Instantiate(f.Scene.World.Components);
+                clone.World.Set(clone.World.FindEntity(f.TargetId), TransformData.Identity with { Position = Vector3.UnitX });
+                Check(clone.World.Identity != f.Scene.World.Identity &&
+                    f.Scene.World.Get<TransformData>(f.Target).Position == Vector3.Zero);
+                Check(!System.Text.Encoding.UTF8.GetString(bytes).Contains("authority", StringComparison.OrdinalIgnoreCase) &&
+                    !System.Text.Encoding.UTF8.GetString(f.Image.CopyBytes()).Contains("authority", StringComparison.OrdinalIgnoreCase));
             }),
             ("An independent WorldRunner cannot commit while skipping reserved component publication", () => {
-                using var f = new Fixture(); f.Start(); var before = f.Document.CaptureBytes();
-                var runner = new WorldRunner(f.Document.World); Reject(() => runner.Advance(1d / 60));
-                Check(f.Document.CaptureBytes().SequenceEqual(before) && f.Play.Tick == 0 && f.Adapter.Steps == 0);
+                using var f = new Fixture(); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
+                var runner = new WorldRunner(f.Scene.World); Reject(() => runner.Advance(1d / 60));
+                Check(f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && f.Play.Tick == 0 && f.Adapter.Steps == 0);
                 f.Play.AdvanceFixedStep(); Check(f.Play.State == PlayState.Running && f.Play.Tick == 1);
             }),
             ("A malformed final result in a multi-target batch publishes no prefix", () => {
-                using var f = new Fixture(bothTargets: true); f.Start(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(bothTargets: true); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Adapter.BadResult = 8; f.Probe.Fixed = _ => f.Submit(Vector3.UnitX);
                 f.Play.AdvanceFixedStep(); f.CheckPostExecutionFailure(before);
-                Check(f.Document.World.Get<TransformData>(f.Target).Position == Vector3.Zero && f.Document.World.Get<TransformData>(f.Other).Position == Vector3.Zero);
+                Check(f.Scene.World.Get<TransformData>(f.Target).Position == Vector3.Zero && f.Scene.World.Get<TransformData>(f.Other).Position == Vector3.Zero);
             }),
             ("Successful movement commits signal and input consumption exactly once", () => {
                 using var f = new Fixture(); f.Start(); f.SeedInputAndSignal();
@@ -274,7 +278,7 @@ internal static class MovementCases
             ("Numerical quaternion normalization matches the exact committed World value", () => {
                 using var f = new Fixture(); f.Start(); f.Adapter.BadResult = 9;
                 f.Play.AdvanceFixedStep(); Check(f.Play.State == PlayState.Running);
-                Check(f.Move.ReadCommitted()[0].Transform == f.Document.World.Get<TransformData>(f.Target));
+                Check(f.Move.ReadCommitted()[0].Transform == f.Scene.World.Get<TransformData>(f.Target));
                 Check(f.Move.ReadCommitted()[0].Transform.Rotation == Quaternion.Identity);
             }),
             ("A custom registered normalizer cannot silently desynchronize numerical and World values", () => {
@@ -283,7 +287,7 @@ internal static class MovementCases
                 var schema = ComponentRegistry.CreateDefault().Describe().Single(d => d.TypeId == "ncma.transform").Schema.GetRawText();
                 registry.Register<TransformData>("ncma.transform", 1, schema,
                     v => TransformData.Validate(change ? v with { Position = v.Position + Vector3.UnitX } : v));
-                using var f = new Fixture(components: registry); f.Start(); var before = f.Document.CaptureBytes();
+                using var f = new Fixture(components: registry); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Adapter.ExecuteAction = () => change = true;
                 f.Play.AdvanceFixedStep(); f.CheckPostExecutionFailure(before);
             }),
@@ -291,13 +295,13 @@ internal static class MovementCases
                 for (int i = 0; i < 32; i++)
                 {
                     using var f = new Fixture(); f.Start(); f.Play.AdvanceFixedStep(); f.Play.Stop();
-                    Check(f.Adapter.Closed && !f.Move.Status.ResourcesOwned); f.Document.World.Remove<TransformData>(f.Target);
+                    Check(f.Adapter.Closed && !f.Move.Status.ResourcesOwned); f.Scene.World.Remove<TransformData>(f.Target);
                 }
             }),
             ("Duplicate missing overbudget targets and a second coordinator fail before native resources", () => {
                 using var f = new Fixture();
                 Reject(() => new MovementCoordinator(f.Play, [f.TargetId], () => new FakeNumerics()));
-                using var other = new PlaySession(f.Document);
+                using var other = new PlaySession(f.Scene);
                 Reject(() => new MovementCoordinator(other, [f.TargetId, f.TargetId], () => new FakeNumerics()));
                 Reject(() => new MovementCoordinator(other, [Guid.NewGuid()], () => new FakeNumerics()));
                 Reject(() => new MovementCoordinator(other, new Guid[MovementCoordinator.MaxTargets + 1], () => new FakeNumerics()));
@@ -317,7 +321,8 @@ internal static class MovementCases
 
     private sealed class Fixture : IDisposable
     {
-        public readonly SceneDocument Document;
+        public readonly RuntimeSceneInstance Scene;
+        public readonly RuntimeSceneImage Image;
         public readonly global::Ncma.Runtime.Entity Target, Other;
         public Guid TargetId => _targetId;
         private readonly Guid _targetId;
@@ -327,15 +332,21 @@ internal static class MovementCases
         public readonly List<FakeNumerics> Adapters = [];
         private readonly FakeNumerics _first = new();
         public FakeNumerics Adapter => Adapters.Count == 0 ? _first : Adapters[^1];
-        public Fixture(PlayAdvanceMode mode = PlayAdvanceMode.FixedSteps, bool bothTargets = false, ComponentRegistry? components = null,Action<World,Entity>? prepare=null)
+        public Fixture(PlayAdvanceMode mode = PlayAdvanceMode.FixedSteps, bool bothTargets = false, ComponentRegistry? components = null,Action<SceneDocument,Guid>? prepare=null)
         {
-            Document = new("Movement fixture", components);
-            Target = Document.World.CreateEntity("Target"); Document.World.Set(Target, TransformData.Identity); _targetId = Document.World.GetUuid(Target);
-            prepare?.Invoke(Document.World,Target);
-            Other = Document.World.CreateEntity("Other"); Document.World.Set(Other, TransformData.Identity);
-            Document.SetBindings(TargetId, [new(Guid.NewGuid(), "Test.Probe", true, [])]);
-            Play = new(Document, FrameTimePolicy.Strict, advanceMode: mode);
-            Move = new(Play, bothTargets ? [TargetId, Document.World.GetUuid(Other)] : [TargetId], () => { var adapter = Adapters.Count == 0 ? _first : new FakeNumerics(); Adapters.Add(adapter); return adapter; });
+            var source = new SceneDocument("Movement fixture", components);
+            var target = source.CreateObject("Target"); source.SetComponent(target, TransformData.Identity); _targetId = target;
+            prepare?.Invoke(source, target);
+            var other = source.CreateObject("Other"); source.SetComponent(other, TransformData.Identity);
+            var otherId = other;
+            source.SetBindings(TargetId, [new(Guid.NewGuid(), "Test.Probe", true, [])]);
+            Image = source.BakeRuntime(source.Revision).Image;
+            Scene = Image.Instantiate(source.Components);
+            Target = Scene.World.FindEntity(TargetId); Other = Scene.World.FindEntity(otherId);
+            var independent = Image.Instantiate(source.Components);
+            Check(Target.WorldIdentity != independent.World.Identity && Other.WorldIdentity != independent.World.Identity && Scene.World.GetUuid(Target) == target && Scene.World.GetUuid(Other) == other);
+            Play = new(Scene, FrameTimePolicy.Strict, advanceMode: mode);
+            Move = new(Play, bothTargets ? [TargetId, otherId] : [TargetId], () => { var adapter = Adapters.Count == 0 ? _first : new FakeNumerics(); Adapters.Add(adapter); return adapter; });
         }
         public void Start() => Play.Start(b => b.TypeName == "Test.Missing" ? throw new ArgumentException("missing behaviour") : Probe);
         public void Submit(Vector3 delta) => Move.Submit(new(Move.CurrentStep, TargetId, delta, 0));
@@ -360,12 +371,12 @@ internal static class MovementCases
         public void CheckPreExecutionFailure(byte[] before)
         {
             Check(Play.State == PlayState.Faulted && Play.Tick == 0 && Adapter.Steps == 0);
-            Check(Document.CaptureBytes().SequenceEqual(before) && Move.Status.SnapshotValid && Move.Status.Faulted);
+            Check(Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && Move.Status.SnapshotValid && Move.Status.Faulted);
         }
         public void CheckPostExecutionFailure(byte[] before)
         {
             Check(Play.State == PlayState.Faulted && Play.Tick == 0 && Adapter.Steps == 1);
-            Check(Document.CaptureBytes().SequenceEqual(before) && !Move.Status.SnapshotValid && Move.Status.NumericalExecutionStarted);
+            Check(Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && !Move.Status.SnapshotValid && Move.Status.NumericalExecutionStarted);
         }
         public void Dispose() { Adapter.FailClose = false; Play.Stop(); Move.Dispose(); Play.Dispose(); }
     }

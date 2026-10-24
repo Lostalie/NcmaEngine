@@ -25,17 +25,17 @@ static BehaviourBindingData Binding() => new(Guid.NewGuid(), "Not.Installed.Beha
 static SceneDocument Populated()
 {
     var doc = new SceneDocument("Scene", Registry());
-    global::Ncma.Runtime.Entity logic = doc.World.CreateEntity("Logic");
-    doc.World.Set(logic, new Health(100));
-    global::Ncma.Runtime.Entity hero = doc.World.CreateEntity("Hero"); doc.World.Set(hero, TransformData.Identity);
-    doc.SetBindings(doc.World.GetUuid(logic), [Binding(), Binding()]);
+    Guid logic = doc.CreateObject("Logic");
+    doc.SetComponent(logic, new Health(100));
+    Guid hero = doc.CreateObject("Hero"); doc.SetComponent(hero, TransformData.Identity);
+    doc.SetBindings(logic, [Binding(), Binding()]);
     _ = doc.Revision; return doc;
 }
 static void AtomicReject(SceneDocument doc, SceneDocumentSnapshot snapshot)
 {
-    byte[] before = doc.CaptureBytes(); ulong rev = doc.Revision; Guid identity = doc.World.Identity;
+    byte[] before = doc.CaptureBytes(); ulong rev = doc.Revision; Guid identity = doc.SessionId;
     Reject(() => doc.RestoreSnapshot(snapshot));
-    Check(before.SequenceEqual(doc.CaptureBytes()) && rev == doc.Revision && identity == doc.World.Identity, "Failed restore modified scene.");
+    Check(before.SequenceEqual(doc.CaptureBytes()) && rev == doc.Revision && identity == doc.SessionId, "Failed restore modified scene.");
 }
 static string AssetPath(string name)
 {
@@ -58,8 +58,8 @@ var cases = new (string, Action)[]
         var doc = Populated(); byte[] before = doc.CaptureBytes(); var snapshot = doc.CaptureSnapshot();
         doc.RestoreBytes(before);
         Check(before.SequenceEqual(doc.CaptureBytes()));
-        global::Ncma.Runtime.Entity logic = doc.World.FindEntity(snapshot.Objects[0].Id);
-        Check(!doc.World.Has<TransformData>(logic) && doc.World.Get<Health>(logic).Points == 100 && doc.GetBindings(doc.World.GetUuid(logic)).Length == 2);
+        Guid logic = snapshot.Objects[0].Id;
+        Check(!doc.HasComponent<TransformData>(logic) && doc.GetComponent<Health>(logic).Points == 100 && doc.GetBindings(logic).Length == 2);
     }),
     ("Snapshot and binding copies never alias live data", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes(); var snapshot = doc.CaptureSnapshot();
@@ -68,22 +68,22 @@ var cases = new (string, Action)[]
         var bindings = doc.GetBindings(snapshot.Objects[0].Id); bindings[0].Exports[0] = new("Broken", ExportKind.Boolean, 99);
         Check(before.SequenceEqual(doc.CaptureBytes()));
     }),
-    ("Deleted UUID metadata removed; external World writes observed", () => {
-        var doc = Populated(); global::Ncma.Runtime.Entity obj = doc.World.GetEntities()[0]; ulong rev = doc.Revision;
-        doc.World.Destroy(obj); Check(doc.Revision == rev + 1);
+    ("Deleted UUID removes authoring metadata and increments revision", () => {
+        var doc = Populated(); Guid obj = doc.GetObjectIds()[0]; ulong rev = doc.Revision;
+        doc.DeleteObject(obj); Check(doc.Revision == rev + 1);
         var clone = new SceneDocument("Clone", Registry()); clone.RestoreBytes(doc.CaptureBytes());
-        Check(clone.World.Count == 1);
+        Check(clone.ObjectCount == 1);
     }),
-    ("Bindings update revision without changing World handles", () => {
-        var doc = Populated(); global::Ncma.Runtime.Entity obj = doc.World.GetEntities()[0]; ulong rev = doc.Revision; ulong wr = doc.World.Revision;
-        var bindings = doc.GetBindings(doc.World.GetUuid(obj)); bindings[0] = bindings[0] with { Enabled = true };
-        doc.SetBindings(doc.World.GetUuid(obj), bindings);
-        Check(doc.Revision == rev + 1 && doc.World.Revision == wr && doc.World.GetName(obj) == "Logic");
+    ("Bindings update revision without changing object UUIDs or components", () => {
+        var doc = Populated(); Guid obj = doc.GetObjectIds()[0]; ulong rev = doc.Revision; var ids = doc.GetObjectIds(); var components = doc.GetComponents(obj);
+        var bindings = doc.GetBindings(obj); bindings[0] = bindings[0] with { Enabled = true };
+        doc.SetBindings(obj, bindings);
+        Check(doc.Revision == rev + 1 && ids.SequenceEqual(doc.GetObjectIds()) && doc.GetObjectName(obj) == "Logic" && JsonSerializer.Serialize(components)==JsonSerializer.Serialize(doc.GetComponents(obj)));
     }),
-    ("Restore invalidates old references and increments once", () => {
-        var doc = Populated(); global::Ncma.Runtime.Entity obj = doc.World.GetEntities()[0]; var id = doc.World.GetUuid(obj); ulong rev = doc.Revision;
+    ("Restore increments once and invalidates the prior bake source revision", () => {
+        var doc = Populated(); Guid obj = doc.GetObjectIds()[0]; var id = obj; ulong rev = doc.Revision;
         doc.RestoreSnapshot(doc.CaptureSnapshot(), rev);
-        Check(doc.Revision == rev + 1 && doc.World.GetName(doc.World.FindEntity(id)) == "Logic"); Reject(() => _ = doc.World.GetName(obj));
+        Check(doc.Revision == rev + 1 && doc.GetObjectName(id) == "Logic"); Reject(() => doc.BakeRuntime(rev));
     }),
     ("Expected revision rejects before mutation", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes();
@@ -124,9 +124,9 @@ var cases = new (string, Action)[]
     }),
     ("Removed scene snapshots are rejected without compatibility conversion", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes();
-        ulong revision = doc.Revision; Guid identity = doc.World.Identity;
-        global::Ncma.Runtime.Entity live = doc.World.GetEntities()[0];
-        string id = doc.World.GetUuid(live).ToString();
+        ulong revision = doc.Revision; Guid identity = doc.SessionId;
+        Guid live = doc.GetObjectIds()[0];
+        string id = live.ToString();
         var payloads = new[] {
             """{"version":6,"name":"Legacy","objects":[]}""",
             """{"version":1,"name":"Legacy","objects":[{"id":"OBJECT_ID","name":"Logic","language":0,"hasTransform":false,"transform":{},"bindings":[]}]}""".Replace("OBJECT_ID", id),
@@ -134,8 +134,8 @@ var cases = new (string, Action)[]
         };
         foreach (string payload in payloads) {
             Reject(() => doc.RestoreBytes(Encoding.UTF8.GetBytes(payload)));
-            Check(before.SequenceEqual(doc.CaptureBytes()) && revision == doc.Revision && identity == doc.World.Identity);
-            Check(doc.World.GetName(live) == "Logic"); // Failed legacy input does not invalidate live references.
+            Check(before.SequenceEqual(doc.CaptureBytes()) && revision == doc.Revision && identity == doc.SessionId);
+            Check(doc.GetObjectName(live) == "Logic"); // Failed legacy input preserves authoring UUIDs and revision.
         }
         var assembly = typeof(SceneDocument).Assembly;
         Check(assembly.GetType("Ncma.Scene.SceneSnapshotCodec") is null);
@@ -150,13 +150,13 @@ var cases = new (string, Action)[]
         AtomicReject(doc, s with { Objects = Enumerable.Repeat(s.Objects[0], World.MaxObjects + 1).ToArray() });
     }),
     ("Bounded encoder rejects total size and oversized bindings before commit", () => {
-        var doc = new SceneDocument(); global::Ncma.Runtime.Entity a = doc.World.CreateEntity("A"); global::Ncma.Runtime.Entity b = doc.World.CreateEntity("B");
+        var doc = new SceneDocument(); Guid a = doc.CreateObject("A"); Guid b = doc.CreateObject("B");
         var properties = Enumerable.Range(0, 1024).Select(i => new ExportData(i.ToString() + new string('x', 120), ExportKind.Double, 1)).ToArray();
         var values = Enumerable.Range(0, 12).Select(_ => new BehaviourBindingData(Guid.NewGuid(), "Type", false, properties)).ToArray();
-        doc.SetBindings(doc.World.GetUuid(a), values);
+        doc.SetBindings(a, values);
         byte[] before = doc.CaptureBytes(); ulong rev = doc.Revision;
         var more = Enumerable.Range(0, 24).Select(_ => new BehaviourBindingData(Guid.NewGuid(), "Type", false, properties)).ToArray();
-        Reject(() => doc.SetBindings(doc.World.GetUuid(b), more));
+        Reject(() => doc.SetBindings(b, more));
         Check(before.SequenceEqual(doc.CaptureBytes()) && rev == doc.Revision);
     }),
     ("Validator-normalized payload and total document size stay bounded", () => {
@@ -169,7 +169,7 @@ var cases = new (string, Action)[]
         var objects = Enumerable.Range(0, 70).Select(i => new SceneObjectData(Guid.NewGuid(), "A",
             [new ComponentSnapshot("game.label", 1, JsonSerializer.SerializeToElement(new { value = "small" }))],
             i == 0 ? bindings : [])).ToArray();
-        AtomicReject(doc, new(1, "Bounded", objects)); // World alone fits, combined normalized document does not.
+        AtomicReject(doc, new(1, "Bounded", objects)); // Component payloads alone fit, combined normalized document does not.
         var hugeRegistry = ComponentRegistry.CreateDefault();
         hugeRegistry.Register<Label>("game.label", 1, """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""",
             _ => new Label(new string('x', 70000)));
@@ -185,19 +185,19 @@ var cases = new (string, Action)[]
         var doc = Populated();
         Check(Task.Run(() => { try { _ = doc.CaptureBytes(); return false; } catch (InvalidOperationException) { return true; } }).GetAwaiter().GetResult());
     }),
-    ("Restore validator cannot mutate World or document", () => {
+    ("Restore validator cannot mutate authoring objects or document", () => {
         SceneDocument? doc = null; bool armed = false; int blocked = 0;
         var registry = ComponentRegistry.CreateDefault();
         registry.Register<Health>("game.health", 1, """{"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}""", value => {
             if (armed) {
-                try { doc!.World.CreateEntity("Reentrant"); } catch (InvalidOperationException) { blocked++; }
-                try { doc!.SetBindings(doc.World.GetUuid(doc.World.GetEntities()[0]), []); } catch (InvalidOperationException) { blocked++; }
+                try { doc!.CreateObject("Reentrant"); } catch (InvalidOperationException) { blocked++; }
+                try { doc!.SetBindings(doc.GetObjectIds()[0], []); } catch (InvalidOperationException) { blocked++; }
             }
             return value;
         });
-        doc = new("Protected", registry); global::Ncma.Runtime.Entity obj = doc.World.CreateEntity("Hero"); doc.World.Set(obj, new Health(1));
+        doc = new("Protected", registry); Guid obj = doc.CreateObject("Hero"); doc.SetComponent(obj, new Health(1));
         var snapshot = doc.CaptureSnapshot(); armed = true; doc.RestoreSnapshot(snapshot);
-        Check(blocked == 2 && doc.World.Count == 1);
+        Check(blocked == 2 && doc.ObjectCount == 1);
     }),
     ("Complete document assets preserve all registered components and bindings", () => {
         var doc = Populated(); byte[] before = doc.CaptureBytes();
@@ -205,9 +205,9 @@ var cases = new (string, Action)[]
         SceneDocumentFiles.Save(doc, path);
         var clone = new SceneDocument("Clone", Registry()); SceneDocumentFiles.Load(clone, path);
         Check(before.SequenceEqual(File.ReadAllBytes(path)) && before.SequenceEqual(clone.CaptureBytes()));
-        Check(clone.World.Get<Health>(clone.World.GetEntities()[0]).Points == 100 && !clone.World.Has<TransformData>(clone.World.GetEntities()[0]));
-        clone.World.Set(clone.World.GetEntities()[0], new Health(7)); SceneDocumentFiles.Save(clone, path);
-        SceneDocumentFiles.Load(doc, path); Check(doc.World.Get<Health>(doc.World.GetEntities()[0]).Points == 7);
+        Check(clone.GetComponent<Health>(clone.GetObjectIds()[0]).Points == 100 && !clone.HasComponent<TransformData>(clone.GetObjectIds()[0]));
+        clone.SetComponent(clone.GetObjectIds()[0], new Health(7)); SceneDocumentFiles.Save(clone, path);
+        SceneDocumentFiles.Load(doc, path); Check(doc.GetComponent<Health>(doc.GetObjectIds()[0]).Points == 7);
         Check(!Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.tmp").Any());
     }),
     ("Unsupported text and document versions have no migration path", () => {
@@ -245,28 +245,37 @@ var cases = new (string, Action)[]
     }),
     ("Save failure preserves target and leaves no temporary files", () => {
         var doc = Populated(); var path = AssetPath("Locked.ncmascene"); SceneDocumentFiles.Save(doc, path);
-        byte[] before = File.ReadAllBytes(path); doc.World.Set(doc.World.GetEntities()[0], new Health(2));
+        byte[] before = File.ReadAllBytes(path); doc.SetComponent(doc.GetObjectIds()[0], new Health(2));
         using (var locked = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)) {
             Reject(() => SceneDocumentFiles.Save(doc, path));
         }
         Check(before.SequenceEqual(File.ReadAllBytes(path)));
         Check(!Directory.EnumerateFiles(Path.GetDirectoryName(path)!, "*.tmp").Any());
     }),
-    ("Complete snapshot cloning keeps edit/play isolated", () => {
-        var edit = Populated(); byte[] before = edit.CaptureBytes(); var play = new SceneDocument("Play", Registry());
-        play.RestoreBytes(before); play.World.Set(play.World.GetEntities()[0], new Health(2));
-        var id = play.World.GetUuid(play.World.GetEntities()[0]); play.SetBindings(id, []);
-        Check(before.SequenceEqual(edit.CaptureBytes()) && edit.World.Get<Health>(edit.World.GetEntities()[0]).Points == 100);
+    ("Explicit bake keeps authoring and actual runtime state isolated", () => {
+        var edit = Populated(); byte[] before = edit.CaptureBytes();
+        var runtime = edit.BakeRuntime(edit.Revision).Image.Instantiate(edit.Components);
+        Guid id = edit.GetObjectIds()[0]; var entity = runtime.World.FindEntity(id);
+        runtime.World.Set(entity, new Health(2));
+        var bindings = runtime.CopyRuntimeBindings(); bindings[id] = [];
+        runtime.World.BeginStep();
+        try {
+            Action? publish = null;
+            var commit = runtime.World.PrepareStepView(view => publish = runtime.PrepareRuntimeStep(view, bindings));
+            commit(); publish!();
+        } finally { runtime.World.AbortStep(); }
+        Check(runtime.GetBindings(id).Length == 0 && runtime.World.Get<Health>(entity).Points == 2);
+        Check(before.SequenceEqual(edit.CaptureBytes()) && edit.GetComponent<Health>(id).Points == 100 && edit.GetBindings(id).Length == 2);
     })
 };
 int failures = 0;
-var allCases=cases.Concat(PrefabTests.Cases()).ToArray();
+var allCases=cases.Concat(PrefabTests.Cases()).Concat(RuntimeSceneBakeTests.Cases()).Concat(RuntimeSceneStateTests.Cases()).Concat(RuntimeInspectionTests.Cases()).Concat(AuthoringStoreTests.Cases()).ToArray();
 foreach (var (name, run) in allCases) {
     try { run(); Console.WriteLine("PASS " + name); }
     catch (Exception e) { failures++; Console.Error.WriteLine("FAIL " + name + ": " + e); }
 }
 Console.WriteLine($"Scene document: {allCases.Length - failures}/{allCases.Length} passed.");
-failures += RuntimeValidationTests.Run();
+failures += RuntimeMetadataTests.Run();
 failures += SceneReadTests.Run();
 return failures == 0 ? 0 : 1;
 readonly record struct Health(int Points) : IComponent;

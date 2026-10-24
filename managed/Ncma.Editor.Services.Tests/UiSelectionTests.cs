@@ -59,10 +59,10 @@ internal static unsafe class UiSelectionTests
         });
         yield return("UI selection defaults, explicit Off and strict scene cardinality",()=>{
             var doc=new SceneDocument("UI",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);var p=new UiPackageReference(1,Guid.NewGuid(),1,"assets/a.ncupak",new('A',64));
-            Check(SceneUiState.Resolve(doc.CaptureSnapshot(),p)==p);global::Ncma.Runtime.Entity obj=doc.World.CreateEntity("UI");doc.World.Set(obj, SceneUiData.Off);Check(SceneUiState.Resolve(doc.CaptureSnapshot(),p)==null);
-            doc.World.Set(obj, SceneUiData.From(p));Check(SceneUiState.Resolve(doc.CaptureSnapshot(),null)==p);byte[] bytes=doc.CaptureBytes();var restored=new SceneDocument("UI",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);restored.RestoreBytes(bytes);Check(SceneUiState.Read(restored.CaptureSnapshot())==SceneUiData.From(p));
+            Check(SceneUiState.Resolve(doc.CaptureSnapshot(),p)==p);Guid obj=doc.CreateObject("UI");doc.SetComponent(obj, SceneUiData.Off);Check(SceneUiState.Resolve(doc.CaptureSnapshot(),p)==null);
+            doc.SetComponent(obj, SceneUiData.From(p));Check(SceneUiState.Resolve(doc.CaptureSnapshot(),null)==p);byte[] bytes=doc.CaptureBytes();var restored=new SceneDocument("UI",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);restored.RestoreBytes(bytes);Check(SceneUiState.Read(restored.CaptureSnapshot())==SceneUiData.From(p));
             Reject(()=>SceneUiData.Validate(SceneUiData.Off with{Generation=1}));Reject(()=>SceneUiData.From(p with{Path="../x.ncupak"}));
-            doc.World.Set(doc.World.CreateEntity("duplicate"), SceneUiData.Off);Reject(()=>SceneUiState.Read(doc.CaptureSnapshot()));
+            doc.SetComponent(doc.CreateObject("duplicate"), SceneUiData.Off);Reject(()=>SceneUiState.Read(doc.CaptureSnapshot()));
         });
         yield return("UI selection one original history entry, Undo Redo and saved scene reference",()=>{
             using var f=new Fixture(output);var a=f.Package(1);int before=f.Owner.Edit!.State.UndoCount;var token=f.Proposal(a);var request=f.Publication.Request(token);
@@ -85,7 +85,7 @@ internal static unsafe class UiSelectionTests
         yield return("UI selection missing preparation, another target, stale scene and owner reject",()=>{
             using var f=new Fixture(output);Reject(()=>f.Publication.Review(f.Workspace.Stamp,f.Target,new(1,f.Ui.DocumentId,1,"assets/missing.ncupak",new('A',64))));
             var a=f.Package(1);var review=f.Publication.Review(f.Workspace.Stamp,f.Target,a);f.Workspace.CreateObject(f.Workspace.Stamp);Reject(()=>f.Publication.Approve(review,review.Fingerprint,true));f.Apply(a);
-            Guid other=f.Owner.Document.World.GetUuid(f.Owner.Document.World.GetEntities().Single(o=>f.Owner.Document.World.GetUuid(o)!=f.Target));Reject(()=>f.Publication.Review(f.Workspace.Stamp,other,a));Task.Run(()=>Reject(()=>f.Publication.Review(f.Workspace.Stamp,f.Target,a))).GetAwaiter().GetResult();
+            Guid other=f.Owner.Document.GetObjectIds().Single(id=>id!=f.Target);Reject(()=>f.Publication.Review(f.Workspace.Stamp,other,a));Task.Run(()=>Reject(()=>f.Publication.Review(f.Workspace.Stamp,f.Target,a))).GetAwaiter().GetResult();
         });
     }
 }

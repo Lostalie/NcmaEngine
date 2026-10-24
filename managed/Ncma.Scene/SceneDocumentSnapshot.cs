@@ -16,8 +16,11 @@ public sealed record SceneObjectData(
     [property: JsonRequired] Guid Id,
     [property: JsonRequired] string Name,
     [property: JsonRequired] ComponentSnapshot[] Components,
-    [property: JsonRequired] BehaviourBindingData[] Behaviours);
+    [property: JsonRequired] BehaviourBindingData[] Behaviours) : ISceneObjectContent;
 public sealed record SceneDocumentSnapshot(
     [property: JsonRequired] int Version,
     [property: JsonRequired] string Name,
-    [property: JsonRequired] SceneObjectData[] Objects);
+    [property: JsonRequired] SceneObjectData[] Objects) : ISceneContent
+{
+    IReadOnlyList<ISceneObjectContent> ISceneContent.Objects => Objects;
+}

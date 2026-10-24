@@ -54,15 +54,15 @@ public static class ActionSample
         var doc=new SceneDocument("Procedural action diagnostic (not user FBX acceptance)",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);
         var actors=new List<Guid>();var targets=new List<Guid>();
         for(int i=0;i<characters;i++) {
-            global::Ncma.Runtime.Entity actor=doc.World.CreateEntity("Character "+i,Id(100+i));doc.World.Set(actor, TransformData.Identity with{Position=new(i*3,.1f,0)});doc.World.Set(actor, CharacterData.Default with{Controlled=i==0});
-            doc.World.Set(actor, new SkinnedMeshData(model,mesh,rig,slots,true,true,uint.MaxValue));doc.World.Set(actor, new ClipPlaybackData(clips[0],true,true,1,0));doc.World.Set(actor, new RootMotionData(0));doc.World.Set(actor, new HealthData(100,100));
-            doc.World.Set(actor, new ActionDefinitionData(definition,clips[0],clips[1],clips[2],clips[3],.2f,.5f,.2f,.7f,.5f,.95f,0,1,25,2.5f,2,6));actors.Add(doc.World.GetUuid(actor));
-            global::Ncma.Runtime.Entity target=doc.World.CreateEntity("Damage target "+i,Id(200+i));doc.World.Set(target, TransformData.Identity with{Position=new(i*3,1,-2)});doc.World.Set(target, new BoxColliderData(.3f,.9f,.3f,1000,2,false));doc.World.Set(target, new HealthData(100,100));targets.Add(doc.World.GetUuid(target));
+            Guid actor=doc.CreateObject("Character "+i,Id(100+i));doc.SetComponent(actor, TransformData.Identity with{Position=new(i*3,.1f,0)});doc.SetComponent(actor, CharacterData.Default with{Controlled=i==0});
+            doc.SetComponent(actor, new SkinnedMeshData(model,mesh,rig,slots,true,true,uint.MaxValue));doc.SetComponent(actor, new ClipPlaybackData(clips[0],true,true,1,0));doc.SetComponent(actor, new RootMotionData(0));doc.SetComponent(actor, new HealthData(100,100));
+            doc.SetComponent(actor, new ActionDefinitionData(definition,clips[0],clips[1],clips[2],clips[3],.2f,.5f,.2f,.7f,.5f,.95f,0,1,25,2.5f,2,6));actors.Add(actor);
+            Guid target=doc.CreateObject("Damage target "+i,Id(200+i));doc.SetComponent(target, TransformData.Identity with{Position=new(i*3,1,-2)});doc.SetComponent(target, new BoxColliderData(.3f,.9f,.3f,1000,2,false));doc.SetComponent(target, new HealthData(100,100));targets.Add(target);
         }
-        if(characters!=0){global::Ncma.Runtime.Entity floor=doc.World.CreateEntity("Physics floor",Id(8));doc.World.Set(floor, TransformData.Identity with{Position=new(45,-.5f,0)});doc.World.Set(floor, new BoxColliderData(100,.5f,20,1000,1,false));}
-        global::Ncma.Runtime.Entity camera=doc.World.CreateEntity("Camera",cameraId);doc.World.Set(camera, TransformData.Identity with{Position=new(0,3,7)});doc.World.Set(camera, CameraData.Default);
-        if(characters!=0)doc.World.Set(camera, new FollowCameraData(actors[0],0,3,7,1));
-        global::Ncma.Runtime.Entity light=doc.World.CreateEntity("Sun",Id(9));doc.World.Set(light, TransformData.Identity);doc.World.Set(light, DirectionalLightData.Default);
+        if(characters!=0){Guid floor=doc.CreateObject("Physics floor",Id(8));doc.SetComponent(floor, TransformData.Identity with{Position=new(45,-.5f,0)});doc.SetComponent(floor, new BoxColliderData(100,.5f,20,1000,1,false));}
+        Guid camera=doc.CreateObject("Camera",cameraId);doc.SetComponent(camera, TransformData.Identity with{Position=new(0,3,7)});doc.SetComponent(camera, CameraData.Default);
+        if(characters!=0)doc.SetComponent(camera, new FollowCameraData(actors[0],0,3,7,1));
+        Guid light=doc.CreateObject("Sun",Id(9));doc.SetComponent(light, TransformData.Identity);doc.SetComponent(light, DirectionalLightData.Default);
         SceneDocumentFiles.Save(doc,Path.Combine(root,"start.ncmascene"));
         Write(Path.Combine(root,"assets/action.ncpak"),SceneAssetPreparation.CreateRuntimePackage(root,project,doc.CaptureSnapshot(),[]));
         string assemblyName=Path.GetFileName(gameplayAssembly);Write(Path.Combine(root,assemblyName),File.ReadAllBytes(gameplayAssembly));Write(Path.Combine(root,Path.ChangeExtension(assemblyName,".deps.json")),File.ReadAllBytes(Path.ChangeExtension(gameplayAssembly,".deps.json")));

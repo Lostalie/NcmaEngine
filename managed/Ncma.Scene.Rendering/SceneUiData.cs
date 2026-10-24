@@ -28,7 +28,7 @@ public static class SceneUiState
 {
     private static readonly ComponentRegistry Registry=CreateRegistry();
     private static ComponentRegistry CreateRegistry(){var r=ComponentRegistry.CreateDefault();SceneUiData.Register(r);return r;}
-    public static SceneUiData? Read(SceneDocumentSnapshot snapshot)
+    public static SceneUiData? Read(ISceneContent snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);SceneUiData? found=null;
         foreach(var obj in snapshot.Objects)foreach(var component in obj.Components.Where(c=>c.TypeId==SceneUiData.TypeId)){
@@ -37,6 +37,6 @@ public static class SceneUiState
         }
         return found;
     }
-    public static UiPackageReference? Resolve(SceneDocumentSnapshot snapshot,UiPackageReference? projectDefault)
+    public static UiPackageReference? Resolve(ISceneContent snapshot,UiPackageReference? projectDefault)
         =>Read(snapshot) is {} selected?selected.Package:projectDefault?.Validate();
 }

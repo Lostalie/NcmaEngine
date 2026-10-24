@@ -40,10 +40,10 @@ internal static class SceneUiEditorProbe
             Pass(renderer.UiTargetStats.Productions==before.Productions&&renderer.UiStats.UploadedBytes==uploaded&&renderer.UiTargetStats.Leases==0,"warm16 cached target no upload/production/live lease");
             var owner=editor.VerificationEditor;
             var workspace=new EditorWorkspace(owner);var edit=owner.Edit!;
-            global::Ncma.Runtime.Entity light=owner.Document.World.GetEntities().Single(o=>owner.Document.World.Has<DirectionalLightData>(o));
-            Guid lightId=owner.Document.World.GetUuid(light);var initial=owner.Document.World.Get<DirectionalLightData>(light);
+            Guid light=owner.Document.GetObjectIds().Single(o=>owner.Document.HasComponent<DirectionalLightData>(o));
+            Guid lightId=light;var initial=owner.Document.GetComponent<DirectionalLightData>(light);
             var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",
-                JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=lightId,typeId=DirectionalLightData.TypeId,version=1,data=owner.Document.World.Components.Encode(initial with{Intensity=initial.Intensity*.25f})}}}));
+                JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=lightId,typeId=DirectionalLightData.TypeId,version=1,data=owner.Document.Components.Encode(initial with{Intensity=initial.Intensity*.25f})}}}));
             Pass(edit.Invoke(command).Status=="denied","Agent remains read-only");
             Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[lightId],componentScope:[DirectionalLightData.TypeId])).Changed,"original scoped light command");
             var dim=Draw();Pass(!dim.SequenceEqual(image)&&dim.AsSpan(at,4).SequenceEqual(image.AsSpan(at,4)),"scene changes without re-toning HUD");

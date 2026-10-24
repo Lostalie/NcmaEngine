@@ -18,12 +18,13 @@ public readonly record struct PresentationCounters(ulong MainSubmissions,ulong P
 }
 public readonly record struct PresentationCostReport(ulong Generation,ulong HostFrame,bool Completed,
     bool IncludesDiagnosticCapture,double CpuWallMilliseconds,long OwnerThreadAllocatedBytes,
-    PresentationCounters? Counters,AttributedGpuCost? Main,AttributedGpuCost? Skin,AttributedGpuCost? Ui)
+    PresentationCounters? Counters,AttributedGpuCost? Main,AttributedGpuCost? Skin,AttributedGpuCost? Ui,
+    AttributedGpuCost? MainResolved=null,AttributedGpuCost? SkinResolved=null,AttributedGpuCost? UiResolved=null)
 {
-    public int Version=>1;
+    public int Version=>2;
     public string Scope=>"presentation-call; excludes simulation/startup and observation overhead";
     public string CounterCoverage=>"selected native batch/copy/upload counters; not all ABI calls/uploads; UI draw submissions include offscreen production";
-    public string GpuCoverage=>"last bounded sample per domain; elapsed timestamp intervals, not additive whole-frame or GPU busy time";
+    public string GpuCoverage=>"current query and last resolved sample per domain; bounded copies, not complete history or additive whole-frame GPU time";
     public bool FullPerformanceAccepted=>false;
 }
 
@@ -45,7 +46,8 @@ public sealed class PresentationCostCapture
         ArgumentNullException.ThrowIfNull(renderer);_renderer=renderer;
         var state=renderer.ReadFrameState();if(state.Active||state.Failed)throw new InvalidOperationException("Cost capture requires healthy off-frame initialization.");
         _generation=state.Generation;
-        _=ReadCounters();_=renderer.ReadGpuTiming();_=renderer.ReadGpuWorkTiming(GpuTimingDomain.SkinDispatch);_=renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction);
+        _=ReadCounters();_=renderer.ReadGpuTimingSnapshot(GpuTimingDomain.MainSubmissionBeforePresent);
+        _=renderer.ReadGpuTimingSnapshot(GpuTimingDomain.SkinDispatch);_=renderer.ReadGpuTimingSnapshot(GpuTimingDomain.UiProduction);
     }
     private void Verify(){if(_thread!=Environment.CurrentManagedThreadId)throw new InvalidOperationException("Cost capture requires its owner thread.");}
     public void Begin(ulong hostFrame,bool includesDiagnosticCapture=false)
@@ -61,10 +63,12 @@ public sealed class PresentationCostCapture
         double elapsed=Stopwatch.GetElapsedTime(_time).TotalMilliseconds;long allocated=GC.GetAllocatedBytesForCurrentThread()-_allocated;
         var state=_renderer.ReadFrameState();if(state.Generation!=_generation||state.Active||state.Failed)throw new InvalidOperationException("Cost capture must finish off-frame on the same healthy renderer.");
         var counters=PresentationCounters.Delta(ReadCounters(),_before);
-        var main=Attribute(new(_renderer.ReadGpuTiming(),0,0));
-        var skin=Attribute(_renderer.ReadGpuWorkTiming(GpuTimingDomain.SkinDispatch));
-        var ui=Attribute(_renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction));
-        var result=new PresentationCostReport(_generation,_frame,true,_diagnostic,elapsed,allocated,counters,main,skin,ui);
+        var main=_renderer.ReadGpuTimingSnapshot(GpuTimingDomain.MainSubmissionBeforePresent);
+        var skin=_renderer.ReadGpuTimingSnapshot(GpuTimingDomain.SkinDispatch);
+        var ui=_renderer.ReadGpuTimingSnapshot(GpuTimingDomain.UiProduction);
+        var result=new PresentationCostReport(_generation,_frame,true,_diagnostic,elapsed,allocated,counters,
+            Attribute(main.Current),Attribute(skin.Current),Attribute(ui.Current),
+            Attribute(main.LastResolved),Attribute(skin.LastResolved),Attribute(ui.LastResolved));
         _last=result;_active=false;return result;
     }
     // No native reads on a failure path; never overwrite the primary render exception.

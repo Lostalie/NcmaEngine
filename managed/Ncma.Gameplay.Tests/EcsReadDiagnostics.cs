@@ -15,7 +15,7 @@ internal static class EcsReadDiagnostics
     private static readonly FieldInfo? Cache = typeof(World).GetField("_committedEntityOrder", BindingFlags.Instance | BindingFlags.NonPublic);
     private static Guid Id(int index) => new(index + 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     private static void Check(bool condition) { if (!condition) throw new InvalidOperationException("Read lifecycle diagnostic mismatch."); }
-    private static SceneDocument Fixture(int count)
+    private static RuntimeSceneInstance Fixture(int count)
     {
         var registry = ComponentRegistry.CreateDefault();
         const string schema = """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":false}""";
@@ -23,13 +23,14 @@ internal static class EcsReadDiagnostics
         registry.Register<Flag>("e5c.flag", 1, schema, value => value);
         registry.Register<Unattached>("e5c.unattached", 1, schema, value => value);
         var document = new SceneDocument("E5-C read lifecycle", registry);
-        for (int i = 0; i < count; i++) {
-            var entity = document.World.CreateEntity("Object " + i, Id(i));
-            document.World.Set(entity, TransformData.Identity with { Position = new(i, 0, 0) });
-            if (i % 2 == 0) document.World.Set(entity, new Marker(i));
-            if (i % 4 == 0) document.World.Set(entity, new Flag(i));
-        }
-        return document;
+        document.RestoreSnapshot(new(1, document.Name, Enumerable.Range(0, count).Select(i => {
+            var components = new List<ComponentSnapshot> {
+                new("ncma.transform", 1, registry.Encode(TransformData.Identity with { Position = new(i, 0, 0) })) };
+            if (i % 2 == 0) components.Add(new("e5c.marker", 1, registry.Encode(new Marker(i))));
+            if (i % 4 == 0) components.Add(new("e5c.flag", 1, registry.Encode(new Flag(i))));
+            return new SceneObjectData(Id(i), "Object " + i, components.ToArray(), []);
+        }).ToArray()));
+        return document.BakeRuntime(document.Revision).Image.Instantiate(registry);
     }
     private static object Distribution(double[] values)
     {
@@ -37,13 +38,13 @@ internal static class EcsReadDiagnostics
         double P(double p) => sorted[Math.Max(0, (int)Math.Ceiling(sorted.Length * p) - 1)];
         return new { p50 = P(.5), p95 = P(.95), p99 = P(.99), max = sorted[^1] };
     }
-    internal static void Run(bool measured, Action<string, int, SceneDocument>? verified = null)
+    internal static void Run(bool measured, Action<string, int, EcsDiagnosticState>? verified = null)
     {
         int warmup = measured ? 12 : 1, samples = measured ? 100 : 2, cases = 0;
         string[] names = ["copy_cold_first", "copy_warm", "copy_value_change", "copy_component_membership",
             "copy_recreate", "copy_restore", "query_value_change", "query_three_warm", "query_none_warm", "query_empty_pool"];
         if (measured) Console.WriteLine(JsonSerializer.Serialize(new {
-            kind = "ecs_e5_read_diagnostic_environment", schema = 1, runtime = RuntimeInformation.FrameworkDescription,
+            kind = "ecs_e6_read_diagnostic_environment", schema = 2, historicalPairedContractCompatible = false, runtime = RuntimeInformation.FrameworkDescription,
             os = RuntimeInformation.OSDescription, cpuCount = Environment.ProcessorCount,
             stopwatchFrequency = Stopwatch.Frequency, serverGc = System.Runtime.GCSettings.IsServerGC,
 #if DEBUG
@@ -56,8 +57,8 @@ internal static class EcsReadDiagnostics
         foreach (int count in measured ? new[] { 0, 100, 1000, World.MaxObjects } : new[] { 0, 8 })
         foreach (string name in names)
         {
-            SceneDocument document = Fixture(count); World world = document.World;
-            byte[] snapshot = document.CaptureBytes();
+            RuntimeSceneInstance document = Fixture(count); World world = document.World;
+            var snapshot = document.CaptureCheckpoint();
             Entity[] expected = Enumerable.Range(0, count).Select(i => world.FindEntity(Id(i))).ToArray();
             bool copies = name.StartsWith("copy_", StringComparison.Ordinal);
             EntityQuery? query = copies ? null : name switch {
@@ -79,7 +80,7 @@ internal static class EcsReadDiagnostics
             {
                 sequence++;
                 if (name == "copy_cold_first") { document = Fixture(count); world = document.World; }
-                if (name == "copy_restore") document.RestoreBytes(snapshot);
+                if (name == "copy_restore") document.RestoreCheckpoint(snapshot, document.Revision);
                 if (count != 0) {
                     Entity first = world.FindEntity(Id(0));
                     if (name is "copy_value_change" or "query_value_change")
@@ -136,14 +137,14 @@ internal static class EcsReadDiagnostics
             long managedAfter = GC.GetTotalMemory(false);
             int[] gc = Enumerable.Range(0, 3).Select(i => GC.CollectionCount(i) - gcStart[i]).ToArray();
             if (measured) Console.WriteLine(JsonSerializer.Serialize(new {
-                kind = "ecs_e5_read_diagnostic_sample", schema = 1, workload = name, objects = count, warmup, samples,
+                kind = "ecs_e6_read_diagnostic_sample", schema = 2, historicalPairedContractCompatible = false, workload = name, objects = count, warmup, samples,
                 ms = Distribution(times), allocatedThreadBytes = Distribution(allocations), runtimeGcPauseMs = Distribution(pauses),
                 rawMs = times, rawAllocatedThreadBytes = allocations, rawRuntimeGcPauseMs = pauses,
                 observedCacheField = Cache is not null, retainedIdentityCounts = retained, entitySizeBytes = Unsafe.SizeOf<Entity>(),
                 managedBeforeBytes = managedBefore, managedAfterBytes = managedAfter, gcCollectionsIncludingSetup = gc,
                 note = "Retained counts describe one private identity array payload, not heap residency. Output copies are additional. GC/heap include untimed fixture and invalidation; pause attribution can lag."
             }));
-            verified?.Invoke(name, count, document); cases++;
+            verified?.Invoke(name, count, EcsDiagnosticState.FromRuntime(document)); cases++;
         }
         Console.WriteLine($"E5 read lifecycle diagnostic fixture checks: {cases}/{cases} passed; measured={measured}.");
     }

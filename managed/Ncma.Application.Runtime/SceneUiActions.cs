@@ -96,7 +96,7 @@ public sealed class SceneUiInput : IDisposable
             throw new InvalidOperationException("Another producer owns this Play UI binding.");
         var ui = _runtime.Stamp;
         bool changed = ui.Instance != _uiStamp.Instance || ui.Generation != _uiStamp.Generation ||
-            ui.PlaySession != _play.SessionId || ui.World != _play.Document.World.Identity;
+            ui.PlaySession != _play.SessionId || ui.World != _play.Scene.World.Identity;
         // A normal fixed step increments scene revision once. Out-of-step metadata/world changes
         // revoke queued observations, while normal ticks preserve widget focus and pointer capture.
         bool externalChange = active && _observed && (current.Tick < _observation.Tick ||
@@ -104,7 +104,7 @@ public sealed class SceneUiInput : IDisposable
             current.SceneRevision - _observation.SceneRevision != current.Tick - _observation.Tick);
         if (!active || changed || externalChange) {
             Cancel();
-            _runtime.Bind(_play.SessionId, _play.Document.World.Identity, _play.Tick);
+            _runtime.Bind(_play.SessionId, _play.Scene.World.Identity, _play.Tick);
             ui = _runtime.Stamp; current = _play.BindUiInput(ui.Instance, ui.Generation); _admission = current.Admission;
         } else _runtime.Bind(current.SessionId, current.WorldId, current.Tick);
         _observation = current; _uiStamp = _runtime.Stamp; _observed = true; return true;

@@ -8,6 +8,7 @@ namespace NcmaEngine::Rendering {
 class GpuWorkTimingKernel final {
     Rhi::D3D11RenderBackend& backend;
     NcmaGpuWorkSampleV1& sample;
+    NcmaGpuWorkSampleV1& lastResolved;
     Microsoft::WRL::ComPtr<ID3D11Query> disjoint,begin,end;
     bool measuring=false,pending=false,failed=false;
 public:
@@ -16,7 +17,7 @@ public:
     static inline HRESULT testResult=S_OK;
     static inline bool testDisjoint=false,testInvalid=false;
 #endif
-    GpuWorkTimingKernel(Rhi::D3D11RenderBackend& b,NcmaGpuWorkSampleV1& s):backend(b),sample(s){}
+    GpuWorkTimingKernel(Rhi::D3D11RenderBackend& b,NcmaGpuWorkSampleV1& s,NcmaGpuWorkSampleV1& resolved):backend(b),sample(s),lastResolved(resolved){}
     bool Initialize(std::string& error) {
         D3D11_QUERY_DESC desc{D3D11_QUERY_TIMESTAMP_DISJOINT,0};
         for(auto* query:{std::addressof(disjoint),std::addressof(begin),std::addressof(end)}) {
@@ -47,6 +48,7 @@ public:
         const bool valid=!data.Disjoint&&data.Frequency&&last>=first;
         sample.timing.state=data.Disjoint?NCMA_GPU_SAMPLE_DISJOINT:valid?NCMA_GPU_SAMPLE_VALID:NCMA_GPU_SAMPLE_INVALID;
         sample.timing.milliseconds=valid?static_cast<double>(last-first)*1000.0/static_cast<double>(data.Frequency):0;
+        lastResolved=sample;
         pending=false;
     }
     void Begin(uint64_t frame,uint64_t resource=0,uint64_t revision=0) {

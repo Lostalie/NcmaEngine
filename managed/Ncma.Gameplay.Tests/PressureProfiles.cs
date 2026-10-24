@@ -49,8 +49,10 @@ internal static class PressureProfiles
             var scene = new SceneDocumentSnapshot(1, "Pressure", Enumerable.Range(0, setup.Objects).Select(i => new SceneObjectData(
                 Guid.NewGuid(), "Object " + i, components, Enumerable.Range(0, setup.Bindings).Select(_ => new BehaviourBindingData(
                     Guid.NewGuid(), "Profile.Moving", true, [])).ToArray())).ToArray());
-            doc.RestoreSnapshot(scene); int sceneBytes = doc.CaptureBytes().Length; var counter = new Counter();
-            using var play = new PlaySession(doc) { MeasureSteps = true };
+            doc.RestoreSnapshot(scene);
+            var runtime = doc.BakeRuntime(doc.Revision).Image.Instantiate(registry);
+            int sceneBytes = runtime.CaptureCheckpoint().CopyBytes().Length; var counter = new Counter();
+            using var play = new PlaySession(runtime) { MeasureSteps = true };
             play.AddSystem(new ReadSystem(counter)); play.Start(_ => new Moving(counter));
             var frames = new List<double>(); var allocations = new List<double>();
             var layers = new Dictionary<string, List<double>>();
@@ -70,7 +72,8 @@ internal static class PressureProfiles
                 Add("instancesPrepare", p.InstancesPrepare); Add("receiptsPrepare", p.ReceiptsPrepare); Add("renderPrepare", p.RenderPrepare); Add("install", p.Install);
             }
             if (play.RenderView.Objects.Length != setup.Objects || play.Tick != 40 || !double.IsFinite(counter.Sum)) throw new Exception("Pressure output invalid");
-            Console.WriteLine(JsonSerializer.Serialize(new { fixture = "runtime_pressure_one_fixed_step", objects = setup.Objects,
+            Console.WriteLine(JsonSerializer.Serialize(new { fixture = "runtime_pressure_one_fixed_step", schema = 2,
+                stateFormat = RuntimeSceneImage.Format, stateVersion = RuntimeSceneImage.FormatVersion, historicalPairedContractCompatible = false, objects = setup.Objects,
                 componentsPerObject = setup.Components, bindingsPerObject = setup.Bindings, systems = 1, sceneBytes, renderObjects = play.RenderView.Objects.Length,
                 samples = frames.Count, frameMs = Stats(frames), allocationBytes = Stats(allocations),
                 layerMs = layers.ToDictionary(p => p.Key, p => Stats(p.Value)) }));

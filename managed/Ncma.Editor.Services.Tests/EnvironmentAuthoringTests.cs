@@ -61,7 +61,7 @@ internal static class EnvironmentAuthoringTests
         internal EnvironmentPresetReview Review()=>Service.ReviewNeutral(Workspace.Stamp,Id);
         internal Guid Approve(EnvironmentPresetReview r)=>Service.Approve(r,r.Fingerprint,true);
         internal string FilePath(EnvironmentPresetReview r)=>Path.Combine(Root,r.Path);
-        internal EnvironmentLightingData Value=>Owner.Document.World.Get<EnvironmentLightingData>(Owner.Document.World.FindEntity(Id));
+        internal EnvironmentLightingData Value=>Owner.Document.GetComponent<EnvironmentLightingData>(Id);
         internal CapabilityResult Read(object? input=null)=>Owner.Edit!.Invoke(new(2,Guid.NewGuid(),Owner.Edit.SessionId,Owner.Edit.Revision,EditorEnvironmentWorkspace.ListCapability,JsonSerializer.SerializeToElement(input??new{})));
         public void Dispose()=>Owner.Dispose();
     }
@@ -79,18 +79,18 @@ internal static class EnvironmentAuthoringTests
     internal static IEnumerable<(string,Action)> Cases(string output,string repository)
     {
         yield return("M7.3-C3-B2 Core scene participant validates before durable preparation and compensates late revoke",()=>{
-            var doc=new SceneDocument();Guid id=doc.World.GetUuid(doc.World.CreateEntity("Before"));var edit=new EditSession(doc);bool allowed=true;
+            var doc=new SceneDocument();Guid id=doc.CreateObject("Before");var edit=new EditSession(doc);bool allowed=true;
             var p=new Participant(()=>JsonSerializer.SerializeToElement(new[]{new{op="rename",objectId=id,name="After"}}));edit.RegisterCommandParticipant(EditorEnvironmentWorkspace.ApplyDescriptor,p);
             CapabilityRequest Request()=>new(2,Guid.NewGuid(),edit.SessionId,edit.Revision,EditorEnvironmentWorkspace.ApplyCapability,JsonSerializer.SerializeToElement(new{}));
             Check(!edit.Invoke(Request(),new([EditorEnvironmentWorkspace.ApplyCapability],objectScope:[])).Changed&&p.Prepares==0);
             var impact=edit.DescribeRequestImpact(Request());Check(impact.Impact.Objects.SequenceEqual(new[]{id})&&p.Prepares==0);
-            p.OnPrepare=()=>{doc.World.Rename(doc.World.FindEntity(id), "illegal");};Check(!edit.Invoke(Request(),new([EditorEnvironmentWorkspace.ApplyCapability])).Changed&&doc.World.GetName(doc.World.FindEntity(id))=="Before"&&p.Publishes==0);
+            p.OnPrepare=()=>{doc.RenameObject(id, "illegal");};Check(!edit.Invoke(Request(),new([EditorEnvironmentWorkspace.ApplyCapability])).Changed&&doc.GetObjectName(id)=="Before"&&p.Publishes==0);
             p.OnPrepare=null;p.OnPublish=()=>allowed=false;var grant=new CapabilityPermissions([EditorEnvironmentWorkspace.ApplyCapability],objectScope:[id],isCurrent:()=>allowed);
-            Check(!edit.Invoke(Request(),grant).Changed&&p.Compensations==1&&doc.World.GetName(doc.World.FindEntity(id))=="Before"&&!edit.State.Frozen);
-            p.OnPublish=null;allowed=true;Check(edit.Invoke(Request(),grant).Changed&&doc.World.GetName(doc.World.FindEntity(id))=="After");
+            Check(!edit.Invoke(Request(),grant).Changed&&p.Compensations==1&&doc.GetObjectName(id)=="Before"&&!edit.State.Frozen);
+            p.OnPublish=null;allowed=true;Check(edit.Invoke(Request(),grant).Changed&&doc.GetObjectName(id)=="After");
         });
         yield return("M7.3-C3-B2 Core no-op requested scope retained and malformed scene operations rejected",()=>{
-            foreach(bool malformed in new[]{false,true}){var doc=new SceneDocument();Guid id=doc.World.GetUuid(doc.World.CreateEntity("Before"));var edit=new EditSession(doc);
+            foreach(bool malformed in new[]{false,true}){var doc=new SceneDocument();Guid id=doc.CreateObject("Before");var edit=new EditSession(doc);
                 var p=new Participant(()=>malformed?JsonSerializer.SerializeToElement(Array.Empty<object>()):JsonSerializer.SerializeToElement(new[]{new{op="rename",objectId=id,name="Before"}}));edit.RegisterCommandParticipant(EditorEnvironmentWorkspace.ApplyDescriptor,p);
                 var request=new CapabilityRequest(2,Guid.NewGuid(),edit.SessionId,edit.Revision,EditorEnvironmentWorkspace.ApplyCapability,JsonSerializer.SerializeToElement(new{}));
                 if(malformed){Check(!edit.Invoke(request,new([EditorEnvironmentWorkspace.ApplyCapability])).Changed&&p.Prepares==0);continue;}
@@ -119,7 +119,7 @@ internal static class EnvironmentAuthoringTests
                 f.Workspace.History(f.Workspace.Stamp,false);Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&!File.Exists(f.FilePath(r))&&File.Exists(nce));
                 f.Workspace.History(f.Workspace.Stamp,true);Check(after.SequenceEqual(f.Owner.Document.CaptureBytes())&&File.Exists(f.FilePath(r)));}
             f.Service.Synchronize();Check(f.Service.Rows().Single().State=="registered");string scene=Path.Combine(f.Root,"saved.ncmascene");f.Workspace.Save(f.Workspace.Stamp,scene);
-            using var reopened=new EditorSessionOwner("reopened",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);new EditorWorkspace(reopened).Open(new EditorWorkspace(reopened).Stamp,scene,true);Check(reopened.Document.World.Get<EnvironmentLightingData>(reopened.Document.World.FindEntity(f.Id))==f.Value);
+            using var reopened=new EditorSessionOwner("reopened",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);new EditorWorkspace(reopened).Open(new EditorWorkspace(reopened).Stamp,scene,true);Check(reopened.Document.GetComponent<EnvironmentLightingData>(f.Id)==f.Value);
         });
         yield return("M7.3-C3-B2 exact scope default deny unknown input stale proposal and original history",()=>{
             using var f=new Fixture(output,repository);var r=f.Review();Guid token=f.Approve(r);var edit=f.Owner.Edit!;var request=f.Service.Request(token);byte[] before=f.Owner.Document.CaptureBytes();
@@ -162,7 +162,7 @@ internal static class EnvironmentAuthoringTests
         yield return("M7.3-C3-B2 UI cancel explicit confirmation apply single Undo and frozen controls",()=>{
             using var f=new Fixture(output,repository);int history=f.Owner.Edit!.State.UndoCount;f.Click("选择合成中性预设…");Check(f.Service.Review is not null);f.Click("取消预设选择");Check(f.Service.Review is null&&f.Owner.Edit.State.UndoCount==history);
             f.Click("选择合成中性预设…");f.Click("已核对目标、资源和文件发布范围",1);f.Click("批准并应用预设（一次撤销）");Check(f.Owner.Edit.State.UndoCount==history+1&&f.Value.Enabled);
-            f.Workspace.History(f.Workspace.Stamp,false);Check(!f.Owner.Document.World.Has<EnvironmentLightingData>(f.Owner.Document.World.FindEntity(f.Id)));f.Workspace.History(f.Workspace.Stamp,true);
+            f.Workspace.History(f.Workspace.Stamp,false);Check(!f.Owner.Document.HasComponent<EnvironmentLightingData>(f.Id));f.Workspace.History(f.Workspace.Stamp,true);
             f.Owner.RefreshAssets(true);f.Owner.StartPlay();f.Build();var before=f.Owner.Document.CaptureBytes();f.Click("选择合成中性预设…");Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));f.Owner.StopPlay();
         });
         yield return("M7.3-C3-B2 real stdio bounded metadata default deny no file IO TTL audience epoch",()=>{

@@ -156,24 +156,24 @@ public sealed class EditorAssetWorkflow : IDisposable
     }
     public void Assign(EditorViewStamp stamp,Guid objectId,Guid assetId,AssetKind kind)
     {
-        Writable(stamp);var root=Inspect(assetId,kind);global::Ncma.Runtime.Entity obj=_workspace.Owner.Document.World.FindEntity(objectId);
+        Writable(stamp);var root=Inspect(assetId,kind);var document=_workspace.Owner.Document;if(!document.ContainsObject(objectId))throw new ArgumentException("Unknown target UUID.");
         if(!root.Subassets.Any(s=>s.AssetId==assetId&&s.Kind==kind&&!s.Tombstone)&&kind!=AssetKind.MaterialSet)throw new EditRejectedException("typed_subasset_required");
-        var registry=_workspace.Owner.Document.World.Components;object operation;
+        var registry=document.Components;object operation;
         if(kind==AssetKind.Clip) {
-            if(!_workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)||_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).CharacterId!=root.AssetId)throw new EditRejectedException("clip_rig_mismatch");
-            var value=_workspace.Owner.Document.World.Has<Ncma.Animation.ClipPlaybackData>(obj)?_workspace.Owner.Document.World.Get<Ncma.Animation.ClipPlaybackData>(obj):new(assetId,true,true,1,0);
+            if(!document.HasComponent<SkinnedMeshData>(objectId)||document.GetComponent<SkinnedMeshData>(objectId).CharacterId!=root.AssetId)throw new EditRejectedException("clip_rig_mismatch");
+            var value=document.HasComponent<Ncma.Animation.ClipPlaybackData>(objectId)?document.GetComponent<Ncma.Animation.ClipPlaybackData>(objectId):new(assetId,true,true,1,0);
             operation=Set(Ncma.Animation.ClipPlaybackData.TypeId,registry.Encode(value with{ClipId=assetId}));
-        } else if(kind==AssetKind.StaticMesh&&_workspace.Owner.Document.World.Has<StaticMeshData>(obj)) {
+        } else if(kind==AssetKind.StaticMesh&&document.HasComponent<StaticMeshData>(objectId)) {
             var part=Assets.Imports.Generations.CopyManifest(root).Meshes.Single(m=>m.Mesh==assetId);
-            operation=Set(StaticMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<StaticMeshData>(obj) with{MeshId=assetId,MaterialSetId=part.Materials}));
+            operation=Set(StaticMeshData.TypeId,registry.Encode(document.GetComponent<StaticMeshData>(objectId) with{MeshId=assetId,MaterialSetId=part.Materials}));
         }
-        else if(kind==AssetKind.SkinnedMesh&&_workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)) {
-            if(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).CharacterId!=root.AssetId)throw new EditRejectedException("asset_character_mismatch");
+        else if(kind==AssetKind.SkinnedMesh&&document.HasComponent<SkinnedMeshData>(objectId)) {
+            if(document.GetComponent<SkinnedMeshData>(objectId).CharacterId!=root.AssetId)throw new EditRejectedException("asset_character_mismatch");
             var part=Assets.Imports.Generations.CopyManifest(root).Meshes.Single(m=>m.Mesh==assetId);
             var skeleton=root.Subassets.Single(s=>s.Kind==AssetKind.Skeleton&&!s.Tombstone);
-            operation=Set(SkinnedMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj) with{CharacterId=root.AssetId,MeshId=assetId,SkeletonId=skeleton.AssetId,MaterialSetId=part.Materials}));
-        } else if(kind==AssetKind.MaterialSet&&_workspace.Owner.Document.World.Has<StaticMeshData>(obj)) {RequireCoverage(_workspace.Owner.Document.World.Get<StaticMeshData>(obj).MeshId,AssetKind.StaticMesh);operation=Set(StaticMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<StaticMeshData>(obj) with{MaterialSetId=assetId}));}
-        else if(kind==AssetKind.MaterialSet&&_workspace.Owner.Document.World.Has<SkinnedMeshData>(obj)) {RequireCoverage(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj).MeshId,AssetKind.SkinnedMesh);operation=Set(SkinnedMeshData.TypeId,registry.Encode(_workspace.Owner.Document.World.Get<SkinnedMeshData>(obj) with{MaterialSetId=assetId}));}
+            operation=Set(SkinnedMeshData.TypeId,registry.Encode(document.GetComponent<SkinnedMeshData>(objectId) with{CharacterId=root.AssetId,MeshId=assetId,SkeletonId=skeleton.AssetId,MaterialSetId=part.Materials}));
+        } else if(kind==AssetKind.MaterialSet&&document.HasComponent<StaticMeshData>(objectId)) {RequireCoverage(document.GetComponent<StaticMeshData>(objectId).MeshId,AssetKind.StaticMesh);operation=Set(StaticMeshData.TypeId,registry.Encode(document.GetComponent<StaticMeshData>(objectId) with{MaterialSetId=assetId}));}
+        else if(kind==AssetKind.MaterialSet&&document.HasComponent<SkinnedMeshData>(objectId)) {RequireCoverage(document.GetComponent<SkinnedMeshData>(objectId).MeshId,AssetKind.SkinnedMesh);operation=Set(SkinnedMeshData.TypeId,registry.Encode(document.GetComponent<SkinnedMeshData>(objectId) with{MaterialSetId=assetId}));}
         else throw new EditRejectedException("asset_component_kind_mismatch");
         _workspace.Transaction(stamp,"Assign typed asset",[operation],objectId);
         object Set(string type,JsonElement data)=>new{op="set_component",objectId,typeId=type,version=1,data};
@@ -184,27 +184,26 @@ public sealed class EditorAssetWorkflow : IDisposable
     {
         Verify();if(Prepared?.Ticket!=prepared.Ticket)throw new EditRejectedException("asset_import_ticket_mismatch");
         var ids=prepared.Record.Subassets.Select(s=>s.AssetId).Append(prepared.Record.AssetId).ToHashSet();
-        return CollectRenderReferences(_workspace.Owner.Document.World, ids);
+        return CollectRenderReferences(_workspace.Owner.Document, ids);
     }
-    // Off-frame import review. Query the union, including malformed/missing-Transform members;
-    // the report is not a renderability validator. Preserve creation order, not UUID order.
-    private static Guid[] CollectRenderReferences(World world, HashSet<Guid> ids)
+    // Off-frame authoring review includes malformed/missing-Transform members;
+    // this is not a renderability validator. UUID order follows document creation order.
+    private static Guid[] CollectRenderReferences(Ncma.Scene.SceneDocument document, HashSet<Guid> ids)
     {
-        using var read = world.ReadOnly();
-        var members = new HashSet<Entity>();
-        Add<StaticMeshData>(value => ids.Contains(value.MeshId) || ids.Contains(value.MaterialSetId));
-        Add<SkinnedMeshData>(value => ids.Contains(value.CharacterId) || ids.Contains(value.MeshId) || ids.Contains(value.MaterialSetId));
-        Add<Ncma.Animation.ClipPlaybackData>(value => ids.Contains(value.ClipId));
-        var ordered = members.ToArray();
-        Array.Sort(ordered, world.CompareCreationOrder);
-        return ordered.Select(world.GetUuid).ToArray();
-
-        void Add<T>(Func<T, bool> affected) where T : struct, IComponent
+        using var read = document.ReadOnly();
+        var members = new List<Guid>();
+        foreach (var id in document.GetObjectIds())
         {
-            if (!world.Components.IsRegistered<T>()) return;
-            foreach (var entity in world.Query<T>())
-                if (affected(world.Get<T>(entity))) members.Add(entity);
+            if (Affected<StaticMeshData>(id, value => ids.Contains(value.MeshId) || ids.Contains(value.MaterialSetId)) ||
+                Affected<SkinnedMeshData>(id, value => ids.Contains(value.CharacterId) || ids.Contains(value.MeshId) || ids.Contains(value.MaterialSetId)) ||
+                Affected<Ncma.Animation.ClipPlaybackData>(id, value => ids.Contains(value.ClipId)))
+                members.Add(id);
         }
+        return members.ToArray();
+
+        bool Affected<T>(Guid id, Func<T, bool> affected) where T : struct, IComponent =>
+            document.Components.IsRegistered<T>() && document.HasComponent<T>(id) &&
+            affected(document.GetComponent<T>(id));
     }
     public void Dispose()
     {

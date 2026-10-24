@@ -4,8 +4,11 @@ static void RendererWorkTimingNativeTests(const NcmaRendererApiV1_2& api,uint64_
     NcmaErrorV1 error{};NcmaRendererWorkTimingApiV1 work{};const auto& base=api.base.base;
     pass(api.query_scene_render(context,20,&work,23,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==24&&!work.read,"Work timing short table atomic");
     pass(api.query_scene_render(context,20,&work,24,&error)==NCMA_OK&&work.version==1&&work.capabilities==3&&work.read,"Work timing query20");
+    NcmaRendererTimingSnapshotApiV1 snapshots{};
+    pass(api.query_scene_render(context,21,&snapshots,sizeof(snapshots),&error)==NCMA_OK,"Work snapshot API");
     uint64_t handle=0;pass(base.create_renderer(context,&desc,&handle,&error)==NCMA_OK,"Work timing device");
     auto read=[&](uint32_t domain){NcmaGpuWorkSampleV1 s{};pass(work.read(context,handle,domain,&s,&error)==NCMA_OK,"Work timing copied read");return s;};
+    auto snapshot=[&](uint32_t domain){NcmaGpuTimingSnapshotV1 s{};pass(snapshots.read(context,handle,domain,&s,&error)==NCMA_OK,"Work snapshot read");return s;};
     const auto resources=renderer->backend->GetLiveResourceCount();
     for(uint32_t domain:{2u,3u}){auto s=read(domain);pass(!s.timing.state&&!s.timing.sequence&&s.timing.generation==handle&&s.timing.domain==domain&&!s.resource&&!s.content_revision,"Missing work domain explicitly unavailable");}
     pass(!renderer->skinKernel&&!renderer->uiTiming&&!renderer->ui&&renderer->backend->GetLiveResourceCount()==resources,"Read never initializes missing workloads");
@@ -26,14 +29,20 @@ static void RendererWorkTimingNativeTests(const NcmaRendererApiV1_2& api,uint64_
     update(9);wait();Timing::testResult=S_FALSE;
     for(uint64_t frame=11;frame<=19;frame+=2){update(frame);wait();}
     auto delayed=read(2);pass(delayed.timing.state==NCMA_GPU_SAMPLE_PENDING&&delayed.timing.origin_frame==9&&delayed.timing.observed_frame==19&&delayed.timing.skipped==5,"More than three palette buffers proceed while timing unavailable");
+    auto retainedSkin=snapshot(2);pass(retainedSkin.current.timing.state==NCMA_GPU_SAMPLE_PENDING&&retainedSkin.last_resolved.timing.state==NCMA_GPU_SAMPLE_VALID&&retainedSkin.last_resolved.timing.origin_frame==5&&retainedSkin.last_resolved.timing.sequence==1,"Pending skin retains previous batch");
     Timing::testResult=S_OK;auto late=read(2);pass(late.timing.state==NCMA_GPU_SAMPLE_VALID&&late.timing.origin_frame==9&&late.timing.sequence==2,"Late skin timing has exact original batch");
     update(21);wait();Timing::testResult=E_FAIL;auto failed=read(2);Timing::testResult=S_OK;
     palette.model[12]=.25f;update(23);wait();auto still=read(2);
     pass(failed.timing.state==NCMA_GPU_SAMPLE_FAILED&&still.timing.state==NCMA_GPU_SAMPLE_FAILED&&still.timing.origin_frame==21&&still.timing.sequence==3,"Failed skin timestamp quarantined, dispatch continues");
     std::array<uint8_t,144> captured{};pass(skin.capture(context,handle,mesh,captured.data(),144,&error)==NCMA_OK,"Actual skin output after timing failure");float x=0;std::memcpy(&x,captured.data(),4);pass(x==.25f,"Skin numerical output still advances with failed telemetry");
     pass(skin.destroy(context,handle,mesh,&error)==NCMA_OK&&read(2).timing.state==NCMA_GPU_SAMPLE_ABANDONED,"Retired skin owner invalidates live timing");
+    auto retiredSkin=snapshot(2);pass(retiredSkin.current.timing.state==NCMA_GPU_SAMPLE_ABANDONED&&retiredSkin.last_resolved.timing.origin_frame==9,"Retired kernel retains historical copy");
     pass(skin.create(context,handle,&meshDesc,&mesh,&error)==NCMA_OK,"Skin owner recreated");update(25);wait();auto recreated=read(2);
     pass(recreated.timing.state==NCMA_GPU_SAMPLE_VALID&&recreated.timing.sequence==4&&recreated.timing.origin_frame==25&&recreated.timing.generation==first.timing.generation,"Same device new owner never resets sequence");
+    update(27);wait();update(29);wait(); // No timing read between these two real batches.
+    Timing::testResult=S_FALSE;auto unreadSkin=snapshot(2);Timing::testResult=S_OK;
+    pass(unreadSkin.current.timing.state==NCMA_GPU_SAMPLE_PENDING&&unreadSkin.current.timing.origin_frame==29&&
+        unreadSkin.last_resolved.timing.state==NCMA_GPU_SAMPLE_VALID&&unreadSkin.last_resolved.timing.origin_frame==27&&unreadSkin.last_resolved.timing.sequence==5,"Unread skin resolution survives next batch");
     pass(skin.destroy(context,handle,mesh,&error)==NCMA_OK,"Skin drain");
     NcmaUiApiV1 ui{};NcmaUiTargetApiV1 targets{};pass(api.query_scene_render(context,6,&ui,sizeof(ui),&error)==NCMA_OK&&api.query_scene_render(context,7,&targets,sizeof(targets),&error)==NCMA_OK,"UI APIs");
     uint8_t white[]{255,255,255,255};NcmaUiImageV1 imageDesc{sizeof(imageDesc),1,1,4,white};NcmaUiKeyV1 image{},list{},a{},b{};
@@ -43,7 +52,11 @@ static void RendererWorkTimingNativeTests(const NcmaRendererApiV1_2& api,uint64_
     pass(ui.create_list(context,handle,&listDesc,&list,&error)==NCMA_OK,"UI list");NcmaUiTargetDescriptionV1 td{16,32,32,0};
     pass(targets.create_target(context,handle,&td,&a,&error)==NCMA_OK&&targets.create_target(context,handle,&td,&b,&error)==NCMA_OK,"Two UI targets one timing owner");
     auto produce=[&](NcmaUiKeyV1 target,uint64_t frame,uint64_t revision){NcmaUiTargetFrameV1 f{sizeof(f),0,frame,revision,target,list,{0,0,0,0}};pass(targets.submit(context,handle,&f,&error)==NCMA_OK,"Actual offscreen production");wait();};
-    produce(a,33,1);auto sa=read(3);produce(b,33,1);auto sb=read(3);
+    produce(a,33,1);produce(b,33,1); // No timing read of A before B begins.
+    Timing::testResult=S_FALSE;auto retainedUi=snapshot(3);Timing::testResult=S_OK;
+    auto sa=retainedUi.last_resolved;
+    pass(retainedUi.current.timing.state==NCMA_GPU_SAMPLE_PENDING&&retainedUi.current.resource==b.value&&sa.timing.state==NCMA_GPU_SAMPLE_VALID&&sa.resource==a.value&&sa.content_revision==1&&sa.timing.sequence==1,"Unread UI result keeps previous target identity");
+    auto sb=read(3);
     pass(sa.timing.origin_frame==33&&sb.timing.origin_frame==33&&sb.timing.sequence==sa.timing.sequence+1&&sa.resource==a.value&&sb.resource==b.value&&sb.content_revision==1,"Same frame independent target productions retain exact identity");
     NcmaUiKeyV1 lease{};pass(targets.acquire(context,handle,b,1,34,&lease,&error)==NCMA_OK&&targets.release(context,handle,lease,&error)==NCMA_OK,"Cached presentation lease");
     auto cached=read(3);pass(std::memcmp(&cached,&sb,sizeof(sb))==0,"Cached reuse is not a new production timing");
@@ -55,6 +68,7 @@ static void RendererWorkTimingNativeTests(const NcmaRendererApiV1_2& api,uint64_
     }
     produce(a,53,5);pass(read(3).timing.state==NCMA_GPU_SAMPLE_FAILED,"Failed UI timing does not block target updates");
     pass(targets.destroy_target(context,handle,a,&error)==NCMA_OK&&targets.destroy_target(context,handle,b,&error)==NCMA_OK&&read(3).timing.state==NCMA_GPU_SAMPLE_ABANDONED,"Last UI target retires timing owner");
+    auto retiredUi=snapshot(3);pass(retiredUi.current.timing.state==NCMA_GPU_SAMPLE_ABANDONED&&retiredUi.last_resolved.timing.state==NCMA_GPU_SAMPLE_INVALID&&retiredUi.last_resolved.resource==a.value&&retiredUi.last_resolved.content_revision==3,"UI invalid result retained after failure and resource retirement");
     pass(ui.destroy(context,handle,list,&error)==NCMA_OK&&ui.destroy(context,handle,image,&error)==NCMA_OK,"UI owners drain");
     Validation(*renderer);if(renderer->stats.validation_errors||renderer->stats.validation_warnings)std::cerr<<renderer->diagnostics;
     pass(!renderer->stats.validation_errors&&!renderer->stats.validation_warnings,"Work timing API0/0");

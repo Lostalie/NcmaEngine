@@ -37,15 +37,15 @@ internal static class SkinnedHostChecks
             int characters = 0;
             foreach (var mesh in manifest.Meshes)
             {
-                global::Ncma.Runtime.Entity obj = document.World.CreateEntity("Character " + characters++); document.World.Set(obj, TransformData.Identity with { Position = new(0, 0, -3) });
-                document.World.Set(obj, new SkinnedMeshData(model, mesh.Mesh, manifest.Skeleton!.Value, mesh.Materials, true, true, uint.MaxValue));
-                document.World.Set(obj, new ClipPlaybackData(manifest.Clips[0], true, true, 1, 0));
+                Guid obj = document.CreateObject("Character " + characters++); document.SetComponent(obj, TransformData.Identity with { Position = new(0, 0, -3) });
+                document.SetComponent(obj, new SkinnedMeshData(model, mesh.Mesh, manifest.Skeleton!.Value, mesh.Materials, true, true, uint.MaxValue));
+                document.SetComponent(obj, new ClipPlaybackData(manifest.Clips[0], true, true, 1, 0));
             }
-            global::Ncma.Runtime.Entity camera = document.World.CreateEntity("Camera"); document.World.Set(camera, TransformData.Identity); document.World.Set(camera, CameraData.Default with { Projection = CameraProjection.Orthographic, OrthographicHeight = 4 });
-            global::Ncma.Runtime.Entity light = document.World.CreateEntity("Light"); document.World.Set(light, TransformData.Identity); document.World.Set(light, DirectionalLightData.Default);
+            Guid camera = document.CreateObject("Camera"); document.SetComponent(camera, TransformData.Identity); document.SetComponent(camera, CameraData.Default with { Projection = CameraProjection.Orthographic, OrthographicHeight = 4 });
+            Guid light = document.CreateObject("Light"); document.SetComponent(light, TransformData.Identity); document.SetComponent(light, DirectionalLightData.Default);
             string scene = Path.Combine(root, "start.ncmascene"), projectFile = Path.Combine(root, "scene.ncmaproject"); SceneDocumentFiles.Save(document, scene); byte[] saved = File.ReadAllBytes(scene);
             string assembly = Assembly.GetExecutingAssembly().Location; File.Copy(assembly, Path.Combine(root, "gameplay.dll")); File.Copy(Path.ChangeExtension(assembly, ".deps.json"), Path.Combine(root, "gameplay.deps.json"));
-            var config = new ProjectConfiguration(1, project, "FBX scene", "start.ncmascene", "gameplay.dll", "Direct3D11", [], SceneCamera: document.World.GetUuid(camera));
+            var config = new ProjectConfiguration(1, project, "FBX scene", "start.ncmascene", "gameplay.dll", "Direct3D11", [], SceneCamera: camera);
             File.WriteAllBytes(projectFile, JsonSerializer.SerializeToUtf8Bytes(config, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             for (int i = 0; i < 3; i++)
             {
@@ -62,12 +62,14 @@ internal static class SkinnedHostChecks
             RuntimePackageChecks.Run(repository, root, output, plugins.Contains("windows-ninja-release", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug", config, document.CaptureSnapshot());
             var coupled = new SceneDocument("FBX coupled character", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), CharacterComponents.RequireComposition);
             coupled.RestoreBytes(document.CaptureBytes());
-            global::Ncma.Runtime.Entity actor = coupled.World.GetEntities().First(o => coupled.World.Has<SkinnedMeshData>(o)); coupled.World.Set(actor, CharacterData.Default with { FootOffsetY = 0 });
-            coupled.World.Set(actor, TransformData.Identity with { Position = new(0, .1f, -3) });
-            coupled.World.Set(actor, new RootMotionData(0));
-            global::Ncma.Runtime.Entity floor = coupled.World.CreateEntity("Collision floor"); coupled.World.Set(floor, TransformData.Identity with { Position = new(0, -.5f, 0) }); coupled.World.Set(floor, new BoxColliderData(20, .5f, 20, 1000, 1, false));
-            coupled.World.Set(coupled.World.FindEntity(document.World.GetUuid(camera)), new FollowCameraData(coupled.World.GetUuid(actor), 0, 2, 6, 1));
+            Guid actor = coupled.GetObjectIds().First(o => coupled.HasComponent<SkinnedMeshData>(o)); coupled.SetComponent(actor, CharacterData.Default with { FootOffsetY = 0 });
+            coupled.SetComponent(actor, TransformData.Identity with { Position = new(0, .1f, -3) });
+            coupled.SetComponent(actor, new RootMotionData(0));
+            Guid floor = coupled.CreateObject("Collision floor"); coupled.SetComponent(floor, TransformData.Identity with { Position = new(0, -.5f, 0) }); coupled.SetComponent(floor, new BoxColliderData(20, .5f, 20, 1000, 1, false));
+            coupled.SetComponent(camera, new FollowCameraData(actor, 0, 2, 6, 1));
             string coupledScene = Path.Combine(root, "coupled.ncmascene"), coupledProject = Path.Combine(root, "coupled.ncmaproject"); SceneDocumentFiles.Save(coupled, coupledScene); byte[] coupledSaved = File.ReadAllBytes(coupledScene);
+            var runtimeStartup = coupled.BakeRuntime(coupled.Revision).Image.Instantiate(coupled.Components);
+            string startupRuntimeHash = Convert.ToHexString(SHA256.HashData(runtimeStartup.CaptureCheckpoint().CopyBytes()));
             File.WriteAllBytes(coupledProject, JsonSerializer.SerializeToUtf8Bytes(config with { StartupScene = "coupled.ncmascene", PhysicsEnabled = true }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
             foreach (bool headless in new[] { true, false })
             {
@@ -77,7 +79,7 @@ internal static class SkinnedHostChecks
                 var report = playerRunOwner1.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false, trustedInput: headless ? (p, t) => CharacterHostChecks.Input(p, t) : null);
                 Check(report.ExitCode == 0 && report.Tick >= 30 && report.ShutdownErrors.Length == 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0 && (headless || report.RenderedFrames > 0), "Actual animated FBX coupled Player: " + report.Reason);
                 Check(coupledSaved.SequenceEqual(File.ReadAllBytes(coupledScene)), "Coupled Player edited authoring scene");
-                Check(report.StateSha256 != Convert.ToHexString(SHA256.HashData(coupledSaved)), "Actual coupled Player must publish movement, not clear/reference fallback");
+                Check(report.SchemaVersion == 2 && report.StateSha256 is { Length: 64 } && report.StateSha256 != startupRuntimeHash, "Actual coupled Player must change runtime state, not merely change serialization format");
             }
             string packedRoot = Path.Combine(root, "Coupled packed"); Directory.CreateDirectory(Path.Combine(packedRoot, "assets"));
             string packed = Path.Combine(packedRoot, "assets/game.ncpak"); File.WriteAllBytes(packed, SceneAssetPreparation.CreateRuntimePackage(root, project, coupled.CaptureSnapshot(), []));

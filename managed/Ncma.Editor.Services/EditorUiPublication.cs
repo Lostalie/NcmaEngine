@@ -50,8 +50,8 @@ public sealed class EditorUiPublication:IEditCommandSceneParticipant,IDisposable
     public UiSelectionReview Review(EditorViewStamp stamp,Guid target,UiPackageReference? package)
     {
         Writable(stamp);if(target==Guid.Empty)throw new ArgumentException("Exact target UUID required.");
-        var selected=SceneUiState.Read(Edit.Document.CaptureSnapshot());global::Ncma.Runtime.Entity obj=Edit.Document.World.FindEntity(target);
-        SceneUiData? before=Edit.Document.World.Has<SceneUiData>(obj)?Edit.Document.World.Get<SceneUiData>(obj):null;
+        var selected=SceneUiState.Read(Edit.Document.CaptureSnapshot());if(!Edit.Document.ContainsObject(target))throw new ArgumentException("Unknown target UUID.");
+        SceneUiData? before=Edit.Document.HasComponent<SceneUiData>(target)?Edit.Document.GetComponent<SceneUiData>(target):null;
         if(selected is not null&&before is null)throw new EditRejectedException("ui_selection_other_object");
         package=package?.Validate();if(package is not null)_prepared.RequirePrepared(package);
         var after=package is null?SceneUiData.Off:SceneUiData.From(package);
@@ -78,7 +78,7 @@ public sealed class EditorUiPublication:IEditCommandSceneParticipant,IDisposable
         if(_proposal.After.Package is {} next)_prepared.RequirePrepared(next);return _proposal;
     }
     public JsonElement SceneOperations(JsonElement input)
-    {var p=Proposal(input);return JsonSerializer.SerializeToElement(new[]{new{op="set_component",objectId=p.Target,typeId=SceneUiData.TypeId,version=1,data=Edit.Document.World.Components.Encode(p.After)}});}
+    {var p=Proposal(input);return JsonSerializer.SerializeToElement(new[]{new{op="set_component",objectId=p.Target,typeId=SceneUiData.TypeId,version=1,data=Edit.Document.Components.Encode(p.After)}});}
     private static string Key(ParticipantMemento m)=>Convert.ToHexString(SHA256.HashData([..m.Before,..m.After]));
     public ParticipantMemento Prepare(JsonElement input)
     {

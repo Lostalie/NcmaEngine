@@ -7,6 +7,7 @@ using Ncma.Assets;
 using Ncma.Assets.Runtime;
 using Ncma.Application.Runtime;
 using Ncma.Editor.Services;
+using Ncma.Editor.App;
 using Ncma.Gameplay;
 using Ncma.Rendering;
 using Ncma.Rendering.Scene;
@@ -38,8 +39,8 @@ internal static unsafe partial class Program
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true);
         var f=new SkinFixture(output);var graph=AnimatorGraph(f);string graphPath=Path.Combine(f.Root,"assets/character.ncmaanim");
         File.WriteAllBytes(graphPath,AnimationGraphCodec.Encode(graph));var (document,camera,ids)=f.Scene();
-        global::Ncma.Runtime.Entity obj=document.World.FindEntity(ids[0]);document.World.Remove<ClipPlaybackData>(obj);document.World.Set(obj, new AnimatorData(graph.AssetId,graph.SkeletonId));document.ValidateAuthoring();
-        document.World.Set(obj, new ClipPlaybackData(f.Manifest.Clips[0],true,true,1,0));Reject(document.ValidateAuthoring);document.World.Remove<ClipPlaybackData>(obj);
+        Guid obj=ids[0];document.RemoveComponent<ClipPlaybackData>(obj);document.SetComponent(obj, new AnimatorData(graph.AssetId,graph.SkeletonId));document.ValidateAuthoring();
+        document.SetComponent(obj, new ClipPlaybackData(f.Manifest.Clips[0],true,true,1,0));Reject(document.ValidateAuthoring);document.RemoveComponent<ClipPlaybackData>(obj);
         using var assets=SceneAssetPreparation.Prepare(f.Root,f.Project,document.CaptureSnapshot(),true);
         var retained=(RuntimeAnimationGraphAsset)assets.Assets.Require(graph.AssetId,AssetKind.AnimationGraph);
         var copy=retained.CopyDefinition();copy.Nodes[0]=copy.Nodes[0] with{Name="mutated"};Check(retained.CopyDefinition().Nodes.All(n=>n.Name!="mutated"),"Graph publication leaked authoring data");
@@ -64,21 +65,23 @@ internal static unsafe partial class Program
         var playerOptions=Ncma.Player.App.PlayerOptions.Parse(["--project",project,"--headless","--ticks","8","--report",Path.Combine(moved,"player-result.json")]);
         var report=playerRunOwner0.Run(playerOptions,pluginRoot:Path.Combine(moved,"no-native-plugins"),visible:false);
         Check(report.ExitCode==0 && report.Tick==8 && report.Modules.Length==0 && report.RenderedFrames==0 && report.ShutdownErrors.Length==0,"Formal source-free Headless Player graph: "+report.Reason);
-        using(var owner=new RuntimeSessionOwner(document)) {
+        using(var owner=new RuntimeSessionOwner()) {
+            var runtimeScene=document.BakeRuntime(document.Revision).Image.Instantiate(document.Components);
             SceneAnimatorRuntime? animator=null;
-            var play=owner.StartPlay(factory:d=>new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps),compose:p=>animator=SceneAnimatorRuntime.Compose(p,packed));
+            var play=owner.StartPlay(runtimeScene,factory:d=>new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps),compose:p=>animator=SceneAnimatorRuntime.Compose(p,packed));
             for(int i=0;i<60;i++)Check(play.AdvanceFixedStep().State==PlayState.Running,"Headless graph step failed");
             Check(animator!.ReadFrame(ids[0]).Context.Tick==60 && kernel.Statistics.Rigs==0,"Headless created native pose/GPU or clock missed commit");
-            var session=play.SessionId;var world=play.Document.World.Identity;play.Reload(_=>throw new Exception("no behaviours"));
-            Check(play.State==PlayState.Paused && play.Tick==60 && play.SessionId!=session && play.Document.World.Identity!=world && animator.ReadFrame(ids[0]).Context.Tick==60,"Graph reload identity/chronology");
+            var session=play.SessionId;var world=play.Scene.World.Identity;play.Reload(_=>throw new Exception("no behaviours"));
+            Check(play.State==PlayState.Paused && play.Tick==60 && play.SessionId!=session && play.Scene.World.Identity!=world && animator.ReadFrame(ids[0]).Context.Tick==60,"Graph reload identity/chronology");
             owner.StopPlay();Reject(()=>animator.ReadFrame(ids[0]));
         }
         foreach(int count in new[]{32,33}) {
             var (many,_,actors)=f.Scene(count);
-            foreach(Guid id in actors){global::Ncma.Runtime.Entity actor=many.World.FindEntity(id);many.World.Remove<ClipPlaybackData>(actor);many.World.Set(actor, new AnimatorData(graph.AssetId,graph.SkeletonId));}
-            using var host=new RuntimeSessionOwner(many);SceneAnimatorRuntime? animator=null;
-            if(count==33){Reject(()=>host.StartPlay(compose:p=>SceneAnimatorRuntime.Compose(p,packed)));continue;}
-            var play=host.StartPlay(compose:p=>animator=SceneAnimatorRuntime.Compose(p,packed));
+            foreach(Guid id in actors){Guid actor=id;many.RemoveComponent<ClipPlaybackData>(actor);many.SetComponent(actor, new AnimatorData(graph.AssetId,graph.SkeletonId));}
+            var runtimeScene=many.BakeRuntime(many.Revision).Image.Instantiate(many.Components);
+            using var host=new RuntimeSessionOwner();SceneAnimatorRuntime? animator=null;
+            if(count==33){Reject(()=>host.StartPlay(runtimeScene,compose:p=>SceneAnimatorRuntime.Compose(p,packed)));continue;}
+            var play=host.StartPlay(runtimeScene,compose:p=>animator=SceneAnimatorRuntime.Compose(p,packed));
             animator!.SetFloat(actors[0],graph.Parameters[0].Id,1);Check(play.AdvanceFrame(1.0/60).State==PlayState.Running,"32 Animator quantum");
             var identities=new HashSet<Guid>();var recipe=new AnimationPoseInstruction[retained.PrepareProgram(assets.Assets).MaximumPlanInstructions];
             foreach(Guid id in actors) {
@@ -93,18 +96,19 @@ internal static unsafe partial class Program
             composePreparedPlay:(p,a)=>live=SceneAnimatorRuntime.Compose(p,a),beforePlayStop:()=>{if(closeFail)throw new InvalidOperationException("injected derived close retention");scene?.Dispose();scene=null;});
         editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(f.Root,f.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
-        ulong editTick=editor.Document.World.Tick;
-        using(var preview=new SceneRenderSession(renderer,cache,editor.Document.World)) {preview.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
+        var projection=EditorSceneProjection.Bake(editor);ulong editTick=projection.Scene.World.Tick;
+        byte[] editBytes=editor.Document.CaptureBytes();
+        using(var preview=new SceneRenderSession(renderer,cache,projection.Scene.World)) {preview.Prepare(editor.RenderAssets!,projection.Scene.CaptureSnapshot(),poseKernel:kernel);
             preview.Animation!.AdvancePreview(.25);preview.Submit(frame++,256,256,camera,target:target);renderer.Present();
-            Check(Math.Abs(preview.Animation.RootDisplacement(ids[0]).X-.125)<1e-5 && editor.Document.World.Tick==editTick,"Independent graph preview oracle: displacement="+preview.Animation.RootDisplacement(ids[0]).X+" tick="+editor.Document.World.Tick);
+            Check(Math.Abs(preview.Animation.RootDisplacement(ids[0]).X-.125)<1e-5 && projection.IsCurrent(editor)&&projection.Scene.World.Tick==editTick&&editBytes.SequenceEqual(editor.Document.CaptureBytes()),"Independent graph preview oracle: displacement="+preview.Animation.RootDisplacement(ids[0]).X+" tick="+projection.Scene.World.Tick);
         }
         for(int cycle=0;cycle<32;cycle++) {
             var play=editor.StartPlay();play.Pause();live!.SetFloat(ids[0],graph.Parameters[0].Id,.75);
-            var before=live.ReadFrame(ids[0]);scene=new(renderer,cache,play.Document.World);scene.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play,animators:live);
+            var before=live.ReadFrame(ids[0]);scene=new(renderer,cache,play.Scene.World);scene.Prepare(editor.PlayRenderAssets!,play.Scene.CaptureSnapshot(),poseKernel:kernel,play:play,animators:live);
             if(cycle==0) {
                 ulong rigs=kernel.Statistics.Rigs;
-                using var deniedAnimation=new SceneAnimationSession(play.Document.World,kernel);
-                Reject(()=>deniedAnimation.Prepare(assets,play.Document.CaptureSnapshot(),animators:live));
+                using var deniedAnimation=new SceneAnimationSession(play.Scene.World,kernel);
+                Reject(()=>deniedAnimation.Prepare(assets,play.Scene.CaptureSnapshot(),animators:live));
                 Check(kernel.Statistics.Rigs==rigs,"Foreign prepared asset publication acquired numerical resources");
             }
             scene.Submit(frame++,256,256,camera,target:target);renderer.Present();
@@ -121,9 +125,9 @@ internal static unsafe partial class Program
         }
         foreach(int fault in new[]{0,1,2}) {
             // Register fault injection after graph preparation, before starting the host.
-            var failureDocument=editor.Document.CreateIsolatedCopy();using var host=new RuntimeSessionOwner(failureDocument);
+            var runtimeScene=editor.Document.BakeRuntime(editor.Document.Revision).Image.Instantiate(editor.Document.Components);using var host=new RuntimeSessionOwner();
             SceneAnimatorRuntime? failed=null;
-            var failedPlay=host.StartPlay(compose:p=>{
+            var failedPlay=host.StartPlay(runtimeScene,compose:p=>{
                 failed=SceneAnimatorRuntime.Compose(p,assets);
                 p.AddSystem(new GraphFailure(w=>{if(fault!=0){try{if(fault==1)w.Set(w.FindEntity(ids[0]), new AnimatorData(graph.AssetId,graph.SkeletonId));else failed!.SetFloat(ids[0],graph.Parameters[0].Id,.5);}catch(InvalidOperationException){}}else throw new InvalidOperationException("prepared failure");}));return failed;
             });

@@ -35,6 +35,8 @@ internal static unsafe partial class Program
                     Pass(renderer.ReadGpuTiming().State==GpuSampleState.Unavailable&&renderer.Stats.SubmittedFrames==0,"skin cost is not a main frame");
                 }
                 Pass(renderer.ReadGpuWorkTiming(GpuTimingDomain.SkinDispatch).Timing.State==GpuSampleState.Abandoned,"explicit skin owner retirement invalidates live sample");
+                var retired=renderer.ReadGpuTimingSnapshot(GpuTimingDomain.SkinDispatch);
+                Pass(retired.Current.Timing.State==GpuSampleState.Abandoned&&retired.LastResolved==skinCopy,"skin owner retirement retains copied resolution");
                 using(var gpu=renderer.CreateSkinnedMesh(upload))
                 {
                     renderer.UpdateSkins(13,[new(gpu,0)],palette);renderer.WaitIdle();
@@ -53,6 +55,7 @@ internal static unsafe partial class Program
                         var first=renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction);var pixels=renderer.CaptureUiTarget(a);
                         renderer.SubmitUiTarget(b,list,21,7,Vector4.Zero);renderer.WaitIdle();uiCopy=renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction);
                         Pass(first.Timing.IsValid&&uiCopy.Timing.IsValid&&first.Timing.OriginFrame==21&&uiCopy.Timing.OriginFrame==21&&uiCopy.Timing.Sequence==2&&first.Resource!=0&&uiCopy.Resource!=0&&first.Resource!=uiCopy.Resource&&first.ContentRevision==3&&uiCopy.ContentRevision==7,"same-frame UI productions retain target and exact content identity");
+                        Pass(renderer.ReadGpuTimingSnapshot(GpuTimingDomain.UiProduction).LastResolved==uiCopy,"UI snapshot preserves exact source metadata");
                         Pass(renderer.CaptureUiTarget(b).SequenceEqual(pixels)&&pixels[(8*32+8)*4]==255,"actual timed target pixels unchanged");
                         using(var lease=renderer.AcquireUiPresentation(b,7,23))
                             Pass(renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction)==uiCopy,"cached lease acquisition does not pretend to produce new work");
@@ -62,6 +65,10 @@ internal static unsafe partial class Program
                         long before=GC.GetAllocatedBytesForCurrentThread();
                         for(int i=0;i<128;i++){renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction);renderer.ReadGpuWorkTiming(GpuTimingDomain.SkinDispatch);}
                         allocated=GC.GetAllocatedBytesForCurrentThread()-before;Pass(allocated==0,"256 warmed work timing reads allocate zero on owner thread");
+                        for(int i=0;i<32;i++){renderer.ReadGpuTimingSnapshot(GpuTimingDomain.UiProduction);renderer.ReadGpuTimingSnapshot(GpuTimingDomain.SkinDispatch);}
+                        long snapshotBefore=GC.GetAllocatedBytesForCurrentThread();
+                        for(int i=0;i<128;i++){renderer.ReadGpuTimingSnapshot(GpuTimingDomain.UiProduction);renderer.ReadGpuTimingSnapshot(GpuTimingDomain.SkinDispatch);}
+                        Pass(GC.GetAllocatedBytesForCurrentThread()==snapshotBefore,"256 warmed work snapshots allocate zero on owner thread");
                     }
                     Pass(renderer.ReadGpuWorkTiming(GpuTimingDomain.UiProduction).Timing.State==GpuSampleState.Abandoned,"last UI target retires sample owner");
                     using var again=renderer.CreateUiTarget(32,32);renderer.SubmitUiTarget(again,list,29,1,Vector4.Zero);renderer.WaitIdle();

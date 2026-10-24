@@ -25,7 +25,7 @@ internal static class EnvironmentInspectorTests
             Check(Owner.Edit.Invoke(request,new(["ncma.scene.transaction"])).Changed);
             View = new(Workspace, null, workspaceStyle:true); Build();
         }
-        internal EnvironmentLightingData Value => Owner.Document.World.Get<EnvironmentLightingData>(Owner.Document.World.FindEntity(Id));
+        internal EnvironmentLightingData Value => Owner.Document.GetComponent<EnvironmentLightingData>(Id);
         internal void Build() => View.Build(++_frame,1280,720);
         internal GuiItem Item(string label) => View.Items.ToArray().Single(i => Encoding.UTF8.GetString(View.Text.Slice((int)i.LabelOffset,(int)i.LabelLength)) == label);
         internal GuiEvent Event(string label, uint phase, double value = 0) { var i = Item(label); var f = View.Frame; return new() {
@@ -73,11 +73,11 @@ internal static class EnvironmentInspectorTests
             var workspace = new EditorWorkspace(owner); Guid id = workspace.CreateObject(workspace.Stamp); var view = new EditorPresenter(workspace,null); view.Build(1,1280,720);
             var i = view.Items.ToArray().Single(i=>Encoding.UTF8.GetString(view.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))=="添加环境配置（关闭）"); var f=view.Frame;
             view.Apply([new(){Kind=i.Kind,WidgetHigh=i.WidgetHigh,WidgetLow=i.WidgetLow,Phase=3,Frame=f.Frame,ViewGeneration=f.ViewGeneration,DocumentGeneration=f.DocumentGeneration,Revision=f.Revision}],[]);
-            Check(owner.Document.World.Get<EnvironmentLightingData>(owner.Document.World.FindEntity(id)) == EnvironmentLightingData.Off);
+            Check(owner.Document.GetComponent<EnvironmentLightingData>(id) == EnvironmentLightingData.Off);
             Guid other = workspace.CreateObject(workspace.Stamp); view.Build(2,1280,720);
             Check(!Encoding.UTF8.GetString(view.Text).Contains("添加环境配置（关闭）"));
             var result = owner.Edit!.Invoke(RenderingEditorAdapter.EnvironmentRequest(owner.Edit,other,EnvironmentLightingData.Off,owner.Edit.Revision),new(["ncma.scene.transaction"]));
-            Check(!result.Changed && !owner.Document.World.Has<EnvironmentLightingData>(owner.Document.World.FindEntity(other)));
+            Check(!result.Changed && !owner.Document.HasComponent<EnvironmentLightingData>(other));
         });
         yield return ("M7.3-C3-B1 Agent exact scope/revision/session/revocation and original history", () => {
             using var f = new Fixture(); var edit=f.Owner.Edit!; bool current=true;
@@ -99,19 +99,24 @@ internal static class EnvironmentInspectorTests
         yield return ("M7.3-C3-B1 save/reopen and Play freeze", () => {
             using var f=new Fixture(); f.Change(Strength,4); string path=Path.Combine(output,"environment-inspector.ncmascene"); f.Workspace.Save(f.Workspace.Stamp,path);
             using var reopened=new EditorSessionOwner("Reopen",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);
-            var workspace=new EditorWorkspace(reopened); workspace.Open(workspace.Stamp,path,true); Check(reopened.Document.World.Get<EnvironmentLightingData>(reopened.Document.World.FindEntity(f.Id))==f.Value);
+            var workspace=new EditorWorkspace(reopened); workspace.Open(workspace.Stamp,path,true); Check(reopened.Document.GetComponent<EnvironmentLightingData>(f.Id)==f.Value);
             byte[] before=f.Owner.Document.CaptureBytes(); f.Owner.StartPlay(); f.Build(); Check(f.Item(Strength).Enabled==0); f.Change(Strength,8);
             Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())); f.Owner.StopPlay(); f.Build(); Check(f.Item(Strength).Enabled!=0);
         });
-        yield return ("M7.3-C3-B1 status is world/revision/Play-bound and clears on recovery", () => {
-            using var f=new Fixture(); var world=f.Owner.Document.World;
+        yield return ("M7.3-C3-B1 status distinguishes authoring provenance and runtime World, and clears on recovery", () => {
+            using var f=new Fixture(); var preview=EditorSceneProjection.Bake(f.Owner); var world=preview.Scene.World;
             Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
-            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value); Check(f.View.EnvironmentPreparationStatus.Contains("就绪"));
-            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,false,true,null); Check(f.View.EnvironmentPreparationStatus.Contains("失败"));
-            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value); Check(!f.View.EnvironmentPreparationStatus.Contains("失败"));
+            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value,preview.Source); Check(f.View.EnvironmentPreparationStatus.Contains("就绪"));
+            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,false,true,null,preview.Source); Check(f.View.EnvironmentPreparationStatus.Contains("失败"));
+            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value,preview.Source); Check(!f.View.EnvironmentPreparationStatus.Contains("失败"));
             f.Change(Strength,2); Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
-            world=f.Owner.Document.World; f.View.ShowEnvironmentPreparation(Guid.NewGuid(),world.Revision,Guid.Empty,true,false,f.Value); Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
-            var play=f.Owner.StartPlay(); f.View.ShowEnvironmentPreparation(play.Document.World.Identity,play.Document.World.Revision,play.SessionId,true,false,f.Value);
+            preview=EditorSceneProjection.Bake(f.Owner); world=preview.Scene.World;
+            f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value,
+                preview.Source with { DocumentSession = Guid.NewGuid() }); Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
+            var play=f.Owner.StartPlay();
+            f.View.ShowEnvironmentPreparation(Guid.NewGuid(),play.Scene.World.Revision,play.SessionId,true,false,f.Value);
+            Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
+            f.View.ShowEnvironmentPreparation(play.Scene.World.Identity,play.Scene.World.Revision,play.SessionId,true,false,f.Value);
             Check(f.View.EnvironmentPreparationStatus.Contains("Play")); f.Owner.StopPlay(); Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
         });
         yield return ("M7.3-C3-B1 unchanged Inspector reuses document cache", () => {

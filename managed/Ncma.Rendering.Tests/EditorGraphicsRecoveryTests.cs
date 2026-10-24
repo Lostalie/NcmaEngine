@@ -21,14 +21,15 @@ internal static unsafe partial class Program
         string projectPath=Path.Combine(fixture.Root,"project.ncmaproject");
         File.WriteAllBytes(projectPath,JsonSerializer.SerializeToUtf8Bytes(new ProjectConfiguration(1,fixture.Project,"Graphics recovery","start.ncmascene","gameplay.dll","Direct3D11",[],SceneCamera:camera),new JsonSerializerOptions{PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
         int cases=0;void Pass(bool ok,string label){Check(ok,"M7.6 same-session graphics: "+label);cases++;}
-        using(var editor=new CandidatePresentation(plugins,ProjectContext.Load(projectPath),true,false,false)) {
+        var resourceMemory=new RendererMemoryCapture();
+        using(var editor=new CandidatePresentation(plugins,ProjectContext.Load(projectPath),true,false,false,resourceMemory:resourceMemory)) {
             editor.Start();ulong frame=0;
             byte[] Draw() {
                 byte[]? pixels=null;editor.CaptureNextCompositeViewportForVerification((p,_,_)=>pixels=p);
                 editor.PumpPlatform();var f=new FrameContext(++frame,0);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);
                 return pixels??throw new Exception("Missing viewport capture");
             }
-            Draw();var before=Draw();var owner=editor.VerificationEditor;var edit=owner.Edit!;var world=owner.Document.World;var doc=owner.Document;var presenter=editor.VerificationPresenter;
+            Draw();var before=Draw();var owner=editor.VerificationEditor;var edit=owner.Edit!;var doc=owner.Document;var presenter=editor.VerificationPresenter;
             var workspace=new EditorWorkspace(owner);var id=workspace.CreateObject(workspace.Stamp);Draw();
             var stamp=workspace.Stamp;var history=edit.State;var bytes=doc.CaptureBytes();
             var old=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
@@ -37,12 +38,15 @@ internal static unsafe partial class Program
             workspace.Transaction(workspace.Stamp,"Name",[new{op="rename",objectId=id,name="retained"}]);Reject(()=>editor.RebuildGraphics(stale));
             Pass(editor.GraphicsPhase==EditorGraphicsPhase.Ready&&!old.IsClosed,"stale scene review cannot retire resources");
             workspace.History(workspace.Stamp,false);stamp=workspace.Stamp;history=edit.State;bytes=doc.CaptureBytes();
+            var staleProjection=OwnedEditProjection(editor);Pass(!staleProjection.IsCurrent(owner),"Undo changes source revision and requires a new projection");
             var review=editor.ReviewGraphicsRecovery();
             Task.Run(()=>Reject(()=>editor.RebuildGraphics(review))).GetAwaiter().GetResult();
             Pass(!old.IsClosed&&editor.GraphicsPhase==EditorGraphicsPhase.Ready,"foreign thread cannot consume review");
             editor.RebuildGraphics(review);var fresh=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
+            var memoryRows=resourceMemory.Capture().Samples;
+            Pass(memoryRows.Length==3&&memoryRows.All(s=>s.State==RendererMemoryState.Available)&&memoryRows[0].Ledger!.Generation==generation&&memoryRows[2].Ledger!.Generation==fresh.ReadFrameState().Generation,"real resource ledger retains old and rebuilt device generations");
             Pass(old.IsClosed&&fresh.ReadFrameState().Generation!=generation,"new actual DX11 device generation in same loaded plugin");
-            Pass(ReferenceEquals(owner,editor.VerificationEditor)&&ReferenceEquals(world,owner.Document.World)&&ReferenceEquals(doc,owner.Document)&&ReferenceEquals(edit,owner.Edit)&&ReferenceEquals(presenter,editor.VerificationPresenter),"same exact World/document/EditSession/presenter instances");
+            Pass(ReferenceEquals(owner,editor.VerificationEditor)&&!ReferenceEquals(staleProjection,OwnedEditProjection(editor))&&OwnedEditProjection(editor).IsCurrent(owner)&&ReferenceEquals(doc,owner.Document)&&ReferenceEquals(edit,owner.Edit)&&ReferenceEquals(presenter,editor.VerificationPresenter),"changed-source projection rebaked; same exact document/EditSession/presenter instances");
             Pass(workspace.Stamp==stamp&&edit.State==history&&bytes.SequenceEqual(doc.CaptureBytes())&&PinLocked(fixture.GenerationPath),"history and document unchanged, original CPU asset pin retained");
             Reject(()=>_=target.ImageToken);Reject(()=>_=old.Stats);Reject(()=>editor.RebuildGraphics(review));
             Pass(editor.GraphicsPhase==EditorGraphicsPhase.Ready,"stale objects and replay rejected without harming replacement");
@@ -61,11 +65,11 @@ internal static unsafe partial class Program
             Reject(()=>editor.ReviewGraphicsRecovery(true));editor.SubmitInput(faultFrame);editor.AdvancePlay(faultFrame);
             editor.CaptureNextCompositeViewportForVerification((_,_,_)=>throw new InvalidOperationException("private-capture-failure"));Reject(()=>editor.Present(faultFrame));
             Pass(fresh.ReadFrameState().Active,"actual failed frame remains active, no implicit Present/abandon");
-            Reject(()=>editor.ReviewGraphicsRecovery());var failedWorld=owner.Document.World;var failedHistory=edit.State;var failedBytes=owner.Document.CaptureBytes();
+            Reject(()=>editor.ReviewGraphicsRecovery());var failedWorld=OwnedEditProjection(editor).Scene.World;var failedHistory=edit.State;var failedBytes=owner.Document.CaptureBytes();
             editor.RebuildGraphics(editor.ReviewGraphicsRecovery(true));
             var nativeDiagnostic=editor.GraphicsNativeFailure;
             Pass(nativeDiagnostic is {Operation:(uint)GpuFailureOperation.ExplicitAbandon,NativeCode:null,DeviceReason:0}&&nativeDiagnostic.Value.Frame==faultFrame.FrameId,"explicit abandonment diagnostic copied before old renderer closes, not fabricated physical loss");
-            Pass(fresh.IsClosed&&ReferenceEquals(failedWorld,owner.Document.World)&&edit.State==failedHistory&&failedBytes.SequenceEqual(owner.Document.CaptureBytes()),"approved terminal abandonment plus fresh device retains same live edit state");
+            Pass(fresh.IsClosed&&ReferenceEquals(failedWorld,OwnedEditProjection(editor).Scene.World)&&OwnedEditProjection(editor).IsCurrent(owner)&&edit.State==failedHistory&&failedBytes.SequenceEqual(owner.Document.CaptureBytes()),"approved terminal abandonment plus fresh device retains same live edit state");
             Draw();Pass(Draw().SequenceEqual(before),"exact viewport after actual failed frame recovery");
             var final=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
             Pass(final.Stats.ValidationErrors==0&&final.Stats.ValidationWarnings==0,"DX11 validation0/0");
@@ -91,12 +95,12 @@ internal static unsafe partial class Program
             closingHost.CaptureNextCompositeViewportForVerification((_,_,_)=>throw new InvalidOperationException("test-closing-frame"));Reject(()=>closingHost.Present(f));
             var scene=EnvironmentProductEvidence.Field<SceneRenderSession>(closingHost,playing?"_playScene":"_editScene");
             var renderer=EnvironmentProductEvidence.Field<RendererSession>(closingHost,"_renderer");
-            var world=owner.Document.World;var state=owner.Edit!.State;var play=owner.Play;var status=play?.Status;
+            var world=OwnedEditProjection(closingHost).Scene.World;var authoring=owner.Document;var state=owner.Edit!.State;var play=owner.Play;var status=play?.Status;
             PluginException? failedClose=null;try{scene.Dispose();}catch(PluginException error){failedClose=error;}
             Pass(failedClose?.Result==PluginResult.Busy&&scene.PreparationPhase==ScenePreparationPhase.Closing&&renderer.ReadFrameState().Active,"actual partial scene close retains Closing owner and active GPU frame "+playing);
             var review=closingHost.ReviewGraphicsRecovery(true);closingHost.RebuildGraphics(review);
             Pass(scene.PreparationPhase==ScenePreparationPhase.Closed&&renderer.IsClosed&&closingHost.GraphicsPhase==EditorGraphicsPhase.Ready,"approved host recovery retries Closing scene without Ready-only access "+playing);
-            Pass(ReferenceEquals(world,owner.Document.World)&&owner.Edit.State==state&&ReferenceEquals(play,owner.Play)&&play?.Status==status,"partial-close retry preserves original business/Play owners "+playing);
+            Pass(ReferenceEquals(authoring,owner.Document)&&ReferenceEquals(world,OwnedEditProjection(closingHost).Scene.World)&&OwnedEditProjection(closingHost).IsCurrent(owner)&&owner.Edit.State==state&&ReferenceEquals(play,owner.Play)&&play?.Status==status,"partial-close retry preserves original business/Play owners "+playing);
             Reject(()=>closingHost.RebuildGraphics(review));
             var fresh=EnvironmentProductEvidence.Field<RendererSession>(closingHost,"_renderer");
             Pass(fresh.Stats.ValidationErrors==0&&fresh.Stats.ValidationWarnings==0&&PinLocked(fixture.GenerationPath),"replacement device API0/0 and CPU source pin retained "+playing);
@@ -109,15 +113,15 @@ internal static unsafe partial class Program
             if(reenter){Reject(host!.Dispose);}
             return new Scene3DPipeline(w,h,shadows:s);
         })) {
-            host.Start();var owner=host.VerificationEditor;var world=owner.Document.World;var bytes=owner.Document.CaptureBytes();
+            host.Start();var owner=host.VerificationEditor;var world=OwnedEditProjection(host).Scene.World;var authoring=owner.Document;var bytes=owner.Document.CaptureBytes();
             reenter=true;var review=host.ReviewGraphicsRecovery();Reject(()=>host.RebuildGraphics(review));
             Pass(host.GraphicsPhase==EditorGraphicsPhase.Failed&&host.GraphicsRecoveryFailure=="graphics_preparation_failed","caught reentry poisons outer preparation");
             Reject(()=>host.PumpPlatform());Reject(()=>host.RebuildGraphics(review));
-            Pass(ReferenceEquals(world,owner.Document.World)&&bytes.SequenceEqual(owner.Document.CaptureBytes())&&PinLocked(fixture.GenerationPath),"failed candidate retains World, CPU pins and original document");
+            Pass(ReferenceEquals(authoring,owner.Document)&&ReferenceEquals(world,OwnedEditProjection(host).Scene.World)&&bytes.SequenceEqual(owner.Document.CaptureBytes())&&PinLocked(fixture.GenerationPath),"failed candidate retains World, CPU pins and original document");
             reenter=false;host.RebuildGraphics(host.ReviewGraphicsRecovery());
             Pass(host.GraphicsPhase==EditorGraphicsPhase.Ready&&host.GraphicsRecoveryFailure=="graphics_preparation_failed"&&ReferenceEquals(owner,host.VerificationEditor),"exact explicit retry drains partial replacement; preserves first diagnostic and business owner");
         }
-        File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new{cases,sameWorld=true,sameHistory=true,actualDx11=true,physicalDeviceLoss=false,basicPlayRetention=true,wholeStageAccepted=false}));
+        File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new{cases,schema=2,sameAuthoring=true,unchangedSourceKeepsProjection=true,changedSourceRebaked=true,sameHistory=true,actualDx11=true,physicalDeviceLoss=false,basicPlayRetention=true,wholeStageAccepted=false}));
         Console.WriteLine($"PASS M7.6 Editor same-session graphics {cases} checks; {output}");return 0;
     }
 }

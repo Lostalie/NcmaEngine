@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Ncma.Assets;
 using Ncma.Editor.Services;
+using Ncma.Editor.App;
 using Ncma.Rendering;
 using Ncma.Rendering.Scene;
 using Ncma.Runtime;
@@ -35,11 +36,11 @@ internal static unsafe partial class Program
         }
         internal (SceneDocument Document,Guid Camera,Guid Ground,Guid Caster) Scene() {
             var d=new SceneDocument("Scene GPU",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
-            global::Ncma.Runtime.Entity ground=d.World.CreateEntity("Ground");d.World.Set(ground, TransformData.Identity with{Position=new(0,0,-4.5f),Scale=new(4,4,1)});d.World.Set(ground, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
-            global::Ncma.Runtime.Entity caster=d.World.CreateEntity("Off-camera caster");d.World.Set(caster, TransformData.Identity with{Position=new(3,0,-.5f)});d.World.Set(caster, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
-            global::Ncma.Runtime.Entity camera=d.World.CreateEntity("Explicit camera");d.World.Set(camera, TransformData.Identity);d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
-            global::Ncma.Runtime.Entity light=d.World.CreateEntity("Primary light");d.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,MathF.PI/4)});d.World.Set(light, DirectionalLightData.Default);
-            d.ValidateAuthoring();return(d,d.World.GetUuid(camera),d.World.GetUuid(ground),d.World.GetUuid(caster));
+            Guid ground=d.CreateObject("Ground");d.SetComponent(ground, TransformData.Identity with{Position=new(0,0,-4.5f),Scale=new(4,4,1)});d.SetComponent(ground, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
+            Guid caster=d.CreateObject("Off-camera caster");d.SetComponent(caster, TransformData.Identity with{Position=new(3,0,-.5f)});d.SetComponent(caster, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
+            Guid camera=d.CreateObject("Explicit camera");d.SetComponent(camera, TransformData.Identity);d.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
+            Guid light=d.CreateObject("Primary light");d.SetComponent(light, TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,MathF.PI/4)});d.SetComponent(light, DirectionalLightData.Default);
+            d.ValidateAuthoring();return(d,camera,ground,caster);
         }
     }
     private static bool PinLocked(string path) { try{using var file=new FileStream(path,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite|FileShare.Delete);return false;}catch(IOException){return true;} }
@@ -50,27 +51,39 @@ internal static unsafe partial class Program
         editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(fixture.Root,fixture.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         byte[] original=new byte[256*256*4],changed=new byte[original.Length];
-        var edit=new SceneRenderSession(renderer,cache,editor.Document.World);edit.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot());
+        var projection=EditorSceneProjection.Bake(editor);
+        var edit=new SceneRenderSession(renderer,cache,projection.Scene.World);edit.Prepare(editor.RenderAssets!,projection.Scene.CaptureSnapshot());
+        Guid? Pick(ulong pickFrame,Guid pickView,float u,float v) {
+            projection.RequireCurrent(editor);return edit.Pick(pickFrame,pickView,u,v);
+        }
+        void RefreshEdit() {
+            var nextProjection=EditorSceneProjection.Bake(editor);
+            var candidate=new SceneRenderSession(renderer,cache,nextProjection.Scene.World);
+            try {candidate.Prepare(editor.RenderAssets!,nextProjection.Scene.CaptureSnapshot());}
+            catch {candidate.Dispose();throw;}
+            var prior=edit;edit=candidate;projection=nextProjection;prior.Dispose();
+        }
         try {
             Check(edit.Submit(frame++,256,256,camera,target:target),"Production scene submitted no GPU geometry");renderer.CaptureTarget(target,original);renderer.Present();
             Check(edit.Costs.GeometryDraws==1&&edit.Costs.ShadowDraws==2&&edit.View!.Geometry.All(d=>d.ObjectId!=caster),"Camera culling incorrectly removed off-camera shadow caster");
-            Check(edit.Pick(frame-1,edit.View!.FrameIdentity,.5f,.5f)==ground,"Exact-frame viewport bounds picking");
+            Check(Pick(frame-1,edit.View!.FrameIdentity,.5f,.5f)==ground,"Exact-frame viewport bounds picking");
             ulong pickFrame=frame-1;Guid pickView=edit.View.FrameIdentity;
-            Reject(()=>edit.Pick(pickFrame+1,pickView,.5f,.5f));Reject(()=>edit.Pick(pickFrame,Guid.NewGuid(),.5f,.5f));
+            Reject(()=>Pick(pickFrame+1,pickView,.5f,.5f));Reject(()=>Pick(pickFrame,Guid.NewGuid(),.5f,.5f));
             ulong resources=renderer.ResourceStats.Creates,plans=renderer.PipelineStats.Creates;
-            var cameraData=editor.Document.World.Get<CameraData>(editor.Document.World.FindEntity(camera));
-            editor.Document.World.Set(editor.Document.World.FindEntity(camera), cameraData with{ViewportX=.5f,ViewportWidth=.5f});
-            Reject(()=>edit.Pick(pickFrame,pickView,.5f,.5f)); // Old pixels/Undo-like revision cannot select a current World.
+            var cameraData=editor.Document.GetComponent<CameraData>(camera);
+            editor.Document.SetComponent(camera, cameraData with{ViewportX=.5f,ViewportWidth=.5f});
+            Reject(()=>Pick(pickFrame,pickView,.5f,.5f)); // Authoring revision invalidates the source stamp, not the detached runtime World.
+            Check(!projection.IsCurrent(editor),"Authoring change did not invalidate the preview source");RefreshEdit();
             edit.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();
             Check(changed[(128*256+64)*4]==0&&changed[(64*256+192)*4]>0,"Normalized camera viewport/offscreen letterbox not deterministic");
-            editor.Document.World.Set(editor.Document.World.FindEntity(camera), cameraData);edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
+            editor.Document.SetComponent(camera, cameraData);RefreshEdit();edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
             for(int i=0;i<8;i++) {
                 var play=editor.StartPlay();
-                using(var session=new SceneRenderSession(renderer,cache,play.Document.World)) {session.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot());
+                using(var session=new SceneRenderSession(renderer,cache,play.Scene.World)) {session.Prepare(editor.PlayRenderAssets!,play.Scene.CaptureSnapshot());
                     Check(renderer.ResourceStats.Creates==resources,"Edit/Play failed to share immutable GPU resources");
                     session.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original),"Play/Editor source parity");
-                    var objectTransform=play.Document.World.Get<TransformData>(play.Document.World.FindEntity(ground));
-                    play.Document.World.Set(play.Document.World.FindEntity(ground), objectTransform with{Position=new(1,0,-4.5f),Scale=new(2,1,1)});
+                    var objectTransform=play.Scene.World.Get<TransformData>(play.Scene.World.FindEntity(ground));
+                    play.Scene.World.Set(play.Scene.World.FindEntity(ground), objectTransform with{Position=new(1,0,-4.5f),Scale=new(2,1,1)});
                     session.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(!changed.SequenceEqual(original),"Committed nonuniform object transform did not affect GPU scene");
                 }
                 editor.StopPlay();edit.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original),"Play/Stop mutated Edit");
@@ -82,16 +95,17 @@ internal static unsafe partial class Program
             Check(!changed.SequenceEqual(original)&&renderer.PipelineStats.Creates==plans,"Exposure update recreated GPU allocation");
             edit.Submit(frame++,256,256,camera,target:target);renderer.Present();
             var playPinned=editor.StartPlay();
-            using(var play=new SceneRenderSession(renderer,cache,playPinned.Document.World)) {play.Prepare(editor.PlayRenderAssets!,playPinned.Document.CaptureSnapshot());
+            using(var play=new SceneRenderSession(renderer,cache,playPinned.Scene.World)) {play.Prepare(editor.PlayRenderAssets!,playPinned.Scene.CaptureSnapshot());
                 string oldPath=fixture.GenerationPath;fixture.WriteModel(2,.5f);editor.RefreshRenderAssets();
-                using(var candidate=new SceneRenderSession(renderer,cache,editor.Document.World)) {candidate.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot());
+                var reimportProjection=EditorSceneProjection.Bake(editor);
+                using(var candidate=new SceneRenderSession(renderer,cache,reimportProjection.Scene.World)) {candidate.Prepare(editor.RenderAssets!,reimportProjection.Scene.CaptureSnapshot());
                     candidate.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(!changed.SequenceEqual(original),"Reimport did not install new GPU generation");
                     play.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,changed);renderer.Present();Check(changed.SequenceEqual(original)&&PinLocked(oldPath),"Play failed to pin old CPU/GPU generation");
                 }
                 editor.StopPlay();Check(PinLocked(oldPath),"GPU/CPU independent lease lifetime lost");edit.Dispose();Check(PinLocked(oldPath),"Active render lease prematurely released source");
             }
             Check(renderer.PipelineStats.Pipelines==0,"Scene GPU groups retained after final lease");
-            var empty=new SceneDocument("Pure flat",RenderComponentRegistry.CreateRegistry());
+            var empty=BakeRenderScene(new SceneDocument("Pure flat",RenderComponentRegistry.CreateRegistry()));
             using var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true);
             ulong groups=renderer.PipelineStats.Creates;
             using(var flat=new SceneRenderSession(renderer,cache,empty.World))
@@ -109,7 +123,7 @@ internal static unsafe partial class Program
         var fixture=new SceneGpuFixture(output);using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         var rows=new List<object>();
         foreach(int count in new[]{0,1,256,4096}) {
-            var document=new SceneDocument("Profile "+count,RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);
+            var document=BakeRenderScene(new SceneDocument("Profile "+count,RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition));
             var cam=new SceneCameraView(Guid.Empty,Matrix4x4.CreateOrthographic(4,4,.1f,1000),Vector3.Zero,CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
             int side=Math.Max(1,(int)Math.Ceiling(Math.Sqrt(count)));
             for(int i=0;i<count;i++) {

@@ -11,7 +11,7 @@ public sealed partial class SceneRenderSession
     private ulong _shadowObservedRevision;
     private bool _shadowReady;
     public SceneShadowData? PreparedShadowSelection { get { Verify();return _shadowPrepared; } }
-    private void InitializeShadows(SceneDocumentSnapshot startup,PreparedShadowLibrary? high)
+    private void InitializeShadows(ISceneContent startup,PreparedShadowLibrary? high)
     {
         var selection=SceneShadowState.Read(startup);
         if(selection!=SceneShadowState.Read(_shadowReader,WorldId))throw new ArgumentException("Stale startup shadow selection.");

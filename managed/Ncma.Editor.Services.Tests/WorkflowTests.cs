@@ -25,7 +25,7 @@ internal static class WorkflowTests
         public void After(Guid connection, CapabilityRequest request, CapabilityResult result)
         {
             if (!result.Changed) return;
-            try { edit.Document.World.CreateEntity("Forbidden observer write"); } catch (InvalidOperationException) { WriteBlocked = true; }
+            try { edit.Document.CreateObject("Forbidden observer write"); } catch (InvalidOperationException) { WriteBlocked = true; }
             NestedBlocked = edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))).Code == "edit_busy";
             throw new InvalidOperationException("Injected receipt observer failure after commit.");
         }
@@ -70,9 +70,9 @@ internal static class WorkflowTests
             }
             var request = new CapabilityRequest(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.transaction", JsonSerializer.SerializeToElement(new { operations = new[] { new { op = "create", objectId = Guid.NewGuid(), name = "Committed retained" } } }));
             Check(Invoke(request).Code == "permission_denied"); endpoint.Approve(endpoint.Proposals.Single().Id, false, null);
-            var committed = Invoke(request); Check(committed.Status == "ok" && committed.Changed && document.World.Count == 1 && edit.State.UndoCount == 1 && observer.WriteBlocked && observer.NestedBlocked);
+            var committed = Invoke(request); Check(committed.Status == "ok" && committed.Changed && document.ObjectCount == 1 && edit.State.UndoCount == 1 && observer.WriteBlocked && observer.NestedBlocked);
             Check(Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))).Code == "request_monitor_faulted");
-            Check(document.World.Count == 1 && edit.State.UndoCount == 1);
+            Check(document.ObjectCount == 1 && edit.State.UndoCount == 1);
         });
         yield return ("M6.9 real stdio default deny/exact tickets/two approvals/revision receipts/no automatic Undo", () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); var service = f.Owner.Workflows!; Guid obj = Guid.NewGuid();
@@ -81,8 +81,8 @@ internal static class WorkflowTests
             Registry(f); Guid id = Propose(f, steps); Check(Op(f, "next", id).GetProperty("isError").GetBoolean()); var review = service.CaptureReview(id);
             Reject(() => service.Approve(review with { Hash = "forged" }, review.Fingerprint, true)); Reject(() => service.Approve(review, review.Fingerprint, false)); Approve(f, id);
             var ticket = Next(f, id); Check(Next(f, id) == ticket || Next(f, id).RequestId == ticket.RequestId); Check(Execute(f, ticket).GetProperty("isError").GetBoolean());
-            Check(service.Capture().Single().Index == 0 && service.Capture().Single().Receipts.Length == 0 && f.Owner.Document.World.Count == 0);
-            ApproveTool(f); Data(Execute(f, ticket)); Check(f.Owner.Document.World.Count == 1 && f.Owner.Edit!.State.UndoCount == 1);
+            Check(service.Capture().Single().Index == 0 && service.Capture().Single().Receipts.Length == 0 && f.Owner.Document.ObjectCount == 0);
+            ApproveTool(f); Data(Execute(f, ticket)); Check(f.Owner.Document.ObjectCount == 1 && f.Owner.Edit!.State.UndoCount == 1);
             Check(Execute(f, ticket).GetProperty("isError").GetBoolean()); // receipt inspection replaces step re-execution
             var receipt = service.Capture().Single(); Check(receipt.Index == 1 && receipt.Receipts.Single().Changed && receipt.Receipts.Single().ExecutionRevision == f.Owner.Edit!.Revision);
             var validate = Next(f, id); Check(validate.ExpectedRevision == f.Owner.Edit!.Revision); Data(Execute(f, validate));
@@ -90,7 +90,7 @@ internal static class WorkflowTests
             CharacterInspectionTests.Schema(Op(f, "inspect", id).GetProperty("structuredContent"), WorkflowSchemas.Descriptor().OutputSchema);
             f.Workspace.Transaction(f.Workspace.Stamp, "Human later edit", [new { op = "rename", objectId = obj, name = "Human retained" }]);
             byte[] before = f.Owner.Document.CaptureBytes(); int undo = f.Owner.Edit.State.UndoCount; service.Cancel(id); service.Revoke();
-            Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Edit.State.UndoCount == undo && service.Capture().Single().Receipts.Length == 2 && f.Owner.Document.World.Tick == 0);
+            Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Edit.State.UndoCount == undo && service.Capture().Single().Receipts.Length == 2 && f.Owner.Play is null);
         });
         yield return ("M6.9 failed actual isolated assertion blocks successor/repair cannot alter assertion policy", () => {
             using var f = new GraphInspectionTests.Fixture(output, repository, true); Registry(f); f.ApproveUi(); f.Writer!.Sequences.PrepareTrusted();
@@ -102,7 +102,7 @@ internal static class WorkflowTests
             var before = f.Owner.Workflows!.Capture().Single(); Check(before.Status == "failed" && before.Index == 1 && before.Receipts.Length == 2 && !before.Receipts[1].AssertionPassed);
             Check(Op(f, "next", id).GetProperty("isError").GetBoolean()); Check(f.Call(EditorWorkflows.Capability, new { op = "repair", workflowId = id,
                 input = new { graphId = f.Graph, caseId = test, section = "timeline", offset = 0, limit = 1 } }, Guid.NewGuid()).GetProperty("isError").GetBoolean());
-            var after = f.Owner.Workflows.Capture().Single(); Check(before.Hash == after.Hash && after.RepairCount == 0 && after.Index == 1 && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Document.World.Tick == 0);
+            var after = f.Owner.Workflows.Capture().Single(); Check(before.Hash == after.Hash && after.RepairCount == 0 && after.Index == 1 && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Play is null);
         });
         yield return ("M6.9 two active plans/foreign owner/registry tamper and stale review rejection", () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); var service = f.Owner.Workflows!;
@@ -132,7 +132,7 @@ internal static class WorkflowTests
             Data(Execute(f, Next(f, id))); Data(Execute(f, Next(f, id))); var run = Next(f, id);
             Check(Execute(f, run).GetProperty("isError").GetBoolean()); var sr = writer.Sequences.CaptureReview(test); writer.Sequences.Approve(sr, sr.Fingerprint, true);
             Data(Execute(f, run)); var final = f.Owner.Workflows!.Capture().Single(); Check(final.Status == "completed" && final.Receipts.Length == 6 && final.Receipts.All(x => x.AssertionPassed));
-            Check(AnimationGraphCodec.Decode(File.ReadAllBytes(f.File)).Name == "Workflow verified" && f.Owner.Edit!.State.UndoCount == 1 && scene.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Document.World.Tick == 0);
+            Check(AnimationGraphCodec.Decode(File.ReadAllBytes(f.File)).Name == "Workflow verified" && f.Owner.Edit!.State.UndoCount == 1 && scene.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Play is null);
         });
         yield return ("M6.9 cancel queued approved mutation retains tombstone and commits nothing", () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); Registry(f);
@@ -144,7 +144,7 @@ internal static class WorkflowTests
             while (f.Owner.Endpoint!.View.QueueCount == 0) { if (clock.ElapsedMilliseconds > 10000) throw new TimeoutException("Workflow queue"); Thread.Sleep(1); }
             Check(!pending.IsCompleted); f.Owner.Workflows!.Cancel(id); f.Owner.Endpoint.Pump(); Check(pending.Wait(10000));
             using var result = JsonDocument.Parse(pending.Result!); Check(result.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
-            Check(Execute(f, t).GetProperty("isError").GetBoolean()); Check(f.Owner.Document.World.Count == 0 && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Workflows.Capture().Single().Receipts.Length == 0);
+            Check(Execute(f, t).GetProperty("isError").GetBoolean()); Check(f.Owner.Document.ObjectCount == 0 && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Workflows.Capture().Single().Receipts.Length == 0);
         });
         yield return ("M6.9 deadline/TTL/revoke-repair/audience/edit/endpoint/foreign ticket fences", () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); Registry(f);
@@ -200,13 +200,13 @@ internal static class WorkflowTests
                 gui.Draw(f.View.Frame, f.View.Items, f.View.Text); renderer.SubmitUi(clear, f.View.Frame.Frame, new(.02f,.03f,.04f,1)); gui.RenderGpu();
                 if (frame == 1) { byte[] pixels = new byte[1280*720*4]; renderer.Capture(pixels); GraphAuthoringTests.SaveBmp(Path.Combine(output, "m6-9-workflow.bmp"), pixels, 1280, 720); } renderer.Present(); }
             renderer.WaitIdle(); Check(renderer.Stats.ValidationErrors == 0 && renderer.Stats.ValidationWarnings == 0 && renderer.UiStats.PureUi == 1 && renderer.Stats.LiveGroups == 0);
-            Check(scene.SequenceEqual(f.Owner.Document.CaptureBytes()) && state == f.Owner.Edit.State && f.Owner.Document.World.Tick == 0);
+            Check(scene.SequenceEqual(f.Owner.Document.CaptureBytes()) && state == f.Owner.Edit.State && f.Owner.Play is null);
         });
         yield return ("M6.9 owner/monitor observation forbids live writes/nested invocation and preserves editor-only registration", () => {
             using var owner = new EditorSessionOwner("Observe"); var edit = owner.Edit!; ulong revision = edit.Revision;
-            Reject(() => edit.ObserveReadOnly(() => owner.Document.World.CreateEntity("Forbidden")));
+            Reject(() => edit.ObserveReadOnly(() => owner.Document.CreateObject("Forbidden")));
             var nested = edit.ObserveReadOnly(() => edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))));
-            Check(nested.Code == "edit_busy" && owner.Document.World.Count == 0 && edit.Revision == revision);
+            Check(nested.Code == "edit_busy" && owner.Document.ObjectCount == 0 && edit.Revision == revision);
             var direct = edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, EditorWorkflows.Capability, JsonSerializer.SerializeToElement(new { op = "next", workflowId = Guid.NewGuid() })));
             Check(direct.Code == "workflow_endpoint_context_required");
             Reject(() => Task.Run(() => owner.Workflows!.Capture()).GetAwaiter().GetResult());

@@ -29,7 +29,7 @@ public sealed class SceneEnvironmentPreflight : IDisposable
     private void VerifyThread(){if(_owner!=Environment.CurrentManagedThreadId)throw new InvalidOperationException("Environment preflight owner thread.");}
     public EnvironmentPreflightStatus Status
     {get{VerifyThread();return new(_phase,_binding is not null,_gpu is not null,_assets is not null);}}
-    public static void RequireShaderClosure(RuntimeShaderFileSet? files,SceneDocumentSnapshot scene)
+    public static void RequireShaderClosure(RuntimeShaderFileSet? files,ISceneContent scene)
     {
         if(files is null||!scene.Objects.Any(o=>o.Components.Any(c=>c.TypeId is StaticMeshData.TypeId or SkinnedMeshData.TypeId)))return;
         bool skin=scene.Objects.Any(o=>o.Components.Any(c=>c.TypeId==SkinnedMeshData.TypeId));
@@ -37,7 +37,7 @@ public sealed class SceneEnvironmentPreflight : IDisposable
         _=files.Get(profile,false,skin);_=files.Get(profile,true,skin);
     }
     public void Prepare(World world,
-        PreparedSceneAssetLease assets,SceneDocumentSnapshot scene,Func<bool> allowed)
+        PreparedSceneAssetLease assets,ISceneContent scene,Func<bool> allowed)
     {
         VerifyThread();
         if(_phase==EnvironmentPreflightPhase.Preparing){_rejected=true;throw new InvalidOperationException("Environment preflight is nonreentrant.");}

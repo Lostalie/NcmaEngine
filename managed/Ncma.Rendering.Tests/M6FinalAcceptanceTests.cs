@@ -73,11 +73,11 @@ internal static unsafe partial class Program
         graph=AddMontage(graph,original.Montage!);
         graph=graph with{Nodes=graph.Nodes.Select((n,i)=>n with{X=100+i*20,Y=70-i*10}).ToArray()};
         File.WriteAllBytes(Path.Combine(fixture.Root,"assets/m6-final.ncmaanim"),AnimationGraphCodec.Encode(graph));
-        SceneDocument Document(int count,bool root){var d=create(count,root);int n=0;foreach(global::Ncma.Runtime.Entity o in d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o))){
-                d.World.Set(o, new AnimatorData(graph.AssetId,graph.SkeletonId));d.World.Set(o, TransformData.Identity with{Position=new((n%8-3.5f)*2,0,-(n/8)*2)});n++;}
+        SceneDocument Document(int count,bool root){var d=create(count,root);int n=0;foreach(Guid o in d.GetObjectIds().Where(o=>d.HasComponent<AnimatorData>(o))){
+                d.SetComponent(o, new AnimatorData(graph.AssetId,graph.SkeletonId));d.SetComponent(o, TransformData.Identity with{Position=new((n%8-3.5f)*2,0,-(n/8)*2)});n++;}
             return d;}
-        var startup=Document(1,true);Guid actor=startup.World.GetUuid(startup.World.GetEntities().Single(o=>startup.World.Has<AnimatorData>(o)));
-        Guid camera=startup.World.GetUuid(startup.World.GetEntities().Single(o=>startup.World.Has<CameraData>(o)));
+        var startup=Document(1,true);Guid actor=startup.GetObjectIds().Single(o=>startup.HasComponent<AnimatorData>(o));
+        Guid camera=startup.GetObjectIds().Single(o=>startup.HasComponent<CameraData>(o));
         byte[] package=SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,startup.CaptureSnapshot(),[]);
         Check(package.SequenceEqual(SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,startup.CaptureSnapshot(),[])),"M6 final package deterministic");
         var semantic=graph with{Nodes=graph.Nodes.Select(n=>n with{X=0,Y=0}).ToArray()};
@@ -132,7 +132,7 @@ internal static unsafe partial class Program
                 Check(!ReferenceEquals(compiled,second.PrepareProgram(other.Assets)),"Program cache remains publication local");}
             Guid slot=graph.Montage!.Slots[0].Id;Vector3? expectedPosition=null;AnimationPoseInstruction[]? expectedPlan=null;MontageSlotFrame? expectedSlot=null;string? expectedTrace=null;
             foreach(int hz in new[]{30,60,144,0}){
-                var d=startup.CreateIsolatedCopy();using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:hz==0?PlayAdvanceMode.FixedSteps:PlayAdvanceMode.Frames);
+                var d=startup.CreateIsolatedCopy();using var play=new PlaySession(d.BakeRuntime(d.Revision).Image.Instantiate(d.Components),FrameTimePolicy.Strict,advanceMode:hz==0?PlayAdvanceMode.FixedSteps:PlayAdvanceMode.Frames);
                 using var runtime=ScenePlayRuntime.Compose(play,physics,assets);
                 var trace=new List<M6Step>(120);var numeric=GraphPoseSnapshotPreparation.Prepare(compiled,assets.Assets);
                 play.AddCommittedObserver(new M6Observer(()=>{var committed=runtime.Animators!.ReadDebug(actor);var pose=new AnimationLocalTransform[layout.Bones.Length];
@@ -142,7 +142,7 @@ internal static unsafe partial class Program
                 play.Start(_=>throw new Exception("No behaviours"));
                 try{for(int i=0;i<(hz==0?120:hz*2);i++){
                         Check((hz==0?play.AdvanceFixedStep():play.AdvanceFrame(1d/hz)).State==PlayState.Running,"M6 combined schedule "+hz+": "+play.Fault?.Code);}
-                    var debug=runtime.Animators!.ReadDebug(actor);var position=d.World.Get<TransformData>(d.World.FindEntity(actor)).Position;var currentSlot=runtime.Animators.ReadMontageSlot(actor,slot);
+                    var debug=runtime.Animators!.ReadDebug(actor);var position=play.Scene.World.Get<TransformData>(play.Scene.World.FindEntity(actor)).Position;var currentSlot=runtime.Animators.ReadMontageSlot(actor,slot);
                     Check(play.Tick==120&&debug.Frame.Context.Tick==120&&runtime.Animators.ReadMontageFrame(actor).Context==debug.Frame.Context&&runtime.Characters!.Status.CommittedSequence==120,"All combined fixed-step owners share tick120");
                     expectedPosition??=position;expectedPlan??=debug.Instructions.ToArray();expectedSlot??=currentSlot;
                     Check(Vector3.Distance(expectedPosition.Value,position)<1e-5&&expectedPlan.SequenceEqual(debug.Instructions)&&expectedSlot==currentSlot,"M6 30/60/144/fixed combined root/pose/Slot parity");
@@ -157,12 +157,12 @@ internal static unsafe partial class Program
             var pipelineBaseline=renderer.PipelineStats.Pipelines;var resourceBaseline=renderer.ResourceStats;
             byte[] frozen=startup.CaptureBytes();
             for(int cycle=0;cycle<128;cycle++){
-                var d=startup.CreateIsolatedCopy();using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
+                var d=startup.CreateIsolatedCopy();using var play=new PlaySession(d.BakeRuntime(d.Revision).Image.Instantiate(d.Components),FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
                 using var runtime=ScenePlayRuntime.Compose(play,physics,assets);bool fail=false;play.AddSystem(new GraphFailure(_=>{if(fail){var pending=play.Commands.SpawnEmpty("post-solver fault");play.Commands.AttachBehaviour(pending.ObjectId,new(Guid.NewGuid(),"Unavailable",true,[]));}}));
-                play.Start(_=>throw new Exception("Injected unavailable behaviour"));Check(identities.Add(play.SessionId)&&identities.Add(d.World.Identity)&&identities.Add(runtime.Animators!.ReadFrame(actor).InstanceId),"Fresh M6 coupled identities");
+                play.Start(_=>throw new Exception("Injected unavailable behaviour"));Check(identities.Add(play.SessionId)&&identities.Add(play.Scene.World.Identity)&&identities.Add(runtime.Animators!.ReadFrame(actor).InstanceId),"Fresh M6 coupled identities");
                 SceneRenderSession? scene=null;
                 try{
-                    scene=new(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
+                    scene=new(renderer,cache,play.Scene.World);scene.Prepare(assets,play.Scene.CaptureSnapshot(),poseKernel:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
                     for(int step=0;step<8;step++){
                         int[] gc=[GC.CollectionCount(0),GC.CollectionCount(1),GC.CollectionCount(2)];long bytes=GC.GetAllocatedBytesForCurrentThread(),started=Stopwatch.GetTimestamp();
                         var status=play.AdvanceFixedStep();
@@ -175,16 +175,16 @@ internal static unsafe partial class Program
                         Check(scene.Submit(frame++,256,256,camera),"M6 cycle actual scene submit");renderer.Present();double draw=Stopwatch.GetElapsedTime(started).TotalMilliseconds;long drawBytes=GC.GetAllocatedBytesForCurrentThread()-bytes;
                         Check(scene.SkinBackpressureFrames==backpressure&&play.Tick==tick&&scene.Costs.GeometryDraws==1&&scene.Costs.ShadowDraws==1,"M6 no backpressure/same-tick geometry and shadow");
                         Check(renderer.SceneStats.UploadedBytes==vertices&&physics.Inspect().Worlds==1,"M6 resident geometry not uploaded each frame; one solver");
-                        costs.Add(new(1,cycle,tick,play.SessionId,d.World.Identity,debug.InstanceId,runtime.Characters!.Status.CommittedSequence,simulation,simulationBytes,drain,draw,drawBytes,scene.Costs,
+                        costs.Add(new(1,cycle,tick,play.SessionId,play.Scene.World.Identity,debug.InstanceId,runtime.Characters!.Status.CommittedSequence,simulation,simulationBytes,drain,draw,drawBytes,scene.Costs,
                             scene.Animation!.Costs.SampleMilliseconds,scene.Animation.Costs.PaletteMilliseconds,scene.SkinAbiMilliseconds,renderer.SkinStats.PaletteBytes-palette,renderer.SceneStats.UploadedBytes-vertices,
                             kernel.Statistics.SampleCalls-samples,renderer.Stats.GpuSampleValid==1?renderer.Stats.GpuMilliseconds:null,Enumerable.Range(0,3).Select(g=>GC.CollectionCount(g)-gc[g]).ToArray()));
                     }
                     scene.Dispose();scene=null;
-                    if(cycle%4==0){Guid old=runtime.Animators!.ReadFrame(actor).InstanceId,world=d.World.Identity;ulong tick=play.Tick;play.Reload(_=>throw new Exception("No behaviours"));
-                        Check(play.State==PlayState.Paused&&play.Tick==tick&&d.World.Identity!=world&&runtime.Animators.ReadFrame(actor).InstanceId!=old,"M6 reload rotates identities and retains chronology");
+                    if(cycle%4==0){Guid old=runtime.Animators!.ReadFrame(actor).InstanceId,world=play.Scene.World.Identity;ulong tick=play.Tick;play.Reload(_=>throw new Exception("No behaviours"));
+                        Check(play.State==PlayState.Paused&&play.Tick==tick&&play.Scene.World.Identity!=world&&runtime.Animators.ReadFrame(actor).InstanceId!=old,"M6 reload rotates identities and retains chronology");
                         Check(play.Step().State==PlayState.Paused&&runtime.Animators.ReadMontageSlot(actor,slot).Active,"M6 reload starts same persistent Montage without external binding");}
-                    if(cycle%4==1){byte[] before=d.CaptureBytes();ulong tick=play.Tick;fail=true;
-                        Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==tick&&before.SequenceEqual(d.CaptureBytes()),"M6 failed quantum retains committed World");
+                    if(cycle%4==1){byte[] before=play.Scene.CaptureCheckpoint().CopyBytes();ulong tick=play.Tick;fail=true;
+                        Check(play.AdvanceFixedStep().State==PlayState.Faulted&&play.Tick==tick&&before.SequenceEqual(play.Scene.CaptureCheckpoint().CopyBytes()),"M6 failed quantum retains committed World");
                         Check(runtime.Characters!.Status.NumericalExecutionStarted,"M6 post-solver failure is fail-stop, not rollback");Reject(()=>runtime.Animators!.ReadFrame(actor));Reject(()=>runtime.Characters.InspectRootMotion(actor));}
                 }finally{scene?.Dispose();play.Stop();}
                 Check(physics.Inspect().Worlds==0&&kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&cache.Count==0&&renderer.SkinStats.Meshes==skinBaseline&&renderer.SceneStats.LiveMeshes==meshBaseline&&renderer.PipelineStats.Pipelines==pipelineBaseline&&renderer.ResourceStats.Textures==resourceBaseline.Textures&&renderer.ResourceStats.Materials==resourceBaseline.Materials&&renderer.ResourceStats.Targets==resourceBaseline.Targets,"M6 shared services return to original resource baselines: "+cycle);
@@ -194,19 +194,19 @@ internal static unsafe partial class Program
         using(var unlocked=new FileStream(packPath,FileMode.Open,FileAccess.ReadWrite,FileShare.None))Check(unlocked.Length==package.Length,"M6 final runtime package pin released");
         Check(!Directory.Exists(Path.Combine(moved,"out"))&&Directory.GetFiles(Path.Combine(moved,"assets")).Length==1,"M6 relocated fixture uses only runtime package");
         foreach(int count in new[]{0,1,8,32}){
-            var d=Document(count,count>0);var ids=d.World.GetEntities().Where(o=>d.World.Has<AnimatorData>(o)).Select(o=>d.World.GetUuid(o)).ToArray();Guid view=d.World.GetUuid(d.World.GetEntities().Single(o=>d.World.Has<CameraData>(o)));
+            var d=Document(count,count>0);var ids=d.GetObjectIds().Where(o=>d.HasComponent<AnimatorData>(o)).ToArray();Guid view=d.GetObjectIds().Single(o=>d.HasComponent<CameraData>(o));
             byte[] bytes=SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,d.CaptureSnapshot(),[]);
             string root=Path.Combine(evidence,"workload-"+count);Directory.CreateDirectory(Path.Combine(root,"assets"));File.WriteAllBytes(Path.Combine(root,"assets/game.ncpak"),bytes);
             using var assets=SceneAssetPreparation.Prepare(root,fixture.Project,d.CaptureSnapshot(),true,"assets/game.ncpak");
             Check(count!=0||assets.Assets.List().Count==0,"Empty workload packages no unused animation closure");
-            using var play=new PlaySession(d,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);using var cache=new RenderResourceCache(renderer);
+            using var play=new PlaySession(d.BakeRuntime(d.Revision).Image.Instantiate(d.Components),FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);using var runtime=ScenePlayRuntime.Compose(play,physics,assets);using var cache=new RenderResourceCache(renderer);
             play.Start(_=>throw new Exception("No behaviours"));var measured=new List<M6Cost>();
-            try{using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(assets,d.CaptureSnapshot(),poseKernel:count==0?null:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
+            try{using var scene=new SceneRenderSession(renderer,cache,play.Scene.World);scene.Prepare(assets,play.Scene.CaptureSnapshot(),poseKernel:count==0?null:kernel,play:play,animators:runtime.Animators,rootMotion:runtime.Characters);
                 for(int step=0;step<24;step++){
                     int[] gc=[GC.CollectionCount(0),GC.CollectionCount(1),GC.CollectionCount(2)];long before=GC.GetAllocatedBytesForCurrentThread(),started=Stopwatch.GetTimestamp();
                     var status=play.AdvanceFixedStep();double simulation=Stopwatch.GetElapsedTime(started).TotalMilliseconds;long allocated=GC.GetAllocatedBytesForCurrentThread()-before;
                     Check(status.State==PlayState.Running,"M6 workload quantum "+count+": "+play.Fault?.Code);
-                    foreach(Guid id in ids){var stamp=runtime.Animators!.ReadFrame(id);Check(stamp.Context.SessionId==play.SessionId&&stamp.Context.WorldId==d.World.Identity&&stamp.Context.Tick==play.Tick&&runtime.Animators.ReadMontageFrame(id).Context==stamp.Context,"Every workload actor has exact graph/Montage/tick identity");}
+                    foreach(Guid id in ids){var stamp=runtime.Animators!.ReadFrame(id);Check(stamp.Context.SessionId==play.SessionId&&stamp.Context.WorldId==play.Scene.World.Identity&&stamp.Context.Tick==play.Tick&&runtime.Animators.ReadMontageFrame(id).Context==stamp.Context,"Every workload actor has exact graph/Montage/tick identity");}
                     started=Stopwatch.GetTimestamp();if(count>0)renderer.WaitIdle();double drain=Stopwatch.GetElapsedTime(started).TotalMilliseconds;
                     ulong samples=kernel.Statistics.SampleCalls,palette=renderer.SkinStats.PaletteBytes,vertices=renderer.SceneStats.UploadedBytes,backpressure=scene.SkinBackpressureFrames;
                     before=GC.GetAllocatedBytesForCurrentThread();started=Stopwatch.GetTimestamp();bool submitted=scene.Submit(frame++,256,256,view);if(submitted)renderer.Present();
@@ -215,7 +215,7 @@ internal static unsafe partial class Program
                     Check(count==0?scene.Animation is null&&scene.Plan is null&&physics.Inspect().Worlds==0&&kernel.Statistics.Rigs==0&&cache.Count==0:
                         scene.Costs.GeometryDraws==count&&scene.Costs.ShadowDraws==count&&scene.Animation!.Costs.Characters==count&&physics.Inspect().Worlds==1,"M6 workload exact active resources and draws");
                     Check(renderer.SceneStats.UploadedBytes==vertices,"M6 workload no per-frame geometry upload");
-                    if(step>=8)measured.Add(new(count,-1,play.Tick,play.SessionId,d.World.Identity,count==0?Guid.Empty:runtime.Animators!.ReadFrame(ids[0]).InstanceId,runtime.Characters?.Status.CommittedSequence??0,
+                    if(step>=8)measured.Add(new(count,-1,play.Tick,play.SessionId,play.Scene.World.Identity,count==0?Guid.Empty:runtime.Animators!.ReadFrame(ids[0]).InstanceId,runtime.Characters?.Status.CommittedSequence??0,
                         simulation,allocated,drain,draw,drawBytes,scene.Costs,scene.Animation?.Costs.SampleMilliseconds??0,scene.Animation?.Costs.PaletteMilliseconds??0,scene.SkinAbiMilliseconds,
                         renderer.SkinStats.PaletteBytes-palette,renderer.SceneStats.UploadedBytes-vertices,kernel.Statistics.SampleCalls-samples,count==0?null:renderer.Stats.GpuSampleValid==1?renderer.Stats.GpuMilliseconds:null,
                         Enumerable.Range(0,3).Select(g=>GC.CollectionCount(g)-gc[g]).ToArray()));

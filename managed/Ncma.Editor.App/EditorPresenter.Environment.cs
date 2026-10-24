@@ -7,19 +7,20 @@ namespace Ncma.Editor.App;
 
 internal sealed unsafe partial class EditorPresenter
 {
-    private sealed record EnvironmentPreparationView(Guid World, ulong Revision, Guid Play, bool Ready, bool Failed, EnvironmentLightingData? Prepared);
+    private sealed record EnvironmentPreparationView(Guid World, ulong Revision, Guid Play, bool Ready, bool Failed, EnvironmentLightingData? Prepared, EditorSceneSourceStamp? Authoring);
     private EnvironmentPreparationView? _environmentPreparation;
 
     // Copied presentation state only. Never an approval, resource handle or Agent capability.
-    internal void ShowEnvironmentPreparation(Guid world, ulong revision, Guid play, bool ready, bool failed, EnvironmentLightingData? prepared) =>
-        _environmentPreparation = new(world, revision, play, ready, failed, prepared);
+    internal void ShowEnvironmentPreparation(Guid world, ulong revision, Guid play, bool ready, bool failed, EnvironmentLightingData? prepared, EditorSceneSourceStamp? authoring=null) =>
+        _environmentPreparation = new(world, revision, play, ready, failed, prepared, authoring);
 
     internal string EnvironmentPreparationStatus
     {
         get {
             var play = workspace.Owner.Play;
-            var world = play?.Document.World ?? workspace.Owner.Document.World;
-            if (_environmentPreparation is not { } state || state.World != world.Identity || state.Revision != world.Revision || state.Play != (play?.SessionId ?? Guid.Empty))
+            var world = play?.Scene.World;
+            if (_environmentPreparation is not { } state || state.Play != (play?.SessionId ?? Guid.Empty) ||
+                (world is null ? state.Authoring is not {} source || !source.Matches(workspace.Owner) : state.Authoring is not null || state.World != world.Identity || state.Revision != world.Revision))
                 return "环境准备：等待当前版本";
             string prefix = play is null ? "环境准备：" : "环境准备（Play，编辑冻结）：";
             if (state.Failed) return prefix + "失败；视口已清空，详见控制台";

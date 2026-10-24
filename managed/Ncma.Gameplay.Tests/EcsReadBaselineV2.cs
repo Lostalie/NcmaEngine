@@ -1,4 +1,4 @@
-// v2 measurement-only fork. Keep timed operations identical to v1; source parity is tested.
+// E6 adaptation retaining v2 memory telemetry; historical paired-source parity is not claimed.
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -6,7 +6,8 @@ using Ncma.Editor.Core;
 using Ncma.Runtime;
 using Ncma.Scene;
 
-// E4-E/current-only cohort. Never JIT this path against the E2-B common reference.
+// E6 diagnostic: query workloads own runtime state; editor workloads use authoring data.
+// Frozen E5 workload shapes are retained, not historical paired-source parity or acceptance.
 internal static class EcsReadBaselineV2
 {
     private readonly record struct Marker(int Value) : IComponent;
@@ -19,10 +20,10 @@ internal static class EcsReadBaselineV2
         return new { p50 = P(.5), p95 = P(.95), p99 = P(.99), max = sorted[^1] };
     }
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    internal static void Run(bool measured, Action<string, int, SceneDocument> verified)
+    internal static void Run(bool measured, Action<string, int, EcsDiagnosticState> verified)
     {
         if (measured) Console.WriteLine(JsonSerializer.Serialize(new {
-            kind = "ecs_e5_environment", schema = 2, utc = DateTimeOffset.UtcNow,
+            kind = "ecs_e6_environment", schema = 3, historicalPairedContractCompatible = false, utc = DateTimeOffset.UtcNow,
             runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
             architecture = RuntimeInformation.ProcessArchitecture.ToString(), cpuCount = Environment.ProcessorCount,
             stopwatchFrequency = Stopwatch.Frequency, serverGc = System.Runtime.GCSettings.IsServerGC,
@@ -44,14 +45,18 @@ internal static class EcsReadBaselineV2
             var registry = ComponentRegistry.CreateDefault();
             registry.Register<Marker>("e5.marker", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":false}""", v => v);
-            var doc = new SceneDocument("E5 read fixture", registry); var world = doc.World;
-            for (int i = 0; i < count; ++i)
-            {
-                var entity = world.CreateEntity("Object " + i, Id(i));
-                world.Set(entity, TransformData.Identity with { Position = new(i, 0, 0) });
-                if (i % 2 == 0) world.Set(entity, new Marker(i));
-            }
+            var doc = new SceneDocument("E5 read fixture", registry);
+            doc.RestoreSnapshot(new(1, doc.Name, Enumerable.Range(0, count).Select(i => {
+                var components = new List<ComponentSnapshot> {
+                    new("ncma.transform", 1, registry.Encode(TransformData.Identity with { Position = new(i, 0, 0) })) };
+                if (i % 2 == 0) components.Add(new("e5.marker", 1, registry.Encode(new Marker(i))));
+                return new SceneObjectData(Id(i), "Object " + i, components.ToArray(), []);
+            }).ToArray()));
             byte[] snapshot = doc.CaptureBytes();
+            // Explicit cold runtime derivation for query workloads; never an authoring mirror.
+            var runtime = doc.BakeRuntime(doc.Revision).Image.Instantiate(registry);
+            var world = runtime.World; var checkpoint = runtime.CaptureCheckpoint();
+            bool runtimeQuery = name.StartsWith("query_", StringComparison.Ordinal);
             bool mixed = name is "query_mixed_warm" or "query_membership_rebuild";
             EntityQuery query = mixed ? world.Query<TransformData, Marker>() : world.Query<TransformData>();
             _ = query.Count;
@@ -68,8 +73,8 @@ internal static class EcsReadBaselineV2
                     if (markerPresent) Check(world.Remove<Marker>(first)); else world.Set(first, new Marker(0));
                     markerPresent = !markerPresent;
                 }
-                if (name == "query_restore_rebuild") doc.RestoreBytes(snapshot);
-                if (name == "editor_page_cold") world.Rename(world.FindEntity(Id(0)), "Cold " + setup);
+                if (name == "query_restore_rebuild") runtime.RestoreCheckpoint(checkpoint, runtime.Revision);
+                if (name == "editor_page_cold") doc.RenameObject(Id(0), "Cold " + setup);
                 if (name.StartsWith("editor_", StringComparison.Ordinal))
                 {
                     bool detail = name == "editor_object_warm";
@@ -103,7 +108,8 @@ internal static class EcsReadBaselineV2
                 {
                     var objects = result.Data.GetProperty("scene").GetProperty("objects");
                     Check(result.Data.GetProperty("totalCount").GetInt32() == count &&
-                        result.Data.GetProperty("worldId").GetGuid() == world.Identity &&
+                        result.Data.GetProperty("model").GetString() == "ncma.authoring-scene" && result.Data.GetProperty("modelVersion").GetInt32() == 1 &&
+                        result.Data.GetProperty("documentSessionId").GetGuid() == doc.SessionId && result.Data.GetProperty("documentRevision").GetUInt64() == doc.Revision &&
                         objects.GetArrayLength() == Math.Min(128, count - offset));
                     int index = offset;
                     foreach (var item in objects.EnumerateArray()) Check(item.GetProperty("id").GetGuid() == Id(index++));
@@ -130,7 +136,8 @@ internal static class EcsReadBaselineV2
             {
                 using var process = Process.GetCurrentProcess(); process.Refresh();
                 Console.WriteLine(JsonSerializer.Serialize(new {
-                    kind = "ecs_e5_sample", schema = 2, workload = name, objects = count, sceneBytes = snapshot.Length,
+                    kind = "ecs_e6_sample", schema = 3, historicalPairedContractCompatible = false, workload = name, objects = count, sceneBytes = runtimeQuery ? checkpoint.CopyBytes().Length : snapshot.Length,
+                    stateFormat = runtimeQuery ? RuntimeSceneImage.Format : "ncma.authoring-scene", stateVersion = 1,
                     warmup, samples, operationsPerSample = 1, ms = Distribution(times),
                     allocatedThreadBytes = Distribution(allocations), rawMs = times, rawAllocatedThreadBytes = allocations,
                     gcCollections = collections, managedBeforeBytes = managedBefore, managedAfterBytes = managedAfter,
@@ -140,7 +147,9 @@ internal static class EcsReadBaselineV2
                 }));
             }
             Check(edit.State.UndoCount == 0 && edit.State.RedoCount == 0);
-            verified(name, count, doc);
+            if (runtimeQuery) Check(snapshot.SequenceEqual(doc.CaptureBytes()));
+            else Check(checkpoint.CopyBytes().SequenceEqual(runtime.CaptureCheckpoint().CopyBytes()));
+            verified(name, count, runtimeQuery ? EcsDiagnosticState.FromRuntime(runtime) : EcsDiagnosticState.FromAuthoring(doc));
         }
         Console.WriteLine($"E5 read fixture checks: {(measured ? 27 : 9)} passed; measured={measured}.");
     }

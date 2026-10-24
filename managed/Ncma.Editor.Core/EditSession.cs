@@ -16,9 +16,13 @@ public sealed partial class EditSession
     private sealed record Entry(byte[] Before, byte[] After, string Label, string Capability, Guid? Target,
         Guid? BeforeSelection, Guid? AfterSelection, FileContext? BeforeFile, FileContext? AfterFile, CommandImpact Impact,
         ParticipantEntry? Participant = null)
-    { public int Bytes => checked(Before.Length + After.Length + (Participant?.Bytes ?? 0)); }
+    {
+        public int Bytes => checked(Before.Length + After.Length + (Participant?.Bytes ?? 0));
+        public Guid[] DestructiveTargets { get; init; } = [];
+    }
     private sealed record Cached(string Fingerprint, CapabilityResult Result, string Permission, Guid? Target, CommandImpact Impact,
-        ParticipantEntry? Participant = null);
+        ParticipantEntry? Participant = null)
+    { public Guid[] DestructiveTargets { get; init; } = []; }
     private sealed record Draft(Guid Token, ulong Revision, Guid? Selection, string Label, JsonElement Input);
     private readonly SceneDocument _document;
     private readonly Dictionary<string, CapabilityDescriptor> _capabilities;
@@ -75,7 +79,7 @@ public sealed partial class EditSession
     {
         _document.VerifyAccess();
         if (_invoking || InteractionBusy) throw new InvalidOperationException("Finish the interaction before selecting.");
-        if (objectId is Guid id) _ = _document.World.FindEntity(id);
+        if (objectId is Guid id) if (!_document.ContainsObject(id)) throw new ArgumentException("Unknown authoring object UUID.");
         _selection = objectId;
     }
     public void SetFrozen(bool frozen)
@@ -127,9 +131,10 @@ public sealed partial class EditSession
             if (_cache.TryGetValue(request.RequestId, out var cached))
             {
                 if (cached.Fingerprint != fingerprint) return Result(request, "conflict", "request_id_reused", false, new { });
-                if (!permissions.Allows(cached.Permission, cached.Target) || !permissions.InScope(cached.Impact)) return Result(request, "denied", "permission_denied", false, new { });
+                if (!permissions.Allows(cached.Permission, cached.Target) || !permissions.InScope(cached.Impact) ||
+                    !DestructiveAllowed(permissions, cached.DestructiveTargets)) return Result(request, "denied", "permission_denied", false, new { });
                 if (cached.Participant is not null)
-                    using (_document.World.ReadOnly()) cached.Participant.Owner.Authorize(cached.Participant.Memento);
+                    using (_document.ReadOnly()) cached.Participant.Owner.Authorize(cached.Participant.Memento);
                 return cached.Result with { Revision = Revision, Replayed = true,
                     Data = JsonSerializer.SerializeToElement(new { history = State, execution = cached.Result.Data }, OutputJson) };
             }
@@ -161,8 +166,7 @@ public sealed partial class EditSession
             target = Uuid(request.Input, "objectId");
             if (!permissions.Allows(request.Capability, target) || !permissions.ObjectAllowed(target.Value))
                 return Result(request, "denied", "target_not_authorized", false, new { });
-            if (!Exists(candidate, target.Value)) throw new ArgumentException("Unknown object UUID.");
-            candidate = candidate with { Objects = candidate.Objects.Where(o => o.Id != target).ToArray() };
+            candidate = DeleteOriginalObject(candidate, target.Value);
             label = "Delete GameObject";
         }
         else
@@ -185,20 +189,24 @@ public sealed partial class EditSession
     }
     private CapabilityResult Commit(CapabilityRequest request, string fingerprint, SceneDocumentSnapshot candidate,
         byte[] before, string label, string capability, Guid? target, Guid? selection,
-        FileContext? replacementFile = null, CapabilityPermissions? permissions = null, ParticipantEntry? participant = null, CapabilityRequest? impactRequest = null)
+        FileContext? replacementFile = null, CapabilityPermissions? permissions = null, ParticipantEntry? participant = null, CapabilityRequest? impactRequest = null,
+        Guid[]? destructiveTargets = null, string? expectedAfterHash = null, CommandImpact? requiredImpact = null)
     {
         byte[] after = [];
         Action install = _document.PrepareRestore(candidate, request.ExpectedRevision, normalized => after = SceneDocumentCodec.Encode(normalized));
+        if (expectedAfterHash is not null && Hash(after) != expectedAfterHash) throw new EditRejectedException("batch_normalization_changed");
+        var deleted = destructiveTargets is null ? [] : (Guid[])destructiveTargets.Clone();
         permissions ??= CapabilityPermissions.ReadOnly;
         var impact = RequestedImpact(impactRequest ?? request, Impact(before, after, _selection, selection, replacementFile is not null));
-        if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
+        if (requiredImpact is not null) impact = MergeImpact(impact, requiredImpact);
+        if (!permissions.Allows(capability, target) || !permissions.InScope(impact) || !DestructiveAllowed(permissions, deleted)) throw new EditRejectedException("scope_denied");
         if (before.AsSpan().SequenceEqual(after) && (replacementFile is null || replacementFile == _file) &&
             (participant is null || participant.Memento.Before.AsSpan().SequenceEqual(participant.Memento.After)))
-            return Remember(request, fingerprint, Result(request, "ok", "no_change", false, new { history = State }), capability, target, impact, participant);
+            return Remember(request, fingerprint, Result(request, "ok", "no_change", false, new { history = State }), capability, target, impact, participant, deleted);
         string hash = Hash(after);
         FileContext file = replacementFile ?? _file;
         var entry = new Entry(before, after, label, capability, target, _selection, selection,
-            replacementFile is null ? null : _file, replacementFile, impact, participant);
+            replacementFile is null ? null : _file, replacementFile, impact, participant) { DestructiveTargets = deleted };
         if (entry.Bytes > MaxHistoryBytes) throw new ArgumentException("Command exceeds history budget.");
         var history = _history.Take(_cursor).Append(entry).ToArray();
         int bytes = history.Sum(e => e.Bytes);
@@ -208,10 +216,10 @@ public sealed partial class EditSession
         ulong next = checked(Revision + 1);
         var state = StateFor(next, history, history.Length, hash, file, selection) with { EditBusy = false };
         var result = Result(request, "ok", "ok", true, new { history = state }, next);
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, capability, target, impact, participant));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, capability, target, impact, participant) { DestructiveTargets = deleted });
         ulong generation = impact.DocumentReplacement ? checked(DocumentGeneration + 1) : DocumentGeneration;
-        if (!permissions.Allows(capability, target) || !permissions.InScope(impact)) throw new EditRejectedException("scope_denied");
-        InstallWithParticipant(participant, true, install, () => permissions.Allows(capability, target) && permissions.InScope(impact));
+        if (!permissions.Allows(capability, target) || !permissions.InScope(impact) || !DestructiveAllowed(permissions, deleted)) throw new EditRejectedException("scope_denied");
+        InstallWithParticipant(participant, true, install, () => permissions.Allows(capability, target) && permissions.InScope(impact) && DestructiveAllowed(permissions, deleted));
         // History/results were prepared before installation. Only the trusted participant's durable
         // completion ran afterward; failure freezes the session instead of reporting a rollback.
         _history = history; _cursor = history.Length; _knownRevision = next; _currentHash = hash;
@@ -225,7 +233,7 @@ public sealed partial class EditSession
         int index = undo ? _cursor - 1 : _cursor;
         if (index < 0 || index >= _history.Length) return Result(request, "error", "history_empty", false, new { });
         Entry entry = _history[index];
-        if (!permissions.Allows(entry.Capability, entry.Target)) return Result(request, "denied", "permission_denied", false, new { });
+        if (!permissions.Allows(entry.Capability, entry.Target) || !DestructiveAllowed(permissions, entry.DestructiveTargets)) return Result(request, "denied", "permission_denied", false, new { });
         if (!permissions.InScope(entry.Impact)) return Result(request, "denied", "history_scope_denied", false, new { });
         byte[] after = [];
         Action install = _document.PrepareRestore(SceneDocumentCodec.Decode(undo ? entry.Before : entry.After),
@@ -238,19 +246,19 @@ public sealed partial class EditSession
         var file = (undo ? entry.BeforeFile : entry.AfterFile) ?? _file;
         ulong next = checked(Revision + 1);
         var result = Result(request, "ok", "ok", true, new { history = StateFor(next, _history, cursor, hash, file, selection) }, next);
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, entry.Capability, entry.Target, entry.Impact, entry.Participant));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, entry.Capability, entry.Target, entry.Impact, entry.Participant) { DestructiveTargets = entry.DestructiveTargets });
         ulong generation = entry.Impact.DocumentReplacement ? checked(DocumentGeneration + 1) : DocumentGeneration;
-        if (!permissions.Allows(entry.Capability, entry.Target) || !permissions.InScope(entry.Impact)) throw new EditRejectedException("history_scope_denied");
-        InstallWithParticipant(entry.Participant, !undo, install, () => permissions.Allows(entry.Capability, entry.Target) && permissions.InScope(entry.Impact));
+        if (!permissions.Allows(entry.Capability, entry.Target) || !permissions.InScope(entry.Impact) || !DestructiveAllowed(permissions, entry.DestructiveTargets)) throw new EditRejectedException("history_scope_denied");
+        InstallWithParticipant(entry.Participant, !undo, install, () => permissions.Allows(entry.Capability, entry.Target) && permissions.InScope(entry.Impact) && DestructiveAllowed(permissions, entry.DestructiveTargets));
         DocumentGeneration = generation;
         _cursor = cursor; _knownRevision = next; _currentHash = hash; _selection = selection; _file = file;
         _cache = cache.Values; _cacheOrder = cache.Order;
         return result;
     }
     private CapabilityResult Remember(CapabilityRequest request, string fingerprint, CapabilityResult result, string permission, Guid? target, CommandImpact impact,
-        ParticipantEntry? participant = null)
+        ParticipantEntry? participant = null, Guid[]? destructiveTargets = null)
     {
-        var cache = PrepareCache(request.RequestId, new(fingerprint, result, permission, target, impact, participant));
+        var cache = PrepareCache(request.RequestId, new(fingerprint, result, permission, target, impact, participant) { DestructiveTargets = destructiveTargets ?? [] });
         _cache = cache.Values; _cacheOrder = cache.Order; return result;
     }
     private (Dictionary<Guid, Cached> Values, Queue<Guid> Order) PrepareCache(Guid id, Cached value)
@@ -312,13 +320,13 @@ public sealed partial class EditSession
             case "set_component":
                 Closed(operation, ["op", "objectId", "typeId", "version", "data"], ["op", "objectId", "typeId", "version", "data"]);
                 var component = new ComponentSnapshot(Text(operation, "typeId"), operation.GetProperty("version").GetInt32(), operation.GetProperty("data").Clone());
-                if (!_document.World.Components.Describe().Any(c => c.TypeId == component.TypeId && c.Version == component.Version))
+                if (!_document.Components.Describe().Any(c => c.TypeId == component.TypeId && c.Version == component.Version))
                     throw new ArgumentException("Unknown component type/version.");
                 item = item with { Components = item.Components.Where(c => c.TypeId != component.TypeId).Append(component).ToArray() }; break;
             case "remove_component":
                 Closed(operation, ["op", "objectId", "typeId"], ["op", "objectId", "typeId"]);
                 string typeId = Text(operation, "typeId");
-                if (!_document.World.Components.Describe().Any(c => c.TypeId == typeId)) throw new ArgumentException("Unknown component type.");
+                if (!_document.Components.Describe().Any(c => c.TypeId == typeId)) throw new ArgumentException("Unknown component type.");
                 item = item with { Components = item.Components.Where(c => c.TypeId != typeId).ToArray() }; break;
             case "set_bindings":
                 Closed(operation, ["op", "objectId", "bindings"], ["op", "objectId", "bindings"]);

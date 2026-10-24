@@ -48,8 +48,28 @@ typedef uint32_t (NCMA_CALL *NcmaReadGpuWorkSampleV1)(uint64_t,uint64_t,uint32_t
 typedef struct NcmaRendererWorkTimingApiV1 {
     uint32_t struct_size,version;uint64_t capabilities;NcmaReadGpuWorkSampleV1 read;
 } NcmaRendererWorkTimingApiV1;
+/* Optional query21/v1, domains1/2/3. Current slot AND last resolved result in
+   one owner-thread snapshot, <=3 DONOTFLUSH polls total, no allocation/wait.
+   Queries19/20 keep their current-slot semantics.
+   last_resolved is Unavailable until a query resolves as Valid/Disjoint/Invalid;
+   includes invalid resolutions, never silently substitutes an earlier valid one.
+   Failed/Abandoned remain visible in current; do not erase the historical result.
+   One copied result per domain, NOT a history or a promise of complete coverage.
+   A new Begin cannot erase it; another resolution replaces it. Consumers dedup
+   by generation/domain/sequence, retain source metadata, and report gaps.
+   Retirement of a skin/UI owner retains the copy but grants no resource access.
+   New renderer generation resets both slots. Both observed_frame fields describe
+   the read horizon, not completion time. Main resource/content_revision are zero. */
+typedef struct NcmaGpuTimingSnapshotV1 {
+    NcmaGpuWorkSampleV1 current,last_resolved;
+} NcmaGpuTimingSnapshotV1;
+typedef uint32_t (NCMA_CALL *NcmaReadGpuTimingSnapshotV1)(uint64_t,uint64_t,uint32_t,NcmaGpuTimingSnapshotV1*,NcmaErrorV1*);
+typedef struct NcmaRendererTimingSnapshotApiV1 {
+    uint32_t struct_size,version;uint64_t capabilities;NcmaReadGpuTimingSnapshotV1 read;
+} NcmaRendererTimingSnapshotApiV1;
 #ifdef __cplusplus
 static_assert(sizeof(NcmaGpuSampleV1)==72&&sizeof(NcmaRendererTimingApiV1)==24);
 static_assert(sizeof(NcmaGpuWorkSampleV1)==88&&sizeof(NcmaRendererWorkTimingApiV1)==24);
+static_assert(sizeof(NcmaGpuTimingSnapshotV1)==176&&sizeof(NcmaRendererTimingSnapshotApiV1)==24);
 #endif
 #endif

@@ -21,7 +21,8 @@ internal static unsafe partial class Program
         using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,64,64);
         using var cook=new EnvironmentCookService(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),()=>true);
         var package=cook.Cook(Guid.NewGuid(),1,HdrEnvironmentSource.Neutral(Guid.NewGuid()),new(8,4,8,64));
-        var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
+        var fixture=new SceneGpuFixture(output);var(authoring,camera,_,_)=fixture.Scene();var authoringBytes=authoring.CaptureBytes();
+        var document=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));
         document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
         global::Ncma.Runtime.Entity environment=document.World.CreateEntity("Environment");document.World.Set(environment, new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true));
@@ -40,7 +41,7 @@ internal static unsafe partial class Program
         }
         try {
             scene.PrepareEnvironmentView(64,64,camera);Check(renderer.PipelineStats.Pipelines==1,"initial pipeline");
-            var original=Draw();var snapshot=document.CaptureBytes();var originalPlan=scene.Plan;var resourceStats=renderer.ResourceStats;
+            var original=Draw();var snapshot=document.CaptureCheckpoint().CopyBytes();var originalPlan=scene.Plan;var resourceStats=renderer.ResourceStats;
             Pass(original.Distinct().Count()>4,"reference scene has nonempty pixels");FailCandidate();
             Pass(scene.ResourceExchangeStatus is{RecoveryRequired:true,Closing:false,CandidateRetained:true,Failure:SceneResourceExchangeFailure.CandidateRetirement}&&ReferenceEquals(scene.Plan,originalPlan),"failure stops submission without discarding old plan or candidate");
             Reject(()=>scene.Submit(frame++,64,64,camera,target:target));Reject(()=>scene.PrepareEnvironmentView(64,64,camera));Reject(()=>scene.RefreshEnvironment(assets,()=>true));
@@ -57,7 +58,7 @@ internal static unsafe partial class Program
             Pass(!scene.ResourceExchangeStatus.RecoveryRequired&&!scene.ResourceExchangeStatus.CandidateRetained&&scene.Plan is null&&renderer.PipelineStats.Pipelines==0,"explicit approved off-frame recovery drains both pipeline generations");
             Reject(()=>scene.Submit(frame++,64,64,camera,target:target));
             fault=false;scene.PrepareEnvironmentView(64,64,camera);
-            Pass(original.SequenceEqual(Draw())&&snapshot.SequenceEqual(document.CaptureBytes()),"reprepare reproduces exact original image without World mutation");
+            Pass(original.SequenceEqual(Draw())&&snapshot.SequenceEqual(document.CaptureCheckpoint().CopyBytes()),"reprepare reproduces exact original image without World mutation");
             Pass(renderer.ResourceStats.Creates==resourceStats.Creates&&renderer.ResourceStats.UploadedBytes==resourceStats.UploadedBytes,"recovery retains immutable geometry/material/texture generation");
             FailCandidate();Reject(scene.Dispose);
             Pass(scene.ResourceExchangeStatus is{RecoveryRequired:true,Closing:true,CandidateRetained:true},"failed close retains candidate and becomes close-only");
@@ -79,6 +80,7 @@ internal static unsafe partial class Program
                 Pass(original.SequenceEqual(pixels)&&plain.PreparedEnvironment==enabled,"explicit environment refresh after recovery restores exact reference image");
             }
             target.Dispose();Pass(renderer.ResourceStats.Targets==0&&renderer.ResourceStats.Materials==0&&renderer.ResourceStats.Textures==0&&renderer.SceneStats.LiveMeshes==0&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"complete resource drain and API0/0");
+            Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()),"runtime exchanges never mutate authoring source");
             File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new{cases,apiErrors=0,apiWarnings=0,realBusy=true,deviceLossRecovery=false,fullStageAccepted=false}));
             Console.WriteLine($"PASS M7.6 scene exchange {cases} checks; API0/0; {output}");return 0;
         } finally {
@@ -103,7 +105,8 @@ internal static unsafe partial class Program
         bool fault=false,fired=false,pendingFrame=false;ulong frame=1;ulong faultPipelineCount=2;
         bool Approved(){if(fault&&!fired&&renderer.PipelineStats.Pipelines==faultPipelineCount){fired=true;renderer.SubmitResources(frame++,[],new(0,0,64,64),Vector4.Zero,new(Vector3.Zero,Vector3.UnitY,Vector4.Zero));pendingFrame=true;return false;}return true;}
         using var runtime=new PostProcessRuntime(renderer,files,library,PostProcessModules.Official(),Approved);
-        var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
+        var fixture=new SceneGpuFixture(output);var(authoring,camera,_,_)=fixture.Scene();var authoringBytes=authoring.CaptureBytes();
+        var document=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});
         global::Ncma.Runtime.Entity settings=document.World.CreateEntity("Post");document.World.Set(settings, PostProcessData.Off with{Enabled=true,StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new(Levels:2,Threshold:0,Intensity:.8f))])});
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
@@ -111,7 +114,7 @@ internal static unsafe partial class Program
         using var scene=new SceneRenderSession(renderer,cache,document.World);scene.Prepare(assets,document.CaptureSnapshot(),postProcessing:runtime);
         byte[] Draw(){var pixels=new byte[64*64*4];scene.Submit(frame++,64,64,camera,target:target);renderer.CaptureTarget(target,pixels);renderer.Present();return pixels;}
         try {
-            scene.PrepareEnvironmentView(64,64,camera);var original=Draw();var snapshot=document.CaptureBytes();var installed=scene.Plan;
+            scene.PrepareEnvironmentView(64,64,camera);var original=Draw();var snapshot=document.CaptureCheckpoint().CopyBytes();var installed=scene.Plan;
             Pass(scene.IsPostProcessReady&&renderer.PostStats.Bindings==1,"initial actual Bloom binding");fault=true;
             AggregateException? failure=null;try{scene.PrepareEnvironmentView(32,32,camera);}catch(AggregateException error){failure=error;}
             Pass(fired&&failure?.InnerExceptions.Count==2&&failure.InnerExceptions[1] is PluginException{Result:PluginResult.Busy},"post preparation and cleanup failures both reported");
@@ -120,7 +123,7 @@ internal static unsafe partial class Program
             renderer.Present();pendingFrame=false;scene.RecoverResourceExchange(()=>true);
             Pass(renderer.PipelineStats.Pipelines==0&&renderer.PostStats.Bindings==0&&renderer.PostStats.ResidentBytes==0,"recovery drains all retained pipelines and post targets");
             fault=false;scene.PrepareEnvironmentView(64,64,camera);
-            Pass(scene.IsPostProcessReady&&original.SequenceEqual(Draw())&&snapshot.SequenceEqual(document.CaptureBytes()),"fresh post preparation restores exact image without world/history mutation");
+            Pass(scene.IsPostProcessReady&&original.SequenceEqual(Draw())&&snapshot.SequenceEqual(document.CaptureCheckpoint().CopyBytes()),"fresh post preparation restores exact image without world/history mutation");
             scene.Submit(frame++,64,64,camera,target:target);pendingFrame=true;Reject(scene.Dispose);
             Pass(scene.ResourceExchangeStatus is{Closing:true,RecoveryRequired:true,CandidateRetained:false}&&renderer.PipelineStats.Pipelines==1,"installed-pipeline close Busy retains ownership and blocks recovery-as-resume");
             renderer.Present();pendingFrame=false;Reject(()=>scene.RecoverResourceExchange(()=>true));scene.Dispose();
@@ -148,7 +151,8 @@ internal static unsafe partial class Program
                     Pass(!startup.HasRetainedProbe&&renderer.PipelineStats.Pipelines==0&&renderer.PostStats.Bindings==0,"fresh startup owner passes complete original preflight");
                 }
             }
-            Pass(snapshot.SequenceEqual(document.CaptureBytes())&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"startup failure/retry preserves exact document and API0/0");
+            Pass(snapshot.SequenceEqual(document.CaptureCheckpoint().CopyBytes())&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"startup failure/retry preserves exact document and API0/0");
+            Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()),"runtime exchanges never mutate authoring source");
             File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new{cases,apiErrors=0,apiWarnings=0,deviceLossRecovery=false,fullStageAccepted=false}));
             Console.WriteLine($"PASS M7.6 post exchange {cases} checks; API0/0; {output}");return 0;
         }finally{if(pendingFrame)renderer.Present();}

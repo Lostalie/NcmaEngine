@@ -15,6 +15,24 @@ static void Until(Func<bool> condition, Action progress, int timeoutMs = 10000)
 }
 try
 {
+if (args.Any(a => a.StartsWith("--ecs-e5-mcp-cost", StringComparison.Ordinal)))
+{
+    if (args.Length != 3 || args[0] is not ("--ecs-e5-mcp-cost-smoke" or "--ecs-e5-mcp-cost-measure"))
+        throw new ArgumentException("E5-D MCP costs require mode, contract path and fresh absolute output directory.");
+    return EcsMcpCosts.Run(Path.GetFullPath(args[1]), args[2], args[0] == "--ecs-e5-mcp-cost-measure");
+}
+if (args.Any(a => a.StartsWith("--ecs-e5-pipe-history", StringComparison.Ordinal)))
+{
+    if (args.Length != 3 || args[0] is not ("--ecs-e5-pipe-history-smoke" or "--ecs-e5-pipe-history-measure"))
+        throw new ArgumentException("E5-D pipe history requires mode, contract path and fresh absolute output directory.");
+    return EcsPipeHistoryCosts.Run(Path.GetFullPath(args[1]), args[2], args[0] == "--ecs-e5-pipe-history-measure");
+}
+if (args.Any(a => a.StartsWith("--ecs-e5-pipe-cost", StringComparison.Ordinal)))
+{
+    if (args.Length != 3 || args[0] is not ("--ecs-e5-pipe-cost-smoke" or "--ecs-e5-pipe-cost-measure"))
+        throw new ArgumentException("E5-D pipe costs require mode, contract path and fresh absolute output directory.");
+    return EcsPipeCosts.Run(Path.GetFullPath(args[1]), args[2], args[0] == "--ecs-e5-pipe-cost-measure");
+}
 if (args.Length == 2 && args[0] == "--live")
 {
     RunMcp(args[1], true, () => { });
@@ -23,7 +41,7 @@ if (args.Length == 2 && args[0] == "--live")
 }
 Schema.Adversarial();
 string root = Path.GetFullPath(".");
-var doc = new SceneDocument("Pipe test"); global::Ncma.Runtime.Entity obj = doc.World.CreateEntity("Original");
+var doc = new SceneDocument("Pipe test"); Guid obj = doc.CreateObject("Original");
 var edit = new EditSession(doc); using var endpoint = new EditorEndpoint(edit, root);
 var descriptor = Wire.Decode<EndpointDescriptor>(File.ReadAllBytes(endpoint.DescriptorPath));
 using var client = new NamedPipeClientStream(".", descriptor.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
@@ -43,7 +61,7 @@ var responseTask = Wire.ReadAsync(client, CancellationToken.None);
 Until(() => responseTask.IsCompleted, () => endpoint.Pump());
 var result = Wire.Decode<IpcResponse>(responseTask.Result!);
 Check(result.Result!.Value.GetProperty("data").GetProperty("scene").GetProperty("objects")[0].GetProperty("name").GetString() == "Original", "Not the active committed scene");
-var rename = new CapabilityRequest(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.transaction", Json(new { operations = new[] { new { op = "rename", objectId = doc.World.GetUuid(obj), name = "User changed" } } }));
+var rename = new CapabilityRequest(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.transaction", Json(new { operations = new[] { new { op = "rename", objectId = obj, name = "User changed" } } }));
 Check(edit.Invoke(rename, new(["ncma.scene.transaction"])).Changed, "Trusted user mutation failed");
 request = request with { RequestId = Guid.NewGuid(), ExpectedRevision = edit.Revision };
 Wire.WriteAsync(client, Wire.Encode(new IpcRequest("invoke", 1, Json(request))), CancellationToken.None).GetAwaiter().GetResult();
@@ -144,6 +162,12 @@ Check(Task.Run(() => { try { endpoint.Pump(); return false; } catch (InvalidOper
 Concurrency.Run(root);
 Lifetimes.Run(root);
 EcsReadTransportCases.Run(root);
+EcsPipeCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-domain-contract.json"),
+    Path.Combine(root, "out", "verification", "ecs-e5d", "pipe-smoke-" + Guid.NewGuid().ToString("N")), false);
+EcsPipeHistoryCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-domain-contract.json"),
+    Path.Combine(root, "out", "verification", "ecs-e5d", "history-smoke-" + Guid.NewGuid().ToString("N")), false);
+EcsMcpCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-mcp-contract.json"),
+    Path.Combine(root, "out", "verification", "ecs-e5d", "mcp-smoke-" + Guid.NewGuid().ToString("N")), false);
 endpoint.Dispose(); Check(!File.Exists(endpoint.DescriptorPath), "Owned discovery descriptor leaked");
 Console.WriteLine("Local IPC owner-thread pairing, active document, default read-only, shutdown and real stdio subprocess passed.");
 return 0;
@@ -188,7 +212,7 @@ static void RunMcp(string descriptorPath, bool live, Action progress)
         var inspected = Call("ncma.scene.inspect", new { }); var revision = inspected.GetProperty("revision").GetUInt64();
         var objects = inspected.GetProperty("data").GetProperty("scene").GetProperty("objects"); Check(objects.GetArrayLength() > 0, "Live scene is empty");
         var warmPage = Call("ncma.scene.inspect", new { offset = 0, limit = 1 }, revision);
-        Check(warmPage.GetProperty("status").GetString() == "ok" && warmPage.GetProperty("data").GetProperty("worldId").GetGuid() == inspected.GetProperty("data").GetProperty("worldId").GetGuid() &&
+        Check(warmPage.GetProperty("status").GetString() == "ok" && warmPage.GetProperty("data").GetProperty("documentSessionId").GetGuid() == inspected.GetProperty("data").GetProperty("documentSessionId").GetGuid() &&
             warmPage.GetProperty("data").GetProperty("scene").GetProperty("objects")[0].GetProperty("id").GetGuid() == objects[0].GetProperty("id").GetGuid(), "E4-E actual stdio warm page changed world/order");
         Check(Call("ncma.scene.inspect", new { limit = 129 }, revision).GetProperty("code").GetString() == "invalid_input", "E4-E stdio bypassed page budget");
         Console.WriteLine("E4-E real MCP stdio bounded warm scene reads passed.");

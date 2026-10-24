@@ -65,8 +65,8 @@ public static class CharacterComponents
         return registry;
     }
     private static readonly ComponentRegistry Decoder = Register(ComponentRegistry.CreateDefault());
-    public static bool HasPhysics(SceneDocumentSnapshot s) => s.Objects.Any(o => o.Components.Any(c => c.TypeId is CharacterData.TypeId or BoxColliderData.TypeId));
-    public static void RequireComposition(SceneDocumentSnapshot snapshot)
+    public static bool HasPhysics(ISceneContent s) => s.Objects.Any(o => o.Components.Any(c => c.TypeId is CharacterData.TypeId or BoxColliderData.TypeId));
+    public static void RequireComposition(ISceneContent snapshot)
     {
         SceneRenderValidation.RequireComposition(snapshot); var objects = snapshot.Objects.ToDictionary(o => o.Id); int characters = 0, controlled = 0, boxes = 0;
         foreach (var obj in snapshot.Objects)

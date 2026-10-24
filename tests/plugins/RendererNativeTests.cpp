@@ -7,6 +7,7 @@
 #include <numbers>
 #include <limits>
 static void Check(bool value,const char* message){if(!value)throw std::runtime_error(message);}
+#include "ClosedShaderReferenceTests.inl"
 #include "EnvironmentGpuNativeTests.inl"
 #include "EnvironmentSceneNativeTests.inl"
 #include "PostProcessNativeTests.inl"
@@ -15,9 +16,11 @@ static void Check(bool value,const char* message){if(!value)throw std::runtime_e
 #include "RendererDiagnosticNativeTests.inl"
 #include "RendererTimingNativeTests.inl"
 #include "RendererWorkTimingNativeTests.inl"
+#include "RendererTimingSnapshotNativeTests.inl"
 int main(int argc,char** argv) {
     try{
         if(argc!=2)return 2;
+        CheckClosedShaderReferences();
         const auto path=std::filesystem::path(argv[1]);
         HMODULE library=LoadLibraryExW(path.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
         Check(library!=nullptr,"Platform load failed.");
@@ -66,6 +69,25 @@ int main(int argc,char** argv) {
         NcmaPlugin::failHandleAllocation=false;
         Check(failedRendererIdentity==NCMA_INTERNAL_ERROR&&handle==0&&!renderer,"Renderer identity failure before window borrow/device creation");
         Check(api.create_renderer(renderModule,&desc,&handle,&error)==0,"Renderer create");
+        {
+            NcmaRendererResourceLedgerApiV1 ledger{};
+            Check(latest.query_scene_render(renderModule,22,&ledger,sizeof(ledger),&error)==NCMA_OK&&ledger.version==1&&ledger.capabilities==1,"Resource ledger negotiation");
+            const auto skinBefore=renderer->skinSample,uiBefore=renderer->uiSample;
+            const auto mainBefore=renderer->gpuSample;
+            NcmaRendererResourceLedgerV1 snapshot{};
+            for(int i=0;i<32;i++)Check(ledger.read(renderModule,handle,&snapshot,sizeof(snapshot),&error)==NCMA_OK,"Resource ledger repeated read");
+            Check(snapshot.struct_size==152&&snapshot.version==1&&snapshot.generation==handle&&snapshot.flags==0&&snapshot.reserved==0,"Resource ledger layout/generation");
+            for(int i=0;i<8;i++)Check(snapshot.logical_bytes[i]==0&&snapshot.live_resources[i]==0,"Empty logical counters");
+            Check(!renderer->meshKernel&&!renderer->resourceKernel&&!renderer->skinKernel&&!renderer->ui&&renderer->scenePipelines.empty()&&renderer->environments.empty(),"Ledger initializes no domain");
+            Check(std::memcmp(&skinBefore,&renderer->skinSample,sizeof(skinBefore))==0&&std::memcmp(&uiBefore,&renderer->uiSample,sizeof(uiBefore))==0&&std::memcmp(&mainBefore,&renderer->gpuSample,sizeof(mainBefore))==0,"Ledger does not resolve GPU timing");
+            renderer->active=true;Check(ledger.read(renderModule,handle,&snapshot,sizeof(snapshot),&error)==NCMA_OK&&snapshot.flags==4,"Read active frame without submit/present");renderer->active=false;
+            renderer->failed=true;Check(ledger.read(renderModule,handle,&snapshot,sizeof(snapshot),&error)==NCMA_OK&&snapshot.flags==2,"Retained fail-stop counters readable");renderer->failed=false;
+            busy=true;Check(ledger.read(renderModule,handle,&snapshot,sizeof(snapshot),&error)==NCMA_BUSY,"Ledger native nonreentry");busy=false;
+            Check(ledger.read(renderModule+1,handle,&snapshot,sizeof(snapshot),&error)==NCMA_INVALID_HANDLE,"Ledger foreign module");
+            uint32_t foreign=NCMA_OK;std::thread worker([&]{NcmaErrorV1 local{};NcmaRendererResourceLedgerV1 value{};foreign=ledger.read(renderModule,handle,&value,sizeof(value),&local);});worker.join();
+            Check(foreign==NCMA_WRONG_THREAD,"Ledger native owner thread");
+            std::cout<<"Resource ledger native ABI/state/non-initializing/timing invariance passed\n";
+        }
         GraphicsHandleFailureTests(renderModule,handle);
         EnvironmentGpuNativeTests(renderModule,handle);
         EnvironmentSceneNativeTests(renderModule,handle);
@@ -85,7 +107,7 @@ int main(int argc,char** argv) {
         NcmaUiTargetApiV1 uiTargets{};
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets)-1,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==72,"Short UI target API");
         Check(latest.query_scene_render(renderModule,7,&uiTargets,sizeof(uiTargets),&error)==NCMA_OK&&uiTargets.version==1&&uiTargets.capabilities==7,"UI target API negotiation");
-        Check(latest.query_scene_render(renderModule,21,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
+        Check(latest.query_scene_render(renderModule,23,&scene,sizeof(scene),&error)==NCMA_ABI_MISMATCH,"Unknown scene service version");
         NcmaShaderApiV1 shaders{};
         Check(latest.query_scene_render(renderModule,8,&shaders,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short shader API");
         Check(latest.query_scene_render(renderModule,8,&shaders,32,&error)==NCMA_OK&&shaders.version==1&&shaders.capabilities==1&&shaders.compile&&shaders.validate_preparation,"Shader query8 actual API");
@@ -486,6 +508,7 @@ int main(int argc,char** argv) {
         RendererDiagnosticNativeTests(latest,renderModule,desc);
         RendererTimingNativeTests(latest,renderModule,desc);
         RendererWorkTimingNativeTests(latest,renderModule,desc);
+        RendererTimingSnapshotNativeTests(latest,renderModule,desc);
         {
             NcmaRendererFrameApiV1 frames{};
             Check(latest.query_scene_render(renderModule,17,&frames,31,&error)==NCMA_BUFFER_TOO_SMALL&&error.required_bytes==32,"Short frame lifecycle API");

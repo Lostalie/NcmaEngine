@@ -49,13 +49,14 @@ internal static unsafe partial class Program
         Bad(() => defaults.Build(settings, 0, 64, _ => throw new Exception("bad size resolved resources")));
         var registry = ComponentRegistry.CreateDefault(); PostProcessData.Register(registry);
         var document = new SceneDocument("Post policy", registry, scene => _ = ScenePostProcessState.Read(scene));
-        global::Ncma.Runtime.Entity obj = document.World.CreateEntity("Settings"); document.World.Set(obj, normalized);
+        Guid obj = document.CreateObject("Settings"); document.SetComponent(obj, normalized);
         byte[] bytes = document.CaptureBytes(); var cloneRegistry = ComponentRegistry.CreateDefault(); PostProcessData.Register(cloneRegistry);
         var clone = new SceneDocument("Copy", cloneRegistry, scene => _ = ScenePostProcessState.Read(scene)); clone.RestoreBytes(bytes);
-        Pass(ScenePostProcessState.Read(clone.CaptureSnapshot()) == normalized && ScenePostProcessState.Read(clone.World, clone.World.Identity) == normalized, "scene roundtrip and flat value");
-        Bad(() => ScenePostProcessState.Read(clone.World, Guid.NewGuid()));
-        using (SceneEnvironmentState.BeginRead(clone.World, clone.World.Identity)) Bad(() => clone.World.CreateEntity("forbidden"));
-        clone.World.Set(clone.World.CreateEntity("Duplicate Off"), PostProcessData.Off); Bad(() => ScenePostProcessState.Read(clone.World, clone.World.Identity)); Bad(() => clone.ValidateAuthoring());
+        var runtime=BakeRenderScene(clone);
+        Pass(ScenePostProcessState.Read(clone.CaptureSnapshot()) == normalized && ScenePostProcessState.Read(runtime.World, runtime.World.Identity) == normalized, "scene roundtrip and flat value");
+        Bad(() => ScenePostProcessState.Read(runtime.World, Guid.NewGuid()));
+        using (SceneEnvironmentState.BeginRead(runtime.World, runtime.World.Identity)) Bad(() => runtime.World.CreateEntity("forbidden"));
+        runtime.World.Set(runtime.World.CreateEntity("Duplicate Off"), PostProcessData.Off); Bad(() => ScenePostProcessState.Read(runtime.World, runtime.World.Identity)); clone.SetComponent(clone.CreateObject("Duplicate Off"),PostProcessData.Off);Bad(() => clone.ValidateAuthoring());
         Exception? owner = null; var thread = new Thread(() => { try { defaults.Validate(settings); } catch(Exception e) { owner=e; } }); thread.Start(); thread.Join(); Pass(owner is InvalidOperationException, "module owner thread");
 
         var repo = new DirectoryInfo(Path.GetFullPath(plugins)); while (!File.Exists(Path.Combine(repo.FullName,"Build.bat"))) repo=repo.Parent??throw new Exception("Repo missing");

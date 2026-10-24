@@ -10,13 +10,13 @@ internal static partial class Program
     private static void RegisterShadowSelectionTests(List<(string,Action)> tests)
     {
         tests.Add(("shadow-absence-explicit-selection-roundtrip",()=>{
-            var d=Document();Check(SceneShadowState.Read(d.CaptureSnapshot()) is null&&SceneShadowState.Read(d.World,d.World.Identity) is null);
+            var d=Document();var empty=Bake(d);Check(SceneShadowState.Read(d.CaptureSnapshot()) is null&&SceneShadowState.Read(empty.World, empty.World.Identity) is null);
             foreach(var quality in Enum.GetValues<SceneShadowQuality>()){
-                global::Ncma.Runtime.Entity obj=d.World.CreateEntity("Shadow policy");d.World.Set(obj, new SceneShadowData(1,quality));d.ValidateAuthoring();
-                Check(!d.World.Has<TransformData>(obj)&&SceneShadowState.Read(d.World,d.World.Identity)==new SceneShadowData(1,quality));
+                Guid obj=d.CreateObject("Shadow policy");d.SetComponent(obj, new SceneShadowData(1,quality));d.ValidateAuthoring();
+                var runtime=Bake(d);Check(!d.HasComponent<TransformData>(obj)&&SceneShadowState.Read(runtime.World,runtime.World.Identity)==new SceneShadowData(1,quality));
                 string path=Path.Combine(OutputRoot(),Guid.NewGuid()+".ncmascene");SceneDocumentFiles.Save(d,path);var copy=Document();SceneDocumentFiles.Load(copy,path);
                 Check(copy.CaptureBytes().AsSpan().SequenceEqual(d.CaptureBytes())&&SceneShadowState.Read(copy.CaptureSnapshot())==new SceneShadowData(1,quality));
-                d.World.Remove<SceneShadowData>(obj);Check(SceneShadowState.Read(d.CaptureSnapshot()) is null);
+                d.RemoveComponent<SceneShadowData>(obj);Check(SceneShadowState.Read(d.CaptureSnapshot()) is null);
             }
         }));
         tests.Add(("shadow-strict-format-values",()=>{
@@ -27,12 +27,12 @@ internal static partial class Program
             Reject(()=>SceneShadowData.Validate(new(1,(SceneShadowQuality)100)));Reject(()=>registry.Decode<SceneShadowData>(new(SceneShadowData.TypeId,2,registry.Encode(SceneShadowData.Default))));
         }));
         tests.Add(("shadow-singleton-off-and-atomic-rejection",()=>{
-            var d=Document();d.World.Set(d.World.CreateEntity("First"), new SceneShadowData(1,SceneShadowQuality.Off));var s=d.CaptureSnapshot();
+            var d=Document();d.SetComponent(d.CreateObject("First"), new SceneShadowData(1,SceneShadowQuality.Off));var s=d.CaptureSnapshot();
             var duplicate=s.Objects[0] with{Id=Guid.NewGuid()};AtomicReject(d,s with{Objects=[s.Objects[0],duplicate]});
-            d.World.Set(d.World.CreateEntity("Second"), SceneShadowData.Default);Reject(()=>SceneShadowState.Read(d.World,d.World.Identity));Reject(d.ValidateAuthoring);
+            d.SetComponent(d.CreateObject("Second"), SceneShadowData.Default);Reject(()=>SceneShadowState.Read(d.CaptureSnapshot()));Reject(d.ValidateAuthoring);
         }));
         tests.Add(("shadow-original-scoped-transaction-history",()=>{
-            var d=Document();Guid id=d.World.GetUuid(d.World.CreateEntity("Policy"));var edit=new EditSession(d);var initial=d.CaptureBytes();
+            var d=Document();Guid id=d.CreateObject("Policy");var edit=new EditSession(d);var initial=d.CaptureBytes();
             object Input(SceneShadowQuality quality)=>new{operations=new[]{new{op="set_component",objectId=id,typeId=SceneShadowData.TypeId,version=1,data=new{version=1,quality=(int)quality}}}};
             CapabilityRequest Request(SceneShadowQuality quality)=>new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",Element(Input(quality)));
             var command=Request(SceneShadowQuality.High);Check(edit.Invoke(command).Status=="denied");Check(!edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[Guid.NewGuid()],componentScope:[SceneShadowData.TypeId])).Changed);
@@ -44,7 +44,7 @@ internal static partial class Program
             ulong revision=edit.Revision;_=edit.Invoke(command,grant);Check(edit.Revision==revision&&edit.State.UndoCount==1&&high.AsSpan().SequenceEqual(d.CaptureBytes()));
         }));
         tests.Add(("shadow-committed-owner-and-identity",()=>{
-            var d=Document();d.World.Set(d.World.CreateEntity("Policy"), SceneShadowData.Default);Reject(()=>SceneShadowState.Read(d.World,Guid.NewGuid()));
+            var d=Runtime();d.World.Set(d.World.CreateEntity("Policy"), SceneShadowData.Default);Reject(()=>SceneShadowState.Read(d.World,Guid.NewGuid()));
             Check(Task.Run(()=>{try{SceneShadowState.Read(d.World,d.World.Identity);return false;}catch(InvalidOperationException){return true;}}).GetAwaiter().GetResult());
             var runner=new WorldRunner(d.World);runner.AddSystem(new ActionSystem(_=>Reject(()=>SceneShadowState.Read(d.World,d.World.Identity))));runner.Advance(1d/60);Check(!runner.IsFaulted);
         }));

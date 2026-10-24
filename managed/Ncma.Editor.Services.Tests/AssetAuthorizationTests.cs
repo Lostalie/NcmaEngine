@@ -116,7 +116,7 @@ internal static class AssetAuthorizationTests
             f.Click(20, subWidget, 1); f.Build(); f.Click(21, 1); f.Build(); f.Click(21, 2, 1); f.Build(); f.Click(21, 3);
             Check(f.Call(f.Sub).Status == "ok" && f.Call(f.Hidden).Code == "asset_not_visible");
             f.Build(); f.Click(21, 4); Check(f.Call(f.Root).Code == "asset_not_visible" && f.Call(f.Sub).Code == "asset_not_visible");
-            Check(f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Document.World.Count == 0);
+            Check(f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Document.ObjectCount == 0);
         });
         yield return ("M3.8 asset UI grant revokes on audience and asset/document changes", () => {
             using var f = new Fixture(output); using var one = Pair(f); var review = f.Controller.Capture([f.Root]); f.Controller.Approve(review, review.Fingerprint, true);
@@ -156,7 +156,7 @@ internal static class AssetAuthorizationTests
                 var result = Send(Call(3, "ncma.assets.inspect", input)).GetProperty("result"); Check(!result.GetProperty("isError").GetBoolean() && !result.GetRawText().Contains("PRIVATE"));
                 f.Build(); f.Click(21, 4); Check(Send(Call(4, "ncma.assets.inspect", input)).GetProperty("result").GetProperty("structuredContent").GetProperty("code").GetString() == "asset_not_visible");
                 requestId = Guid.NewGuid(); var mutation = Send(Call(5, "ncma.assets.import.commit", new { ticket = Guid.NewGuid(), expectedAssetRevision = f.Owner.Assets!.Clock.Revision, projectGeneration = 1, confirmNewIdentities = true })).GetProperty("result");
-                Check(mutation.GetProperty("isError").GetBoolean() && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Document.World.Count == 0);
+                Check(mutation.GetProperty("isError").GetBoolean() && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Document.ObjectCount == 0);
             }
             finally { process.StandardInput.Close(); if (!process.WaitForExit(5000)) process.Kill(true); }
             Check(process.ExitCode == 0 && errors.GetAwaiter().GetResult().Length == 0);

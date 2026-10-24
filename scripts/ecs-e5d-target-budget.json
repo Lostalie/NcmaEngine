@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-d-human-target-v1",
+  "humanConfirmed": true,
+  "hardwareClass": ["NVIDIA GeForce GTX 1060 6GB", "AMD Radeon RX 580 8GB"],
+  "equivalentHardwareRequiresEvidence": true,
+  "output": { "width": 1920, "height": 1080 },
+  "internalRenderScale": { "nativeAllowed": true, "native": 1.0, "optionalReducedMinimum": 0.75, "optionalReducedMaximum": 0.85 },
+  "qualityPreset": "Low",
+  "frameRateCap": 30,
+  "thresholds": { "averageFpsMinimum": 30, "onePercentLowFpsMinimum": 27, "singleHitchMillisecondsMaximum": 80 },
+  "workload": "representative gameplay path; content, duration, warmup, camera/input sequence and metric definitions must be frozen before formal measurement",
+  "rules": [
+    "preserve human thresholds; no inferred rounding allowance or tolerance",
+    "report presentation intervals including frame pacing separately from CPU/GPU work",
+    "do not substitute CPU microbenchmarks, paused presentation or higher-tier local GPU results for target hardware acceptance",
+    "do not hide gameplay asset loads, transitions or slow frames by deleting samples",
+    "fix the chosen permitted internal scale before a cohort; no best-run selection or post-hoc metric redefinition"
+  ],
+  "representativePathFrozen": false,
+  "metricDefinitionsFrozen": false,
+  "targetHardwareVerified": false,
+  "performanceAccepted": false,
+  "memoryAcceptance": "pending"
+}

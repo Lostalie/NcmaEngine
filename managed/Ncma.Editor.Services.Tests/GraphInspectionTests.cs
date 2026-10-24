@@ -97,7 +97,7 @@ internal static class GraphInspectionTests
             foreach(string page in new[]{"montage","montageSlots","montageSections"})Check(f.Call("ncma.animgraph.inspect",new{graphId=f.Graph,section=page},Guid.NewGuid()).GetProperty("isError").GetBoolean());
             f.ApproveUi();using(var locked=new FileStream(f.File,FileMode.Open,FileAccess.Read,FileShare.None))foreach(string page in new[]{"montage","montageSlots","montageSections"}){
                 var result=f.Call("ncma.animgraph.inspect",new{graphId=f.Graph,section=page,offset=0,limit=1},Guid.NewGuid());Check(!result.GetProperty("isError").GetBoolean());var data=result.GetProperty("structuredContent").GetProperty("data");Check(data.GetProperty("items").GetArrayLength()==1&&data.GetProperty("nextOffset").ValueKind==JsonValueKind.Null);}
-            f.Graphs.Revoke();Check(f.Call("ncma.animgraph.inspect",new{graphId=f.Graph,section="montageSections"},Guid.NewGuid()).GetProperty("isError").GetBoolean());Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&f.Owner.Edit!.State.UndoCount==0&&f.Owner.Document.World.Tick==0);
+            f.Graphs.Revoke();Check(f.Call("ncma.animgraph.inspect",new{graphId=f.Graph,section="montageSections"},Guid.NewGuid()).GetProperty("isError").GetBoolean());Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&f.Owner.Edit!.State.UndoCount==0&&f.Owner.Play is null);
         });
         yield return ("M6.2 real stdio graph tools + trusted visible review/default-denied + no tick IO", () => {
             using var f = new Fixture(output, repository); byte[] before = f.Owner.Document.CaptureBytes(); var history = f.Owner.Edit!.State;

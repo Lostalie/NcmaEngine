@@ -25,7 +25,7 @@ internal static unsafe partial class Program
         byte[]? reference=null;Guid originalWorld;
         using(var app=new ApplicationLifetime()) {
             var editor=new CandidatePresentation(plugins,ProjectContext.Load(projectPath),true,false,false);
-            app.Start([editor]);originalWorld=editor.VerificationEditor.Document.World.Identity;
+            app.Start([editor]);originalWorld=OwnedEditProjection(editor).Scene.World.Identity;
             var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
             var surface=EnvironmentProductEvidence.Field<RendererWindowSurface>(editor,"_windowSurface");
             Reject(editor.AbandonFrameForShutdown);Pass(app.State==ApplicationState.Running,"running Editor cannot abandon a frame");
@@ -55,7 +55,7 @@ internal static unsafe partial class Program
             byte[]? restored=null;editor.CaptureNextCompositeViewportForVerification((pixels,_,_)=>restored=pixels);
             Pass(app.Run(new MonotonicClock(),editor,2)==2&&reference is not null&&restored is not null&&reference.SequenceEqual(restored),"fresh approved startup reproduces exact viewport after failed generation drains");
             var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
-            Pass(editor.VerificationEditor.Document.World.Identity!=originalWorld&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"new managed World; old owner cannot access new renderer; API0/0");
+            Pass(OwnedEditProjection(editor).Scene.World.Identity!=originalWorld&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"new managed World; old owner cannot access new renderer; API0/0");
             app.Dispose();Pass(app.State==ApplicationState.Stopped&&app.Failure is null&&app.RetainedServiceCount==0,"normal application startup/run/close remains clean");
         }
         using(var app=new ApplicationLifetime()) {

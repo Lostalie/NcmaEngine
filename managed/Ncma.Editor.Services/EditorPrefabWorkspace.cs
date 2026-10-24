@@ -7,7 +7,7 @@ namespace Ncma.Editor.Services;
 
 // Inspection evidence only. Not a command ticket, file grant or publishable instance.
 // CandidateBytes excludes the future membership/OverrideSet data; publication must revalidate.
-public sealed record PrefabPlacementInspection(EditorViewStamp Stamp, Guid WorldId, string TemplateHash,
+public sealed record PrefabPlacementInspection(EditorViewStamp Stamp, Guid DocumentSessionId, string TemplateHash,
     int CandidateBytes, int ReservedOperations, PrefabExpansionPreview Preview);
 
 // Trusted local edit-host service, not an MCP tool. No file IO, live writes or second history.
@@ -21,7 +21,7 @@ public sealed class EditorPrefabWorkspace
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _policy = policy ?? throw new ArgumentNullException(nameof(policy));
-        if (!ReferenceEquals(policy.Components, workspace.Owner.Document.World.Components))
+        if (!ReferenceEquals(policy.Components, workspace.Owner.Document.Components))
             throw new ArgumentException("Prefab policy must use the edit document's registry.");
     }
 
@@ -51,7 +51,7 @@ public sealed class EditorPrefabWorkspace
         {
             // Exact UUIDs are supplied by the trusted local review, not an Agent's claimed approval.
             var result = PrefabTemplates.Extract(document, ids, scope, _policy, prefabId, name, pivot,
-                stamp.Revision, document.World.Identity);
+                stamp.Revision, document.SessionId);
             Require(stamp);
             return result;
         }
@@ -68,7 +68,7 @@ public sealed class EditorPrefabWorkspace
         try
         {
             var document = _workspace.Owner.Document;
-            using var read = document.World.ReadOnly();
+            using var read = document.ReadOnly();
             var prefab = PrefabDocumentCodec.Decode(templateBytes, _policy);
             if (prefab.BaseVersion != expectedBaseVersion) throw new EditRejectedException("prefab_template_stale");
             string hash = Convert.ToHexString(SHA256.HashData(PrefabDocumentCodec.Encode(prefab, _policy)));
@@ -89,7 +89,7 @@ public sealed class EditorPrefabWorkspace
             isolated.RestoreSnapshot(source with { Objects = source.Objects.Concat(preview.Objects).ToArray() });
             int bytes = isolated.CaptureBytes().Length;
             Require(stamp);
-            return new(stamp, document.World.Identity, hash, bytes, reserved, preview);
+            return new(stamp, document.SessionId, hash, bytes, reserved, preview);
         }
         finally { _inspecting = false; }
     }

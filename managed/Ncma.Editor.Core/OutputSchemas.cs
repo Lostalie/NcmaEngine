@@ -14,8 +14,8 @@ public sealed partial class EditSession
         string data = capability switch
         {
             "ncma.scene.inspect" => """
-            {"type":"object","required":["worldId","tick","totalCount","offset","limit","scene"],"properties":{
-              "worldId":{"type":"string","format":"uuid"},"tick":{"type":"integer","minimum":0},"totalCount":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1},
+            {"type":"object","required":["model","modelVersion","documentSessionId","documentRevision","totalCount","offset","limit","scene"],"properties":{
+              "model":{"const":"ncma.authoring-scene"},"modelVersion":{"const":1},"documentSessionId":{"type":"string","format":"uuid"},"documentRevision":{"type":"integer","minimum":0},"totalCount":{"type":"integer","minimum":0},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1},
               "scene":{"type":"object","required":["version","name","objects"],"properties":{"version":{"const":1},"name":{"type":"string"},"objects":{"type":"array","items":{"type":"object","required":["id","name","components","behaviours"],
                 "properties":{"id":{"type":"string","format":"uuid"},"name":{"type":"string"},"components":{"type":"array","items":{"type":"object","required":["typeId","version"],"properties":{"typeId":{"type":"string"},"version":{"type":"integer"}}}},
                 "behaviours":{"type":"array","items":{"type":"object","required":["id","typeName","enabled","exportCount"],"properties":{"id":{"type":"string"},"typeName":{"type":"string"},"enabled":{"type":"boolean"},"exportCount":{"type":"integer"}}}}}}}}}}}

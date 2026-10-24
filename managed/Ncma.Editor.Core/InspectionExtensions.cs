@@ -2,8 +2,8 @@ using System.Text.Json;
 namespace Ncma.Editor.Core;
 public sealed partial class EditSession
 {
-    // Original 16, independent environment catalog, and registered post module catalog.
-    public const int MaxRegisteredInspections = 18;
+    // Original 16, environment/post catalogs, and two E6 committed runtime read capabilities.
+    public const int MaxRegisteredInspections = 20;
     private readonly Dictionary<string,Func<JsonElement,object>> _inspections = new(StringComparer.Ordinal);
     // Prevalidate a trusted startup batch before registering any descriptor.
     public void RegisterInspections((CapabilityDescriptor Descriptor, Func<JsonElement,object> Inspect)[] entries)
@@ -36,7 +36,7 @@ public sealed partial class EditSession
     private CapabilityResult InspectExtension(CapabilityRequest request)
     {
         object value;
-        using(_document.World.ReadOnly()) value=_inspections[request.Capability](request.Input);
+        using(_document.ReadOnly()) value=_inspections[request.Capability](request.Input);
         if(JsonSerializer.SerializeToUtf8Bytes(value,OutputJson).Length>256*1024-4096)
             return Result(request,"error","item_too_large",false,new{});
         return Result(request,"ok","ok",false,value);

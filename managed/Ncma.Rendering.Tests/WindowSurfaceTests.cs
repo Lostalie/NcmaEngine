@@ -114,9 +114,10 @@ internal static unsafe partial class Program
             editor.Dispose();Pass(surface.Status.Phase==RenderWindowPhase.Closed&&surface.Status.Failure==fault,"Editor orderly shutdown releases GUI pin before both targets");Reject(()=>_=target.ImageToken);Reject(()=>_=pending.ImageToken);
         }
         using(var pins=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true))
-        using(var owner=new RuntimeSessionOwner(document))
+        using(var owner=new RuntimeSessionOwner())
         using(var player=new PlayerPresentation(plugins,false)) {
-            player.Start();player.PrepareBeforeGameplay(document,pins);owner.LoadGameplay(Path.Combine(fixture.Root,"gameplay.dll"));var play=owner.StartPlay();player.BindScene(play,pins,camera);
+            var runtimeScene=document.BakeRuntime(document.Revision).Image.Instantiate(document.Components);
+                player.Start();player.PrepareBeforeGameplay(runtimeScene,pins);owner.LoadGameplay(Path.Combine(fixture.Root,"gameplay.dll"),runtimeScene);var play=owner.StartPlay(runtimeScene);player.BindScene(play,pins,camera);
             var window=EnvironmentProductEvidence.Field<PlatformWindow>(player,"_window");var state=window.State;state.Focused=1;
             player.ProcessInput(play,state,[]);byte[]? baseline=null;player.Present(play,(p,_,_)=>baseline=p);var before=player.Stats;
             state.Minimized=1;state.FramebufferWidth=state.FramebufferHeight=0;state.Held[1]=1UL<<(87%64); // forced focus/held W while hidden

@@ -15,7 +15,8 @@ internal sealed class RelocatedPresentationCosts(UiPublicationProductEvidence ev
         evidence.Pass(report.IncludesDiagnosticCapture, "relocated screenshot marked diagnostic");
         _diagnostics.Add((report.Generation, report.HostFrame));
         if (!report.Completed)
-            evidence.Pass(report.Counters is null && report.Main is null && report.Skin is null && report.Ui is null,
+            evidence.Pass(report.Counters is null && report.Main is null && report.Skin is null && report.Ui is null &&
+                report.MainResolved is null && report.SkinResolved is null && report.UiResolved is null,
                 "failed presentation never reuses successful cost counters or GPU samples");
     }
 
@@ -54,6 +55,9 @@ internal sealed class RelocatedPresentationCosts(UiPublicationProductEvidence ev
             Sample(report, report.Main, GpuTimingDomain.MainSubmissionBeforePresent);
             Sample(report, report.Skin, GpuTimingDomain.SkinDispatch);
             Sample(report, report.Ui, GpuTimingDomain.UiProduction);
+            Sample(report, report.MainResolved, GpuTimingDomain.MainSubmissionBeforePresent);
+            Sample(report, report.SkinResolved, GpuTimingDomain.SkinDispatch);
+            Sample(report, report.UiResolved, GpuTimingDomain.UiProduction);
         }
         object? Origin(AttributedGpuCost? value) => value is { } sample ? new
         {
@@ -67,7 +71,8 @@ internal sealed class RelocatedPresentationCosts(UiPublicationProductEvidence ev
         {
             label, frames = reports.Length, hostCpuMilliseconds = milliseconds, hostOwnerAllocatedBytes = allocated,
             hostScope = "test host draw callback plus reading copied report; excludes startup/simulation; no capture/wait",
-            reports, origins = reports.Select(r => new { main = Origin(r.Main), skin = Origin(r.Skin), ui = Origin(r.Ui) }).ToArray(),
+            reports, origins = reports.Select(r => new { main = Origin(r.Main), skin = Origin(r.Skin), ui = Origin(r.Ui),
+                mainResolved=Origin(r.MainResolved),skinResolved=Origin(r.SkinResolved),uiResolved=Origin(r.UiResolved) }).ToArray(),
             fullPerformanceAccepted = false
         });
     }

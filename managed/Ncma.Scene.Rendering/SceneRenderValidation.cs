@@ -34,8 +34,8 @@ public sealed class PreparedSceneAssets
 public static class SceneRenderValidation
 {
     private static readonly ComponentRegistry Registry = RenderComponentRegistry.CreateRegistry();
-    public static void RequireComposition(SceneDocumentSnapshot snapshot) => _ = Inspect(snapshot);
-    public static IReadOnlyList<SceneRenderDiagnostic> Inspect(SceneDocumentSnapshot snapshot,
+    public static void RequireComposition(ISceneContent snapshot) => _ = Inspect(snapshot);
+    public static IReadOnlyList<SceneRenderDiagnostic> Inspect(ISceneContent snapshot,
         PreparedSceneAssets? assets = null, bool strictMissing = false, AssetCatalog? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot); bool validateActionReferences=assets is not null; assets ??= PreparedSceneAssets.Empty;

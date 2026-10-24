@@ -8,17 +8,17 @@ internal sealed partial class RuntimeCommandBuffer
 {
     public StructuralSubmission SubmitBatch(ReadOnlySpan<StructuralCommand> commands)
     {
-        session.Document.VerifyAccess();
+        session.Scene.VerifyAccess();
         bool entered = false;
         try
         {
-            session.Document.World.VerifyWriteAccess();
-            if (!_active || !session.Document.World.IsUpdating || _submitting)
+            session.Scene.World.VerifyWriteAccess();
+            if (!_active || !session.Scene.World.IsUpdating || _submitting)
                 throw new InvalidOperationException("Structural batches require a non-reentrant fixed-step callback.");
             if (commands.Length == 0 || commands.Length > Capacity - _pending.Count || (ulong)commands.Length > ulong.MaxValue - _sequence)
                 throw new ArgumentException("Structural batch command budget exceeded.");
             _submitting = true; entered = true;
-            var world = session.Document.World;
+            var world = session.Scene.World;
             var copied = new StructuralCommand[commands.Length];
             var targets = new Guid[commands.Length];
             var componentBytes = new int[commands.Length];
@@ -59,7 +59,7 @@ internal sealed partial class RuntimeCommandBuffer
                     case StructuralCommand.Attach c:
                         target = Target(c.Target, i); ArgumentNullException.ThrowIfNull(c.Binding);
                         if (string.IsNullOrWhiteSpace(c.Binding.TypeName) || c.Binding.TypeName.Length > 512 ||
-                            c.Binding.Exports is null || c.Binding.Exports.Length > SceneDocumentValidator.MaxExportsPerBinding ||
+                            c.Binding.Exports is null || c.Binding.Exports.Length > BehaviourBindingRules.MaxExportsPerBinding ||
                             c.Binding.Exports.Any(e => e is null || string.IsNullOrWhiteSpace(e.Name) || e.Name.Length > 128))
                             throw new ArgumentException("Invalid binding payload budget.");
                         size += SceneJson.EncodeBounded(c.Binding, PayloadBytes - _bytes - bytes).Length;
@@ -97,7 +97,7 @@ internal sealed partial class RuntimeCommandBuffer
             }, snapshot =>
             {
                 // Exact complete-document and normalized batch budgets share the checked candidate encoding.
-                _ = session.Document.PrepareRuntimeStep(snapshot, bindings);
+                _ = session.Scene.PrepareRuntimeStep(snapshot, bindings);
                 int normalizedBytes = bytes;
                 for (int i = 0; i < copied.Length; ++i)
                     if (copied[i] is StructuralCommand.Add add)
@@ -134,7 +134,7 @@ internal sealed partial class RuntimeCommandBuffer
                 }
             }
         }
-        catch (Exception error) { session.Document.World.RejectStep(error); throw; }
+        catch (Exception error) { session.Scene.World.RejectStep(error); throw; }
         finally { if (entered) _submitting = false; }
     }
 
@@ -145,7 +145,7 @@ internal sealed partial class RuntimeCommandBuffer
 
     private void Apply(StructuralCommand command, Guid id, Dictionary<Guid, BehaviourBindingData[]> bindings)
     {
-        var world = session.Document.World;
+        var world = session.Scene.World;
         switch (command)
         {
             case StructuralCommand.Create c: world.StageCreate(id, c.Name); bindings.Add(id, []); break;

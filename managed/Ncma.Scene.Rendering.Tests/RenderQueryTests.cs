@@ -17,7 +17,7 @@ internal static partial class Program
             Check(extractor.Extract(Assets, Guid.Empty, 800, 600).Geometry.Count == 0);
         }));
         tests.Add(("E4-C singleton counts retain duplicate Off rejection", () => {
-            var w = Document().World;
+            var w = Runtime().World;
             var env = new SceneComponentReader<EnvironmentLightingData>(w);
             var post = new SceneComponentReader<PostProcessData>(w);
             var shadow = new SceneComponentReader<SceneShadowData>(w);
@@ -36,7 +36,7 @@ internal static partial class Program
             w.Destroy(b); Check(SceneShadowState.Read(shadow, w.Identity) is null);
         }));
         tests.Add(("E4-C singleton values are not cached by membership", () => {
-            var w = Document().World; var e = w.CreateEntity("settings"); w.Set(e, SceneShadowData.Default);
+            var w = Runtime().World; var e = w.CreateEntity("settings"); w.Set(e, SceneShadowData.Default);
             var reader = new SceneComponentReader<SceneShadowData>(w); Check(reader.ReadSingle(w.Identity, out var before) == 1);
             ulong membership = w.MembershipVersion;
             w.Set(e, new SceneShadowData(1, SceneShadowQuality.High));
@@ -44,15 +44,15 @@ internal static partial class Program
             Check(before == SceneShadowData.Default);
         }));
         tests.Add(("E4-C reader rejects old resource identity before rebuilding", () => {
-            var w = Document().World; var e = w.CreateEntity("settings"); w.Set(e, SceneShadowData.Default);
+            var w = Runtime().World; var e = w.CreateEntity("settings"); w.Set(e, SceneShadowData.Default);
             var reader = new SceneComponentReader<SceneShadowData>(w); Guid old = w.Identity;
             Check(reader.ReadSingle(old, out _) == 1); var snapshot = w.CaptureSnapshot(); w.RestoreSnapshot(snapshot);
             Reject(() => reader.ReadSingle(old, out _));
             Check(reader.ReadSingle(w.Identity, out var value) == 1 && value == SceneShadowData.Default);
-            var other = Document().World; Reject(() => reader.ReadSingle(other.Identity, out _));
+            var other = Runtime().World; Reject(() => reader.ReadSingle(other.Identity, out _));
         }));
         tests.Add(("E4-C reader owner and committed boundary remain checked", () => {
-            var w = Document().World; var reader = new SceneComponentReader<SceneShadowData>(w); Guid identity = w.Identity;
+            var w = Runtime().World; var reader = new SceneComponentReader<SceneShadowData>(w); Guid identity = w.Identity;
             Check(reader.ReadSingle(identity, out _) == 0);
             Task.Run(() => Reject(() => reader.ReadSingle(identity, out _))).GetAwaiter().GetResult();
             var runner = new WorldRunner(w);
@@ -87,7 +87,7 @@ internal static partial class Program
             Check(readBytes == 0 && bytes == 0); // Reader only, not whole-frame/performance acceptance.
         }));
         tests.Add(("E4-C geometry union preserves creation order and malformed members", () => {
-            var w = Document().World; var query = new SceneGeometryQuery(w);
+            var w = Runtime().World; var query = new SceneGeometryQuery(w);
             var a = w.CreateEntity("skin", Guid.Parse("00000003-0000-0000-0000-000000000000")); w.Set(a, QuerySkin);
             var b = w.CreateEntity("static", Guid.Parse("00000001-0000-0000-0000-000000000000")); w.Set(b, Mesh);
             var c = w.CreateEntity("conflict", Guid.Parse("00000002-0000-0000-0000-000000000000")); w.Set(c, Mesh); w.Set(c, QuerySkin);
@@ -96,7 +96,7 @@ internal static partial class Program
             Check(query.Read(w.Identity).SequenceEqual(new[] { a, c, replacement }));
         }));
         tests.Add(("E4-C mixed geometry structural oracle and restore", () => {
-            var w = Document().World; var query = new SceneGeometryQuery(w); var random = new Random(41020);
+            var w = Runtime().World; var query = new SceneGeometryQuery(w); var random = new Random(41020);
             for (int step = 0; step < 240; step++) {
                 var all = w.GetEntities();
                 if (all.Count == 0 || all.Count < 80 && random.Next(3) == 0) w.CreateEntity("geometry");
@@ -112,7 +112,7 @@ internal static partial class Program
             }
         }));
         tests.Add(("E4-C mixed geometry 4096 union does not duplicate or truncate", () => {
-            var w = Document().World; var query = new SceneGeometryQuery(w); var skin = QuerySkin;
+            var w = Runtime().World; var query = new SceneGeometryQuery(w); var skin = QuerySkin;
             Check(query.Read(w.Identity).Length == 0);
             for (int i = 0; i < World.MaxObjects; i++) {
                 var e = w.CreateEntity("mixed geometry");
@@ -123,7 +123,7 @@ internal static partial class Program
             Check(query.Read(w.Identity).SequenceEqual(w.GetEntities().ToArray()));
         }));
         tests.Add(("E4-C geometry cache is membership-only and warm allocation-free", () => {
-            var d = Document(); var e = Geometry(d); var query = new SceneGeometryQuery(d.World); Guid identity = d.World.Identity;
+            var d = Runtime(); var e = Geometry(d); var query = new SceneGeometryQuery(d.World); Guid identity = d.World.Identity;
             for (int i = 0; i < 512; i++) { query.Read(identity); }
             long start = GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < 4096; i++) Check(query.Read(identity).Length == 1);
@@ -133,7 +133,7 @@ internal static partial class Program
             Check(new RenderSceneExtractor(d.World).Extract(Assets, Camera(d), 800, 600).Geometry.Count == 0);
         }));
         tests.Add(("E4-C extraction retains diagnostic order and invalid light handling", () => {
-            var d = Document(); var w = d.World;
+            var d = Runtime(); var w = d.World;
             var missing = w.CreateEntity("no transform"); w.Set(missing, Mesh);
             var conflict = w.CreateEntity("conflict"); w.Set(conflict, Mesh); w.Set(conflict, QuerySkin);
             var skin = w.CreateEntity("unprepared"); w.Set(skin, QuerySkin);
@@ -143,7 +143,7 @@ internal static partial class Program
             Check(view.Diagnostics.Select(x => x.Code).SequenceEqual(new[] { "camera_missing", "light_invalid", "multiple_primary_lights", "transform_missing", "geometry_conflict", "skinning_unprepared" }));
         }));
         tests.Add(("E4-C frame indices follow creation order after deletion and recreation", () => {
-            var d = Document(); var a = Geometry(d); var b = Geometry(d); var c = Geometry(d);
+            var d = Runtime(); var a = Geometry(d); var b = Geometry(d); var c = Geometry(d);
             Guid camera = Camera(d); Light(d); var assets = Assets; var extractor = new RenderSceneExtractor(d.World);
             Check(extractor.Extract(assets, camera, 800, 600).Geometry.Select(x => x.ObjectId).SequenceEqual(new[] { a, b, c }.Select(d.World.GetUuid)));
             d.World.Destroy(a); var fresh = Geometry(d);

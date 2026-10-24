@@ -3,13 +3,17 @@ using Ncma.Application.Runtime;
 using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Rendering;
+using Ncma.Application;
 namespace Ncma.Player.App;
 
-internal sealed partial class PlayerPresentation(string plugins, bool visible, Func<float,float,bool,RenderPipeline>? pipelineFactory = null, bool presentationCosts=false) : IDisposable
+internal sealed partial class PlayerPresentation(string plugins, bool visible, Func<float,float,bool,RenderPipeline>? pipelineFactory = null, bool presentationCosts=false, Ncma.Application.LoopCostCapture? loopCosts=null,int? frameRateLimit=null,PresentationStageCapture? stages=null,PlayerWindowSize? windowSize=null,WindowMode windowMode=WindowMode.Windowed,RendererMemoryCapture? resourceMemory=null) : IDisposable
 {
     private readonly PluginLoader _loader = new();
     private PlatformWindow? _window;
+    private PlatformPrecisionWait? _precisionWait;
+    internal Ncma.Application.FramePacer? Pacer { get; private set; }
     private RendererSession? _renderer;
+    internal void ObserveResourceMemory(RendererMemoryCheckpoint checkpoint)=>resourceMemory?.Observe(checkpoint,_renderer);
     private RendererWindowSurface? _windowSurface;
     public RenderWindowStatus? SurfaceStatus=>_windowSurface?.Status;
     private RenderPipelineService? _pipeline;
@@ -40,15 +44,27 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     private RendererSession? _costRenderer;
     private PresentationCostCapture? _costCapture;
     public PresentationCostReport? LastPresentationCosts => _costCapture?.Last;
+    private PlayerOutputObservation? _output;
+    internal PlayerOutputReport? CaptureOutput() { VerifyGraphicsAccess(); return _output?.Capture(); }
     public void Start(RuntimeShaderFileSet? shaderFiles = null, RuntimePostProcessLibrary? postLibrary = null, Ncma.Rendering.Scene.PostProcessModules? postModules = null,RuntimeShadowLibrary? shadowLibrary=null)
     {
         VerifyGraphicsAccess();_shaderFiles=shaderFiles;_postLibrary=postLibrary;_postModules=postModules;_shadowLibrary=shadowLibrary;
+        var requested=windowSize ?? PlayerWindowSize.Default;requested.Validate();
+        if(windowMode is not (WindowMode.Windowed or WindowMode.BorderlessPixels))throw new ArgumentOutOfRangeException(nameof(windowMode));
         _loader.Load(plugins, [
-            new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, 0, []),
+            new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, windowMode==WindowMode.BorderlessPixels?2u:frameRateLimit is null?0u:1u, []),
             new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]) ]);
-        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaPlayer — DX11 scene", visible: visible);
+        if(frameRateLimit is int fps) {
+            Ncma.Application.FramePacer.ValidateRate(fps);
+            _precisionWait=new(_loader.Modules.Single(m=>m.Kind==ModuleKind.Platform));
+            Pacer=new(fps,_precisionWait.WaitMicroseconds);
+        }
+        _window = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Platform), "NcmaPlayer — DX11 scene", requested.Width, requested.Height, visible,windowMode);
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory, "NcmaEngine.ico"));
-        _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, 1280, 720);
+        _state = _window.State;
+        var initial=new PlayerWindowSize(_state.FramebufferWidth,_state.FramebufferHeight);initial.Validate();
+        _output=new(requested,initial,windowMode);
+        _renderer = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Renderer), _window, initial.Width, initial.Height);
         _windowSurface=new(_renderer);
         shaderFiles?.InstallSelection(_renderer,()=>!_disposed);
         if(shadowLibrary is not null)_highShadows=shadowLibrary.Prepare(_renderer,shaderFiles??throw new ArgumentException("High shadows require checked scene shader files."),()=>!_disposed);
@@ -56,7 +72,7 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
         _pipeline = new(_renderer);
         _cache = new(_renderer);
     }
-    public void PrepareBeforeGameplay(Ncma.Scene.SceneDocument document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets,Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage=null,SceneUiActions? uiActions=null)
+    public void PrepareBeforeGameplay(Ncma.Scene.RuntimeSceneInstance document,Ncma.Scene.Rendering.PreparedSceneAssetLease assets,Ncma.Ui.Rendering.RuntimeUiPackage? uiPackage=null,SceneUiActions? uiActions=null)
     {
         VerifyGraphicsAccess();_uiPackage=uiPackage;
         if(_environmentPreflight is not null)throw new InvalidOperationException("Startup already prepared.");
@@ -67,20 +83,21 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
         _environmentPreflight.Prepare(document.World,assets,document.CaptureSnapshot(),()=>!_disposed);
         if (uiPackage is not null) {
             uiActions?.Validate(uiPackage.Capture());
-            _ui = new(); _ui.Prepare(uiPackage, _renderer!, plugins, new(1280,720,1,default), interactive:uiActions is not null); _uiActions=uiActions;
+            var state=_window!.State;
+            _ui = new(); _ui.Prepare(uiPackage, _renderer!, plugins, new(state.FramebufferWidth,state.FramebufferHeight,state.ScaleX,default), interactive:uiActions is not null); _uiActions=uiActions;
         }
     }
     public void BindScene(PlaySession play, Ncma.Scene.Rendering.PreparedSceneAssetLease assets, Guid? camera,Ncma.Animation.IRootMotionPresentation? rootMotion=null,Ncma.Scene.Rendering.SceneAnimatorRuntime? animators=null)
     {
         VerifyGraphicsAccess();_boundPlay=play;_rootMotion=rootMotion;_animators=animators;
         if (_scene is not null) throw new InvalidOperationException("Scene already bound.");
-        var snapshot=play.Document.CaptureSnapshot();
+        var snapshot=play.Scene.CaptureSnapshot();
         if(snapshot.Objects.Any(o=>o.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.SkinnedMeshData.TypeId))) {
             string path=Path.Combine(plugins,"NcmaAnimationKernel.dll");
             _poseKernel=new(path,Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),blendSupport:true,layerSupport:true);
         }
-        _scene = new(_renderer!, _cache!, play.Document.World);_scene.Prepare(assets, snapshot,
-            pipelineFactory:Ncma.Rendering.Scene.ScenePipelineStartup.Bind(_renderer!,play.Document.World,pipelineFactory,()=>!_disposed),poseKernel:_poseKernel,play:play,
+        _scene = new(_renderer!, _cache!, play.Scene.World);_scene.Prepare(assets, snapshot,
+            pipelineFactory:Ncma.Rendering.Scene.ScenePipelineStartup.Bind(_renderer!,play.Scene.World,pipelineFactory,()=>!_disposed),poseKernel:_poseKernel,play:play,
             interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),rootMotion:rootMotion,animators:animators,
             environmentPreparationAllowed:()=>!_disposed,postProcessing:_postRuntime,highShadows:_highShadows); _camera = camera ?? Guid.Empty;_assets=assets;
         _environmentPreflight?.Dispose();_environmentPreflight=null;
@@ -126,21 +143,27 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
     public void Present(PlaySession play,Action<byte[],uint,uint>? verificationCapture=null)
     {
         RequireGraphicsReady();
+        stages?.Begin(checked(_frame+1),PresentationCall.Present,verificationCapture is not null);
+        bool completed=false;
         PresentationCostCapture? costs=null;
         try{
+            stages?.Phase(PresentationStage.Observer);
             if(presentationCosts&&_renderer is not null&&RendererWindowSurface.CanPresent(_state)){
                 if(!ReferenceEquals(_costRenderer,_renderer)){_costCapture=new(_renderer);_costRenderer=_renderer;}
                 costs=_costCapture;costs!.Begin(checked(_frame+1),verificationCapture is not null);
             }
-            PresentCore(play,verificationCapture);costs?.End();
+            PresentCore(play,verificationCapture);stages?.Phase(PresentationStage.Observer);costs?.End();completed=true;
         }
         catch(Exception error){costs?.Abort();_windowSurface?.RecordFailure(error);_firstGraphicsFailure??=_windowSurface?.Status.Failure;RememberNativeFailure(error);_graphicsFailed=true;throw;}
+        finally{stages?.End(completed);}
     }
     private void PresentCore(PlaySession play,Action<byte[],uint,uint>? verificationCapture)
     {
+        stages?.Phase(PresentationStage.Surface);
         var renderer=_renderer??throw new InvalidOperationException("Player presentation is not started.");
         if (!_windowSurface!.Prepare(_state)) { _window!.Wait(.01); return; }
-        var world = play.Document.World;
+        stages?.Phase(PresentationStage.ViewPreparation);
+        var world = play.Scene.World;
         if (!ReferenceEquals(_settingsWorld, world)) {
             _configurationReader = new(world); _environmentReader = new(world); _settingsWorld = world;
         }
@@ -160,21 +183,26 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
             // Keep the installed scene intact for orderly disposal, but never present its stale
             // output as the requested settings. The runner records a fault and closes the host.
             try {
+                stages?.Phase(PresentationStage.SceneSubmission);
                 _pipeline!.Configure(RenderConfiguration.Default(play.SessionId) with {PipelineType="ncma.clear.v1"},_state.FramebufferWidth,_state.FramebufferHeight);
                 _pipeline.Submit(frame);
+                stages?.Phase(PresentationStage.DiagnosticCapture);
                 if(verificationCapture is not null){var pixels=new byte[checked((int)(_state.FramebufferWidth*_state.FramebufferHeight*4))];renderer.Capture(pixels);verificationCapture(pixels,_state.FramebufferWidth,_state.FramebufferHeight);}
-                renderer.Present();
+                stages?.Phase(PresentationStage.NativePresent);
+                renderer.Present();loopCosts?.PresentReturned();_output!.Presented(_state.FramebufferWidth,_state.FramebufferHeight);
             } catch(Exception clearFailure) {throw new AggregateException("Scene preparation and fail-closed clear failed.",preparationFailure,clearFailure);}
             throw;
         }
+        stages?.Phase(PresentationStage.SceneSubmission);
         if (!_scene!.Submit(frame, _state.FramebufferWidth, _state.FramebufferHeight, _camera,follow, exposure: config.Exposure, ambient: config.Ambient)) {
             // Empty, culled or missing-camera views clear; never substitute a reference cube.
             _pipeline!.Configure(config with {PipelineType="ncma.clear.v1",ToneExposureOverride=0,FeatureExposure=0,ReplaceToneStage=false},_state.FramebufferWidth,_state.FramebufferHeight);
             _pipeline.Submit(frame);
         }
-        _ui?.Submit(frame);
+        stages?.Phase(PresentationStage.GuiGpu);_ui?.Submit(frame);
+        stages?.Phase(PresentationStage.DiagnosticCapture);
         if(verificationCapture is not null){var pixels=new byte[checked((int)(_state.FramebufferWidth*_state.FramebufferHeight*4))];renderer.Capture(pixels);verificationCapture(pixels,_state.FramebufferWidth,_state.FramebufferHeight);}
-        renderer.Present();
+        stages?.Phase(PresentationStage.NativePresent);renderer.Present();loopCosts?.PresentReturned();_output!.Presented(_state.FramebufferWidth,_state.FramebufferHeight);
     }
     public void Dispose()
     {
@@ -189,7 +217,8 @@ internal sealed partial class PlayerPresentation(string plugins, bool visible, F
         _pipelineStartup?.Dispose();_pipelineStartup=null;_assets=null; _cache?.Dispose(); _cache = null;
         _postRuntime?.Dispose();_postRuntime=null;
         _poseKernel?.Dispose(); _poseKernel=null;
-        _pipeline?.Dispose(); _pipeline = null; _renderer?.Dispose(); _windowSurface?.CompleteShutdown(); _renderer = null;
+        _pipeline?.Dispose(); _pipeline = null; ObserveResourceMemory(RendererMemoryCheckpoint.BeforeRendererClose);_renderer?.Dispose(); _windowSurface?.CompleteShutdown(); _renderer = null;
+        _precisionWait?.Dispose();_precisionWait=null;Pacer=null;
         _window?.Dispose(); _window = null; _loader.Dispose(); _disposed = true;
     }
     internal void AbandonFrameForShutdown()

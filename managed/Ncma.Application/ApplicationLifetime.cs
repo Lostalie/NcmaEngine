@@ -86,11 +86,12 @@ public sealed class ApplicationLifetime : IDisposable
         }
         finally { _busy = false; }
     }
-    public ulong Run(IFrameClock clock, IFramePipeline pipeline, ulong maxFrames)
+    public ulong Run(IFrameClock clock, IFramePipeline pipeline, ulong maxFrames, LoopCostCapture? costs = null, FramePacer? pacer = null)
     {
         Verify();
         if (State != ApplicationState.Running || maxFrames == 0) throw new InvalidOperationException("Running application and positive frame limit required.");
         ArgumentNullException.ThrowIfNull(clock); ArgumentNullException.ThrowIfNull(pipeline);
+        if(costs is not null&&costs.FrameRateLimit!=pacer?.FramesPerSecond)throw new ArgumentException("Pacing observation configuration mismatch.");
         _busy = true;
         var phase=ApplicationFramePhase.Clock;
         try
@@ -100,18 +101,35 @@ public sealed class ApplicationLifetime : IDisposable
             ulong count = 0;
             while (count < maxFrames)
             {
-                phase=ApplicationFramePhase.Platform;if(!pipeline.PumpPlatform())break;
+                costs?.Begin();
+                var outcome=LoopCostOutcome.Faulted;
+                ulong observedFrame=0;
+                try {
+                phase=ApplicationFramePhase.Clock;
+                if(pacer is not null){costs?.Phase(LoopCostPhase.Pacing);pacer.Wait();costs?.PacingAdmitted(pacer.LastAdmissionTimestamp!.Value);}
+                costs?.Phase(LoopCostPhase.Platform);
+                phase=ApplicationFramePhase.Platform;if(!pipeline.PumpPlatform()){outcome=LoopCostOutcome.Stopped;break;}
+                costs?.Phase(LoopCostPhase.Control);
                 phase=ApplicationFramePhase.Clock;
                 double now = clock.Seconds, delta = now - previous;
                 if (!double.IsFinite(now) || !double.IsFinite(delta) || delta < 0) throw new ArgumentException("Clock must be finite and monotonic.");
                 previous = now;
                 var frame = new FrameContext(LastFrameId=checked(LastFrameId+1), delta);count++;
+                observedFrame=frame.FrameId;
+                costs?.Phase(LoopCostPhase.Intents);
                 phase=ApplicationFramePhase.EditorIntents;pipeline.ApplyEditorIntents(frame);
+                costs?.Phase(LoopCostPhase.Agent);
                 phase=ApplicationFramePhase.Agent;pipeline.PumpAgent(frame);
+                costs?.Phase(LoopCostPhase.BeginPresentation);
                 phase=ApplicationFramePhase.BeginPresentation;pipeline.BeginPresentation(frame);
+                costs?.Phase(LoopCostPhase.Input);
                 phase=ApplicationFramePhase.Input;pipeline.SubmitInput(frame);
+                costs?.Phase(LoopCostPhase.Simulation);
                 phase=ApplicationFramePhase.Gameplay;pipeline.AdvancePlay(frame);
+                costs?.Phase(LoopCostPhase.Presentation);
                 phase=ApplicationFramePhase.Present;pipeline.Present(frame);
+                outcome=LoopCostOutcome.Completed;
+                } finally { costs?.End(observedFrame,outcome); }
             }
             return count;
         }

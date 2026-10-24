@@ -22,10 +22,10 @@ public sealed partial class ScenePipelineStartup : IDisposable
     // Validate both shadow variants with real bounded bindings BEFORE gameplay is loaded.
     // Viewport-sized candidates are still validated again; this is not a code sandbox,
     // future-callback guarantee or permission to call a factory inside a simulation tick.
-    public void Prepare(World world, SceneDocumentSnapshot scene,
+    public void Prepare(World world, ISceneContent scene,
         Func<float, float, bool, RenderPipeline>? factory, PostProcessRuntime? post, Func<bool> allowed,PreparedShadowLibrary? highShadows=null)
     {ArgumentNullException.ThrowIfNull(allowed);PrepareOwned(()=>PrepareCore(world,scene,factory,post,()=>Approved(allowed),highShadows));}
-    private void PrepareCore(World world,SceneDocumentSnapshot scene,Func<float,float,bool,RenderPipeline>? factory,
+    private void PrepareCore(World world,ISceneContent scene,Func<float,float,bool,RenderPipeline>? factory,
         PostProcessRuntime? post,Func<bool> allowed,PreparedShadowLibrary? highShadows)
     {
         ArgumentNullException.ThrowIfNull(world);ArgumentNullException.ThrowIfNull(scene);

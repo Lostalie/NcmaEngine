@@ -19,7 +19,7 @@ internal static class StructuralBatchCases
     }
     private sealed class Fixture : IDisposable
     {
-        internal readonly SceneDocument Doc;
+        internal readonly RuntimeSceneInstance Scene;
         internal readonly Probe Probe = new();
         internal readonly PlaySession Play;
         internal readonly Entity Entity;
@@ -28,25 +28,29 @@ internal static class StructuralBatchCases
         internal IRuntimeCommands Commands => Play.Commands;
         internal Fixture(ComponentRegistry? registry = null)
         {
-            Doc = new("Batch fixture", registry); Entity = Doc.World.CreateEntity("Original"); Id = Doc.World.GetUuid(Entity);
-            Doc.World.Set(Entity, TransformData.Identity);
-            Doc.SetBindings(Id, [new(Binding, "Test.Probe", true, [])]);
-            Play = new(Doc);
+            var source = new SceneDocument("Batch fixture", registry);
+            var authored = source.CreateObject("Original"); Id = authored;
+            source.SetComponent(authored, TransformData.Identity);
+            source.SetBindings(Id, [new(Binding, "Test.Probe", true, [])]);
+            Scene = source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
+            Entity = Scene.World.FindEntity(Id);
+            Check(Entity.WorldIdentity == Scene.World.Identity && Scene.World.GetUuid(Entity) == authored, "Runtime resolves authoring UUID into its own handle.");
+            Play = new(Scene);
         }
         internal void Start(Func<BehaviourBindingData, Behaviour>? factory = null) => Play.Start(factory ?? (b => b.Id == Binding ? Probe : new Probe()));
         internal void Step() => Play.AdvanceFrame(1.0 / 60);
         public void Dispose() => Play.Dispose();
     }
-    private static ComponentSnapshot Transform(Fixture f) => new("ncma.transform", 1, f.Doc.World.Components.Encode(TransformData.Identity));
+    private static ComponentSnapshot Transform(Fixture f) => new("ncma.transform", 1, f.Scene.World.Components.Encode(TransformData.Identity));
     private static void AtomicReject(Func<Fixture, StructuralCommand[]> make)
     {
         using var f = new Fixture(); bool rejected = false;
         f.Probe.Fixed = _ => { Reject(() => f.Commands.SubmitBatch(make(f))); rejected = true; };
-        f.Start(); byte[] before = f.Doc.CaptureBytes(); ulong revision = f.Doc.Revision;
-        var query = f.Doc.World.Query<TransformData>(); Check(query.Count == 1);
+        f.Start(); byte[] before = f.Scene.CaptureCheckpoint().CopyBytes(); ulong revision = f.Scene.Revision;
+        var query = f.Scene.World.Query<TransformData>(); Check(query.Count == 1);
         f.Step(); Check(rejected && f.Play.State == PlayState.Faulted && f.Play.Tick == 0);
-        Check(f.Doc.CaptureBytes().SequenceEqual(before) && f.Doc.Revision == revision && query.Count == 1);
-        Check(f.Doc.World.Resolve(f.Entity) == f.Entity);
+        Check(f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && f.Scene.Revision == revision && query.Count == 1);
+        Check(f.Scene.World.Resolve(f.Entity) == f.Entity);
     }
     internal static void Run()
     {
@@ -54,23 +58,23 @@ internal static class StructuralBatchCases
         {
             ("create dependencies and committed-only receipts", () => {
                 using var f = new Fixture(); var id = Guid.NewGuid(); StructuralSubmission? batch = null;
-                var query = f.Doc.World.Query<TransformData>(); Check(query.Count == 1);
+                var query = f.Scene.World.Query<TransformData>(); Check(query.Count == 1);
                 f.Probe.Fixed = _ => {
                     batch = f.Commands.SubmitBatch([
                         new StructuralCommand.Create(id, "New"), new StructuralCommand.Rename(StructuralTarget.CreatedAt(0), "Final"),
                         new StructuralCommand.Add(StructuralTarget.CreatedAt(0), Transform(f)),
                         new StructuralCommand.Attach(StructuralTarget.CreatedAt(0), new(Guid.NewGuid(), "Test.Other", true, []))]);
-                    Check(batch.Count == 4 && batch.Created(0).ObjectId == id && query.Count == 1 && f.Doc.World.Count == 1);
+                    Check(batch.Count == 4 && batch.Created(0).ObjectId == id && query.Count == 1 && f.Scene.World.Count == 1);
                     Reject(() => f.Commands.Resolve(batch.Created(0))); Reject(() => f.Commands.GetReceipt(batch[3]));
-                    Reject(() => batch.Created(1)); Reject(() => f.Doc.World.FindEntity(id));
+                    Reject(() => batch.Created(1)); Reject(() => f.Scene.World.FindEntity(id));
                 };
                 f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Play.BehaviourCount == 2 && query.Count == 2);
-                var entity = f.Commands.Resolve(batch!.Created(0)); Check(f.Doc.World.GetName(entity) == "Final");
+                var entity = f.Commands.Resolve(batch!.Created(0)); Check(f.Scene.World.GetName(entity) == "Final");
                 for (int i = 0; i < batch.Count; i++) {
                     var receipt = f.Commands.GetReceipt(batch[i]);
-                    Check(receipt.Entity == entity && receipt.WorldIdentity == f.Doc.World.Identity && receipt.Tick == 1 && receipt.Disposition == "committed");
+                    Check(receipt.Entity == entity && receipt.WorldIdentity == f.Scene.World.Identity && receipt.Tick == 1 && receipt.Disposition == "committed");
                 }
-                Check(f.Doc.World.Resolve(f.Entity) == f.Entity);
+                Check(f.Scene.World.Resolve(f.Entity) == f.Entity);
             }),
             ("late component failure rejects whole step despite catch", () => {
                 using var f = new Fixture(); PendingEntity? earlier = null; bool rejected = false; var id = Guid.NewGuid();
@@ -83,8 +87,8 @@ internal static class StructuralBatchCases
                     Check(!((RuntimeCommandBuffer)f.Commands).Bindings.ContainsKey(id));
                     Reject(() => f.Commands.GetReceipt(earlier.Token));
                 };
-                f.Start(); var before = f.Doc.CaptureBytes(); f.Step();
-                Check(rejected && f.Play.State == PlayState.Faulted && f.Doc.CaptureBytes().SequenceEqual(before));
+                f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes(); f.Step();
+                Check(rejected && f.Play.State == PlayState.Faulted && f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
                 Reject(() => f.Commands.Resolve(earlier!)); Reject(() => f.Commands.GetReceipt(earlier!.Token));
             }),
             ("late binding metadata failure leaves no prefix", () => {
@@ -94,8 +98,8 @@ internal static class StructuralBatchCases
                         new StructuralCommand.Attach(StructuralTarget.CreatedAt(0), new(Guid.NewGuid(), "Test.Other", true, [new("Bad", 999, 1)]))]));
                     Check(!((RuntimeCommandBuffer)f.Commands).Bindings.ContainsKey(id)); rejected = true;
                 };
-                f.Start(); var before = f.Doc.CaptureBytes(); f.Step();
-                Check(rejected && f.Play.State == PlayState.Faulted && f.Doc.CaptureBytes().SequenceEqual(before));
+                f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes(); f.Step();
+                Check(rejected && f.Play.State == PlayState.Faulted && f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
             }),
             ("duplicate rename rejected", () => AtomicReject(f => [new StructuralCommand.Rename(f.Target, "A"), new StructuralCommand.Rename(f.Target, "B")])),
             ("duplicate component mutation rejected", () => AtomicReject(f => [new StructuralCommand.Remove(f.Target, "ncma.transform"), new StructuralCommand.Add(f.Target, Transform(f))])),
@@ -142,10 +146,10 @@ internal static class StructuralBatchCases
                     if (f.Play.Tick == 3) f.Commands.SubmitBatch([new StructuralCommand.Detach(f.Target, binding)]);
                 };
                 f.Start(b => b.Id == f.Binding ? f.Probe : other);
-                f.Step(); Check(other.Created == 0 && f.Doc.GetBindings(f.Id).Length == 2);
+                f.Step(); Check(other.Created == 0 && f.Scene.GetBindings(f.Id).Length == 2);
                 f.Step(); Check(other.Created == 1 && other.Enabled == 0);
                 f.Step(); Check(other.Enabled == 1 && other.FixedCount == 1);
-                f.Step(); Check(other.Disabled == 1 && other.FixedCount == 1 && f.Doc.GetBindings(f.Id).Length == 1);
+                f.Step(); Check(other.Disabled == 1 && other.FixedCount == 1 && f.Scene.GetBindings(f.Id).Length == 1);
                 f.Step(); Check(other.Destroyed == 1 && f.Play.Tick == 5);
             }),
             ("foreign pending and aborted retry handles cannot revive", () => {
@@ -161,7 +165,7 @@ internal static class StructuralBatchCases
                 f.Start(); f.Step(); var retry = aborted ?? throw new Exception("Missing retry submission.");
                 Check(f.Play.Tick == 1 && retry.Token != old.Token);
                 Reject(() => f.Commands.Resolve(old)); Reject(() => first.Commands.Resolve(retry));
-                Check(f.Doc.World.GetName(f.Commands.Resolve(retry)) == "Retry");
+                Check(f.Scene.World.GetName(f.Commands.Resolve(retry)) == "Retry");
             }),
             ("cross batch ordering and same attempt pending dependencies", () => {
                 using var f = new Fixture(); PendingEntity? single = null, batched = null;
@@ -172,8 +176,8 @@ internal static class StructuralBatchCases
                         new StructuralCommand.Rename(StructuralTarget.PendingCreation(single), "S"), new StructuralCommand.Rename(StructuralTarget.PendingCreation(batched), "B")]);
                     f.Commands.SubmitBatch([new StructuralCommand.Rename(f.Target, "Last"), new StructuralCommand.Add(f.Target, Transform(f))]);
                 };
-                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Doc.World.GetName(f.Entity) == "Last" && f.Doc.World.Has<TransformData>(f.Entity));
-                Check(f.Doc.World.GetName(f.Commands.Resolve(single!)) == "S" && f.Doc.World.GetName(f.Commands.Resolve(batched!)) == "B");
+                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Scene.World.GetName(f.Entity) == "Last" && f.Scene.World.Has<TransformData>(f.Entity));
+                Check(f.Scene.World.GetName(f.Commands.Resolve(single!)) == "S" && f.Scene.World.GetName(f.Commands.Resolve(batched!)) == "B");
             }),
             ("pending removed before commit has no live result", () => {
                 using var f = new Fixture(); StructuralSubmission? create = null, destroy = null;
@@ -181,7 +185,7 @@ internal static class StructuralBatchCases
                     create = f.Commands.SubmitBatch([new StructuralCommand.Create(Guid.NewGuid(), "Ephemeral")]);
                     destroy = f.Commands.SubmitBatch([new StructuralCommand.Destroy(StructuralTarget.PendingCreation(create.Created(0)))]);
                 };
-                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Doc.World.Count == 1);
+                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Scene.World.Count == 1);
                 foreach (var token in new[] { create![0], destroy![0] }) {
                     var receipt = f.Commands.GetReceipt(token); Check(receipt.Entity is null && receipt.Disposition == "removed");
                 }
@@ -194,7 +198,7 @@ internal static class StructuralBatchCases
                     else if (f.Play.Tick == 1) f.Commands.SubmitBatch([new StructuralCommand.Rename(StructuralTarget.Existing(f.Commands.Resolve(pending!)), "Second")]);
                     else Reject(() => f.Commands.SubmitBatch([new StructuralCommand.Rename(StructuralTarget.PendingCreation(pending!), "Stale")]));
                 };
-                f.Start(); f.Step(); f.Step(); Check(f.Play.Tick == 2 && f.Doc.World.GetName(f.Commands.Resolve(pending!)) == "Second");
+                f.Start(); f.Step(); f.Step(); Check(f.Play.Tick == 2 && f.Scene.World.GetName(f.Commands.Resolve(pending!)) == "Second");
                 f.Step(); Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 2);
             }),
             ("resolved pending never retargets after deletion and slot reuse", () => {
@@ -215,18 +219,19 @@ internal static class StructuralBatchCases
                 f.Probe.Fixed = _ => pending = f.Commands.SpawnEmpty("New"); f.Start(); f.Step(); var old = pending!;
                 f.Play.Stop(); Reject(() => f.Commands.GetReceipt(old.Token)); Reject(() => f.Commands.Resolve(old));
                 f.Start(); f.Step(); Check(pending!.Token != old.Token); Reject(() => f.Commands.Resolve(old));
-                f.Play.Stop(); var bytes = f.Doc.CaptureBytes(); f.Doc.RestoreBytes(bytes); Reject(() => f.Commands.Resolve(pending));
+                f.Play.Stop(); var checkpoint = f.Scene.CaptureCheckpoint();
+                f.Scene.RestoreCheckpoint(checkpoint, f.Scene.Revision); Reject(() => f.Commands.Resolve(pending));
             }),
             ("accepted batch aborted by later factory preserves input and receipts", () => {
                 using var f = new Fixture(); StructuralSubmission? accepted = null;
                 f.Probe.Fixed = _ => accepted = f.Commands.SubmitBatch([new StructuralCommand.Create(Guid.NewGuid(), "Bad factory"),
                     new StructuralCommand.Attach(StructuralTarget.CreatedAt(0), new(Guid.NewGuid(), "Missing.Type", true, []))]);
                 f.Start(b => b.TypeName == "Missing.Type" ? throw new ArgumentException("Missing factory") : f.Probe);
-                var before = f.Doc.CaptureBytes();
+                var before = f.Scene.CaptureCheckpoint().CopyBytes();
                 var pressed = new ulong[8]; pressed[0] = 2;
                 f.Play.SubmitInput(new InputFrame(f.Play.SessionId, 1, true, new ulong[8], new ulong[8], new ulong[8]));
                 f.Play.SubmitInput(new InputFrame(f.Play.SessionId, 2, true, new ulong[8], pressed, new ulong[8]));
-                f.Step(); Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 0 && f.Doc.CaptureBytes().SequenceEqual(before));
+                f.Step(); Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 0 && f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
                 Check(f.Play.Input.Pressed(1)); Reject(() => f.Commands.GetReceipt(accepted![0])); Reject(() => f.Commands.Resolve(accepted!.Created(0)));
             }),
             ("shared command cap accepts 1024 and rejects 1025", () => {
@@ -238,8 +243,8 @@ internal static class StructuralBatchCases
                         if (overflow) Reject(() => f.Commands.SubmitBatch([new StructuralCommand.Rename(f.Target, "Overflow")]));
                     };
                     f.Start(); f.Step();
-                    if (overflow) { Check(f.Play.State == PlayState.Faulted && f.Doc.World.Count == 1); Reject(() => f.Commands.GetReceipt(single)); }
-                    else { Check(f.Play.Tick == 1 && f.Doc.World.Count == 1024 && batch!.Count == 1023); Check(f.Commands.GetReceipt(single).Tick == 1); }
+                    if (overflow) { Check(f.Play.State == PlayState.Faulted && f.Scene.World.Count == 1); Reject(() => f.Commands.GetReceipt(single)); }
+                    else { Check(f.Play.Tick == 1 && f.Scene.World.Count == 1024 && batch!.Count == 1023); Check(f.Commands.GetReceipt(single).Tick == 1); }
                 }
             }),
             ("receipt retention remains bounded across singles and batches", () => {
@@ -261,8 +266,8 @@ internal static class StructuralBatchCases
                     var result = f.Commands.SubmitBatch(input); pending = result.Created(0); input[0] = null!;
                     exports[0] = new("Changed", (uint)ExportKind.Double, 99);
                 };
-                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Doc.World.Has<TransformData>(f.Commands.Resolve(pending!)));
-                Check(f.Doc.GetBindings(pending!.ObjectId)[0].Exports[0] == new ExportData("Value", ExportKind.Double, 3));
+                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Scene.World.Has<TransformData>(f.Commands.Resolve(pending!)));
+                Check(f.Scene.GetBindings(pending!.ObjectId)[0].Exports[0] == new ExportData("Value", ExportKind.Double, 3));
             }),
             ("bounded raw normalized and aggregate payloads", () => {
                 foreach (bool normalize in new[] { false, true }) {
@@ -277,7 +282,7 @@ internal static class StructuralBatchCases
                             catch (ArgumentException) { rejected = true; break; }
                         }
                     };
-                    f.Start(); f.Step(); Check(rejected && f.Play.State == PlayState.Faulted && f.Doc.World.Count == 1);
+                    f.Start(); f.Step(); Check(rejected && f.Play.State == PlayState.Faulted && f.Scene.World.Count == 1);
                 }
             }),
             ("caught validator reentrancy poisons the enclosing step", () => {
@@ -292,8 +297,8 @@ internal static class StructuralBatchCases
                     using var f = new Fixture(registry); active = f;
                     f.Probe.Fixed = _ => { using var json = JsonDocument.Parse("{\"text\":\"safe\"}");
                         Reject(() => f.Commands.SubmitBatch([new StructuralCommand.Add(f.Target, new("test.text", 1, json.RootElement))])); };
-                    f.Start(); var before = f.Doc.CaptureBytes(); f.Step(); active = null;
-                    Check(reentered && f.Play.State == PlayState.Faulted && f.Doc.CaptureBytes().SequenceEqual(before));
+                    f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes(); f.Step(); active = null;
+                    Check(reentered && f.Play.State == PlayState.Faulted && f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
                 }
             }),
             ("owner thread and read only callbacks cannot submit", () => {
@@ -301,14 +306,14 @@ internal static class StructuralBatchCases
                 Check(Task.Run(() => { try { f.Commands.SubmitBatch([new StructuralCommand.Rename(f.Target, "Foreign")]); return false; }
                     catch (InvalidOperationException) { return true; } }).GetAwaiter().GetResult());
                 f.Probe.Update = _ => Reject(() => f.Commands.SubmitBatch([new StructuralCommand.Rename(f.Target, "ReadOnly")]));
-                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Doc.World.GetName(f.Entity) == "Original");
+                f.Start(); f.Step(); Check(f.Play.Tick == 1 && f.Scene.World.GetName(f.Entity) == "Original");
             }),
             ("sequence overflow rejects without wrapping", () => {
                 using var f = new Fixture(); f.Probe.Fixed = _ => {
                     typeof(RuntimeCommandBuffer).GetField("_sequence", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(f.Commands, ulong.MaxValue - 1);
                     Reject(() => f.Commands.SubmitBatch([new StructuralCommand.Create(Guid.NewGuid(), "A"), new StructuralCommand.Create(Guid.NewGuid(), "B")]));
                 };
-                f.Start(); f.Step(); Check(f.Play.State == PlayState.Faulted && f.Doc.World.Count == 1 && f.Play.Tick == 0);
+                f.Start(); f.Step(); Check(f.Play.State == PlayState.Faulted && f.Scene.World.Count == 1 && f.Play.Tick == 0);
             }),
         };
         foreach (var test in cases) { test.Run(); Console.WriteLine("PASS structural batch " + test.Name); }

@@ -17,8 +17,8 @@ internal static class EcsReadTransportCases
         var doc = new SceneDocument("ECS IPC");
         for (int i = 0; i < 131; i++)
         {
-            var entity = doc.World.CreateEntity("Object " + i, new Guid(500 - i, 0, 0, new byte[8]));
-            doc.World.Set(entity, TransformData.Identity with { Position = new(i, 2, 3) });
+            var entity = doc.CreateObject("Object " + i, new Guid(500 - i, 0, 0, new byte[8]));
+            doc.SetComponent(entity, TransformData.Identity with { Position = new(i, 2, 3) });
         }
         var original = doc.CaptureSnapshot(); var edit = new EditSession(doc);
         using var endpoint = new EditorEndpoint(edit, root);
@@ -56,15 +56,15 @@ internal static class EcsReadTransportCases
                 var response = Invoke(Request("ncma.scene.inspect", new { offset, limit = 128 }));
                 Check(response.GetProperty("status").GetString() == "ok" && !response.GetProperty("changed").GetBoolean(), "read-only page");
                 var data = response.GetProperty("data"); var objects = data.GetProperty("scene").GetProperty("objects").EnumerateArray().ToArray();
-                Check(data.GetProperty("totalCount").GetInt32() == 131 && data.GetProperty("worldId").GetGuid() == doc.World.Identity, "current world/count");
+                Check(data.GetProperty("totalCount").GetInt32() == 131 && data.GetProperty("documentSessionId").GetGuid() == doc.SessionId && data.GetProperty("documentRevision").GetUInt64() == doc.Revision && data.GetProperty("model").GetString() == "ncma.authoring-scene" && data.GetProperty("modelVersion").GetInt32() == 1, "current authoring model/session/revision/count");
                 Check(objects.Length == Math.Min(128, 131 - offset), "page boundary");
                 for (int i = 0; i < objects.Length; i++)
                     Check(objects[i].GetProperty("id").GetGuid() == expected.Objects[offset + i].Id && objects[i].GetProperty("name").GetString() == expected.Objects[offset + i].Name, "creation order/current values");
             }
         }
         long before = Captures(); Pages(original); Pages(original);
-        Check(Captures() == before + 1, "one cold proof, warm pages do not capture document");
-        Guid id = original.Objects[129].Id; var oldEntity = doc.World.FindEntity(id);
+        Check(Captures() == before, "cold and warm authoring pages never capture the complete document");
+        Guid id = original.Objects[129].Id; ulong oldRevision = doc.Revision;
         var stale = Request("ncma.scene.inspect", new { offset = 128, limit = 128 });
         var rename = Request("ncma.scene.transaction", new { operations = new[] { new { op = "rename", objectId = id, name = "Approved" } } });
         Check(Invoke(rename).GetProperty("code").GetString() == "permission_denied" && edit.State.UndoCount == 0, "no implicit write approval");
@@ -73,7 +73,7 @@ internal static class EcsReadTransportCases
         var changed = doc.CaptureSnapshot(); Pages(changed);
         Check(Invoke(stale).GetProperty("code").GetString() == "revision_conflict", "warm proof does not bypass stale revision");
         Check(edit.Invoke(Request("ncma.history.undo", new { }), new(["ncma.scene.transaction", "ncma.history.undo"])).Changed, "user Undo");
-        Check(doc.World.FindEntity(id) != oldEntity, "Undo invalidates runtime identity"); Pages(original);
+        Check(doc.Revision > oldRevision && doc.GetObjectName(id) == original.Objects[129].Name, "Undo invalidates authoring revision and restores the UUID value"); Pages(original);
         Check(Invoke(Request("ncma.history.redo", new { })).GetProperty("changed").GetBoolean(), "remote Redo shares approved history"); Pages(changed);
         var details = Invoke(Request("ncma.scene.object.inspect", new { objectId = id, section = "components", limit = 1 }));
         Check(details.GetProperty("data").GetProperty("items")[0].GetProperty("data").GetRawText() == original.Objects[129].Components[0].Data.GetRawText(), "copied component details after Restore");

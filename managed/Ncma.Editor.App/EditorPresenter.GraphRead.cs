@@ -17,6 +17,11 @@ internal sealed unsafe partial class EditorPresenter
     internal void AttachGraphReads(AnimationGraphInspections service) => _graphs = service;
     private void BuildGraphReads(float width, float height, ref ulong labelId)
     {
+        if (_showGraphReads) BuildGraphReadsVisible(width, height, ref labelId);
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void BuildGraphReadsVisible(float width, float height, ref ulong labelId)
+    {
         if (!_showGraphReads || _graphs is null) return;
         Panel(301, "动画图检查 / 本机审批（非节点编辑器）", width * .12f, height * .12f, width * .76f, height * .75f);
         Add(GuiItemKind.Button, 40, 1, "本机选择并读取 .ncmaanim", new("graph_open"), enabled: filePicker is not null && projectRoot is not null && !_page!.State.Frozen && !_page.State.EditBusy);

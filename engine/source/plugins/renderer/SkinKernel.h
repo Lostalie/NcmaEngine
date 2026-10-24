@@ -33,7 +33,7 @@ public:
  std::array<NcmaSkinPaletteV5,32768> copiedPalettes{};
  static constexpr uint64_t ResidentBytes=3ull*32768*128+16;
  static constexpr uint64_t CpuScratchBytes=32ull*24+32768ull*128;
- explicit SkinKernel(Rhi::D3D11RenderBackend& b,NcmaGpuWorkSampleV1& s):backend(b),sample(s),timing(b,s){}
+ explicit SkinKernel(Rhi::D3D11RenderBackend& b,NcmaGpuWorkSampleV1& s,NcmaGpuWorkSampleV1& resolved):backend(b),sample(s),timing(b,s,resolved){}
  static std::string_view ShaderSource();
  bool Initialize(std::string&,const NcmaComputeShaderV1* = nullptr);
  bool Matches(const NcmaComputeShaderV1& d) const noexcept { return registeredCode.size()==d.bytes&&std::equal(registeredCode.begin(),registeredCode.end(),d.bytecode); }

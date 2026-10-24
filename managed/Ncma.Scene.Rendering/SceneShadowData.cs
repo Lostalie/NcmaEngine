@@ -34,7 +34,7 @@ public static class SceneShadowState
         if (count > 1) throw new ArgumentException("At most one scene shadow selection, including Off.");
         return count == 0 ? null : SceneShadowData.Validate(value);
     }
-    public static SceneShadowData? Read(SceneDocumentSnapshot snapshot)
+    public static SceneShadowData? Read(ISceneContent snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot); SceneShadowData? value = null;
         foreach (var obj in snapshot.Objects) foreach (var component in obj.Components.Where(c => c.TypeId == SceneShadowData.TypeId)) {

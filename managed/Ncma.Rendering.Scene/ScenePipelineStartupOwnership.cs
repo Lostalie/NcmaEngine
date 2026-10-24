@@ -40,9 +40,9 @@ public sealed partial class ScenePipelineStartup
             catch(Exception closeFailure){if(preparationFailure is not null)throw new AggregateException("Startup preparation and probe retirement failed; host retains probe.",preparationFailure,closeFailure);throw;}
         }
     }
-    public void PreparePost(World world,SceneDocumentSnapshot scene,PostProcessRuntime? runtime)
+    public void PreparePost(World world,ISceneContent scene,PostProcessRuntime? runtime)
     {PrepareOwned(()=>PreparePostCore(world,scene,runtime));}
-    private void PreparePostCore(World world,SceneDocumentSnapshot scene,PostProcessRuntime? runtime)
+    private void PreparePostCore(World world,ISceneContent scene,PostProcessRuntime? runtime)
     {
         ArgumentNullException.ThrowIfNull(world);ArgumentNullException.ThrowIfNull(scene);
         using var read=SceneEnvironmentState.BeginRead(world,world.Identity);

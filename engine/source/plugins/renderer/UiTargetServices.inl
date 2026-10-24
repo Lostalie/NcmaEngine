@@ -9,7 +9,7 @@ uint32_t NCMA_CALL CreateUiTarget(uint64_t context,uint64_t handle,const NcmaUiT
         if(renderer->uiTargets.size()>=4||bytes+renderer->uiTargetBytes+renderer->ui->Stats(handle,renderer->pureUi).resident_bytes>128ull*1024*1024)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"UI target resident budget.");
         BusyScope scope;std::string message;Rhi::TextureDescription desc{};desc.Width=d->width;desc.Height=d->height;
         std::unique_ptr<Rendering::GpuWorkTimingKernel> timing;
-        if(!renderer->uiTiming){timing=std::make_unique<Rendering::GpuWorkTimingKernel>(*renderer->backend,renderer->uiSample);
+        if(!renderer->uiTiming){timing=std::make_unique<Rendering::GpuWorkTimingKernel>(*renderer->backend,renderer->uiSample,renderer->uiResolved);
             if(!timing->Initialize(message))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,message);}
         desc.Usage=Rhi::TextureUsage::RenderTarget|Rhi::TextureUsage::Sampled;
         const uint64_t id=NcmaPlugin::NewWindowsHandle();

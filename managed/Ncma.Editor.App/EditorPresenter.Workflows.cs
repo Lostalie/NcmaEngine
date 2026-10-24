@@ -22,6 +22,11 @@ internal sealed unsafe partial class EditorPresenter
     }
     private void BuildWorkflows(float width, float height, ref ulong label)
     {
+        if (_showWorkflows) BuildWorkflowsVisible(width, height, ref label);
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void BuildWorkflowsVisible(float width, float height, ref ulong label)
+    {
         if (!_showWorkflows || workspace.Owner.Workflows is not { } service) return;
         Panel(413, "AI 工作流 · 精确审批与回执", width * .08f, height * .1f, width * .84f, height * .8f);
         var overlay = _items[^1]; overlay.Value = 2; _items[^1] = overlay;

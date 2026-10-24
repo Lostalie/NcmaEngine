@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-d-mcp-stdio-v1",
+  "domainContractSha256": "81348C1688885F2F87585251A0B37CA4055D4716C18FC264A2FE1F87F25B8F18",
+  "configuration": "Release",
+  "counts": [100, 1000, 4096],
+  "smokeCount": 8,
+  "workloads": ["page_cold_revision", "page_warm_first", "page_warm_last", "object_warm", "approved_transaction", "undo", "redo"],
+  "sampling": { "processes": 3, "warmup": 12, "samples": 100, "quantile": "nearest-rank", "selection": "complete matrix; no best-run selection or automatic resampling" },
+  "scope": "actual separate Ncma.Editor.Mcp process: JSON-RPC encode/stdio/write/session refresh/private pipe/Pump/read/decode including production audit IO and serialization; process startup/handshake/pair/approve/oracles and harness file IO excluded",
+  "allocationScope": "parent owner thread only; excludes MCP child and async workers; not total allocation or residency",
+  "pumpScope": "nested parent EditorEndpoint.Pump including production audit IO; not additive to roundtrip",
+  "limits": { "page": 128, "detail": 64, "structuredOutputBytes": 262144, "stdioFrameBytes": 1048576, "pollSleepMilliseconds": 1, "requestTimeoutSeconds": 15 },
+  "authority": "isolated test endpoint; explicit TEST pairing and exact proposal approval; no production permission changes",
+  "formalClosureVerified": false,
+  "targetBudgetAccepted": false,
+  "memoryAcceptance": "pending",
+  "fullPerformanceAccepted": false,
+  "deployed": false
+}

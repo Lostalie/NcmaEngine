@@ -13,7 +13,8 @@ internal static unsafe partial class Program
         using var loader=new PluginLoader();loader.Load(Path.GetFullPath(plugins),Specs().Take(2).ToArray());
         using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"Pipeline boundary",64,64,false);
         using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,64,64);
-        var document=new SceneDocument("Boundary",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
+        var authoring=new SceneDocument("Boundary",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
+        var authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
         bool approved=true;int calls=0;Action? callback=null;bool inBuild=false;
         Func<float,float,bool,RenderPipeline>? bound=null;
         bound=ScenePipelineStartup.Bind(renderer,document.World,(e,a,s)=>{
@@ -35,7 +36,7 @@ internal static unsafe partial class Program
         using var startup=new ScenePipelineStartup(renderer);
         before=calls;startup.Prepare(document.World,document.CaptureSnapshot(),bound,null,()=>true);
         Pass(before==calls&&renderer.PipelineStats.Pipelines==0&&renderer.EnvironmentStats.Live==0&&renderer.PostStats.Bindings==0,"empty World never initializes custom scene resources");
-        document.RestoreSnapshot(document.CaptureSnapshot());Bad(Build);Pass(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"boundary API0/0");return checks;
+        document.RestoreCheckpoint(document.CaptureCheckpoint(),document.Revision);Bad(Build);Pass(renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"boundary API0/0");Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()),"runtime boundary and restore leave authoring unchanged");return checks;
     }
     private sealed class StartupCallbackPipeline(Func<uint,uint,RenderGraph> build):RenderPipeline {public override RenderGraph Build(uint w,uint h)=>build(w,h);}
 }

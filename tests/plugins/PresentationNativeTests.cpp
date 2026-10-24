@@ -2,6 +2,29 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <iostream>
+// Compile the same backend with a compile-time-only failure seam. The production
+// static library evaluates the real HRESULT expressions without these globals.
+#include <d3d11.h>
+#include <d3dcompiler.h>
+static int preparationFailStep = 0;
+static unsigned preparationStepCalls[16]{};
+// The old shader pair is a test-only oracle, never a product compatibility path.
+static ID3D11PixelShader* referenceGuiImage = nullptr;
+static ID3D11PixelShader* referenceGuiFont = nullptr;
+static void DrawGuiReferenceOrCurrent(ID3D11DeviceContext* dc, UINT count, UINT index, INT vertex, bool alpha)
+{
+    if (referenceGuiImage) {
+        dc->PSSetShader(alpha ? referenceGuiFont : referenceGuiImage, nullptr, 0);
+        dc->DrawIndexed(count, index, vertex);
+    } else {
+        dc->DrawIndexedInstanced(count, 1, index, vertex, alpha ? 1 : 0);
+    }
+}
+#define NCMA_IMGUI_DX11_RESULT(step, expression) (++preparationStepCalls[step], preparationFailStep == (step) ? E_FAIL : (expression))
+#define NCMA_IMGUI_DX11_DRAW_INDEXED(context, count, index, vertex, alpha) DrawGuiReferenceOrCurrent(context, count, index, vertex, alpha)
+#include "../../engine/sdk/imgui/backends/imgui_impl_dx11.cpp"
+#undef NCMA_IMGUI_DX11_RESULT
+#undef NCMA_IMGUI_DX11_DRAW_INDEXED
 ImVec2 recordedButtonMin, recordedButtonMax;
 namespace ImGui {
 bool RecordedButton(const char* label) {
@@ -26,6 +49,8 @@ bool RecordedInputText(const char* label, char* text, size_t length) {
 #undef assert
 #define assert(expression) do { if (!(expression)) throw std::runtime_error(#expression); } while (false)
 #include <iostream>
+#include "PlatformPrecisionWaitTests.inl"
+#include "GuiDevicePreparationTests.inl"
 int main(int argc, char** argv)
 {
     try {
@@ -50,6 +75,7 @@ int main(int argc, char** argv)
     assert(getPlatform(1, 0, &api, sizeof(api), &error) == NCMA_OK);
     uint64_t platform = 0, w = 0;
     assert(api.module.initialize(nullptr, 0, &platform, &error) == NCMA_OK);
+    TestPrecisionWait(getPlatform,api,platform);
     const std::string title = "Native adapter fixture";
     NcmaWindowDescriptionV1 description{sizeof(description), 640, 480, 0,
         reinterpret_cast<const uint8_t*>(title.data()), static_cast<uint32_t>(title.size()), 0};
@@ -202,7 +228,9 @@ int main(int argc, char** argv)
     frame.frame++;assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);canvas[3].kind=NCMA_GUI_CANVAS_INPUT;canvas[3].rect[0]=10;canvas[3].rect[1]=10;canvas[3].rect[2]=100;canvas[3].rect[3]=100;canvas[3].enabled=0;
     assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK&&count==0);
     std::cout<<"PASS GUI1.7 copied text/rect/pointer presentation;1.0..1.6 queries retained\n";
-    assert(Destroy(gm, g, &error) == NCMA_OK && Shutdown(gm, &error) == NCMA_OK);
+    assert(Destroy(gm, g, &error) == NCMA_OK);
+    TestGuiDevicePreparation(api, platform, w, gm, state);
+    assert(Shutdown(gm, &error) == NCMA_OK);
     assert(api.destroy_window(platform, w, &error) == NCMA_OK && api.module.shutdown(platform, &error) == NCMA_OK);
     FreeLibrary(platformLibrary);
     std::cout << "PASS CPU font atlas 100/150/200% and complete native cleanup; not manual/GPU acceptance\n";

@@ -23,11 +23,11 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     private bool _disposed;
     private sealed record Binding(Guid Id, CharacterData? Character, BoxColliderData? Box);
     public CoupledMovementStatus Status => _coordinator.Status;
-    public Guid NumericalEpoch { get { _play.Document.VerifyAccess(); return _domain?.Epoch ?? Guid.Empty; } }
+    public Guid NumericalEpoch { get { _play.Scene.VerifyAccess(); return _domain?.Epoch ?? Guid.Empty; } }
     public static CharacterPlayRuntime? Compose(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets = null, bool profile = false, SceneAnimatorRuntime? animators = null)
     {
         ArgumentNullException.ThrowIfNull(play); ArgumentNullException.ThrowIfNull(physics);
-        var startup = play.Document.CaptureSnapshot();
+        var startup = play.Scene.CaptureSnapshot();
         CharacterComponents.RequireComposition(startup);
         if (!CharacterComponents.HasPhysics(startup)) return null;
         if (!physics.Enabled) throw new ArgumentException("Scene physics bindings require explicit physicsEnabled=true.");
@@ -36,16 +36,16 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     private CharacterPlayRuntime(PlaySession play, PhysicsService physics, PreparedSceneAssetLease? assets,bool profile, SceneAnimatorRuntime? animators)
     {
         _play = play;_profileEnabled=profile;
-        _roots=new(play.Document.World,assets);
-        try{_graphRoots=new(play.Document.World,assets,animators,128-_roots.TrackCount,262144-_roots.RetainedKeyCount);try{_actions=new(play.Document.World,_roots);}catch{_graphRoots.Dispose();throw;}}catch{_roots.Dispose();throw;}
-        _bindings = SceneStartupEntities.EitherByUuid<CharacterData, BoxColliderData>(play.Document.World)
-            .Select(o => new Binding(play.Document.World.GetUuid(o), play.Document.World.Has<CharacterData>(o) ? play.Document.World.Get<CharacterData>(o) : null, play.Document.World.Has<BoxColliderData>(o) ? play.Document.World.Get<BoxColliderData>(o) : null)).ToArray();
+        _roots=new(play.Scene.World,assets);
+        try{_graphRoots=new(play.Scene.World,assets,animators,128-_roots.TrackCount,262144-_roots.RetainedKeyCount);try{_actions=new(play.Scene.World,_roots);}catch{_graphRoots.Dispose();throw;}}catch{_roots.Dispose();throw;}
+        _bindings = SceneStartupEntities.EitherByUuid<CharacterData, BoxColliderData>(play.Scene.World)
+            .Select(o => new Binding(play.Scene.World.GetUuid(o), play.Scene.World.Has<CharacterData>(o) ? play.Scene.World.Get<CharacterData>(o) : null, play.Scene.World.Has<BoxColliderData>(o) ? play.Scene.World.Get<BoxColliderData>(o) : null)).ToArray();
         _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => {
-            _profileTick=0;_roots.Initialize(play.Document.World);_graphRoots.Initialize(play.Document.World);_actions.Initialize(play.Document.World,play.SessionId);return _domain = new Domain(physics, _bindings);
+            _profileTick=0;_roots.Initialize(play.Scene.World);_graphRoots.Initialize(play.Scene.World);_actions.Initialize(play.Scene.World,play.SessionId);return _domain = new Domain(physics, _bindings);
         },StageCombat);
         Guid[] chars = _bindings.Where(b => b.Character is not null).Select(b => b.Id).ToArray();
         Guid[] boxes = _bindings.Where(b => b.Box is not null).Select(b => b.Id).ToArray();
-        Guid[] cameras = SceneStartupEntities.With<FollowCameraData>(play.Document.World).Select(o => play.Document.World.GetUuid(o)).ToArray();
+        Guid[] cameras = SceneStartupEntities.With<FollowCameraData>(play.Scene.World).Select(o => play.Scene.World.GetUuid(o)).ToArray();
         // Freeze complete membership, including an empty set: runtime attachment must not
         // silently create metadata with no corresponding numerical/presentation owner.
         _coordinator.FreezeConfiguration<CharacterData>(chars);
@@ -63,7 +63,7 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     }
     public void FixedUpdate(World world, double delta)
     {
-        if (_disposed || world != _play.Document.World || _domain is null || !Status.SnapshotValid) throw new InvalidOperationException("Stale character domain.");
+        if (_disposed || world != _play.Scene.World || _domain is null || !Status.SnapshotValid) throw new InvalidOperationException("Stale character domain.");
         var input = _play.Input; float h = (float)delta;
         _actionMs=_rootMs=_queryMs=_combatMs=0;long preparation=ProfileTime,actionTime=ProfileTime;
         _actions.BeginStep();_actionMs+=ProfileElapsed(actionTime);
@@ -110,7 +110,7 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     public void StepCommitted(World world,double h){long start=ProfileTime;_roots.Commit(world,h);_graphRoots.Commit(world);_actions.Commit(world);_commitMs=ProfileElapsed(start);_profileTick=world.Tick;}
     private void StageCombat(MovementStepStamp stamp,ReadOnlySpan<NumericMovementResult> results)
     {
-        if(stamp.SessionId!=_play.SessionId||stamp.WorldId!=_play.Document.World.Identity||stamp.FromTick!=_play.Tick)throw new InvalidOperationException("Combat stamp mismatch.");
+        if(stamp.SessionId!=_play.SessionId||stamp.WorldId!=_play.Scene.World.Identity||stamp.FromTick!=_play.Tick)throw new InvalidOperationException("Combat stamp mismatch.");
         long start=ProfileTime;
         _actions.StageHits((actor,reach,mask)=>{long query=ProfileTime;Guid result=_domain!.QueryTarget(actor,reach,mask);_queryMs+=ProfileElapsed(query);return result;});
         _combatMs=ProfileElapsed(start);
@@ -120,25 +120,25 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     public CombatEvent[] ReadCombatEvents(){VerifyRootPresentation();return _actions.Events();}
     public CharacterDebugFrame ReadDebugFrame()
     {
-        _play.Document.VerifyAccess();ObjectDisposedException.ThrowIf(_disposed,this);
+        _play.Scene.VerifyAccess();ObjectDisposedException.ThrowIf(_disposed,this);
         _coordinator.VerifyReadBoundary();
         bool valid=_play.State is PlayState.Running or PlayState.Paused && Status.SnapshotValid;
         var rows=new List<CharacterDebugRow>(32);
         if(valid)foreach(var binding in _bindings.Where(b=>b.Character is not null)) {
-            global::Ncma.Runtime.Entity obj=_play.Document.World.FindEntity(binding.Id);int index=Array.IndexOf(_bindings,binding);
+            global::Ncma.Runtime.Entity obj=_play.Scene.World.FindEntity(binding.Id);int index=Array.IndexOf(_bindings,binding);
             var numeric=_domain!.Character(index);bool graphRoot=_graphRoots.Contains(binding.Id),root=_roots.Contains(binding.Id)||graphRoot;
             var motion=graphRoot?_graphRoots.Inspect(binding.Id):root?_roots.Inspect(binding.Id):default;
             var action=_actions.Owns(binding.Id)?_actions.Inspect(binding.Id):default;
-            HealthData? hp=_play.Document.World.Has<HealthData>(obj)?_play.Document.World.Get<HealthData>(obj):null;
-            rows.Add(new(binding.Id,_play.Document.World.Get<TransformData>(obj).Position,numeric.Ground.ToString(),_domain.ContactCount(index),root,motion.Time,motion.DesiredDisplacement,motion.AcceptedDisplacement,
+            HealthData? hp=_play.Scene.World.Has<HealthData>(obj)?_play.Scene.World.Get<HealthData>(obj):null;
+            rows.Add(new(binding.Id,_play.Scene.World.Get<TransformData>(obj).Position,numeric.Ground.ToString(),_domain.ContactCount(index),root,motion.Time,motion.DesiredDisplacement,motion.AcceptedDisplacement,
                 _actions.Owns(binding.Id)?action.State.ToString():"None",action.Instance,hp?.Current,hp?.Maximum));
         }
-        return new(_play.SessionId,_play.Document.World.Identity,_play.Tick,_play.State.ToString(),valid,valid?"none":_play.State==PlayState.Faulted?"play_faulted":"snapshot_invalid",rows.ToArray(),valid?_actions.Events():[]);
+        return new(_play.SessionId,_play.Scene.World.Identity,_play.Tick,_play.State.ToString(),valid,valid?"none":_play.State==PlayState.Faulted?"play_faulted":"snapshot_invalid",rows.ToArray(),valid?_actions.Events():[]);
     }
     // Trusted owner-thread control at a safe boundary. Candidate clocks are never consumed before commit.
     public void SetRootPlayback(Guid objectId,ClipPlaybackData settings)
     {
-        _play.Document.VerifyAccess();
+        _play.Scene.VerifyAccess();
         // Status is synchronized only outside a candidate step; World write access rejects read-only callbacks.
         _coordinator.VerifyControlBoundary();
         if(_actions.Owns(objectId))throw new InvalidOperationException("Action policy owns this actor's playback selection.");
@@ -147,7 +147,7 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
         _roots.Request(objectId,settings);
     }
     private void VerifyRootPresentation() {
-        _play.Document.VerifyAccess();_coordinator.VerifyReadBoundary();if(_disposed||_play.State==PlayState.Faulted||!Status.SnapshotValid)throw new InvalidOperationException("Invalid coupled root motion presentation.");
+        _play.Scene.VerifyAccess();_coordinator.VerifyReadBoundary();if(_disposed||_play.State==PlayState.Faulted||!Status.SnapshotValid)throw new InvalidOperationException("Invalid coupled root motion presentation.");
     }
     public ClipPlaybackData Playback(Guid objectId){VerifyRootPresentation();return _roots.Playback(objectId);}
     public ClipSampleTimes Sample(Guid objectId,float alpha,bool paused){VerifyRootPresentation();return _roots.Sample(objectId,alpha,paused);}
@@ -157,13 +157,13 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
     public static SceneCameraView? FollowView(PlaySession play, Guid camera, uint width, uint height)
     {
         if (camera == Guid.Empty || play.State == PlayState.Faulted) return null;
-        if (!play.Document.World.TryFindEntity(camera, out var obj) || !play.Document.World.Has<FollowCameraData>(obj) || !play.Document.World.Has<CameraData>(obj)) return null;
-        var data = play.Document.World.Get<FollowCameraData>(obj); var target = play.RenderView.Objects.FirstOrDefault(o => o.ObjectId == data.Target);
+        if (!play.Scene.World.TryFindEntity(camera, out var obj) || !play.Scene.World.Has<FollowCameraData>(obj) || !play.Scene.World.Has<CameraData>(obj)) return null;
+        var data = play.Scene.World.Get<FollowCameraData>(obj); var target = play.RenderView.Objects.FirstOrDefault(o => o.ObjectId == data.Target);
         if (target is null) return null;
         var position = target.Transform.Position + new V3(data.OffsetX, data.OffsetY, data.OffsetZ);
         var view = M4.CreateLookAt(position, target.Transform.Position + new V3(0, data.LookHeight, 0), V3.UnitY);
         if (!M4.Invert(view, out var cameraWorld) || !M4.Decompose(cameraWorld, out _, out var rotation, out _)) throw new ArgumentException("Invalid follow view.");
-        return RenderSceneExtractor.CreateCamera(Guid.Empty, new(position, Q.Normalize(rotation), V3.One), play.Document.World.Get<CameraData>(obj), width, height);
+        return RenderSceneExtractor.CreateCamera(Guid.Empty, new(position, Q.Normalize(rotation), V3.One), play.Scene.World.Get<CameraData>(obj), width, height);
     }
     public void Dispose()
     {

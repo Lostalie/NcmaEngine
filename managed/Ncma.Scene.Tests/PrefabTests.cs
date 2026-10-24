@@ -16,40 +16,40 @@ internal static class PrefabTests
         var registry=ComponentRegistry.CreateDefault();
         registry.Register<Link>("game.link",1,"""{"type":"object","additionalProperties":false,"required":["target","asset","label"],"properties":{"target":{"type":"string"},"asset":{"type":"string"},"label":{"type":"string"}}}""",v=>v);
         registry.Register<RuntimeOnly>("game.runtime_only",1,"""{"type":"object","additionalProperties":false,"required":["handle"],"properties":{"handle":{"type":"integer"}}}""",v=>v);
-        var scene=new SceneDocument("Source",registry);global::Ncma.Runtime.Entity a=scene.World.CreateEntity("A");global::Ncma.Runtime.Entity b=scene.World.CreateEntity("B");global::Ncma.Runtime.Entity empty=scene.World.CreateEntity("Empty");Guid asset=Guid.NewGuid();
-        scene.World.Set(a, new TransformData(new(3,4,5),Quaternion.CreateFromYawPitchRoll(.4f,.2f,-.3f),new(2,.5f,3)));scene.World.Set(b, new TransformData(new(-2,7,1),Quaternion.Identity,Vector3.One));
-        scene.World.Set(a, new Link(scene.World.GetUuid(b),asset,scene.World.GetUuid(b).ToString("D")));
-        scene.SetBindings(scene.World.GetUuid(a),[new(Guid.NewGuid(),"Game.Known",true,[new("Speed",ExportKind.Float,.75)])]);
+        var scene=new SceneDocument("Source",registry);Guid a=scene.CreateObject("A");Guid b=scene.CreateObject("B");Guid empty=scene.CreateObject("Empty");Guid asset=Guid.NewGuid();
+        scene.SetComponent(a, new TransformData(new(3,4,5),Quaternion.CreateFromYawPitchRoll(.4f,.2f,-.3f),new(2,.5f,3)));scene.SetComponent(b, new TransformData(new(-2,7,1),Quaternion.Identity,Vector3.One));
+        scene.SetComponent(a, new Link(b,asset,b.ToString("D")));
+        scene.SetBindings(a,[new(Guid.NewGuid(),"Game.Known",true,[new("Speed",ExportKind.Float,.75)])]);
         var policy=new PrefabPolicy(registry,trusted??(binding=>binding.TypeName=="Game.Known"&&binding.Exports.Length==1&&binding.Exports[0].Name=="Speed"&&binding.Exports[0].Kind==ExportKind.Float))
             .AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object),new("/asset",PrefabReferenceRole.Asset,"StaticMesh")]);
-        Guid[] ids=[scene.World.GetUuid(a),scene.World.GetUuid(b),scene.World.GetUuid(empty)];return new(scene,ids,policy,new(scene,ids,()=>true),asset);
+        Guid[] ids=[a,b,empty];return new(scene,ids,policy,new(scene,ids,()=>true),asset);
     }
-    private static PrefabDocument Extract(Fixture f)=>PrefabTemplates.Extract(f.Scene,f.Ids,f.Scope,f.Policy,Guid.NewGuid(),"Template",new(1,2,3),f.Scene.Revision,f.Scene.World.Identity);
+    private static PrefabDocument Extract(Fixture f)=>PrefabTemplates.Extract(f.Scene,f.Ids,f.Scope,f.Policy,Guid.NewGuid(),"Template",new(1,2,3),f.Scene.Revision,f.Scene.SessionId);
     public static IEnumerable<(string,Action)> Cases()
     {
         yield return("M3.7-A exact read-only extraction and declared references",()=> {
-            var f=Make();byte[] before=f.Scene.CaptureBytes();ulong rev=f.Scene.Revision;Guid world=f.Scene.World.Identity;
+            var f=Make();byte[] before=f.Scene.CaptureBytes();ulong rev=f.Scene.Revision;Guid world=f.Scene.SessionId;
             var prefab=Extract(f);Check(prefab.Objects.Length==3&&prefab.Objects.All(o=>!f.Ids.Contains(o.Id)));Check(prefab.ObjectReferences.Length==1&&prefab.Dependencies.Single()==new PrefabDependency(f.Asset,"StaticMesh"));
-            var a=prefab.Objects.Single(o=>o.Name=="A");var b=prefab.Objects.Single(o=>o.Name=="B");var link=f.Scene.World.Components.Decode<Link>(a.Components.Single(c=>c.TypeId=="game.link"));
+            var a=prefab.Objects.Single(o=>o.Name=="A");var b=prefab.Objects.Single(o=>o.Name=="B");var link=f.Scene.Components.Decode<Link>(a.Components.Single(c=>c.TypeId=="game.link"));
             Check(link.Target==b.Id&&link.Asset==f.Asset&&link.Label==f.Ids[1].ToString("D"),"Explicit remap changed unrelated UUID-looking text");
             Check(a.Behaviours[0].Id!=f.Scene.GetBindings(f.Ids[0])[0].Id&&a.Behaviours[0].Exports[0].Value==.75);
-            Check(before.SequenceEqual(f.Scene.CaptureBytes())&&f.Scene.Revision==rev&&f.Scene.World.Identity==world,"Read-only extraction changed live scene/handles");
+            Check(before.SequenceEqual(f.Scene.CaptureBytes())&&f.Scene.Revision==rev&&f.Scene.SessionId==world,"Read-only extraction changed authoring data/session");
             Check(prefab.Objects.Single(o=>o.Name=="Empty").Components.Length==0);
         });
         yield return("M3.7-A source scope, stale identities, foreign thread and callback writes rejected",()=> {
-            var f=Make();byte[] before=f.Scene.CaptureBytes();ulong rev=f.Scene.Revision;Guid world=f.Scene.World.Identity;
+            var f=Make();byte[] before=f.Scene.CaptureBytes();ulong rev=f.Scene.Revision;Guid world=f.Scene.SessionId;
             void Run(Guid[] ids,PrefabExtractionScope scope,ulong revision,Guid identity)=>PrefabTemplates.Extract(f.Scene,ids,scope,f.Policy,Guid.NewGuid(),"Template",new(0,0,0),revision,identity);
             Reject(()=>Run(f.Ids,new(f.Scene,[f.Ids[0]],()=>true),rev,world));Reject(()=>Run(f.Ids,new(f.Scene,f.Ids,()=>false),rev,world));
             Reject(()=>Run(f.Ids,new(new SceneDocument(),f.Ids,()=>true),rev,world));Reject(()=>Run(f.Ids,f.Scope,rev+1,world));Reject(()=>Run(f.Ids,f.Scope,rev,Guid.NewGuid()));
             Reject(()=>Run([f.Ids[0],f.Ids[0]],f.Scope,rev,world));Reject(()=>Run([],f.Scope,rev,world));Reject(()=>Run([Guid.Empty],f.Scope,rev,world));
-            Reject(()=>Run(f.Ids,new(f.Scene,f.Ids,()=>{f.Scene.World.CreateEntity("Callback mutation");return true;}),rev,world));
+            Reject(()=>Run(f.Ids,new(f.Scene,f.Ids,()=>{f.Scene.CreateObject("Callback mutation");return true;}),rev,world));
             Task.Run(()=>Reject(()=>Run(f.Ids,f.Scope,rev,world))).GetAwaiter().GetResult();Check(before.SequenceEqual(f.Scene.CaptureBytes()));
         });
         yield return("M3.7-A outside references, unknown components and untrusted behaviours rejected",()=> {
-            var f=Make();Reject(()=>PrefabTemplates.Extract(f.Scene,[f.Ids[0]],f.Scope,f.Policy,Guid.NewGuid(),"Template",new(0,0,0),f.Scene.Revision,f.Scene.World.Identity));
-            f.Scene.World.Set(f.Scene.World.FindEntity(f.Ids[2]), new RuntimeOnly(123));Reject(()=>Extract(f));
-            var noBindings=Make();var policy=new PrefabPolicy(noBindings.Scene.World.Components).AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object),new("/asset",PrefabReferenceRole.Asset,"StaticMesh")]);
-            Reject(()=>PrefabTemplates.Extract(noBindings.Scene,noBindings.Ids,noBindings.Scope,policy,Guid.NewGuid(),"Template",new(0,0,0),noBindings.Scene.Revision,noBindings.Scene.World.Identity));
+            var f=Make();Reject(()=>PrefabTemplates.Extract(f.Scene,[f.Ids[0]],f.Scope,f.Policy,Guid.NewGuid(),"Template",new(0,0,0),f.Scene.Revision,f.Scene.SessionId));
+            f.Scene.SetComponent(f.Ids[2], new RuntimeOnly(123));Reject(()=>Extract(f));
+            var noBindings=Make();var policy=new PrefabPolicy(noBindings.Scene.Components).AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object),new("/asset",PrefabReferenceRole.Asset,"StaticMesh")]);
+            Reject(()=>PrefabTemplates.Extract(noBindings.Scene,noBindings.Ids,noBindings.Scope,policy,Guid.NewGuid(),"Template",new(0,0,0),noBindings.Scene.Revision,noBindings.Scene.SessionId));
             Fixture? mutating=null;mutating=Make(_=>{mutating!.Scene.SetBindings(mutating.Ids[0],[]);return true;});byte[] before=mutating.Scene.CaptureBytes();Reject(()=>Extract(mutating));Check(before.SequenceEqual(mutating.Scene.CaptureBytes()));
         });
         yield return("M3.7-A strict JSON v1, duplicate/missing/unknown keys and removed formats rejected",()=> {
@@ -76,13 +76,13 @@ internal static class PrefabTests
             Check(preview.InstanceId!=second.InstanceId&&!preview.Objects.Select(o=>o.Id).Intersect(second.Objects.Select(o=>o.Id)).Any());
             Check(preview.Objects.All(o=>!prefab.Objects.Any(t=>t.Id==o.Id))&&preview.Objects.Single(o=>o.Name=="Empty").Components.Length==0);
             var a=preview.Objects.Single(o=>o.Name=="A");var b=preview.Objects.Single(o=>o.Name=="B");Check(f.Policy.Components.Decode<Link>(a.Components.Single(c=>c.TypeId=="game.link")).Target==b.Id);
-            var original=f.Scene.World.Get<TransformData>(f.Scene.World.FindEntity(f.Ids[0]));var placed=f.Policy.Components.Decode<TransformData>(a.Components.Single(c=>c.TypeId=="ncma.transform"));
+            var original=f.Scene.GetComponent<TransformData>(f.Ids[0]);var placed=f.Policy.Components.Decode<TransformData>(a.Components.Single(c=>c.TypeId=="ncma.transform"));
             Check(placed.Position==new Vector3(12,22,32)&&placed.Scale==original.Scale&&placed.Rotation==original.Rotation);
             Matrix4x4 Matrix(TransformData t)=>Matrix4x4.CreateScale(t.Scale)*Matrix4x4.CreateFromQuaternion(t.Rotation)*Matrix4x4.CreateTranslation(t.Position);
             var expected=Vector3.Transform(new(2,-3,4),Matrix(original)*Matrix4x4.CreateTranslation(new Vector3(9,18,27)));
             Check(Vector3.Distance(expected,Vector3.Transform(new(2,-3,4),Matrix(placed)))<1e-4,"Template * translation matrix order");
-            var expanded=new SceneDocument("Preview",f.Policy.Components);expanded.RestoreSnapshot(new(1,"Preview",preview.Objects));expanded.World.Destroy(expanded.World.FindEntity(a.Id));Check(expanded.World.Count==2&&expanded.World.GetUuid(expanded.World.FindEntity(b.Id))==b.Id,"Flat deletion unexpectedly removed a related object");
-            Check(f.Scene.World.Count==3&&preview.OperationCount==7); // create3 + Transform2 + link1 + bindings1
+            var expanded=new SceneDocument("Preview",f.Policy.Components);expanded.RestoreSnapshot(new(1,"Preview",preview.Objects));expanded.DeleteObject(a.Id);Check(expanded.ObjectCount==2&&expanded.ContainsObject(b.Id),"Flat deletion unexpectedly removed a related object");
+            Check(f.Scene.ObjectCount==3&&preview.OperationCount==7); // create3 + Transform2 + link1 + bindings1
         });
         yield return("M3.7-A owned codec/preview copies and stable cold bytes",()=> {
             var f=Make();var prefab=Extract(f);byte[] encoded=PrefabDocumentCodec.Encode(prefab,f.Policy);var decoded=PrefabDocumentCodec.Decode(encoded,f.Policy);
@@ -93,7 +93,7 @@ internal static class PrefabTests
             File.WriteAllBytes(file,encoded);var restarted=PrefabDocumentCodec.Decode(File.ReadAllBytes(file),f.Policy);Check(encoded.SequenceEqual(PrefabDocumentCodec.Encode(restarted,f.Policy))); // Test fixture IO only, not a public save entry.
         });
         yield return("M3.7-A policy registration is explicit, immutable and rejects array/nested paths",()=> {
-            var f=Make();var registry=f.Scene.World.Components;
+            var f=Make();var registry=f.Scene.Components;
             Reject(()=>new PrefabPolicy(registry).AllowComponent("game.unknown",1,[]));Reject(()=>new PrefabPolicy(registry).AllowComponent("game.link",2,[]));
             foreach(string path in new[]{"target","/0","/items/0","/~0","/target/"})Reject(()=>new PrefabPolicy(registry).AllowComponent("game.link",1,[new(path,PrefabReferenceRole.Object)]));
             Reject(()=>new PrefabPolicy(registry).AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object,"Asset")]));Reject(()=>new PrefabPolicy(registry).AllowComponent("game.link",1,[new("/asset",PrefabReferenceRole.Asset,"Prefab")]));
@@ -102,7 +102,7 @@ internal static class PrefabTests
         });
         yield return("M3.7-A codec copies before trusted callbacks and accepts JSON property reordering",()=> {
             var original=Make();var prefab=Extract(original);bool invoked=false;
-            var checking=new PrefabPolicy(original.Scene.World.Components,_=>{invoked=true;prefab.Objects[0]=prefab.Objects[0] with{Name="Mutated caller DTO"};return true;})
+            var checking=new PrefabPolicy(original.Scene.Components,_=>{invoked=true;prefab.Objects[0]=prefab.Objects[0] with{Name="Mutated caller DTO"};return true;})
                 .AllowComponent("game.link",1,[new("/target",PrefabReferenceRole.Object),new("/asset",PrefabReferenceRole.Asset,"StaticMesh")]);
             byte[] bytes=PrefabDocumentCodec.Encode(prefab,checking);Check(invoked&&PrefabDocumentCodec.Decode(bytes,checking).Objects[0].Name=="A","Encoder exposed caller mutations after validation");
             var node=JsonNode.Parse(bytes)!;var data=node["objects"]![0]!["components"]![0]!["data"]!.AsObject();
@@ -110,8 +110,8 @@ internal static class PrefabTests
             _=PrefabDocumentCodec.Decode(Encoding.UTF8.GetBytes(node.ToJsonString()),checking);
         });
         yield return("M3.7-A empty-container templates do not require Transform registration",()=> {
-            var registry=new ComponentRegistry();var scene=new SceneDocument("Empty",registry);global::Ncma.Runtime.Entity obj=scene.World.CreateEntity("Logic container");var policy=new PrefabPolicy(registry);
-            var prefab=PrefabTemplates.Extract(scene,[scene.World.GetUuid(obj)],new(scene,[scene.World.GetUuid(obj)],()=>true),policy,Guid.NewGuid(),"Empty template",new(0,0,0),scene.Revision,scene.World.Identity);
+            var registry=new ComponentRegistry();var scene=new SceneDocument("Empty",registry);Guid obj=scene.CreateObject("Logic container");var policy=new PrefabPolicy(registry);
+            var prefab=PrefabTemplates.Extract(scene,[obj],new(scene,[obj],()=>true),policy,Guid.NewGuid(),"Empty template",new(0,0,0),scene.Revision,scene.SessionId);
             var preview=PrefabTemplates.PreviewExpansion(prefab,policy,new(10,20,30),[]);Check(preview.OperationCount==1&&preview.Objects[0].Components.Length==0);
         });
         yield return("M3.7-A object, operation and placement budgets reject detached partial plans",()=> {
@@ -122,7 +122,7 @@ internal static class PrefabTests
             registry.Register<C4>("game.c4",1,schema,v=>v);registry.Register<C5>("game.c5",1,schema,v=>v);registry.Register<C6>("game.c6",1,schema,v=>v);registry.Register<C7>("game.c7",1,schema,v=>v);
             var policy=new PrefabPolicy(registry);for(int i=0;i<8;i++)policy.AllowComponent("game.c"+i,1,[]);
             var large=new PrefabDocument(1,Guid.NewGuid(),1,"Large",new(0,0,0),Enumerable.Range(0,16).Select(i=>new PrefabObject(Guid.NewGuid(),"Object",Enumerable.Range(0,8).Select(c=>new ComponentSnapshot("game.c"+c,1,JsonSerializer.SerializeToElement(new{value=1}))).ToArray(),[])).ToArray(),[],[]);
-            _=PrefabDocumentCodec.Encode(large,policy);Reject(()=>PrefabTemplates.PreviewExpansion(large,policy,new(0,0,0),[]));Check(f.Scene.World.Count==3);
+            _=PrefabDocumentCodec.Encode(large,policy);Reject(()=>PrefabTemplates.PreviewExpansion(large,policy,new(0,0,0),[]));Check(f.Scene.ObjectCount==3);
         });
     }
     private readonly record struct Link(Guid Target,Guid Asset,string Label):IComponent;

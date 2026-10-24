@@ -10,7 +10,7 @@ internal sealed unsafe partial class CandidatePresentation
 {
     private RuntimeShadowLibrary? _shadowLibrary;
     private PreparedShadowLibrary? _highShadows;
-    private PreparedShadowLibrary? PrepareShadowRuntime(World world,SceneDocumentSnapshot snapshot)
+    private PreparedShadowLibrary? PrepareShadowRuntime(World world,ISceneContent snapshot)
     {
         using var read=SceneEnvironmentState.BeginRead(world,world.Identity);
         var value=SceneShadowState.Read(snapshot);

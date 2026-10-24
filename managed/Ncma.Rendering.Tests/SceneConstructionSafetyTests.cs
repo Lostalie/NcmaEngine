@@ -30,7 +30,8 @@ internal static unsafe partial class Program
             foreach(string file in new[]{"blender_279_sausage_6100_ascii.fbx","blender_279_sausage_7400_binary.fbx"}) {
                 SkinFixture fixture;using(var importer=new ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath)))))
                     fixture=new(output,importer.LoadAndCopy(Path.Combine(repo.FullName,"tests/assets/fbx",file),30));
-                var(document,camera,_)=fixture.Scene(2);var snapshot=document.CaptureSnapshot();var original=document.CaptureBytes();
+                var(authoring,camera,_)=fixture.Scene(2);var authoringBytes=authoring.CaptureBytes();
+                var document=BakeRenderScene(authoring);var snapshot=document.CaptureSnapshot();var original=document.CaptureCheckpoint().CopyBytes();
                 using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,snapshot,true);
                 using var cache=new RenderResourceCache(renderer);using var animation=new SceneAnimationSession(document.World,kernel);
                 Pass(animation.PreparationPhase==ScenePreparationPhase.Empty,"animation owner precedes acquisition");
@@ -67,7 +68,7 @@ internal static unsafe partial class Program
                     fresh.Prepare(assets,snapshot,poseKernel:kernel);using var target=renderer.CreateViewTarget(64,64);
                     Pass(fresh.Submit(frame++,64,64,camera,target:target),"fresh owner renders after failures drain");renderer.Present();
                 }
-                cache.Trim();Pass(original.SequenceEqual(document.CaptureBytes())&&renderer.SkinStats.Meshes==0&&renderer.PipelineStats.Pipelines==0&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"World unchanged, resources drained, actual API0/0");
+                cache.Trim();Pass(original.SequenceEqual(document.CaptureCheckpoint().CopyBytes())&&authoringBytes.SequenceEqual(authoring.CaptureBytes())&&renderer.SkinStats.Meshes==0&&renderer.PipelineStats.Pipelines==0&&renderer.Stats.ValidationErrors==0&&renderer.Stats.ValidationWarnings==0,"runtime and authoring unchanged, resources drained, actual API0/0");
             }
         }
         // Test-only owner attachment tests actual product-class close/retry order,
@@ -78,7 +79,7 @@ internal static unsafe partial class Program
             else{var value=new PlayerPresentation(plugins,false);value.Start();host=value;}
             var renderer=(RendererSession)Field(host,"_renderer").GetValue(host)!;
             var cache=(RenderResourceCache)Field(host,editor?"_sceneCache":"_cache").GetValue(host)!;
-            var fixture=new SkinFixture(output);var(document,_,_)=fixture.Scene(2);var snapshot=document.CaptureSnapshot();
+            var fixture=new SkinFixture(output);var(authoring,_,_)=fixture.Scene(2);var document=BakeRenderScene(authoring);var snapshot=document.CaptureSnapshot();
             using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,snapshot,true);
             string slot=editor?"_pendingScene":"_scene";Pass(Field(host,slot).GetValue(host) is null,"test never overwrites existing owner");
             var scene=new SceneRenderSession(renderer,cache,document.World);Field(host,slot).SetValue(host,scene);

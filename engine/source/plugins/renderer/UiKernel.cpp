@@ -1,4 +1,5 @@
 #include "UiKernel.h"
+#include "ClosedShaderSources.h"
 #include "../WindowsHandle.h"
 #include <d3dcompiler.h>
 #include <cmath>
@@ -8,14 +9,7 @@
 namespace NcmaEngine::Rendering {
 using Microsoft::WRL::ComPtr;
 std::string_view UiKernel::ShaderSource() noexcept {
-    return R"(
-cbuffer Frame : register(b0) {float2 Size;float2 Pad;};
-Texture2D Image : register(t0);SamplerState Linear : register(s0);
-struct V {float2 p:POSITION;float2 uv:TEXCOORD0;float4 c:COLOR0;float2 local:TEXCOORD1;float2 extent:TEXCOORD2;float radius:TEXCOORD3;};
-struct O {float4 p:SV_POSITION;float2 uv:TEXCOORD0;float4 c:COLOR0;float2 local:TEXCOORD1;float2 extent:TEXCOORD2;float radius:TEXCOORD3;};
-O VSMain(V v){O o;o.p=float4(v.p.x/Size.x*2-1,1-v.p.y/Size.y*2,0,1);o.uv=v.uv;o.c=v.c;o.local=v.local;o.extent=v.extent;o.radius=v.radius;return o;}
-float4 PSMain(O v):SV_TARGET {float coverage=1;if(v.radius>0){float2 q=abs(v.local-v.extent*.5)-(v.extent*.5-v.radius);float d=length(max(q,0))+min(max(q.x,q.y),0)-v.radius;coverage=saturate(.5-d/max(fwidth(d),.001));}return Image.Sample(Linear,v.uv)*v.c*float4(1,1,1,coverage);}
-)";
+    return ClosedShaderSources::Ui;
 }
 bool UiKernel::PrepareShaders(const NcmaShaderPairV1& code,Programs& candidate,std::string& error) {
     auto check=[&](HRESULT hr,const char* operation){if(FAILED(hr)){backend.ReportApiFailure(hr);error=operation;return false;}return true;};

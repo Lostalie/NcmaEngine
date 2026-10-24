@@ -1,6 +1,4 @@
 using System.Reflection;
-using System.Text.Json;
-using Ncma.Editor.Core;
 using Ncma.Gameplay;
 using Ncma.Runtime;
 using Ncma.Scene;
@@ -23,16 +21,19 @@ internal static class EcsJointCases
             var registry = ComponentRegistry.CreateDefault();
             registry.Register<Marker>("joint.marker", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
-            var document = new SceneDocument("E3 joint fixture", registry); var world = document.World;
+            var document = new SceneDocument("E3 joint fixture", registry);
             var ids = Enumerable.Range(0, count).Select(Id).ToArray();
             for (int i = 0; i < count; i++)
             {
-                var entity = world.CreateEntity("Object " + i, ids[i]);
-                world.Set(entity, TransformData.Identity with { Position = new(i, 0, 0) });
-                if (i % 100 == 0) world.Set(entity, new Marker(i));
+                Guid entity = document.CreateObject("Object " + i, ids[i]);
+                document.SetComponent(entity, TransformData.Identity with { Position = new(i, 0, 0) });
+                if (i % 100 == 0) document.SetComponent(entity, new Marker(i));
             }
+            byte[] authoringBytes = document.CaptureBytes();
+            var scene = document.BakeRuntime(document.Revision).Image.Instantiate(registry);
+            var world = scene.World;
             var query = world.Query<TransformData>(); int steps = 0, nextId = count; bool markerPresent = true;
-            using var play = new PlaySession(document, FrameTimePolicy.Strict);
+            using var play = new PlaySession(scene, FrameTimePolicy.Strict);
             play.AddSystem(new StepSystem(w => {
                 Check(query.Count == count && w.Count == count);
                 if (workload is "sparse" or "full")
@@ -62,10 +63,10 @@ internal static class EcsJointCases
             }));
             play.Start(_ => throw new Exception("No bindings expected."));
             Check(play.AdvanceFrame(1d / 60).State == PlayState.Running);
-            var captures = (Count(world, "_capturedSnapshotCount"), Count(world, "_copiedValidationSnapshotCount"), Count(document, "_capturedDocumentCount"));
+            var captures = (Count(world, "_capturedSnapshotCount"), Count(world, "_copiedValidationSnapshotCount"), Count(scene, "_capturedSnapshots"));
             long encodes = Count(world, "_encodedComponentCount");
             for (int step = 0; step < 4; step++) Check(play.AdvanceFrame(1d / 60).State == PlayState.Running);
-            Check(captures == (Count(world, "_capturedSnapshotCount"), Count(world, "_copiedValidationSnapshotCount"), Count(document, "_capturedDocumentCount")));
+            Check(captures == (Count(world, "_capturedSnapshotCount"), Count(world, "_copiedValidationSnapshotCount"), Count(scene, "_capturedSnapshots")));
             int expectedWrites = workload == "full" ? count : workload == "sparse" ? (count + 99) / 100 : 0;
             if (workload is "none" or "sparse" or "full") Check(Count(world, "_encodedComponentCount") == encodes + 4L * expectedWrites);
             Check(world.Tick == (ulong)steps && query.Count == count && world.Count == count);
@@ -76,46 +77,45 @@ internal static class EcsJointCases
                 Check(world.Get<TransformData>(world.FindEntity(ids[i])).Position.X == expected && rendered[ids[i]].Transform.Position.X == expected);
                 if (workload == "membership" && i % 100 == 0) Check(world.Has<Marker>(world.FindEntity(ids[i])) == markerPresent);
             }
-            // Complete document comparison is an independent cold oracle, outside the checked step window.
-            var copy = new SceneDocument("copy", registry); copy.RestoreBytes(document.CaptureBytes());
-            Check(copy.CaptureBytes().SequenceEqual(document.CaptureBytes()));
-            VerifyInspection(document, query, rendered.Keys.ToHashSet());
+            // Complete runtime state roundtrip is cold, outside the checked step window.
+            // Runtime inspection never creates an EditSession or an authoring document wrapper.
+            VerifyInspection(scene, query, rendered.Keys.ToHashSet());
+            play.Stop(); var checkpoint = scene.CaptureCheckpoint(); var oldWorld = world.Identity;
+            scene.RestoreCheckpoint(checkpoint, scene.Revision);
+            Check(checkpoint.CopyBytes().SequenceEqual(scene.CaptureCheckpoint().CopyBytes()) && world.Identity != oldWorld);
+            Check(authoringBytes.SequenceEqual(document.CaptureBytes()));
             passed++; Console.WriteLine($"PASS E3 joint {workload} objects={count}: no full World/Scene snapshots; values/queries/render/codec agree.");
         }
         Console.WriteLine($"E3 joint fixed-step tests: {passed}/15 passed.");
         Console.WriteLine($"E4-E committed Play/query/render/inspection joint cases: {passed}/15 passed.");
     }
 
-    private static void VerifyInspection(SceneDocument document, EntityQuery query, HashSet<Guid> rendered)
+    private static void VerifyInspection(RuntimeSceneInstance scene, EntityQuery query, HashSet<Guid> rendered)
     {
-        // Cold oracle and editor reads are OUTSIDE the measured/checked simulation window.
-        var snapshot = document.CaptureSnapshot(); var edit = new EditSession(document); edit.SetFrozen(true);
-        long before = Count(document, "_capturedDocumentCount"); var inspected = new List<Guid>();
-        CapabilityRequest Request(string name, object input) => new(EditSession.ContractVersion, Guid.NewGuid(),
-            edit.SessionId, edit.Revision, name, JsonSerializer.SerializeToElement(input));
+        // The independent cold oracle is outside the simulation window. Paginated inspection
+        // must not capture that whole snapshot again, even on its first request.
+        var snapshot = scene.CaptureSnapshot(); var stamp = scene.GetInspectionStamp();
+        long before = Count(scene, "_capturedSnapshots"); var inspected = new List<Guid>();
         for (int offset = 0; offset < snapshot.Objects.Length; offset += 128)
         {
-            var result = edit.Invoke(Request("ncma.scene.inspect", new { offset, limit = 128 }));
-            Check(result.Status == "ok" && !result.Changed && result.Data.GetProperty("totalCount").GetInt32() == snapshot.Objects.Length);
-            Check(result.Data.GetProperty("worldId").GetGuid() == document.World.Identity && result.Data.GetProperty("tick").GetUInt64() == document.World.Tick);
-            var objects = result.Data.GetProperty("scene").GetProperty("objects").EnumerateArray().ToArray();
-            for (int i = 0; i < objects.Length; i++)
+            var result = scene.InspectObjects(stamp, offset, 128);
+            Check(result.TotalCount == snapshot.Objects.Length && result.Stamp == stamp && result.Offset == offset);
+            Check(result.Stamp.WorldId == scene.World.Identity && result.Stamp.Tick == scene.World.Tick);
+            for (int i = 0; i < result.Items.Length; i++)
             {
-                var expected = snapshot.Objects[offset + i]; Guid id = objects[i].GetProperty("id").GetGuid(); inspected.Add(id);
-                Check(id == expected.Id && objects[i].GetProperty("name").GetString() == expected.Name && rendered.Contains(id));
+                var expected = snapshot.Objects[offset + i]; Guid id = result.Items[i].Id; inspected.Add(id);
+                Check(id == expected.Id && result.Items[i].Name == expected.Name && rendered.Contains(id));
             }
         }
-        foreach (var entity in query) Check(inspected.Contains(document.World.GetUuid(entity)));
+        foreach (var entity in query) Check(inspected.Contains(scene.World.GetUuid(entity)));
         foreach (var expected in new[] { snapshot.Objects[0], snapshot.Objects[^1] })
         {
-            var result = edit.Invoke(Request("ncma.scene.object.inspect", new { objectId = expected.Id, section = "components", limit = 64 }));
-            Check(result.Status == "ok");
-            var actual = result.Data.GetProperty("items").EnumerateArray().ToArray();
-            Check(actual.Length == expected.Components.Length);
+            var result = scene.InspectComponents(stamp, expected.Id, limit: 64);
+            Check(result.Stamp == stamp && result.ObjectId == expected.Id && result.TotalCount == expected.Components.Length);
+            Check(result.Items.Length == expected.Components.Length);
             foreach (var component in expected.Components)
-                Check(actual.Single(c => c.GetProperty("typeId").GetString() == component.TypeId).GetProperty("data").GetRawText() == component.Data.GetRawText());
+                Check(result.Items.Single(c => c.TypeId == component.TypeId).Data.GetRawText() == component.Data.GetRawText());
         }
-        Check(Count(document, "_capturedDocumentCount") == before + 1);
-        Check(edit.State.UndoCount == 0 && edit.State.RedoCount == 0 && document.World.Tick > 0);
+        Check(Count(scene, "_capturedSnapshots") == before && scene.GetInspectionStamp() == stamp && scene.World.Tick > 0);
     }
 }

@@ -23,7 +23,7 @@ internal static class ReadQueryTests
     private static long Captures(SceneDocument doc) => (long)typeof(SceneDocument).GetField("_capturedDocumentCount", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(doc)!;
     private static void ExactPage(EditSession edit, SceneDocumentSnapshot snapshot, int offset, int limit)
     {
-        var expected = JsonSerializer.SerializeToElement(new { worldId = edit.Document.World.Identity, tick = edit.Document.World.Tick,
+        var expected = JsonSerializer.SerializeToElement(new { model = "ncma.authoring-scene", modelVersion = 1, documentSessionId = edit.Document.SessionId, documentRevision = edit.Document.Revision,
             totalCount = snapshot.Objects.Length, offset, limit, scene = new { snapshot.Version, snapshot.Name,
                 objects = snapshot.Objects.Skip(offset).Take(limit).Select(item => new { item.Id, item.Name,
                     components = item.Components.Select(c => new { c.TypeId, c.Version }),
@@ -34,13 +34,13 @@ internal static class ReadQueryTests
     {
         var cases = new (string, Action)[] {
             ("existing scene capability matches complete-snapshot oracle on cold and warm pages", () => {
-                var doc = new SceneDocument("查询"); for (int i = 0; i < 140; i++) { var e = doc.World.CreateEntity("Object" + i); if (i % 2 == 0) doc.World.Set(e, TransformData.Identity); }
+                var doc = new SceneDocument("查询"); for (int i = 0; i < 140; i++) { var e = doc.CreateObject("Object" + i); if (i % 2 == 0) doc.SetComponent(e, TransformData.Identity); }
                 var edit = new EditSession(doc); var oracle = doc.CaptureSnapshot(); long before = Captures(doc);
                 ExactPage(edit, oracle, 0, 128); ExactPage(edit, oracle, 128, 128); ExactPage(edit, oracle, int.MaxValue, 128);
-                Check(Captures(doc) == before + 1 && Page(edit, -1).Code == "invalid_input" && Page(edit, 0, 129).Code == "invalid_input");
+                Check(Captures(doc) == before && Page(edit, -1).Code == "invalid_input" && Page(edit, 0, 129).Code == "invalid_input");
             }),
             ("read cache preserves missing-object precedence and detail pagination constraints", () => {
-                var doc = new SceneDocument(); var id = doc.World.GetUuid(doc.World.CreateEntity("A")); var edit = new EditSession(doc);
+                var doc = new SceneDocument(); var id = doc.CreateObject("A"); var edit = new EditSession(doc);
                 Check(Object(edit, id).Status == "ok"); long before = Captures(doc);
                 Check(Object(edit, id, "summary", int.MaxValue, 64).Data.GetProperty("returnedCount").GetInt32() == 0);
                 Check(Object(edit, Guid.NewGuid(), "unknown").Code == "object_not_found");
@@ -48,7 +48,7 @@ internal static class ReadQueryTests
                 Check(Object(edit, id, offset: -1).Code == "invalid_input" && Captures(doc) == before);
             }),
             ("session revision permissions and history remain authoritative after warming reads", () => {
-                var doc = new SceneDocument(); var id = doc.World.GetUuid(doc.World.CreateEntity("A")); var edit = new EditSession(doc);
+                var doc = new SceneDocument(); var id = doc.CreateObject("A"); var edit = new EditSession(doc);
                 var original = doc.CaptureSnapshot(); ExactPage(edit, original, 0, 1);
                 var stale = Request(edit, "ncma.scene.inspect", new { }); long before = Captures(doc);
                 Check(edit.Invoke(stale with { SessionId = Guid.NewGuid() }).Code == "session_mismatch" && Captures(doc) == before);
@@ -62,13 +62,33 @@ internal static class ReadQueryTests
                 edit.SetFrozen(true); Check(Page(edit).Status == "ok"); Check(edit.Invoke(Request(edit, "ncma.scene.transaction", new { operations = new[] { new { op = "rename", objectId = id, name = "C" } } }), permissions).Code == "play_frozen");
                 edit.SetFrozen(false);
             }),
-            ("readable schema diagnostics remain distinct from scene.validate", () => {
+            ("schema-invalid writes never enter authoring or alter current read results", () => {
                 var registry = ComponentRegistry.CreateDefault(); registry.Register<Diagnostic>("test.diagnostic", 1,
                     """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""", v => v);
-                var doc = new SceneDocument("Diagnostic", registry); var e = doc.World.CreateEntity("A"); doc.World.Set(e, new Diagnostic(7));
-                var edit = new EditSession(doc); Check(Page(edit).Status == "ok" && Object(edit, doc.World.GetUuid(e), "components").Status == "ok");
+                var doc = new SceneDocument("Diagnostic", registry); Guid id = doc.CreateObject("A");
+                var edit = new EditSession(doc); var original = Page(edit).Data.GetRawText(); ulong revision = doc.Revision;
+                bool rejected = false;
+                try { doc.SetComponent(id, new Diagnostic(7)); }
+                catch (Exception e) when (e is ArgumentException or InvalidOperationException or JsonException) { rejected = true; }
+                Check(rejected && doc.Revision == revision && Page(edit).Data.GetRawText() == original);
+                Check(Object(edit, id, "components").Data.GetProperty("returnedCount").GetInt32() == 0);
+                Check(edit.Invoke(Request(edit, "ncma.scene.validate", new { })).Data.GetProperty("valid").GetBoolean());
+            }),
+            ("incomplete composition stays inspectable but validate rejects until an authorized transaction completes it", () => {
+                var doc = new SceneDocument("Composition", validateComposition: snapshot => {
+                    if (snapshot.Objects.Any(o => !o.Components.Any(c => c.TypeId == "ncma.transform")))
+                        throw new ArgumentException("Required transform is missing.");
+                });
+                Guid id = doc.CreateObject("A"); var edit = new EditSession(doc);
+                Check(Page(edit).Status == "ok" && Object(edit, id, "components").Status == "ok");
                 Check(edit.Invoke(Request(edit, "ncma.scene.validate", new { })).Code == "invalid_input");
-                Check(Page(edit).Status == "ok" && Object(edit, doc.World.GetUuid(e), "components").Data.GetProperty("items")[0].GetProperty("data").GetProperty("value").GetInt32() == 7);
+                var request = Request(edit, "ncma.scene.transaction", new { operations = new[] { new {
+                    op = "set_component", objectId = id, typeId = "ncma.transform", version = 1,
+                    data = doc.Components.Encode(TransformData.Identity) } } });
+                Check(edit.Invoke(request).Code == "permission_denied");
+                Check(edit.Invoke(request, new CapabilityPermissions(["ncma.scene.transaction"])).Changed);
+                Check(edit.Invoke(Request(edit, "ncma.scene.validate", new { })).Data.GetProperty("valid").GetBoolean());
+                Check(Object(edit, id, "components").Data.GetProperty("returnedCount").GetInt32() == 1);
             }),
             ("scene output budget rejects oversized summaries on both read paths", () => {
                 var doc = new SceneDocument(); var objects = Enumerable.Range(0, 3).Select(i => new SceneObjectData(Guid.NewGuid(), "A" + i, [],
@@ -82,9 +102,9 @@ internal static class ReadQueryTests
                 void Register<T>(string id) where T : struct, IComponent => registry.Register<T>(id, 1,
                     """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""", v => v);
                 Register<TextA>("test.a"); Register<TextB>("test.b"); Register<TextC>("test.c"); Register<TextD>("test.d"); Register<TextE>("test.e");
-                var doc = new SceneDocument("Detail", registry); var e = doc.World.CreateEntity("A"); string text = new('x', 60000);
-                doc.World.Set(e, new TextA(text)); doc.World.Set(e, new TextB(text)); doc.World.Set(e, new TextC(text)); doc.World.Set(e, new TextD(text)); doc.World.Set(e, new TextE(text));
-                var edit = new EditSession(doc); Guid id = doc.World.GetUuid(e);
+                var doc = new SceneDocument("Detail", registry); var e = doc.CreateObject("A"); string text = new('x', 60000);
+                doc.SetComponent(e, new TextA(text)); doc.SetComponent(e, new TextB(text)); doc.SetComponent(e, new TextC(text)); doc.SetComponent(e, new TextD(text)); doc.SetComponent(e, new TextE(text));
+                var edit = new EditSession(doc); Guid id = e;
                 for (int attempt = 0; attempt < 2; attempt++) {
                     var result = Object(edit, id, "components", 0, 64); Check(result.Status == "ok");
                     int count = result.Data.GetProperty("returnedCount").GetInt32(); Check(count > 0 && count < 5 && result.Data.GetProperty("nextOffset").GetInt32() == count);

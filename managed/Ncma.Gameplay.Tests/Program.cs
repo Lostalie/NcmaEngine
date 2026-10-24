@@ -20,21 +20,27 @@ static void Reject(Action action)
     try { action(); } catch (Exception e) when (e is ArgumentException or InvalidOperationException or AggregateException or OverflowException) { return; }
     throw new Exception("Invalid request accepted.");
 }
-static SceneDocument Document(int objects = 1, bool spatial = true)
+static SceneDocument AuthoringScene(int objects = 1, bool spatial = true)
 {
     var doc = new SceneDocument("Play fixture");
     for (int i = 0; i < objects; i++)
     {
-        global::Ncma.Runtime.Entity obj = doc.World.CreateEntity("Object " + i, Guid.Parse($"00000000-0000-0000-0000-{i + 1:D12}"));
-        if (spatial) doc.World.Set(obj, TransformData.Identity);
-        doc.SetBindings(doc.World.GetUuid(obj), [new(Guid.Parse($"10000000-0000-0000-0000-{i + 1:D12}"), "Test.Probe", true, [])]);
+        Guid obj = doc.CreateObject("Object " + i, Guid.Parse($"00000000-0000-0000-0000-{i + 1:D12}"));
+        if (spatial) doc.SetComponent(obj, TransformData.Identity);
+        doc.SetBindings(obj, [new(Guid.Parse($"10000000-0000-0000-0000-{i + 1:D12}"), "Test.Probe", true, [])]);
     }
     return doc;
 }
-static global::Ncma.Runtime.Entity Object(SceneDocument doc) => doc.World.GetEntities()[0];
+static RuntimeSceneInstance RuntimeScene(int objects = 1, bool spatial = true, Action<SceneDocument>? prepare = null)
+{
+    var source = AuthoringScene(objects, spatial);
+    prepare?.Invoke(source);
+    return source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
+}
+static global::Ncma.Runtime.Entity Object(RuntimeSceneInstance scene) => scene.World.GetEntities()[0];
 static double EqualTime(int fps)
 {
-    var doc = Document(); var probe = new Probe();
+    var doc = RuntimeScene(); var probe = new Probe();
     probe.Fixed = delta => {
         var t = probe.GameObject.LocalTransform; t.Position.X += (float)delta;
         probe.GameObject.LocalTransform = t;
@@ -49,7 +55,7 @@ static double EqualTime(int fps)
 [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
 static WeakReference[] DisposedPlay()
 {
-    var doc = Document(); var probe = new Probe(); var play = new PlaySession(doc);
+    var doc = RuntimeScene(); var probe = new Probe(); var play = new PlaySession(doc);
     play.Start(_ => probe); play.AdvanceFrame(1d / 60); play.Stop(); play.Dispose();
     return [new(play), new(probe)];
 }
@@ -62,14 +68,14 @@ static InputFrame Frame(PlaySession play, ulong sequence, ulong held = 0, ulong 
 var cases = new (string Name, Action Run)[]
 {
     ("Reload preflight failure preserves old catalog instances and committed Play paused", () => {
-        var doc = Document(); var old = new Probe(); using var play = new PlaySession(doc);
-        play.Start(_ => old); play.AdvanceFrame(1.0 / 60); var bytes = doc.CaptureBytes(); var epoch = play.SessionId;
+        var doc = RuntimeScene(); var old = new Probe(); using var play = new PlaySession(doc);
+        play.Start(_ => old); play.AdvanceFrame(1.0 / 60); var bytes = doc.CaptureCheckpoint().CopyBytes(); var epoch = play.SessionId;
         Reject(() => play.Reload(_ => throw new ArgumentException("Candidate invalid")));
-        Check(play.State == PlayState.Paused && play.SessionId == epoch && doc.CaptureBytes().SequenceEqual(bytes) && old.Destroyed == 0);
+        Check(play.State == PlayState.Paused && play.SessionId == epoch && doc.CaptureCheckpoint().CopyBytes().SequenceEqual(bytes) && old.Destroyed == 0);
         play.Resume(); play.AdvanceFrame(1.0 / 60); Check(old.FixedCount == 2); play.Stop(); Check(old.Destroyed == 1);
     }),
     ("Reload rebuilds private instances clears commands input and systems without resetting World", () => {
-        var doc = Document(); var old = new Probe(); var fresh = new Probe(); int systems = 0; using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); var old = new Probe(); var fresh = new Probe(); int systems = 0; using var play = new PlaySession(doc);
         play.AddSystem(new TestSystem((_, _) => systems++)); play.Start(_ => old); play.AdvanceFrame(1.0 / 60);
         var reference = Object(doc); var world = doc.World.Identity; var tick = play.Tick; var epoch = play.SessionId;
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2));
@@ -79,10 +85,10 @@ var cases = new (string Name, Action Run)[]
         Check(fresh.FixedCount == 1 && systems == 1);
     }),
     ("Reload activation failure is Faulted and does not resurrect old private state", () => {
-        var doc = Document(); var old = new Probe(); var fresh = new Probe { Create = () => throw new InvalidOperationException("Activation") };
-        using var play = new PlaySession(doc); play.Start(_ => old); var epoch = play.SessionId; var before = doc.CaptureBytes();
+        var doc = RuntimeScene(); var old = new Probe(); var fresh = new Probe { Create = () => throw new InvalidOperationException("Activation") };
+        using var play = new PlaySession(doc); play.Start(_ => old); var epoch = play.SessionId; var before = doc.CaptureCheckpoint().CopyBytes();
         Reject(() => play.Reload(_ => fresh)); Check(play.State == PlayState.Faulted && play.SessionId != epoch && old.Destroyed == 1);
-        Check(doc.CaptureBytes().SequenceEqual(before) && play.Tick == 0 && play.Fault!.Phase == "reload_create");
+        Check(doc.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && play.Tick == 0 && play.Fault!.Phase == "reload_create");
         Reject(() => play.Resume()); play.Stop(); Check(fresh.Destroyed == 1);
     }),
     ("Repeated Start Stop Dispose does not retain engine instance roots", () => {
@@ -91,7 +97,7 @@ var cases = new (string Name, Action Run)[]
         Check(references.All(r => !r.IsAlive), "Disposed Play/Behaviour roots leaked");
     }),
     ("Runtime pending lifecycle is cleaned by Stop without a following step", () => {
-        var doc = Document(); var first = new Probe(); var second = new Probe(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); var first = new Probe(); var second = new Probe(); using var play = new PlaySession(doc);
         first.Fixed = _ => {
             first.Context.Commands.AttachBehaviour(doc.World.GetUuid(Object(doc)), new(Guid.NewGuid(), "Test.Pending", true, []));
             first.Context.Commands.RemoveBehaviour(doc.World.GetUuid(Object(doc)), Guid.Parse("10000000-0000-0000-0000-000000000001"));
@@ -100,7 +106,7 @@ var cases = new (string Name, Action Run)[]
         Check(first.Disabled == 1 && first.Destroyed == 1 && second.Created == 0);
     }),
     ("Runtime create configure is atomic and keeps surviving handles", () => {
-        var doc = Document(); global::Ncma.Runtime.Entity original = Object(doc); var originalId = original; var identity = doc.World.Identity;
+        var doc = RuntimeScene(); global::Ncma.Runtime.Entity original = Object(doc); var originalId = original; var identity = doc.World.Identity;
         var probe = new Probe(); PendingEntity? pending = null; using var play = new PlaySession(doc);
         probe.Fixed = _ => {
             if (play.Tick != 0) return;
@@ -116,34 +122,34 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Caught payload and component validation errors still poison the whole step", () => {
         foreach (bool command in new[] { true, false }) {
-            var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
+            var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc);
             probe.Fixed = _ => {
                 probe.Context.Commands.SpawnEmpty("Never installed");
                 if (command) { try { probe.Context.Commands.AddComponent(doc.World.GetUuid(Object(doc)), new("ncma.transform", 1, default)); } catch (InvalidOperationException) { } }
                 else { var t = TransformData.Identity with { Position = new System.Numerics.Vector3(float.NaN, 0, 0) }; Reject(() => doc.World.Set(Object(doc), t)); }
             };
-            play.Start(_ => probe); byte[] before = doc.CaptureBytes(); play.AdvanceFrame(1.0 / 60);
-            Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureBytes().SequenceEqual(before));
+            play.Start(_ => probe); byte[] before = doc.CaptureCheckpoint().CopyBytes(); play.AdvanceFrame(1.0 / 60);
+            Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
             Check(play.Fault!.AttemptTick == 1 && play.Fault.Tick == 0);
         }
     }),
     ("Later invalid runtime command aborts structure components metadata input and receipts", () => {
-        var doc = Document(); var probe = new Probe(); PendingEntity? pending = null; using var play = new PlaySession(doc);
-        var before = doc.CaptureBytes(); var reference = Object(doc); var revision = doc.Revision;
+        var doc = RuntimeScene(); var probe = new Probe(); PendingEntity? pending = null; using var play = new PlaySession(doc);
+        var before = doc.CaptureCheckpoint().CopyBytes(); var reference = Object(doc); var revision = doc.Revision;
         probe.Fixed = _ => {
             pending = probe.Context.Commands.SpawnEmpty("Transient");
             var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t;
             probe.Context.Commands.AttachBehaviour(pending.ObjectId, new(Guid.NewGuid(), "Test.Probe", true, []));
             Reject(() => probe.Context.Commands.Rename(Guid.NewGuid(), "Bad")); // Even if user catches it, the step is poisoned.
         };
-        play.Start(_ => probe); before = doc.CaptureBytes(); revision = doc.Revision;
+        play.Start(_ => probe); before = doc.CaptureCheckpoint().CopyBytes(); revision = doc.Revision;
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2)); play.AdvanceFrame(1.0 / 60);
-        Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureBytes().SequenceEqual(before) && doc.Revision == revision);
+        Check(play.State == PlayState.Faulted && play.Tick == 0 && doc.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && doc.Revision == revision);
         Check(Object(doc) == reference && play.Input.Pressed(1)); Reject(() => play.Commands.GetReceipt(pending!.Token));
     }),
     ("Runtime conflict order rejects duplicate create double delete and modifications after delete", () => {
         foreach (var conflict in new[] { "create", "delete", "rename", "add" }) {
-            var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
+            var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc);
             probe.Fixed = _ => {
                 if (conflict == "create") { var id = Guid.NewGuid(); probe.Context.Commands.SpawnEmpty("A", id); probe.Context.Commands.SpawnEmpty("B", id); }
                 else { var id = doc.World.GetUuid(Object(doc)); probe.Context.Commands.Destroy(id);
@@ -151,12 +157,12 @@ var cases = new (string Name, Action Run)[]
                     else if (conflict == "rename") probe.Context.Commands.Rename(id, "Bad");
                     else probe.Context.Commands.AddComponent(id, new("ncma.transform", 1, doc.World.Components.Encode(TransformData.Identity))); }
             };
-            play.Start(_ => probe); var before = doc.CaptureBytes(); play.AdvanceFrame(1.0 / 60);
-            Check(play.State == PlayState.Faulted && doc.CaptureBytes().SequenceEqual(before) && play.Tick == 0, conflict);
+            play.Start(_ => probe); var before = doc.CaptureCheckpoint().CopyBytes(); play.AdvanceFrame(1.0 / 60);
+            Check(play.State == PlayState.Faulted && doc.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && play.Tick == 0, conflict);
         }
     }),
     ("Spawn then delete publishes no object binding or lifecycle", () => {
-        var doc = Document(); var probe = new Probe(); int factories = 0; PendingEntity? pending = null;
+        var doc = RuntimeScene(); var probe = new Probe(); int factories = 0; PendingEntity? pending = null;
         using var play = new PlaySession(doc); probe.Fixed = _ => {
             pending = probe.Context.Commands.SpawnEmpty("Gone");
             probe.Context.Commands.AttachBehaviour(pending.ObjectId, new(Guid.NewGuid(), "Test.Probe", true, []));
@@ -168,7 +174,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Component write remove ordering rejects Set after remove and Add existing", () => {
         foreach (bool after in new[] { false, true }) {
-            var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
+            var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc);
             probe.Fixed = _ => {
                 if (!after) { var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t; }
                 probe.Context.Commands.RemoveComponent(doc.World.GetUuid(Object(doc)), "ncma.transform");
@@ -177,12 +183,12 @@ var cases = new (string Name, Action Run)[]
             play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
             Check(after ? play.State == PlayState.Faulted && doc.World.Has<TransformData>(Object(doc)) : play.Tick == 1 && !doc.World.Has<TransformData>(Object(doc)));
         }
-        var existing = Document(); var p = new Probe(); using var session = new PlaySession(existing);
+        var existing = RuntimeScene(); var p = new Probe(); using var session = new PlaySession(existing);
         p.Fixed = _ => p.Context.Commands.AddComponent(existing.World.GetUuid(Object(existing)), new("ncma.transform", 1, existing.World.Components.Encode(TransformData.Identity)));
         session.Start(_ => p); session.AdvanceFrame(1.0 / 60); Check(session.State == PlayState.Faulted);
     }),
     ("Runtime attach enable disable remove lifecycle waits for safe boundary", () => {
-        var doc = Document(); var first = new Probe(); var second = new Probe(); var id = doc.World.GetUuid(Object(doc)); var binding = Guid.NewGuid();
+        var doc = RuntimeScene(); var first = new Probe(); var second = new Probe(); var id = doc.World.GetUuid(Object(doc)); var binding = Guid.NewGuid();
         using var play = new PlaySession(doc);
         first.Fixed = _ => {
             if (play.Tick == 0) first.Context.Commands.AttachBehaviour(id, new(binding, "Test.Other", false, []));
@@ -198,7 +204,7 @@ var cases = new (string Name, Action Run)[]
         play.AdvanceFrame(1.0 / 60); Check(second.Destroyed == 1); play.Stop(); Check(second.Disabled == 1 && second.Destroyed == 1);
     }),
     ("Destroyed object cleanup uses tombstone context and surviving handles remain valid", () => {
-        var doc = Document(2); var first = new Probe(); var second = new Probe(); global::Ncma.Runtime.Entity dead = doc.World.GetEntities()[0]; global::Ncma.Runtime.Entity survivor = doc.World.GetEntities()[1];
+        var doc = RuntimeScene(2); var first = new Probe(); var second = new Probe(); global::Ncma.Runtime.Entity dead = doc.World.GetEntities()[0]; global::Ncma.Runtime.Entity survivor = doc.World.GetEntities()[1];
         using var play = new PlaySession(doc); first.Fixed = _ => first.Context.Commands.Destroy(doc.World.GetUuid(dead));
         first.Disable = () => { Check(first.Cleanup!.ObjectId == Guid.Parse("00000000-0000-0000-0000-000000000001")); Reject(() => _ = first.GameObject.Name); };
         play.Start(b => b.Id == Guid.Parse("10000000-0000-0000-0000-000000000001") ? first : second);
@@ -206,20 +212,20 @@ var cases = new (string Name, Action Run)[]
         Reject(() => _ = doc.World.GetName(dead)); play.AdvanceFrame(1.0 / 60); Check(first.Disabled == 1 && first.Destroyed == 1 && second.FixedCount == 2);
     }),
     ("Runtime factory prepare failure leaves complete state and signal consumption intact", () => {
-        var doc = Document(); var first = new Probe(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); var first = new Probe(); using var play = new PlaySession(doc);
         first.Fixed = _ => {
             var signal = new GameplaySignal[1]; Check(first.GameObject.World.ReceiveSignals(first.GameObject, signal) == 1);
             var pending = first.Context.Commands.SpawnEmpty("Bad factory");
             first.Context.Commands.AttachBehaviour(pending.ObjectId, new(Guid.NewGuid(), "Test.Missing", true, []));
         };
         play.Start(b => b.TypeName == "Test.Missing" ? throw new ArgumentException("Missing type") : first);
-        first.GameObject.World.SendSignal(first.GameObject, first.GameObject, 1); var before = doc.CaptureBytes();
-        play.AdvanceFrame(1.0 / 60); Check(play.State == PlayState.Faulted && doc.CaptureBytes().SequenceEqual(before) && play.Tick == 0);
+        first.GameObject.World.SendSignal(first.GameObject, first.GameObject, 1); var before = doc.CaptureCheckpoint().CopyBytes();
+        play.AdvanceFrame(1.0 / 60); Check(play.State == PlayState.Faulted && doc.CaptureCheckpoint().CopyBytes().SequenceEqual(before) && play.Tick == 0);
         Check(first.GameObject.World.ReceiveSignals(first.GameObject, new GameplaySignal[1]) == 1);
     }),
     ("Runtime command and receipt capacity is bounded", () => {
         foreach (int count in new[] { 1024, 1025 }) {
-            var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); CommandToken first = default, last = default;
+            var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc); CommandToken first = default, last = default;
             probe.Fixed = _ => { for (int i = 0; i < count; i++) { var token = probe.Context.Commands.Rename(doc.World.GetUuid(Object(doc)), "Name " + i); if (i == 0) first = token; last = token; } };
             play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
             Check(count == 1024 ? play.Tick == 1 && doc.World.GetName(Object(doc)) == "Name 1023" : play.Tick == 0 && play.State == PlayState.Faulted);
@@ -227,7 +233,7 @@ var cases = new (string Name, Action Run)[]
         }
     }),
     ("Input retains both edges without a fixed step and consumes only once", () => {
-        var doc = Document(); var seen = new List<InputState>(); var probe = new Probe();
+        var doc = RuntimeScene(); var seen = new List<InputState>(); var probe = new Probe();
         using var play = new PlaySession(doc); probe.Fixed = _ => seen.Add(probe.Context.Input); play.Start(_ => probe);
         play.SubmitInput(Frame(play, 1));
         play.SubmitInput(Frame(play, 2, held: 2, pressed: 2, x: 3)); play.AdvanceFrame(0);
@@ -238,7 +244,7 @@ var cases = new (string Name, Action Run)[]
         Check(!seen[1].Pressed(1) && !seen[1].Released(1) && seen[1].PointerX == 0);
     }),
     ("Input rejects foreign epoch sequence pointer and array shapes without mutation", () => {
-        var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe()); play.SubmitInput(Frame(play, 1));
+        var doc = RuntimeScene(); using var play = new PlaySession(doc); play.Start(_ => new Probe()); play.SubmitInput(Frame(play, 1));
         Reject(() => play.SubmitInput(Frame(play, 1))); Reject(() => play.SubmitInput(Frame(play, 2) with { SessionId = Guid.NewGuid() }));
         Reject(() => play.SubmitInput(Frame(play, 2, x: double.NaN))); Reject(() => play.SubmitInput(Frame(play, 2) with { Held = [1] }));
         Check(play.Input.FrameSequence == 1);
@@ -246,7 +252,7 @@ var cases = new (string Name, Action Run)[]
         Check(play.Input.PointerX == 1_000_000 && play.Input.FrameSequence == 2);
     }),
     ("Focus pause resume step clear transient input and resynchronize held", () => {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2)); play.SubmitInput(Frame(play, 3, focused: false));
         Check(!play.Input.Held(1) && !play.Input.Pressed(1));
         play.SubmitInput(Frame(play, 4, 2, 2)); Check(play.Input.Held(1) && !play.Input.Pressed(1));
@@ -255,13 +261,13 @@ var cases = new (string Name, Action Run)[]
         play.SubmitInput(Frame(play, 6, 2, 2)); Check(play.Input.Held(1) && !play.Input.Pressed(1));
     }),
     ("Input consumption aborts when a fixed step fails", () => {
-        var doc = Document(); var probe = new Probe { Fixed = _ => throw new Exception("Input failure") };
+        var doc = RuntimeScene(); var probe = new Probe { Fixed = _ => throw new Exception("Input failure") };
         using var play = new PlaySession(doc); play.Start(_ => probe);
         play.SubmitInput(Frame(play, 1)); play.SubmitInput(Frame(play, 2, 2, 2, x: 5)); play.AdvanceFrame(1.0 / 60);
         Check(play.State == PlayState.Faulted && play.Tick == 0 && play.Input.Pressed(1) && play.Input.PointerX == 5);
     }),
     ("Render view interpolates without writing authoritative World", () => {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc);
         probe.Fixed = _ => { var t = probe.GameObject.LocalTransform; t.Position.X += 10; t.Scale.X += 2;
             t.RotationY = 1; t.RotationW = 0; probe.GameObject.LocalTransform = t; };
         play.Start(_ => probe); play.AdvanceFrame(1.5 / 60); var revision = doc.Revision;
@@ -273,11 +279,11 @@ var cases = new (string Name, Action Run)[]
         Check(play.RenderView.Objects[0].Transform.Position.X == 20);
     }),
     ("Render view omits nonspatial objects and clears after Stop", () => {
-        var doc = Document(spatial: false); using var play = new PlaySession(doc); play.Start(_ => new Probe());
+        var doc = RuntimeScene(spatial: false); using var play = new PlaySession(doc); play.Start(_ => new Probe());
         Check(play.RenderView.Objects.Length == 0); play.Stop(); Check(play.RenderView.Objects.Length == 0 && !doc.World.Has<TransformData>(Object(doc)));
     }),
     ("Signal receive consumption rolls back and sends have monotonic epoch identity", () => {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
         var target = probe.GameObject; target.World.SendSignal(target, target, 1);
         GameplaySignal first = default;
         probe.Fixed = _ => { var values = new GameplaySignal[1]; Check(target.World.ReceiveSignals(target, values) == 1);
@@ -294,41 +300,44 @@ var cases = new (string Name, Action Run)[]
             .Any(m => m.GetCustomAttribute<DllImportAttribute>() is not null));
     }),
     ("Empty scene still advances fixed ticks", () => {
-        var doc = Document(0); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(0); using var play = new PlaySession(doc);
         play.Start(_ => throw new Exception("No factory call expected."));
         Check(play.BehaviourCount == 0 && play.Status.Tick == 0);
         Check(play.AdvanceFrame(1.0 / 60).Tick == 1);
         play.Stop(); play.Stop(); Check(play.State == PlayState.Stopped);
     }),
     ("Non spatial Behaviour does not acquire Transform", () => {
-        var doc = Document(spatial: false); var probe = new Probe();
+        var doc = RuntimeScene(spatial: false); var probe = new Probe();
         using var play = new PlaySession(doc); play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
         Check(!doc.World.Has<TransformData>(Object(doc)) && probe.FixedCount == 1);
     }),
     ("Disabled binding created but never updated", () => {
-        var doc = Document(); global::Ncma.Runtime.Entity obj = Object(doc); var b = doc.GetBindings(doc.World.GetUuid(obj))[0];
-        doc.SetBindings(doc.World.GetUuid(obj), [b with { Enabled = false }]);
+        var doc = RuntimeScene(prepare: source => {
+            var id = source.GetObjectIds()[0];
+            source.SetBindings(id, [source.GetBindings(id)[0] with { Enabled = false }]);
+        });
         var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
         play.AdvanceFrame(1.0 / 60); play.Stop();
         Check(probe.Created == 1 && probe.Enabled == 0 && probe.FixedCount == 0 && probe.UpdateCount == 0 &&
             probe.Disabled == 0 && probe.Destroyed == 1);
     }),
     ("Binding UUID orders instances deterministically", () => {
-        var doc = Document(); var id = doc.World.GetUuid(Object(doc)); var a = Guid.Parse("20000000-0000-0000-0000-000000000001");
+        var a = Guid.Parse("20000000-0000-0000-0000-000000000001");
         var b = Guid.Parse("20000000-0000-0000-0000-000000000002"); var order = new List<Guid>();
-        doc.SetBindings(id, [new(b, "Test.Probe", true, []), new(a, "Test.Probe", true, [])]);
+        var doc = RuntimeScene(prepare: source => source.SetBindings(source.GetObjectIds()[0],
+            [new(b, "Test.Probe", true, []), new(a, "Test.Probe", true, [])]));
         using var play = new PlaySession(doc);
         play.Start(binding => new Probe { Fixed = _ => order.Add(binding.Id) });
         play.AdvanceFrame(1.0 / 60); Check(order.SequenceEqual(new[] { a, b }));
     }),
     ("Initialization commits writes without Tick", () => {
-        var doc = Document(); var probe = new Probe();
+        var doc = RuntimeScene(); var probe = new Probe();
         probe.Create = () => { var t = probe.GameObject.LocalTransform; t.Position.X = 7; probe.GameObject.LocalTransform = t; };
         using var play = new PlaySession(doc); play.Start(_ => probe);
         Check(play.Status.Tick == 0 && doc.World.Get<TransformData>(Object(doc)).Position.X == 7);
     }),
     ("Failed initialization aborts writes and cleans attempted lifecycle", () => {
-        var doc = Document(); var probe = new Probe();
+        var doc = RuntimeScene(); var probe = new Probe();
         probe.Create = () => { var t = probe.GameObject.LocalTransform; t.Position.X = 9; probe.GameObject.LocalTransform = t; throw new InvalidOperationException("Create failure"); };
         using var play = new PlaySession(doc); Reject(() => play.Start(_ => probe));
         Check(play.State == PlayState.Faulted && play.Fault!.Phase == "create");
@@ -336,7 +345,7 @@ var cases = new (string Name, Action Run)[]
         Check(probe.Created == 1 && probe.Destroyed == 1 && play.BehaviourCount == 0);
     }),
     ("Factory failure does not publish partial instances", () => {
-        var doc = Document(2); int attempts = 0; using var play = new PlaySession(doc);
+        var doc = RuntimeScene(2); int attempts = 0; using var play = new PlaySession(doc);
         Reject(() => play.Start(_ => ++attempts == 2 ? throw new ArgumentException("Factory failed") : new Probe()));
         Check(play.State == PlayState.Faulted && play.BehaviourCount == 0 && doc.World.Tick == 0);
     }),
@@ -345,13 +354,13 @@ var cases = new (string Name, Action Run)[]
         Check(Math.Abs(a - b) < 1e-6 && Math.Abs(b - c) < 1e-6);
     }),
     ("Zero step frames update presentation only", () => {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc);
         play.Start(_ => probe); play.AdvanceFrame(1.0 / 120);
         Check(play.Status.Tick == 0 && probe.FixedCount == 0 && probe.UpdateCount == 1);
         play.AdvanceFrame(1.0 / 120); Check(play.Status.Tick == 1 && probe.UpdateCount == 2);
     }),
     ("Fixed writes remain committed-read pending-write", () => {
-        var doc = Document(); var probe = new Probe(); bool readCommitted = false;
+        var doc = RuntimeScene(); var probe = new Probe(); bool readCommitted = false;
         probe.Fixed = _ => {
             var t = probe.GameObject.LocalTransform; t.Position.X = 11; probe.GameObject.LocalTransform = t;
             readCommitted = probe.GameObject.LocalTransform.Position.X == 0;
@@ -360,19 +369,19 @@ var cases = new (string Name, Action Run)[]
         Check(readCommitted && doc.World.Get<TransformData>(Object(doc)).Position.X == 11);
     }),
     ("OnUpdate World write faults after successful step", () => {
-        var doc = Document(); var probe = new Probe();
+        var doc = RuntimeScene(); var probe = new Probe();
         probe.Update = _ => { var t = probe.GameObject.LocalTransform; t.Position.X = 99; probe.GameObject.LocalTransform = t; };
         using var play = new PlaySession(doc); play.Start(_ => probe); var result = play.AdvanceFrame(1.0 / 60);
         Check(result.State == PlayState.Faulted && result.Tick == 1 && result.Fault!.Phase == "update");
         Check(doc.World.Get<TransformData>(Object(doc)).Position.X == 0); Reject(() => play.Resume());
     }),
     ("Read-only blocks structure restore and signal mutations", () => {
-        var doc = Document(); var probe = new Probe(); var snapshot = doc.World.CaptureSnapshot();
+        var doc = RuntimeScene(); var probe = new Probe(); var snapshot = doc.World.CaptureSnapshot();
         probe.Update = _ => {
             Reject(() => doc.World.CreateEntity("Illegal")); Reject(() => doc.World.Rename(Object(doc), "Illegal"));
             Reject(() => doc.World.Remove<TransformData>(Object(doc))); Reject(() => doc.World.Destroy(Object(doc)));
             Reject(() => doc.World.RestoreSnapshot(snapshot));
-            Reject(() => doc.SetBindings(doc.World.GetUuid(Object(doc)), []));
+            Reject(() => probe.Context.Commands.RemoveBehaviour(doc.World.GetUuid(Object(doc)), doc.GetBindings(doc.World.GetUuid(Object(doc)))[0].Id));
             Reject(() => probe.GameObject.World.Dispose());
             Reject(() => probe.GameObject.World.SendSignal(probe.GameObject, probe.GameObject, 1));
             Reject(() => probe.GameObject.World.ReceiveSignals(probe.GameObject, new GameplaySignal[1]));
@@ -381,26 +390,26 @@ var cases = new (string Name, Action Run)[]
         Check(play.State == PlayState.Running && doc.World.Count == 1 && doc.World.GetName(Object(doc)) == "Object 0");
     }),
     ("Invalid time rejects without changing status", () => {
-        var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
+        var doc = RuntimeScene(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
         var before = play.Status;
         foreach (double value in new[] { -1d, double.NaN, double.PositiveInfinity })
             Reject(() => play.AdvanceFrame(value));
         Check(play.Status == before);
     }),
     ("Strict budget rejects before state changes", () => {
-        var doc = Document(); using var play = new PlaySession(doc, FrameTimePolicy.Strict); play.Start(_ => new Probe());
+        var doc = RuntimeScene(); using var play = new PlaySession(doc, FrameTimePolicy.Strict); play.Start(_ => new Probe());
         play.AdvanceFrame(1.0 / 120); var before = play.Status; Reject(() => play.AdvanceFrame(0.25));
         Check(play.Status == before);
     }),
     ("Interactive catch-up reports time loss and preserves fraction", () => {
-        var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
+        var doc = RuntimeScene(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
         var result = play.AdvanceFrame(1.01);
         Check(result.StepsExecuted == 8 && result.Tick == 8 && result.DroppedSeconds > 0.87);
         Check(result.Accumulator >= 0 && result.Accumulator < result.FixedDeltaSeconds);
         Check(result.TotalDroppedSeconds == result.DroppedSeconds);
     }),
     ("Pause resume drops debt and Step skips presentation", () => {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc); play.Start(_ => probe);
         play.AdvanceFrame(1.0 / 120); play.Pause(); var before = play.Status;
         play.AdvanceFrame(20); Check(play.Status == before);
         play.Step(); Check(play.Status.Tick == 1 && probe.UpdateCount == 1 && play.State == PlayState.Paused);
@@ -408,7 +417,7 @@ var cases = new (string Name, Action Run)[]
         Reject(() => play.Step());
     }),
     ("Fixed failure aborts only failed step and retains prior commits", () => {
-        var doc = Document(); var probe = new Probe();
+        var doc = RuntimeScene(); var probe = new Probe();
         probe.Fixed = _ => {
             var t = probe.GameObject.LocalTransform; t.Position.X++; probe.GameObject.LocalTransform = t;
             if (probe.FixedCount == 3) throw new Exception("Third step failed");
@@ -420,75 +429,77 @@ var cases = new (string Name, Action Run)[]
         Reject(() => play.AdvanceFrame(0));
     }),
     ("Single step failure enters Faulted without Tick", () => {
-        var doc = Document(); var probe = new Probe { Fixed = _ => throw new Exception("Step failed") };
+        var doc = RuntimeScene(); var probe = new Probe { Fixed = _ => throw new Exception("Step failed") };
         using var play = new PlaySession(doc); play.Start(_ => probe); play.Pause();
         Check(play.Step().State == PlayState.Faulted && play.Status.Tick == 0);
     }),
     ("Reentrant controls do not change ownership", () => {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc);
         probe.Fixed = _ => { Reject(() => play.AdvanceFrame(0)); Reject(() => play.Stop()); Reject(() => play.Dispose()); };
         play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
         Check(play.State == PlayState.Running && play.Status.Tick == 1);
     }),
     ("Owner thread rejects all foreign control", () => {
-        var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
+        var doc = RuntimeScene(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
         Task.Run(() => { Reject(() => play.Pause()); Reject(() => play.Stop()); Reject(() => _ = play.Status); }).GetAwaiter().GetResult();
         Check(play.State == PlayState.Running);
     }),
     ("Systems use stable order after Behaviour", () => {
-        var doc = Document(); var order = new List<int>(); var probe = new Probe { Fixed = _ => order.Add(0) };
+        var doc = RuntimeScene(); var order = new List<int>(); var probe = new Probe { Fixed = _ => order.Add(0) };
         using var play = new PlaySession(doc);
         play.AddSystem(new TestSystem((_, _) => order.Add(1))); play.AddSystem(new TestSystem((_, _) => order.Add(2)));
         play.Start(_ => probe); Reject(() => play.AddSystem(new TestSystem((_, _) => { })));
         play.AdvanceFrame(1.0 / 60); Check(order.SequenceEqual(new[] { 0, 1, 2 }));
     }),
     ("Initialization factory cannot mutate World", () => {
-        var doc = Document(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); using var play = new PlaySession(doc);
         Reject(() => play.Start(_ => { doc.World.CreateEntity("Illegal"); return new Probe(); }));
         Check(doc.World.Count == 1 && play.State == PlayState.Faulted);
     }),
     ("Stop performs at-most-once cleanup even when callbacks fail", () => {
-        var doc = Document(); var probe = new Probe { Disable = () => throw new Exception("Disable failed") };
+        var doc = RuntimeScene(); var probe = new Probe { Disable = () => throw new Exception("Disable failed") };
         var play = new PlaySession(doc); play.Start(_ => probe);
         Reject(() => play.Stop()); Check(play.State == PlayState.Stopped && probe.Disabled == 1 && probe.Destroyed == 1);
         play.Stop(); play.Dispose(); play.Dispose(); Check(probe.Disabled == 1 && probe.Destroyed == 1);
     }),
-    ("Play clone preserves complete edit document and history", () => {
-        var edit = Document(); var session = new EditSession(edit); byte[] before = edit.CaptureBytes(); var state = session.State;
-        var clone = new SceneDocument(); clone.RestoreBytes(before);
+    ("Baked Play preserves complete authoring document and history", () => {
+        var edit = AuthoringScene(); var session = new EditSession(edit); byte[] before = edit.CaptureBytes(); var state = session.State;
+        var clone = edit.BakeRuntime(edit.Revision).Image.Instantiate(edit.Components);
         var probe = new Probe();
         probe.Fixed = _ => { var t = probe.GameObject.LocalTransform; t.Position.X = 123; probe.GameObject.LocalTransform = t; };
         using var play = new PlaySession(clone); play.Start(_ => probe); play.AdvanceFrame(1.0 / 60); play.Stop();
         Check(before.SequenceEqual(edit.CaptureBytes()) && session.State == state);
-        Check(clone.World.Identity != edit.World.Identity && clone.World.GetUuid(Object(clone)) == edit.World.GetUuid(Object(edit)));
+        Check(clone.World.Identity != Guid.Empty && clone.World.GetUuid(Object(clone)) == edit.GetObjectIds()[0]);
+        Check(clone.World.Get<TransformData>(Object(clone)).Position.X == 123 &&
+            edit.GetComponent<TransformData>(edit.GetObjectIds()[0]).Position.X == 0);
     }),
     ("Stopped session and invalid policy reject controls", () => {
-        var doc = Document(); using var play = new PlaySession(doc);
+        var doc = RuntimeScene(); using var play = new PlaySession(doc);
         Reject(() => play.AdvanceFrame(0)); Reject(() => play.Pause()); Reject(() => play.Step());
         Reject(() => new PlaySession(doc, (FrameTimePolicy)123));
         play.Start(_ => new Probe()); Reject(() => play.Start(_ => new Probe())); play.Stop();
         play.Start(_ => new Probe()); Check(play.State == PlayState.Running && play.Fault is null);
     }),
     ("Accumulated dropped-time overflow rejects before simulation", () => {
-        var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
+        var doc = RuntimeScene(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
         play.AdvanceFrame(double.MaxValue); var before = play.Status;
         Reject(() => play.AdvanceFrame(double.MaxValue));
         Check(play.Status == before);
     }),
     ("Faulted frame reports clamp loss in cumulative diagnostics", () => {
-        var doc = Document(); var probe = new Probe { Fixed = _ => throw new Exception("Failed") };
+        var doc = RuntimeScene(); var probe = new Probe { Fixed = _ => throw new Exception("Failed") };
         using var play = new PlaySession(doc); play.Start(_ => probe); var status = play.AdvanceFrame(1);
         Check(status.State == PlayState.Faulted && status.StepsExecuted == 0);
         Check(Math.Abs(status.DroppedSeconds - 0.75) < 1e-12 && status.TotalDroppedSeconds == status.DroppedSeconds);
     }),
     ("Frame counter overflow rejects before advancing", () => {
-        var doc = Document(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
+        var doc = RuntimeScene(); using var play = new PlaySession(doc); play.Start(_ => new Probe());
         typeof(PlaySession).GetField("_frameCount", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(play, ulong.MaxValue);
         var before = play.Status; Reject(() => play.AdvanceFrame(1.0 / 60)); Check(play.Status == before);
     }),
-    ("Null Play document is rejected explicitly", () => { Reject(() => new PlaySession(null!)); }),
+    ("Null runtime scene is rejected explicitly", () => { Reject(() => new PlaySession(null!)); }),
     ("Fault message remains bounded", () => {
-        var doc = Document(); var probe = new Probe { Fixed = _ => throw new Exception(new string('X', 4096)) };
+        var doc = RuntimeScene(); var probe = new Probe { Fixed = _ => throw new Exception(new string('X', 4096)) };
         using var play = new PlaySession(doc); play.Start(_ => probe); play.AdvanceFrame(1.0 / 60);
         Check(play.Fault!.Message.Length == 512);
     }),
@@ -500,6 +511,8 @@ foreach (var test in cases)
     catch (Exception error) { Console.Error.WriteLine("FAIL " + test.Name + ": " + error); return 1; }
 }
 Console.WriteLine($"Gameplay tests: {passed}/{cases.Length} passed.");
+try { SimulationCostCases.Run(); }
+catch (Exception error) { Console.Error.WriteLine("FAIL simulation costs: " + error); return 1; }
 try { IncrementalGameplayCases.Run(); }
 catch (Exception error) { Console.Error.WriteLine("FAIL incremental gameplay: " + error); return 1; }
 try { IncrementalCommitCases.Run(); }
@@ -518,7 +531,7 @@ if (args.Contains("--benchmark"))
     foreach (int steps in new[] { 0, 1, 8 })
     foreach (int commands in new[] { 0, 64, 1024 })
     {
-        var doc = Document(); var probe = new Probe(); using var play = new PlaySession(doc); var id = doc.World.GetUuid(Object(doc));
+        var doc = RuntimeScene(); var probe = new Probe(); using var play = new PlaySession(doc); var id = doc.World.GetUuid(Object(doc));
         probe.Fixed = _ => { for (int i = 0; i < commands; i++) probe.Context.Commands.Rename(id, "Profile " + i); };
         play.Start(_ => probe); var times = new List<double>(); var allocations = new List<long>();
         for (int iteration = 0; iteration < 40; iteration++)
@@ -540,7 +553,7 @@ if (args.Contains("--pressure-benchmark")) PressureProfiles.Run();
 EcsBaseline.Run(args.Contains("--ecs-baseline"));
 EcsReadBaseline.Run(false, (_, _, _) => { });
 EcsMemoryV2Tests.Run();
-EcsBaselineV2.Run(false, (_, _, _) => { });
+EcsBaselineV2.Run(false);
 EcsReadBaselineV2.Run(false, (_, _, _) => { });
 EcsDenseDiagnostics.Run(false);
 EcsReadDiagnostics.Run(false);

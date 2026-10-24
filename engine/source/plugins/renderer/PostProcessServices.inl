@@ -5,14 +5,7 @@ bool testThrow=false;
 bool testDiagnostic=false;
 #endif
 // Closed binding reflection fixture, not the official/user effect algorithm.
-constexpr const char* source=R"(
-cbuffer Post:register(b0){float4 Params;};
-Texture2D Input0:register(t0);Texture2D Input1:register(t1);SamplerState LinearClamp:register(s0);
-struct Full{float4 p:SV_POSITION;float2 uv:TEXCOORD0;};
-Full VSPost(uint id:SV_VertexID){Full o;o.uv=float2((id<<1)&2,id&2);o.p=float4(o.uv*float2(2,-2)+float2(-1,1),0,1);return o;}
-float4 PSOne(Full i):SV_TARGET{return Input0.SampleLevel(LinearClamp,i.uv,0)*Params;}
-float4 PSTwo(Full i):SV_TARGET{return Input0.SampleLevel(LinearClamp,i.uv,0)+Input1.SampleLevel(LinearClamp,i.uv,0)*Params;}
-)";
+constexpr const char* source=Rendering::ClosedShaderSources::Post;
 struct OwnedPrograms {
     std::vector<NcmaPostProgramV1> programs;
     std::vector<std::vector<uint8_t>> data;
@@ -25,9 +18,10 @@ struct OwnedPrograms {
 };
 uint32_t Code(const uint8_t* data,uint32_t bytes,uint32_t kind,NcmaErrorV1* error){
     auto& expected=renderer->postReferences[kind];
-    if(!expected){ComPtr<ID3DBlob> code;const char* entry=kind==0?"VSPost":kind==1?"PSOne":"PSTwo";
-        if(FAILED(D3DCompile(source,std::strlen(source),"Ncma.PostContract.v1",nullptr,nullptr,entry,kind==0?"vs_5_0":"ps_5_0",ShaderCompilation::Flags,0,&code,nullptr))||
-           FAILED(D3DReflect(code->GetBufferPointer(),code->GetBufferSize(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"post_internal_reflection");}
+    if(!expected){const char* entry=kind==0?"VSPost":kind==1?"PSOne":"PSTwo";
+        static_assert(Rendering::ClosedShaderBytes::Flags==ShaderCompilation::Flags);
+        const auto code=Rendering::ClosedShaderReference::Find(source,entry,kind==0?"vs_5_0":"ps_5_0","Ncma.PostContract.v1");
+        if(code.empty()||FAILED(D3DReflect(code.data(),code.size(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"post_internal_reflection");}
     ComPtr<ID3D11ShaderReflection> actual;const char* reason=nullptr;
     if(FAILED(D3DReflect(data,bytes,__uuidof(ID3D11ShaderReflection),&actual))||!RegisteredStages::SameBindings(actual.Get(),expected.Get(),reason))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"post_actual_bindings");return NCMA_OK;
 }

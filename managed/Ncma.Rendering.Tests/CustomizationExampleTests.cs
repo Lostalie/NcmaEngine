@@ -91,7 +91,8 @@ internal static unsafe partial class Program
 
         bool approved = true;
         using var runtime = new PostProcessRuntime(renderer, files, library, modules, () => approved);
-        var fixture = new SceneGpuFixture(output); var (document, camera, _, _) = fixture.Scene();
+        var fixture = new SceneGpuFixture(output); var (authoring, camera, _, _) = fixture.Scene();
+        var authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity light = document.World.GetEntities().Single(o => document.World.Has<DirectionalLightData>(o)); document.World.Set(light, document.World.Get<DirectionalLightData>(light) with { CastShadow = false });
         document.World.Set(document.World.CreateEntity("Post"), active);
         using (var presets = EnvironmentPresetLibrary.LoadDeployment(deployed)) {
@@ -142,6 +143,7 @@ internal static unsafe partial class Program
             Pass(scene.Plan!.Resources.Single(r => r.Role == RenderRole.SceneShadow).Width == (full ? 512 : 1024) && !shadowed.SequenceEqual(baseline), "custom shadow topology actually executed");
             document.World.Set(light, document.World.Get<DirectionalLightData>(light) with { CastShadow = false }); Prepare(); Pass(Draw().SequenceEqual(baseline), "shadow removal restores baseline");
         }
+        Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()), "custom runtime never mutates authoring source");
         cache.Trim(); Pass(renderer.PostStats.Bindings == 0 && renderer.PipelineStats.Pipelines == 0 && renderer.EnvironmentStats.Live == 0, "close returns GPU resources");
         Pass(renderer.Stats.ValidationErrors == 0 && renderer.Stats.ValidationWarnings == 0, "API0/0");
         File.WriteAllText(Path.Combine(output, "customization-results.json"), JsonSerializer.Serialize(new { cases, maxError, observations, apiErrors = 0, apiWarnings = 0, jointFbxUiAccepted = false, relocatedProductsAccepted = false, manualAccepted = false }));

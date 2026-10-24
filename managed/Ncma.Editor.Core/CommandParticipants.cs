@@ -78,12 +78,12 @@ public sealed partial class EditSession
             _ = _document.PrepareRestore(candidate, request.ExpectedRevision);
         }
         ParticipantMemento prepared;
-        using (_document.World.ReadOnly()) prepared = owner.Prepare(request.Input);
+        using (_document.ReadOnly()) prepared = owner.Prepare(request.Input);
         if (prepared is null || prepared.Before is null || prepared.After is null ||
             (long)prepared.Before.Length + prepared.After.Length > MaxHistoryBytes)
             throw new ArgumentException("Participant memento exceeds history budget.");
         var memento = new ParticipantMemento((byte[])prepared.Before.Clone(), (byte[])prepared.After.Clone());
-        using (_document.World.ReadOnly()) owner.Authorize(memento);
+        using (_document.ReadOnly()) owner.Authorize(memento);
         return Commit(request, fingerprint, candidate, before, _capabilities[request.Capability].Description,
             request.Capability, null, _selection, permissions: permissions, participant: new(owner, memento), impactRequest: impactRequest);
     }
@@ -91,7 +91,7 @@ public sealed partial class EditSession
     private CapabilityRequest ParticipantSceneRequest(CapabilityRequest request, IEditCommandSceneParticipant owner)
     {
         JsonElement operations;
-        using (_document.World.ReadOnly()) operations = owner.SceneOperations(request.Input).Clone();
+        using (_document.ReadOnly()) operations = owner.SceneOperations(request.Input).Clone();
         if (operations.ValueKind != JsonValueKind.Array || operations.GetArrayLength() is < 1 or > MaxOperations)
             throw new ArgumentException("Participant requires bounded original scene operations.");
         var input = JsonSerializer.SerializeToElement(new { operations }); CheckInput(input);
@@ -104,7 +104,7 @@ public sealed partial class EditSession
         bool attempted = false, installed = false;
         try
         {
-            using (_document.World.ReadOnly())
+            using (_document.ReadOnly())
             {
                 entry.Owner.Validate(entry.Memento, forward);
                 if (!authorized()) throw new EditRejectedException("scope_denied");
@@ -115,7 +115,7 @@ public sealed partial class EditSession
             if (!authorized()) throw new EditRejectedException("scope_denied");
             install();
             installed = true;
-            using (_document.World.ReadOnly()) entry.Owner.Complete(entry.Memento, forward);
+            using (_document.ReadOnly()) entry.Owner.Complete(entry.Memento, forward);
         }
         catch
         {
@@ -124,7 +124,7 @@ public sealed partial class EditSession
             if (installed) { _invalidated = true; _frozen = true; }
             if (attempted)
             {
-                try { using (_document.World.ReadOnly()) entry.Owner.Compensate(entry.Memento, forward); }
+                try { using (_document.ReadOnly()) entry.Owner.Compensate(entry.Memento, forward); }
                 catch (Exception error) when (error is not OutOfMemoryException)
                 {
                     _invalidated = true; _frozen = true;

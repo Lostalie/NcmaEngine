@@ -7,7 +7,7 @@ namespace Ncma.Editor.App;
 internal sealed unsafe partial class EditorPresenter
 {
     private object ShadowOperation(Guid target,SceneShadowQuality quality)=>new{op="set_component",objectId=target,typeId=SceneShadowData.TypeId,version=1,
-        data=workspace.Owner.Document.World.Components.Encode(new SceneShadowData(1,quality))};
+        data=workspace.Owner.Document.Components.Encode(new SceneShadowData(1,quality))};
     private void BuildShadowInspector(Guid target,SceneShadowData value,ref ulong control,ref ulong label,bool writable)
     {
         var preset=SceneShadowPresets.Get(SceneShadowData.Validate(value).Quality);
@@ -20,7 +20,7 @@ internal sealed unsafe partial class EditorPresenter
     }
     private void BuildShadowSelection(Guid target,ref ulong control,bool writable)
     {
-        if(workspace.Owner.Document.World.Components.Describe().Any(c=>c.TypeId==SceneShadowData.TypeId)&&!workspace.HasSceneComponent(SceneShadowData.TypeId))
+        if(workspace.Owner.Document.Components.Describe().Any(c=>c.TypeId==SceneShadowData.TypeId)&&!workspace.HasSceneComponent(SceneShadowData.TypeId))
             Button(control++,"添加场景阴影配置（Medium）","transaction",writable,target,ShadowOperation(target,SceneShadowQuality.Medium));
     }
 }

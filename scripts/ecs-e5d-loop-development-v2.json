@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-d-loop-development-v2-pacing",
+  "kind": "default-off development observation; not performance acceptance",
+  "previousEvidence": "ecs-e5-d-loop-development-v1 remains historical and unchanged",
+  "entryOptions": ["--loop-costs", "--max-fps 1..240"],
+  "pacingDefault": "uncapped",
+  "headless": "reject a frame cap; preserve deterministic unpaced fixed steps",
+  "pacingPolicy": "minimum owner-loop admission interval: ceil(Stopwatch.Frequency / fps); first admission immediate; late work rebases from actual admission, never catch-up bursts",
+  "waiting": "Thread.Sleep slices at most 8ms, final <=1ms uses bounded SpinWait calls with repeated time/cancellation checks; no timer resolution change or GPU waits",
+  "scope": "wall loop durations including synchronous waits and observation overhead; not pure CPU time",
+  "admissionTimestamp": "actual Stopwatch timestamp captured by FramePacer; separately copied into loop report v2",
+  "intervalMeaning": "owner-loop admission cap is not physical display synchronization or a guarantee of average/1%-low FPS",
+  "simulation": "unchanged supplied monotonic wall-clock delta and existing fixed-step/catch-up policy",
+  "rawCapacity": 512,
+  "overflow": "first prefix retained and omissions explicit; no full-run percentiles",
+  "gpuEvidence": "no change to prior v3 domain evidence or current/resolved slots",
+  "targetHardwareVerified": false,
+  "performanceAccepted": false,
+  "memoryAcceptance": "pending",
+  "remaining": ["full-run bounded streaming", "resolution/preset/internal scale/representative route freeze", "display interval evidence", "GUI/extraction/residency/queue domains", "full regression and final same-source cohorts"]
+}

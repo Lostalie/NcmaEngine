@@ -11,13 +11,25 @@ public sealed record PlayerReport(int SchemaVersion, string Mode, string Rendere
 {
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
     public Ncma.Rendering.PresentationCostReport? PresentationCosts { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public Ncma.Characters.SceneSimulationCostReport? SimulationCosts { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public Ncma.Application.LoopCostReport? LoopCosts { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public int? FrameRateLimit { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public Ncma.Application.PresentationStageReport? PresentationStages { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public PlayerOutputReport? Output { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public Ncma.Application.ProcessMemoryReport? MemoryCheckpoints { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public Ncma.Rendering.RendererMemoryReport? ResourceMemory { get; init; }
 }
 
 public static class PlayerReports
 {
     public const int MaxBytes = 1024 * 1024;
-    private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }, WriteIndented = true };
     // Check before any runtime startup. CreateNew is the final no-overwrite guard, not a TOCTOU assumption.
     public static void ValidateTarget(string path)
     {
@@ -29,7 +41,7 @@ public static class PlayerReports
     public static void Write(string path, PlayerReport report)
     {
         ValidateTarget(path);
-        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(report, Json);
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(report, PlayerReportJsonContext.Default.PlayerReport);
         if (bytes.Length > MaxBytes) throw new ArgumentException("report_budget");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         ValidateTarget(path);

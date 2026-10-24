@@ -16,14 +16,16 @@ internal static class GameplayUiCases
         new(sequence, Guid.Parse("785b512d-d59f-48b3-9d5c-5fd4f9ca8a41"), "hud.activate", GameplayUiActionKind.Activate);
     private sealed class Fixture : IDisposable
     {
-        internal readonly SceneDocument Document = new("UI input fixture");
+        internal readonly RuntimeSceneInstance Scene;
         internal readonly PlaySession Play;
         internal readonly UiProbe Probe = new();
         internal Fixture(bool start = true)
         {
-            global::Ncma.Runtime.Entity obj = Document.World.CreateEntity("Before");
-            Document.SetBindings(Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Test.UiProbe", true, [])]);
-            Play = new(Document, FrameTimePolicy.Strict);
+            var source = new SceneDocument("UI input fixture");
+            var obj = source.CreateObject("Before");
+            source.SetBindings(obj, [new(Guid.NewGuid(), "Test.UiProbe", true, [])]);
+            Scene = source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
+            Play = new(Scene, FrameTimePolicy.Strict);
             Play.RegisterUiAction("hud.activate", GameplayUiActionKind.Activate);
             Play.RegisterUiAction("hud.value", GameplayUiActionKind.ValueChanged);
             Play.RegisterUiAction("hud.text", GameplayUiActionKind.TextChanged);
@@ -75,16 +77,16 @@ internal static class GameplayUiCases
             }),
             ("Copied proposals are fixed-step-only and gameplay uses existing command commit", () => {
                 using var f = new Fixture(); var stamp = f.Bind(); var action = Action();
-                var source = new[] { action }; var bytes = f.Document.CaptureBytes();
+                var source = new[] { action }; var bytes = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Play.SubmitUiActions(stamp, source); source[0] = Action(999);
-                Check(f.Document.CaptureBytes().SequenceEqual(bytes) && f.Play.UiInput.Count == 0);
+                Check(f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(bytes) && f.Play.UiInput.Count == 0);
                 f.Probe.Fixed = () => {
                     Check(f.Probe.Context.UiInput[0] == action && f.Probe.Context.UiInput.Stamp == stamp);
-                    f.Probe.Context.Commands.Rename(f.Document.World.GetUuid(f.Document.World.GetEntities()[0]), "Accepted");
-                    Check(f.Document.World.GetName(f.Document.World.GetEntities()[0]) == "Before");
+                    f.Probe.Context.Commands.Rename(f.Scene.World.GetUuid(f.Scene.World.GetEntities()[0]), "Accepted");
+                    Check(f.Scene.World.GetName(f.Scene.World.GetEntities()[0]) == "Before");
                 };
                 f.Step(); var retained = f.Probe.Last!;
-                Check(f.Play.Tick == 1 && f.Document.World.GetName(f.Document.World.GetEntities()[0]) == "Accepted" && retained.Count == 1);
+                Check(f.Play.Tick == 1 && f.Scene.World.GetName(f.Scene.World.GetEntities()[0]) == "Accepted" && retained.Count == 1);
                 f.Probe.Fixed = null; f.Step(); Check(f.Probe.Last!.Count == 0 && retained[0] == action);
                 f.Play.Stop(); Check(f.Probe.OutsideEmpty && f.Play.UiInput.Count == 0 && retained.Stamp == stamp);
             }),
@@ -184,9 +186,15 @@ internal static class GameplayUiCases
             ("World or metadata revision change drops queued observations before fixed update", () => {
                 foreach (bool metadata in new[] { false, true }) {
                     using var f = new Fixture(); var stamp = f.Bind(); f.Play.SubmitUiActions(stamp, [Action()]);
-                    global::Ncma.Runtime.Entity obj = f.Document.World.GetEntities()[0];
-                    if (metadata) f.Document.SetBindings(f.Document.World.GetUuid(obj), f.Document.GetBindings(f.Document.World.GetUuid(obj)));
-                    else f.Document.World.Rename(obj, "External");
+                    global::Ncma.Runtime.Entity obj = f.Scene.World.GetEntities()[0];
+                    if (metadata) {
+                        var id = f.Scene.World.GetUuid(obj); var world = f.Scene.World.Identity;
+                        RuntimeSceneTestTransactions.CommitMetadata(f.Scene, bindings => bindings[id] = [bindings[id][0] with {
+                            Exports = [new("RevisionSignal", ExportKind.Double, 1)] }]);
+                        Check(f.Scene.World.Identity == world && f.Scene.World.GetName(obj) == "Before" &&
+                            f.Scene.GetBindings(id)[0].Exports[0].Name == "RevisionSignal");
+                    }
+                    else f.Scene.World.Rename(obj, "External");
                     Check(f.Play.CurrentUiInputStamp.SceneRevision != stamp.SceneRevision);
                     Reject(() => f.Play.SubmitUiActions(stamp, [Action(2)]));
                     f.Step(); Check(f.Probe.Last!.Count == 0); Reject(() => _ = f.Play.CurrentUiInputStamp);
@@ -211,20 +219,22 @@ internal static class GameplayUiCases
                 f.Dispose(); Reject(() => _ = f.Play.UiInput); Reject(() => f.Bind());
             }),
             ("Fault aborts scene commands, revokes UI input and requires explicit new Play", () => {
-                using var f = new Fixture(); var stamp = f.Bind(); var bytes = f.Document.CaptureBytes();
+                using var f = new Fixture(); var stamp = f.Bind(); var bytes = f.Scene.CaptureCheckpoint().CopyBytes();
                 f.Play.SubmitUiActions(stamp, [Action()]);
                 f.Probe.Fixed = () => {
                     Check(f.Probe.Context.UiInput.Count == 1);
-                    f.Probe.Context.Commands.Rename(f.Document.World.GetUuid(f.Document.World.GetEntities()[0]), "Must not commit");
+                    f.Probe.Context.Commands.Rename(f.Scene.World.GetUuid(f.Scene.World.GetEntities()[0]), "Must not commit");
                     throw new InvalidOperationException("gameplay failure");
                 };
-                f.Step(); Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 0 && f.Document.CaptureBytes().SequenceEqual(bytes));
+                f.Step(); Check(f.Play.State == PlayState.Faulted && f.Play.Tick == 0 && f.Scene.CaptureCheckpoint().CopyBytes().SequenceEqual(bytes));
                 Check(f.Play.UiInput.Count == 0); Reject(() => f.Play.SubmitUiActions(stamp, [Action(2)]));
                 f.Play.Stop(); f.Probe.Fixed = null; f.Play.Start(_ => f.Probe);
                 Reject(() => f.Play.SubmitUiActions(stamp, [Action(2)])); f.Step(); Check(f.Probe.Last!.Count == 0);
             }),
             ("Headless fixed-step sessions use identical UI input consumption without OnUpdate", () => {
-                using var play = new PlaySession(new SceneDocument(), FrameTimePolicy.Strict, advanceMode: PlayAdvanceMode.FixedSteps);
+                var source = new SceneDocument();
+                var scene = source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
+                using var play = new PlaySession(scene, FrameTimePolicy.Strict, advanceMode: PlayAdvanceMode.FixedSteps);
                 play.RegisterUiAction("hud.activate", GameplayUiActionKind.Activate); play.Start(_ => throw new Exception("empty"));
                 var stamp = play.BindUiInput(Guid.NewGuid(), 1); play.SubmitUiActions(stamp, [Action()]);
                 Check(play.AdvanceFixedStep().Tick == 1); Reject(() => play.SubmitUiActions(stamp, [Action(2)]));

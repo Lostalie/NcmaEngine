@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ncma.Animation;
 using Ncma.Editor.Core;
 using Ncma.Editor.Services;
+using Ncma.Editor.App;
 using Ncma.Gui;
 
 internal static class GraphSequenceTests
@@ -24,7 +25,7 @@ internal static class GraphSequenceTests
             f.Client.StandardInput.WriteLine(JsonSerializer.Serialize(request,Ncma.Editor.Protocol.Wire.Json));f.Client.StandardInput.Flush();var pending=f.Client.StandardOutput.ReadLineAsync();var watch=System.Diagnostics.Stopwatch.StartNew();
             while(f.Owner.Endpoint!.View.QueueCount==0){if(watch.ElapsedMilliseconds>10000)throw new TimeoutException("Sequence request was not queued.");Thread.Sleep(1);}
             Check(!pending.IsCompleted,"No analysis on IO thread");byte[] before=f.Owner.Document.CaptureBytes();s.Revoke();f.Owner.Endpoint.Pump();Check(pending.Wait(10000));
-            using var response=JsonDocument.Parse(pending.Result!);Check(response.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&f.Owner.Document.World.Tick==0);
+            using var response=JsonDocument.Parse(pending.Result!);Check(response.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&f.Owner.Play is null);
             Reject(()=>s.RunLocal(id));
         });
         yield return("M6.5-D sequence root opt-out/assertion outcomes and retired-ID bound",()=>{
@@ -32,7 +33,7 @@ internal static class GraphSequenceTests
             Reject(()=>s.PrepareTrusted(true,int.MaxValue));s.PrepareTrusted(false);Reject(()=>s.ProposeLocal(new(.1,1,[],[new(1,AnimationSequenceAssertionKind.RootX,Guid.Empty,0)])));
             Guid id=s.ProposeLocal(Case());var noRoot=s.RunLocal(id);Check(!noRoot.RootMotionSupported&&noRoot.Timeline.All(t=>t.Root is null));s.Cancel(id);s.PrepareTrusted();
             id=s.ProposeLocal(new(.1,1,[],[new(1,AnimationSequenceAssertionKind.RootX,Guid.Empty,999)]));Check(!s.RunLocal(id).Passed&&s.RunLocal(id).Checks.Single().Code=="assertion_failed");s.Cancel(id);
-            for(int i=2;i<256;i++){id=s.ProposeLocal(Case());s.Cancel(id);}Reject(()=>s.ProposeLocal(Case()));Check(s.Pending.Length==0&&f.Owner.Document.World.Tick==0);
+            for(int i=2;i<256;i++){id=s.ProposeLocal(Case());s.Cancel(id);}Reject(()=>s.ProposeLocal(Case()));Check(s.Pending.Length==0&&f.Owner.Play is null);
         });
         yield return("M6.5-C stamped event-track draft drag/cancel/save and independent sequence UI",()=>{
             using var f=new GraphInspectionTests.Fixture(output,repository,authoring:true);var w=f.Writer!;
@@ -46,7 +47,7 @@ internal static class GraphSequenceTests
             Click(50,9);Check(w.Capture()!.Events.Length==0&&before.SequenceEqual(File.ReadAllBytes(f.File)));
             Click(50,8);Click(50,44);Click(50,602,.1);Click(50,10);Click(50,52,1);Click(50,53);Click(50,54);
             Check(AnimationGraphCodec.Decode(File.ReadAllBytes(f.File)).Events.Single().Time==.1&&f.Owner.Edit!.State.UndoCount==1&&scene.SequenceEqual(f.Owner.Document.CaptureBytes()));
-            Click(50,60);Click(55,2);Text(55,5,AnimationSequenceCodec.Encode(new(.1,3,[],[new(1,AnimationSequenceAssertionKind.EventCount,Guid.Empty,0)])).GetRawText());Click(55,6);Click(55,7);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("passed=False")&&f.Owner.Document.World.Tick==0);Click(55,19);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("marker="));Click(55,20);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("assertion_failed"));
+            Click(50,60);Click(55,2);Text(55,5,AnimationSequenceCodec.Encode(new(.1,3,[],[new(1,AnimationSequenceAssertionKind.EventCount,Guid.Empty,0)])).GetRawText());Click(55,6);Click(55,7);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("passed=False")&&f.Owner.Play is null);Click(55,19);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("marker="));Click(55,20);Check(System.Text.Encoding.UTF8.GetString(f.View.Text).Contains("assertion_failed"));
             Click(55,16);Click(55,17);
             Check(!f.View.Items.ToArray().Any(i=>i.WidgetHigh==55));
         });
@@ -65,8 +66,8 @@ internal static class GraphSequenceTests
         });
         yield return("M6.5-C exact NCA independent local sequence, copied cases and no World/history/native steps",()=>{
             using var f=new GraphInspectionTests.Fixture(output,repository,authoring:true);var s=f.Writer!.Sequences;Reject(()=>s.ProposeLocal(Case()));s.PrepareTrusted();byte[] scene=f.Owner.Document.CaptureBytes();var state=f.Owner.Edit!.State;
-            Guid id=s.ProposeLocal(Case());var copy=s.CaseCopy(id);copy.Assertions[0]=copy.Assertions[0] with{Value=1};var result=s.RunLocal(id);Check(result.Passed&&result.Timeline.Count==3&&result.RootMotionSupported&&!result.ResourcesPrepared);
-            Check(result.Timeline.All(t=>t.Root is not null)&&result.Timeline[0].Frame.Context.WorldId!=f.Owner.Document.World.Identity&&result.Timeline[^1].Frame.Context.Tick==3);
+            Guid id=s.ProposeLocal(Case());var copy=s.CaseCopy(id);copy.Assertions[0]=copy.Assertions[0] with{Value=1};var authoringPreview=EditorSceneProjection.Bake(f.Owner);var result=s.RunLocal(id);Check(result.Passed&&result.Timeline.Count==3&&result.RootMotionSupported&&!result.ResourcesPrepared);
+            Check(result.Timeline.All(t=>t.Root is not null)&&result.Timeline[0].Frame.Context.WorldId!=Guid.Empty&&result.Timeline[0].Frame.Context.WorldId!=authoringPreview.Scene.World.Identity&&authoringPreview.IsCurrent(f.Owner)&&f.Owner.Play is null&&result.Timeline[^1].Frame.Context.Tick==3);
             Check(scene.SequenceEqual(f.Owner.Document.CaptureBytes())&&state==f.Owner.Edit.State);s.Cancel(id);Reject(()=>s.RunLocal(id));
             for(int i=0;i<4;i++)s.ProposeLocal(Case());Reject(()=>s.ProposeLocal(Case()));s.Revoke();Reject(()=>s.CaptureReview(s.Pending[0]));
         });

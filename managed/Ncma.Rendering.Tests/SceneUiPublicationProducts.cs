@@ -41,17 +41,26 @@ internal static unsafe partial class Program
                 if(probeName=="graphics-recovery-joint"){
                     if(kind!="editor"){
                         using var ordinary=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost.json")));
-                        pass(!ordinary.RootElement.TryGetProperty("presentationCosts",out _),"default relocated Player CLI has no cost report");
-                    }else pass(!File.ReadAllText(Path.Combine(evidence,"apphost.log")).Contains("presentationCosts",StringComparison.Ordinal),"default relocated Editor CLI has no cost output");
+                        pass(!ordinary.RootElement.TryGetProperty("presentationCosts",out _)&&!ordinary.RootElement.TryGetProperty("simulationCosts",out _),"default relocated Player CLI has no cost report");
+                    }else {
+                        string ordinary=File.ReadAllText(Path.Combine(evidence,"apphost.log"));
+                        pass(!ordinary.Contains("presentationCosts",StringComparison.Ordinal)&&!ordinary.Contains("simulationCosts",StringComparison.Ordinal),"default relocated Editor CLI has no cost output");
+                    }
                     var measured=new ProcessStartInfo(cli.FileName){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};
                     foreach(string arg in cli.ArgumentList)measured.ArgumentList.Add(arg==Path.Combine(evidence,"apphost.json")?Path.Combine(evidence,"apphost-costs.json"):arg);
-                    measured.ArgumentList.Add("--presentation-costs");Run(measured,Path.Combine(evidence,"apphost-costs.log"),0);
+                    measured.ArgumentList.Add("--presentation-costs");measured.ArgumentList.Add("--simulation-costs");Run(measured,Path.Combine(evidence,"apphost-costs.log"),0);
                     if(kind=="editor"){
                         string line=File.ReadLines(Path.Combine(evidence,"apphost-costs.log")).Single(l=>l.StartsWith("{\"presentationCosts\":",StringComparison.Ordinal));
                         using var measuredReport=JsonDocument.Parse(line);var observation=measuredReport.RootElement.GetProperty("presentationCosts");
                         pass(observation.GetProperty("Completed").GetBoolean()&&!observation.GetProperty("IncludesDiagnosticCapture").GetBoolean()&&observation.GetProperty("Generation").GetUInt64()>0,"actual relocated Editor CLI opt-in copied non-capture report");
+                        string simulationLine=File.ReadLines(Path.Combine(evidence,"apphost-costs.log")).Single(l=>l.StartsWith("{\"simulationCosts\":",StringComparison.Ordinal));
+                        using var simulationReport=JsonDocument.Parse(simulationLine);
+                        pass(simulationReport.RootElement.GetProperty("simulationCosts").ValueKind==JsonValueKind.Null,"actual Editor Edit-only CLI does not claim simulated gameplay");
                     }else{
                         using var measuredReport=JsonDocument.Parse(File.ReadAllBytes(Path.Combine(evidence,"apphost-costs.json")));
+                        var simulation=measuredReport.RootElement.GetProperty("simulationCosts");var advance=simulation.GetProperty("advance");
+                        pass(advance.GetProperty("completed").GetBoolean()&&advance.GetProperty("tickAfter").GetUInt64()==measuredReport.RootElement.GetProperty("tick").GetUInt64()&&
+                            advance.GetProperty("sessionId").GetGuid()==measuredReport.RootElement.GetProperty("sessionId").GetGuid()&&!simulation.GetProperty("fullPerformanceAccepted").GetBoolean(),"actual relocated Player CLI persists simulation observation with exact final identity/tick");
                         if(kind is "null" or "nullPhysics")pass(!measuredReport.RootElement.TryGetProperty("presentationCosts",out _)&&measuredReport.RootElement.GetProperty("renderedFrames").GetUInt64()==0,"Null CLI opt-in never initializes GPU instrumentation");
                         else{
                             var observation=measuredReport.RootElement.GetProperty("presentationCosts");

@@ -1,4 +1,5 @@
 #include "SkinKernel.h"
+#include "ClosedShaderSources.h"
 #include <d3dcompiler.h>
 #include <cstring>
 #include <memory>
@@ -7,20 +8,7 @@
 namespace NcmaEngine::Rendering {
 namespace {
 bool Ok(Rhi::D3D11RenderBackend& backend,HRESULT hr,std::string& error){if(SUCCEEDED(hr))return true;backend.ReportApiFailure(hr);error="DX11 skin resource/dispatch failed: "+std::to_string(static_cast<unsigned long>(hr));return false;}
-constexpr std::string_view SkinShader=R"(
-struct Input {float3 p;float3 n;float2 uv;float4 t;uint4 joints;float4 weights;};
-struct Palette {column_major float4x4 model;column_major float4x4 normal;};
-StructuredBuffer<Input> Source:register(t0);StructuredBuffer<Palette> Bones:register(t1);
-RWByteAddressBuffer Output:register(u0);
-cbuffer Settings:register(b0){uint VertexCount,Offset,Unused,Unused2;};
-float3 Unit(float3 v,float3 fallback){float length2=dot(v,v);return length2>1e-12?v*rsqrt(length2):fallback;}
-[numthreads(64,1,1)]void CSMain(uint3 id:SV_DispatchThreadID){if(id.x>=VertexCount)return;
- Input v=Source[id.x];float3 p=0,n=0,t=0;
- [unroll]for(uint k=0;k<4;k++){Palette b=Bones[Offset+v.joints[k]];
- p+=mul(b.model,float4(v.p,1)).xyz*v.weights[k];n+=mul((float3x3)b.normal,v.n)*v.weights[k];t+=mul((float3x3)b.model,v.t.xyz)*v.weights[k];}
- n=Unit(n,float3(0,1,0));float3 fallback=Unit(cross(abs(n.y)<.9?float3(0,1,0):float3(1,0,0),n),float3(1,0,0));t=Unit(t-n*dot(n,t),fallback);
- uint at=id.x*48;Output.Store3(at,asuint(p));Output.Store3(at+12,asuint(n));Output.Store2(at+24,asuint(v.uv));Output.Store4(at+32,asuint(float4(t,v.t.w)));
-})";
+constexpr auto SkinShader=ClosedShaderSources::Skin;
 }
 bool SkinInstance::Initialize(Rhi::D3D11RenderBackend& b,StaticMesh& mesh,const NcmaSkinMeshV5& d,std::string& error){
  vertices=d.mesh.vertex_count;bindings=d.binding_count;

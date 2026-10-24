@@ -32,11 +32,11 @@ internal static class PostProcessAuthoringTests
             Root=Path.Combine(output,"post-author-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Root);
             Owner=new("Post authoring",components:RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),validateComposition:CandidatePresentation.RequireComposition,workflowTime:Time,postProcessModules:modules);
             Workspace=new(Owner);if(geometry){var mesh=Workspace.CreateObject(Workspace.Stamp);Workspace.Transaction(Workspace.Stamp,"Geometry",[
-                new{op="set_component",objectId=mesh,typeId="ncma.transform",version=1,data=Owner.Document.World.Components.Encode(TransformData.Identity)},
-                new{op="set_component",objectId=mesh,typeId=StaticMeshData.TypeId,version=1,data=Owner.Document.World.Components.Encode(new StaticMeshData(Guid.NewGuid(),Guid.NewGuid(),true,true,1))}]);}
+                new{op="set_component",objectId=mesh,typeId="ncma.transform",version=1,data=Owner.Document.Components.Encode(TransformData.Identity)},
+                new{op="set_component",objectId=mesh,typeId=StaticMeshData.TypeId,version=1,data=Owner.Document.Components.Encode(new StaticMeshData(Guid.NewGuid(),Guid.NewGuid(),true,true,1))}]);}
             Id=Workspace.CreateObject(Workspace.Stamp);View=new(Workspace,null,Root,workspaceStyle:true);Build();Click("添加后处理配置（关闭）");
         }
-        internal PostProcessData Value=>Owner.Document.World.Get<PostProcessData>(Owner.Document.World.FindEntity(Id));
+        internal PostProcessData Value=>Owner.Document.GetComponent<PostProcessData>(Id);
         internal void Build()=>View.Build(++_frame,1280,720);
         internal GuiItem Item(string name){var found=View.Items.ToArray().Where(i=>Encoding.UTF8.GetString(View.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))==name).ToArray();if(found.Length!=1)throw new Exception("Missing/duplicate GUI item: "+name+"; "+Encoding.UTF8.GetString(View.Text));return found[0];}
         internal GuiEvent Event(string name,uint phase=3,double value=0){var i=Item(name);var f=View.Frame;return new(){Kind=i.Kind,WidgetHigh=i.WidgetHigh,WidgetLow=i.WidgetLow,Phase=phase,Value=value,Frame=f.Frame,ViewGeneration=f.ViewGeneration,DocumentGeneration=f.DocumentGeneration,Revision=f.Revision};}
@@ -44,7 +44,7 @@ internal static class PostProcessAuthoringTests
         internal void Change(string name,double value){View.Apply([Event(name,1),Event(name,2,value),Event(name,3,value)],[]);Build();}
         internal object Input(PostProcessData value)=>new{operations=new[]{RenderingEditorAdapter.PostOperation(Service.Modules,Id,value)}};
         internal CapabilityRequest Raw(PostProcessData value)=>new(2,Guid.NewGuid(),Owner.Edit!.SessionId,Owner.Edit.Revision,"ncma.scene.transaction",
-            JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=Id,typeId=PostProcessData.TypeId,version=1,data=Owner.Document.World.Components.Encode(value)}}}));
+            JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=Id,typeId=PostProcessData.TypeId,version=1,data=Owner.Document.Components.Encode(value)}}}));
         public void Dispose()=>Owner.Dispose();
     }
     private sealed class Client:IDisposable
@@ -73,6 +73,30 @@ internal static class PostProcessAuthoringTests
     }
     internal static IEnumerable<(string,Action)> Cases(string output,string repo)
     {
+        yield return("M7.4-C3 Low button uses original transaction and exact single history",()=>{
+            using var f=new Fixture(output);f.Click("添加 Feature：Bloom");f.Change("启用后处理 / 关闭对照",1);f.Change("曝光 EV",-1);
+            byte[] before=f.Owner.Document.CaptureBytes();var previous=f.Value;int history=f.Owner.Edit!.State.UndoCount;
+            f.Click("应用场景画质：Low v1");
+            Check(f.Owner.Edit.State.UndoCount==history+1&&f.Value==previous with{StackJson="[]"});
+            Check(SceneShadowState.Read(f.Owner.Document.CaptureSnapshot())?.Quality==SceneShadowQuality.Low);
+            byte[] low=f.Owner.Document.CaptureBytes();f.Workspace.History(f.Workspace.Stamp,false);f.Build();
+            Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));f.Workspace.History(f.Workspace.Stamp,true);f.Build();
+            Check(low.SequenceEqual(f.Owner.Document.CaptureBytes()));
+        });
+        yield return("M7.4-C3 Low stale forged draft and Play button guards preserve document",()=>{
+            using var f=new Fixture(output);f.Click("添加 Feature：Bloom");byte[] before=f.Owner.Document.CaptureBytes();int history=f.Owner.Edit!.State.UndoCount;
+            var forged=f.Event("应用场景画质：Low v1");forged.Kind=(uint)GuiItemKind.Label;f.View.Apply([forged],[]);
+            Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&f.Owner.Edit.State.UndoCount==history);
+            var stale=f.Event("应用场景画质：Low v1");f.Workspace.Transaction(f.Workspace.Stamp,"New revision",[new{op="rename",objectId=f.Id,name="New name"}],f.Id);
+            before=f.Owner.Document.CaptureBytes();f.View.Apply([stale],[]);Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));f.Build();
+            var beforeDraft=f.Event("应用场景画质：Low v1");
+            f.View.Apply([f.Event("曝光 EV",1),f.Event("曝光 EV",2,1)],[]);
+            Check(f.Workspace.HasDraft,"draft starts before queued quality click");f.View.Apply([beforeDraft],[]);
+            Check(f.Workspace.HasDraft&&before.SequenceEqual(f.Owner.Document.CaptureBytes()),"queued quality click preserves both draft and committed document");
+            f.Build();Check(f.Item("应用场景画质：Low v1").Enabled==0);f.View.CancelInteraction();f.Build();
+            f.Owner.StartPlay();f.Build();Check(f.Item("应用场景画质：Low v1").Enabled==0);
+            f.Click("应用场景画质：Low v1");Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));f.Owner.StopPlay();
+        });
         yield return("M7.4-C3 catalog owned CPU data and defaults",()=>{
             var modules=PostProcessModules.Official();var descriptions=modules.Describe();Check(descriptions.Length==4);var bloom=descriptions.Single(m=>m.Kind=="feature");bloom.Parameters[0]=new("changed",0,1);Check(modules.Describe().Single(m=>m.Kind=="feature").Parameters[0].Name=="levels");
             var value=RenderingEditorAdapter.PostFeature(modules,PostProcessData.Off,PostProcessLibrarySelection.BloomModule,2);Check(value.StackJson==PostProcessData.EncodeStack([PostProcessModules.Bloom(new())]));
@@ -100,7 +124,7 @@ internal static class PostProcessAuthoringTests
             using var f=new Fixture(output);var before=f.Owner.Document.CaptureBytes();var edit=f.Owner.Edit!;var grant=new CapabilityPermissions(["ncma.scene.transaction"],objectScope:[f.Id],componentScope:[PostProcessData.TypeId]);
             foreach(var invalid in new[]{f.Value with{ToneModule=Guid.NewGuid()},f.Value with{ToneVersion=2},f.Value with{StackJson=PostProcessData.EncodeStack([new(Guid.NewGuid(),1,[])])},f.Value with{StackJson=PostProcessData.EncodeStack([PostProcessModules.Bloom(new()) with{Version=2}])}}){Check(!edit.Invoke(f.Raw(invalid),grant).Changed);Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));}
             using var ui=new Fixture(output,geometry:false);Check(!ui.Owner.Edit!.Invoke(ui.Raw(ui.Value with{Enabled=true}),new(["ncma.scene.transaction"])).Changed);Check(!ui.Value.Enabled);
-            Guid configuration=f.Workspace.CreateObject(f.Workspace.Stamp);f.Workspace.Transaction(f.Workspace.Stamp,"Exposure",[new{op="set_component",objectId=configuration,typeId=RenderConfiguration.ComponentType,version=1,data=f.Owner.Document.World.Components.Encode(RenderConfiguration.Default(Guid.NewGuid()) with{Exposure=16})}]);
+            Guid configuration=f.Workspace.CreateObject(f.Workspace.Stamp);f.Workspace.Transaction(f.Workspace.Stamp,"Exposure",[new{op="set_component",objectId=configuration,typeId=RenderConfiguration.ComponentType,version=1,data=f.Owner.Document.Components.Encode(RenderConfiguration.Default(Guid.NewGuid()) with{Exposure=16})}]);
             Check(!edit.Invoke(f.Raw(f.Value with{Enabled=true,ExposureEv=1}),grant).Changed&&!f.Value.Enabled);
         });
         yield return("M7.4-C3 user parameters dependencies legal reordering same UI and contract",()=>{
@@ -114,9 +138,9 @@ internal static class PostProcessAuthoringTests
         });
         yield return("M7.4-C3 persistence Play freeze and current prepared stamps",()=>{
             using var f=new Fixture(output);f.Click("添加 Feature：Bloom");f.Change("曝光 EV",-2);string file=Path.Combine(f.Root,"scene.ncmascene");f.Workspace.Save(f.Workspace.Stamp,file);f.Workspace.Open(f.Workspace.Stamp,file,true);f.Workspace.Select(f.Workspace.Stamp,f.Id);f.Build();Check(f.Value.ExposureEv==-2);
-            var world=f.Owner.Document.World;f.View.ShowPostPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value);Check(f.View.PostPreparationStatus.Contains("关闭"));
-            f.View.ShowPostPreparation(world.Identity,world.Revision,Guid.Empty,false,true,null);Check(f.View.PostPreparationStatus.Contains("失败"));f.Change("曝光 EV",-1);Check(f.View.PostPreparationStatus.Contains("等待"));
-            var play=f.Owner.StartPlay();f.Build();Check(f.Item("曝光 EV").Enabled==0);f.Change("曝光 EV",3);Check(f.Value.ExposureEv==-1);f.View.ShowPostPreparation(play.Document.World.Identity,play.Document.World.Revision,play.SessionId,true,false,f.Value);Check(f.View.PostPreparationStatus.Contains("Play"));f.Owner.StopPlay();Check(f.View.PostPreparationStatus.Contains("等待"));
+            var preview=EditorSceneProjection.Bake(f.Owner);var world=preview.Scene.World;f.View.ShowPostPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value,authoring:preview.Source);Check(f.View.PostPreparationStatus.Contains("关闭"));
+            f.View.ShowPostPreparation(world.Identity,world.Revision,Guid.Empty,false,true,null,authoring:preview.Source);Check(f.View.PostPreparationStatus.Contains("失败"));f.Change("曝光 EV",-1);Check(f.View.PostPreparationStatus.Contains("等待"));
+            var play=f.Owner.StartPlay();f.Build();Check(f.Item("曝光 EV").Enabled==0);f.Change("曝光 EV",3);Check(f.Value.ExposureEv==-1);f.View.ShowPostPreparation(play.Scene.World.Identity,play.Scene.World.Revision,play.SessionId,true,false,f.Value);Check(f.View.PostPreparationStatus.Contains("Play"));f.Owner.StopPlay();Check(f.View.PostPreparationStatus.Contains("等待"));
         });
         yield return("M7.4-C3 stdio catalog default deny exact human scope TTL revoke repair endpoint",()=>{
             using var f=new Fixture(output);using(var client=new Client(f,repo)){

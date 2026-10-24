@@ -86,8 +86,14 @@ public sealed class EditorWorkspace(EditorSessionOwner owner)
         if (id != confirmedId || id == Guid.Empty) throw new EditRejectedException("delete_confirmation_required");
         Invoke("ncma.scene.delete_object", JsonSerializer.SerializeToElement(new { objectId = id }), stamp, confirmedId);
     }
-    public void History(EditorViewStamp stamp, bool redo) => Invoke(redo ? "ncma.history.redo" : "ncma.history.undo",
-        JsonSerializer.SerializeToElement(new { }), stamp, Edit.HistoryTarget(redo));
+    public void History(EditorViewStamp stamp, bool redo)
+    {
+        Check(stamp); CancelDraft();
+        var permissions = new CapabilityPermissions(LocalCapabilities, Edit.HistoryDestructiveTargets(redo));
+        var result = Edit.Invoke(new(EditSession.ContractVersion, Guid.NewGuid(), Edit.SessionId, stamp.Revision,
+            redo ? "ncma.history.redo" : "ncma.history.undo", JsonSerializer.SerializeToElement(new { })), permissions);
+        if (result.Status != "ok") throw new EditRejectedException(result.Code);
+    }
     public void New(EditorViewStamp stamp, bool discardConfirmed)
     {
         Check(stamp); RequireReplacement(discardConfirmed); CancelDraft();

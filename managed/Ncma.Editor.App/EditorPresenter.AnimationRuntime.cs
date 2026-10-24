@@ -15,6 +15,11 @@ internal sealed unsafe partial class EditorPresenter
     internal void AttachAnimationRuntime(AnimationRuntimeInspectionService service)=>_animationRuntime=service;
     private void BuildAnimationRuntime(float width,float height,ref ulong label)
     {
+        if (_showAnimationRuntime) BuildAnimationRuntimeVisible(width, height, ref label);
+    }
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void BuildAnimationRuntimeVisible(float width,float height,ref ulong label)
+    {
         if(!_showAnimationRuntime||_animationRuntime is null)return;
         Panel(411,"动画图运行观察 / 独立只读审批",width*.1f,height*.12f,width*.8f,height*.75f);
         var bindings=_animationRuntime.LocalBindings();

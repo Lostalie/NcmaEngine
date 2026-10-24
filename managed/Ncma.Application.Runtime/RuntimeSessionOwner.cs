@@ -4,7 +4,7 @@ using Ncma.Scripting;
 
 namespace Ncma.Application.Runtime;
 
-// No editor, native or transport dependencies. Caller decides whether the Play document is a clone.
+// Owns runtime lifecycle and catalog leases. No authoring document or editable World is retained.
 public sealed class RuntimeSessionOwner : IDisposable
 {
     private readonly bool _ownsCatalog;
@@ -13,46 +13,54 @@ public sealed class RuntimeSessionOwner : IDisposable
     private IDisposable? _composition;
     private PlayStatus? _lastStartFailure;
     private bool _busy, _disposed;
-    public SceneDocument Document { get; }
+    private readonly int _ownerThread = Environment.CurrentManagedThreadId;
     public ScriptCatalogService Catalog { get; }
     public PlaySession? Play { get { Verify(); return _play; } }
     public PlayStatus? LastStartFailure { get { Verify(); return _lastStartFailure; } }
-    public RuntimeSessionOwner(SceneDocument document, ScriptCatalogService? catalog = null)
+    public RuntimeSessionOwner(ScriptCatalogService? catalog = null)
     {
-        ArgumentNullException.ThrowIfNull(document); document.VerifyAccess();
-        Document = document; Catalog = catalog ?? new(); _ownsCatalog = catalog is null;
+        Catalog = catalog ?? new(); _ownsCatalog = catalog is null;
     }
     private void Verify()
     {
-        Document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
+        VerifyThread(); ObjectDisposedException.ThrowIf(_disposed, this);
         if (_busy) throw new InvalidOperationException("Runtime callback reentry is forbidden.");
     }
-    private void Preflight(ScriptCatalogService.Candidate candidate)
+    private void VerifyThread()
+    { if (Environment.CurrentManagedThreadId != _ownerThread) throw new InvalidOperationException("Runtime owner thread required."); }
+    private static BehaviourBindingData[] CopyBindings(ISceneContent source)
     {
-        using (Document.World.ReadOnly())
-            foreach (var item in Document.CaptureSnapshot().Objects)
-                foreach (var binding in item.Behaviours) _ = candidate.Instantiate(binding);
+        ArgumentNullException.ThrowIfNull(source);
+        return source.Objects.SelectMany(o => o.Behaviours).Select(b =>
+            b with { Exports = (ExportData[])b.Exports.Clone() }).ToArray();
     }
-    public int LoadGameplay(string path)
+    public int LoadGameplay(string path, ISceneContent source)
     {
         Verify(); if (_play is not null) throw new InvalidOperationException("Stop Play before loading gameplay.");
-        _busy = true;
-        try { using var read = Document.World.ReadOnly(); using var candidate = Catalog.LoadCandidate(path); int count = candidate.Count;
-            Preflight(candidate); Catalog.CommitCandidate(candidate); return count; }
+        var bindings = CopyBindings(source); _busy = true;
+        try { using var candidate = Catalog.LoadCandidate(path); int count = candidate.Count;
+            foreach (var binding in bindings) _ = candidate.Instantiate(binding);
+            Catalog.CommitCandidate(candidate); return count; }
         finally { _busy = false; }
     }
-    public PlaySession StartPlay(SceneDocument? runtimeDocument = null, Func<SceneDocument, PlaySession>? factory = null,
+    public int LoadGameplay(string path, RuntimeSceneInstance scene)
+    {
+        Verify(); ArgumentNullException.ThrowIfNull(scene); scene.VerifyAccess();
+        using var read = scene.World.ReadOnly();
+        return LoadGameplay(path, scene.CaptureSnapshot());
+    }
+    public PlaySession StartPlay(RuntimeSceneInstance scene, Func<RuntimeSceneInstance, PlaySession>? factory = null,
         Func<PlaySession, IDisposable?>? compose = null)
     {
         Verify(); if (_play is not null) throw new InvalidOperationException("Stop current Play first.");
-        var document = runtimeDocument ?? Document; document.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(scene); scene.VerifyAccess();
         PlaySession? candidate = null; IDisposable? lease = null; IDisposable? composition = null; _busy = true; _lastStartFailure = null;
         try
         {
-            using (Document.World.ReadOnly()) using (document.World.ReadOnly())
-                candidate = factory is null ? new PlaySession(document) : factory(document);
-            if (candidate is null || !ReferenceEquals(candidate.Document, document)) throw new ArgumentException("Foreign Play document.");
-            using (Document.World.ReadOnly()) using (document.World.ReadOnly()) composition = compose?.Invoke(candidate);
+            using (scene.World.ReadOnly())
+                candidate = factory is null ? new PlaySession(scene) : factory(scene);
+            if (candidate is null || !ReferenceEquals(candidate.Scene, scene)) throw new ArgumentException("Foreign Play scene.");
+            using (scene.World.ReadOnly()) composition = compose?.Invoke(candidate);
             lease = Catalog.AcquireLease(); candidate.Start(Catalog.Instantiate);
             _composition = composition; _lease = lease; _play = candidate; return candidate;
         }
@@ -65,16 +73,18 @@ public sealed class RuntimeSessionOwner : IDisposable
         }
         finally { _busy = false; }
     }
-    public int ReloadGameplay(string path)
+    public int ReloadGameplay(string path, ISceneContent? stoppedSource = null)
     {
-        Verify(); _play?.Pause(); _busy = true;
+        Verify();
+        var bindings = _play is null ? CopyBindings(stoppedSource ?? throw new ArgumentNullException(nameof(stoppedSource))) : [];
+        _play?.Pause(); _busy = true;
         try
         {
             ScriptCatalogService.Candidate prepared;
-            using (Document.World.ReadOnly()) using (_play?.Document.World.ReadOnly()) prepared = Catalog.LoadCandidate(path);
+            using (_play?.Scene.World.ReadOnly()) prepared = Catalog.LoadCandidate(path);
             using var candidate = prepared; int count = candidate.Count; bool committed = false;
             void Commit() { if (!committed) { Catalog.CommitCandidate(candidate); committed = true; } }
-            try { if (_play is not null) _play.Reload(candidate.Instantiate); else Preflight(candidate); Commit(); return count; }
+            try { if (_play is not null) _play.Reload(candidate.Instantiate); else foreach (var binding in bindings) _ = candidate.Instantiate(binding); Commit(); return count; }
             catch { if (_play?.State == PlayState.Faulted) Commit(); throw; }
         }
         finally { _busy = false; }
@@ -93,7 +103,7 @@ public sealed class RuntimeSessionOwner : IDisposable
     }
     public void Dispose()
     {
-        Document.VerifyAccess(); if (_disposed) return; Verify(); Exception? error = null;
+        VerifyThread(); if (_disposed) return; Verify(); Exception? error = null;
         try { StopPlay(); } catch (Exception e) { error = e; }
         if (_play is not null) throw new InvalidOperationException("Runtime still owns active Play resources.", error);
         if (_ownsCatalog) Catalog.Dispose(); _disposed = true;

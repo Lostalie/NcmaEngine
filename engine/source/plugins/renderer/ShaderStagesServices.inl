@@ -37,9 +37,10 @@ uint32_t ValidateCode(const uint8_t* bytes,uint32_t size,std::string_view source
  for(const auto& cached:cache)if(cached.source==source&&cached.entry==entry&&cached.target==target){expected=cached.reflection;break;}
  if(!expected){
   if(cache.size()>=(environment?4u:10u))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_reference_budget");
-  ComPtr<ID3DBlob> reference;
-  if(FAILED(D3DCompile(source.data(),source.size(),"Ncma.ClosedStage.v1",nullptr,nullptr,entry,target,ShaderCompilation::Flags,0,&reference,nullptr)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_contract");
-  if(FAILED(D3DReflect(reference->GetBufferPointer(),reference->GetBufferSize(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_reflection");
+  static_assert(Rendering::ClosedShaderBytes::Flags==ShaderCompilation::Flags);
+  const auto reference=Rendering::ClosedShaderReference::Find(source,entry,target,"Ncma.ClosedStage.v1");
+  if(reference.empty())return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_contract");
+  if(FAILED(D3DReflect(reference.data(),reference.size(),__uuidof(ID3D11ShaderReflection),&expected)))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"registered_internal_reflection");
   cache.push_back({std::string(source),entry,target,expected});
  }
  if(FAILED(D3DReflect(bytes,size,__uuidof(ID3D11ShaderReflection),&actual)))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT,"registered_stage_bytecode");

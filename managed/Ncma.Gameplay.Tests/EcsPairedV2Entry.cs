@@ -3,8 +3,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Ncma.Scene;
 
-// Test-only entry. It uses APIs shared by the verified E2-B products and current products.
-// Neither product's old/new test suite is substituted for the other measurement driver.
+// E6 diagnostic entry retains the explicit input-file closure checks and workload selectors.
+// Historical manifests describe input provenance only; no old/new source parity or E5 acceptance.
 internal static class EcsPairedV2Entry
 {
     private static readonly string[] Products = ["Ncma.Runtime", "Ncma.Scene", "Ncma.Managed", "Ncma.Gameplay", "Ncma.Movement", "Ncma.Editor.Core"];
@@ -25,6 +25,7 @@ internal static class EcsPairedV2Entry
                 variant is not ("e2b" or "e4e" or "candidate"))
                 throw new InvalidOperationException("Invalid paired identity.");
             string cohort = input.GetProperty("cohort").GetString()!;
+            if (cohort == "common") throw new InvalidOperationException("The E5 v2 common contract predates independent runtime scenes. Use archived products for historical replay; E6 requires its own registered paired contract.");
             if (cohort is not ("common" or "reads") || (cohort == "reads" && variant == "e2b"))
                 throw new InvalidOperationException("Unsupported v2 cohort.");
             if (input.GetProperty("contractId").GetString() != "ecs-e5-c-v2") throw new InvalidOperationException("Wrong v2 contract identity.");
@@ -54,20 +55,19 @@ internal static class EcsPairedV2Entry
                 }
             }
             VerifyLoaded();
-            Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e5_paired_environment", schema = 3, variant,
+            Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_inputs", schema = 3, historicalPairedContractCompatible = false, sourceManifestSchema = 3, variant,
                 cohort, contractId = "ecs-e5-c-v2", contractSha256 = contractHash,
                 measured, files = hashes, tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
-                scope = "Same driver, real product assemblies; CPU workload evidence, not E5/full-engine acceptance" }));
-            void Verified(string name, int count, SceneDocument document) {
-                // Not part of timed/allocation samples. Checks all persistent values with the real codec.
-                byte[] bytes = document.CaptureBytes();
-                Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e5_semantic", workload = name, objects = count,
-                    tick = document.World.Tick, sceneBytes = bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(bytes)) }));
+                scope = "E6-adapted real-product diagnostic; historical manifest/workload provenance only, not paired or E5/full-engine acceptance" }));
+            void Verified(string name, int count, EcsDiagnosticState state) {
+                // Cold semantic evidence names the model actually exercised, never a mirrored document.
+                Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_semantic", schema = 2,
+                    workload = name, objects = count, tick = state.Tick, stateFormat = state.Format, stateVersion = 1,
+                    sceneBytes = state.Bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(state.Bytes)),
+                    historicalPairedContractCompatible = false }));
             }
-            EcsBaselineV2.E5Events = true;
-            if (cohort == "common") EcsBaselineV2.Run(measured, Verified);
-            else EcsReadBaselineV2.Run(measured, Verified);
-            VerifyLoaded(); Console.WriteLine("E5 v2 paired closure verified before and after workloads."); return 0;
+            EcsReadBaselineV2.Run(measured, Verified);
+            VerifyLoaded(); Console.WriteLine("E6 v2 diagnostic loaded-file closure verified; no historical paired acceptance."); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine("E5 v2 paired run failed: " + error); return 1; }
     }

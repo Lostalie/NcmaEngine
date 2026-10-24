@@ -24,27 +24,27 @@ internal static unsafe partial class Program
             package=cook.Cook(Guid.NewGuid(),1,HdrEnvironmentSource.Neutral(Guid.NewGuid()),new(8,4,8,64));
         }
         var fixture=new SceneGpuFixture(output);var(document,_,_,_)=fixture.Scene();
-        global::Ncma.Runtime.Entity environment=document.World.CreateEntity("Environment");var enabled=new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true);document.World.Set(environment, enabled);
+        Guid environment=document.CreateObject("Environment");var enabled=new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true);document.SetComponent(environment, enabled);
         var descriptor=EnvironmentAssetDescriptor.FromPackage(fixture.Project,package);string path=Path.Combine(fixture.Root,descriptor.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path,package.CopyBytes());File.WriteAllBytes(Path.Combine(fixture.Root,"assets/environment.ncenv"),descriptor.Encode());
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
         FieldInfo Field(object host,string name)=>host.GetType().GetField(name,BindingFlags.Instance|BindingFlags.NonPublic)??throw new Exception("Missing host owner field "+name);
         using(var flat=new PlayerPresentation(plugins,false)) {
-            flat.Start();document.World.Set(environment, EnvironmentLightingData.Off);
+            flat.Start();document.SetComponent(environment, EnvironmentLightingData.Off);
             var device=(RendererSession)Field(flat,"_renderer").GetValue(flat)!;
             Pass(Field(device,"_publishEnvironment").GetValue(device) is null,"fresh Player does not query environment API");
-            flat.PrepareBeforeGameplay(document,assets);
+            flat.PrepareBeforeGameplay(document.BakeRuntime(document.Revision).Image.Instantiate(document.Components),assets);
             Pass(Field(device,"_publishEnvironment").GetValue(device) is null,"Off startup leaves optional environment API uninitialized");
-            flat.Dispose();document.World.Set(environment, enabled);
+            flat.Dispose();document.SetComponent(environment, enabled);
         }
         // Ordinary public Player startup refusal, not an injected owner: assignment
         // must precede preparation even when approved CPU generations do not match.
         using(var player=new PlayerPresentation(plugins,false)) {
-            player.Start();document.World.Set(environment, enabled with{Generation=enabled.Generation+1});
-            Reject(()=>player.PrepareBeforeGameplay(document,assets));
+            player.Start();document.SetComponent(environment, enabled with{Generation=enabled.Generation+1});
+            Reject(()=>player.PrepareBeforeGameplay(document.BakeRuntime(document.Revision).Image.Instantiate(document.Components),assets));
             var held=(SceneEnvironmentPreflight?)Field(player,"_environmentPreflight").GetValue(player);
             Pass(held?.Status.Phase==EnvironmentPreflightPhase.Failed,"ordinary Player startup retains failed preflight owner");
-            document.World.Set(environment, enabled);Reject(()=>player.PrepareBeforeGameplay(document,assets));
+            document.SetComponent(environment, enabled);Reject(()=>player.PrepareBeforeGameplay(document.BakeRuntime(document.Revision).Image.Instantiate(document.Components),assets));
             Pass(ReferenceEquals(held,Field(player,"_environmentPreflight").GetValue(player)),"Player refuses overwriting its failed startup owner");
             player.Dispose();Pass(held!.Status.Phase==EnvironmentPreflightPhase.Closed&&Field(player,"_environmentPreflight").GetValue(player) is null,"ordinary failed Player startup closes retained service");
         }
@@ -57,9 +57,10 @@ internal static unsafe partial class Program
             Check(Field(host,ownerField).GetValue(host) is null,"test must never replace an existing owner");
             // Explicit test-only fault attachment to the actual host's sole owner
             // slot. No production fault hook or reflection-based recovery exists.
+            var runtime=BakeRenderScene(document);
             var preflight=new SceneEnvironmentPreflight(renderer,cache);Field(host,ownerField).SetValue(host,preflight);bool pending=false,fired=false;
             try {
-                Reject(()=>preflight.Prepare(document.World,assets,document.CaptureSnapshot(),()=>{
+                Reject(()=>preflight.Prepare(runtime.World,assets,runtime.CaptureSnapshot(),()=>{
                     if(!fired&&renderer.PipelineStats.Pipelines==1){fired=true;renderer.SubmitResources(1,[],new(0,0,64,64),Vector4.Zero,new(Vector3.Zero,Vector3.UnitY,Vector4.Zero));pending=true;return false;}return true;
                 }));
                 PluginException? failure=null;try{host.Dispose();}catch(PluginException error){failure=error;}

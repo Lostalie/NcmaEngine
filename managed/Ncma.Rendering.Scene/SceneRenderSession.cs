@@ -64,7 +64,7 @@ public sealed partial class SceneRenderSession : IDisposable
         _environmentReader = new(world); _postReader = new(world); _shadowReader = new(world);
         _readDiagnostics = _diagnostics.AsReadOnly(); WorldId = world.Identity;
     }
-    public void Prepare(PreparedSceneAssetLease assets, SceneDocumentSnapshot startup,
+    public void Prepare(PreparedSceneAssetLease assets, ISceneContent startup,
         Func<float, float, bool, RenderPipeline>? pipelineFactory = null, Ncma.Animation.Native.PoseKernel? poseKernel = null, Ncma.Gameplay.PlaySession? play = null, bool interpolateTransforms = false,
         Ncma.Animation.IRootMotionPresentation? rootMotion=null,SceneAnimatorRuntime? animators=null,bool previewInterruptions=false,SceneRuntimeShaders? shaders=null,
         SceneEnvironmentRuntimeShaders? environmentShaders=null,Func<bool>? environmentPreparationAllowed=null,PostProcessRuntime? postProcessing=null,
@@ -129,7 +129,7 @@ public sealed partial class SceneRenderSession : IDisposable
         RequireExchangeReady();if(_environmentPreparing||_pendingAnimationBinding)throw new InvalidOperationException("Cannot submit before presentation preparation/binding completes.");VerifyPreparedEnvironment();VerifyPreparedPostProcess();ObserveShadowSelection(); _animationStamp=null;long time = Stopwatch.GetTimestamp();
         IReadOnlyDictionary<Guid,TransformData>? transforms=null;
         if(_interpolateTransforms && _play is not null) {
-            if(_play.Document.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
+            if(_play.Scene.World.Identity!=WorldId || _play.State==Ncma.Gameplay.PlayState.Faulted)throw new InvalidOperationException("Invalid coupled presentation snapshot.");
             transforms=_play.RenderView.Objects.ToDictionary(o=>o.ObjectId,o=>o.Transform);
         }
         var view = _extractor.Extract(_resources.Metadata, browserCamera is null ? sceneCamera : Guid.Empty, width, height, browserCamera,_animation is not null,transforms); View = view;

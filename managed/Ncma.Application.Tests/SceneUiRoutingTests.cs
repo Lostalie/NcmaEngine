@@ -36,9 +36,9 @@ internal static class SceneUiRoutingTests
                 UiElement.Create(Guid.NewGuid(), "Slider", UiKind.Slider, d.Root) with { Order = 2, Action = "value", Layout = UiLayout.Fixed(0, 80, 100, 30) }
             ] };
             Ui = new(new(Definition)); Ui.Layout(new(200, 150, 1, default));
-            global::Ncma.Runtime.Entity obj = Document.World.CreateEntity("Before"); Document.SetBindings(Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Ui.Probe", true, [])]);
-            Probe.Target = Document.World.GetUuid(obj);
-            Play = new(Document, FrameTimePolicy.Strict); Routes.Install(Play); Play.Start(_ => Probe);
+            Guid obj = Document.CreateObject("Before"); Document.SetBindings(obj, [new(Guid.NewGuid(), "Ui.Probe", true, [])]);
+            Probe.Target = obj;
+            Play = new(Document.BakeRuntime(Document.Revision).Image.Instantiate(Document.Components), FrameTimePolicy.Strict); Routes.Install(Play); Play.Start(_ => Probe);
             Bridge = new(Ui, Play, Routes);
         }
         public void Click(ulong seq = 1) => Ui.Input(Ui.Stamp, [new(UiInputKind.PointerDown, seq, new(10, 10)), new(UiInputKind.PointerUp, seq + 1, new(10, 10))]);
@@ -58,13 +58,15 @@ internal static class SceneUiRoutingTests
                 f.Routes.Validate(f.Definition);
             }),
             ("Route installation is atomic when it overlaps another startup producer", () => {
-                using var play = new PlaySession(new SceneDocument()); play.RegisterUiAction("existing", GameplayUiActionKind.Activate);
+                var source = new SceneDocument(); using var play = new PlaySession(source.BakeRuntime(source.Revision).Image.Instantiate(source.Components)); play.RegisterUiAction("existing", GameplayUiActionKind.Activate);
                 var routes = new SceneUiActions(new("new", GameplayUiActionKind.Activate), new("existing", GameplayUiActionKind.Activate));
                 Reject(() => routes.Install(play)); Check(!play.AcceptsUiAction("new", GameplayUiActionKind.Activate));
             }),
             ("Real UiRuntime click is copied through application route into one committed fixed step", () => {
-                using var f = new Fixture(); Check(f.Bridge.Observe()); f.Click(); f.Submit(); Check(f.Probe.Count == 0 && f.Document.World.GetName(f.Document.World.GetEntities()[0]) == "Before");
-                f.Step(); Check(f.Probe.Count == 1 && f.Document.World.GetName(f.Document.World.GetEntities()[0]) == "HUD committed");
+                using var f = new Fixture(); Check(f.Bridge.Observe()); f.Click(); f.Submit(); Check(f.Probe.Count == 0 && f.Play.Scene.World.GetName(f.Play.Scene.World.FindEntity(f.Probe.Target)) == "Before");
+                byte[] authored = f.Document.CaptureBytes();
+                f.Step(); Check(f.Probe.Count == 1 && f.Play.Scene.World.GetName(f.Play.Scene.World.FindEntity(f.Probe.Target)) == "HUD committed");
+                Check(authored.SequenceEqual(f.Document.CaptureBytes()) && f.Document.GetObjectName(f.Probe.Target) == "Before");
                 Check(f.Bridge.Observe()); f.Submit(); f.Step(); Check(f.Probe.Count == 1);
             }),
             ("Text, slider and button semantic kinds originate only from their declared widgets", () => {
@@ -93,7 +95,7 @@ internal static class SceneUiRoutingTests
             ("Normal ticks preserve focus, external revision and UI topology cancellation revoke input", () => {
                 using var f = new Fixture(); f.Bridge.Observe(); f.Click(); f.Submit(); var focus = f.Ui.Focus; f.Step();
                 f.Bridge.Observe(); Check(f.Ui.Focus == focus); var stamp = f.Ui.Stamp;
-                f.Document.World.Rename(f.Document.World.GetEntities()[0], "External"); f.Bridge.Observe(); Check(f.Ui.Stamp.Generation > stamp.Generation && f.Ui.Focus == Guid.Empty);
+                f.Play.Scene.World.Rename(f.Play.Scene.World.FindEntity(f.Probe.Target), "External"); f.Bridge.Observe(); Check(f.Ui.Stamp.Generation > stamp.Generation && f.Ui.Focus == Guid.Empty);
                 f.Click(); f.Submit(); f.Ui.CancelInput(); f.Bridge.Observe(); f.Step(); Check(f.Probe.Count == 1);
             }),
             ("Another producer cannot be silently stolen or cancelled", () => {

@@ -3,8 +3,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Ncma.Scene;
 
-// Test-only entry. It uses APIs shared by the verified E2-B products and current products.
-// Neither product's old/new test suite is substituted for the other measurement driver.
+// E6 diagnostic entry retains the explicit input-file closure checks and workload selectors.
+// Historical manifests describe input provenance only; no old/new source parity or E5 acceptance.
 internal static class EcsPairedEntry
 {
     private static readonly string[] Products = ["Ncma.Runtime", "Ncma.Scene", "Ncma.Managed", "Ncma.Gameplay", "Ncma.Movement", "Ncma.Editor.Core"];
@@ -25,6 +25,7 @@ internal static class EcsPairedEntry
                 (e5 ? variant is not ("e2b" or "e4e" or "candidate") : variant is not ("e2b" or "candidate")))
                 throw new InvalidOperationException("Invalid paired identity.");
             string cohort = e5 ? input.GetProperty("cohort").GetString()! : "common";
+            if (cohort == "common") throw new InvalidOperationException("The E3/E5 common contract predates independent runtime scenes. Use archived products for historical replay; E6 requires its own registered paired contract.");
             if (diagnostics && readDiagnostics) throw new InvalidOperationException("Conflicting diagnostic modes.");
             bool diagnostic = diagnostics || readDiagnostics;
             if (diagnostic ? (!e5 || cohort != (readDiagnostics ? "read-diagnostics" : "dense-diagnostics") || variant == "e2b") :
@@ -56,23 +57,21 @@ internal static class EcsPairedEntry
                 }
             }
             VerifyLoaded();
-            Console.WriteLine(JsonSerializer.Serialize(new { kind = diagnostic ? "ecs_e5_diagnostic_inputs" : e5 ? "ecs_e5_paired_environment" : "ecs_e3_paired_environment", schema = e5 ? 2 : 1, variant,
+            Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_inputs", schema = 3, historicalPairedContractCompatible = false, sourceManifestSchema = e5 ? 2 : 1, variant,
                 cohort, contractSha256 = contractHash,
                 measured, files = hashes, tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
-                scope = "Same driver, real product assemblies; CPU workload evidence, not E5/full-engine acceptance" }));
-            void Verified(string name, int count, SceneDocument document) {
-                // Not part of timed/allocation samples. Checks all persistent values with the real codec.
-                byte[] bytes = document.CaptureBytes();
-                Console.WriteLine(JsonSerializer.Serialize(new { kind = diagnostic ? "ecs_e5_diagnostic_semantic" : e5 ? "ecs_e5_semantic" : "ecs_e3_semantic", workload = name, objects = count,
-                    tick = document.World.Tick, sceneBytes = bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(bytes)) }));
+                scope = "E6-adapted real-product diagnostic; historical manifest/workload provenance only, not paired or E5/full-engine acceptance" }));
+            void Verified(string name, int count, EcsDiagnosticState state) {
+                // Cold semantic evidence names the model actually exercised, never a mirrored document.
+                Console.WriteLine(JsonSerializer.Serialize(new { kind = "ecs_e6_diagnostic_semantic", schema = 2,
+                    workload = name, objects = count, tick = state.Tick, stateFormat = state.Format, stateVersion = 1,
+                    sceneBytes = state.Bytes.Length, sha256 = Convert.ToHexString(SHA256.HashData(state.Bytes)),
+                    historicalPairedContractCompatible = false }));
             }
-            EcsBaseline.E5Events = e5;
             if (readDiagnostics) EcsReadDiagnostics.Run(measured, Verified);
             else if (diagnostics) EcsDenseDiagnostics.Run(measured, Verified);
-            else if (cohort == "common") EcsBaseline.Run(measured, Verified);
             else EcsReadBaseline.Run(measured, Verified);
-            VerifyLoaded(); Console.WriteLine(diagnostic ? "E5 diagnostic closure verified before and after workloads." : e5 ? "E5 paired closure verified before and after workloads." :
-                "E3 paired closure verified before and after workloads."); return 0;
+            VerifyLoaded(); Console.WriteLine("E6 diagnostic loaded-file closure verified; no historical paired acceptance."); return 0;
         }
         catch (Exception error) { Console.Error.WriteLine("E3 paired run failed: " + error); return 1; }
     }

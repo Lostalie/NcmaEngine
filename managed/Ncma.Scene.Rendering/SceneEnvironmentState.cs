@@ -21,7 +21,7 @@ public static class SceneEnvironmentState
         if (count > 1) throw new ArgumentException("One scene environment configuration required.");
         return count == 0 ? EnvironmentLightingData.Off : EnvironmentLightingData.Validate(value);
     }
-    public static EnvironmentLightingData Read(SceneDocumentSnapshot snapshot)
+    public static EnvironmentLightingData Read(ISceneContent snapshot)
     {
         var registry=RenderComponentRegistry.CreateRegistry();var value=EnvironmentLightingData.Off;int count=0;
         foreach(var obj in snapshot.Objects)foreach(var component in obj.Components.Where(c=>c.TypeId==EnvironmentLightingData.TypeId)) {

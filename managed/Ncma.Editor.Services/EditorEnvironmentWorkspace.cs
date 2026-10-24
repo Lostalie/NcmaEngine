@@ -102,7 +102,7 @@ public sealed class EditorEnvironmentWorkspace : IEditCommandSceneParticipant, I
         _review=review with{Fingerprint=Fingerprint(review)};_reviewTime=_time.GetTimestamp();return _review;
     }
     private static string Fingerprint<T>(T value)=>Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
-    private void RequireTarget(Guid id){if(id==Guid.Empty)throw new ArgumentException("Target UUID required.");_=Edit.Document.World.FindEntity(id);}
+    private void RequireTarget(Guid id){if(id==Guid.Empty)throw new ArgumentException("Target UUID required.");if(!Edit.Document.ContainsObject(id))throw new ArgumentException("Unknown target UUID.");}
     private bool ProposalCurrent(EnvironmentPresetReview review,long time)=>Current()&&review.Edit==_workspace.Stamp&&review.AssetRevision==Assets.Clock.Revision&&_time.GetElapsedTime(time,_time.GetTimestamp())<TimeSpan.FromSeconds(60);
     // Local human approval only. Prepared data is not project-visible until the command succeeds.
     public Guid Approve(EnvironmentPresetReview displayed,string fingerprint,bool reviewed)
@@ -136,7 +136,7 @@ public sealed class EditorEnvironmentWorkspace : IEditCommandSceneParticipant, I
     public JsonElement SceneOperations(JsonElement input)
     {
         var p=RequireProposal(input);var d=p.Descriptor;var value=new EnvironmentLightingData(1,d.AssetId,d.Generation,d.ContentHash,1,0,true);
-        return JsonSerializer.SerializeToElement(new[]{new{op="set_component",objectId=p.Review.ObjectId,typeId=EnvironmentLightingData.TypeId,version=1,data=Edit.Document.World.Components.Encode(value)}});
+        return JsonSerializer.SerializeToElement(new[]{new{op="set_component",objectId=p.Review.ObjectId,typeId=EnvironmentLightingData.TypeId,version=1,data=Edit.Document.Components.Encode(value)}});
     }
     public ParticipantMemento Prepare(JsonElement input){var p=RequireProposal(input);return _publication.Prepare(p.Review.Path,p.Descriptor,Assets.Clock.Revision);}
     public void Authorize(ParticipantMemento m)=>_publication.Authorize(m);

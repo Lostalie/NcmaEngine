@@ -11,7 +11,7 @@ internal sealed unsafe partial class CandidatePresentation
     private RuntimePostProcessLibrary? _postLibrary;
     private PostProcessRuntime? _postRuntime;
     private ScenePipelineStartup? _pipelineStartup;
-    private PostProcessRuntime? PreparePostRuntime(World world,SceneDocumentSnapshot snapshot)
+    private PostProcessRuntime? PreparePostRuntime(World world,ISceneContent snapshot)
     {
         using var read=SceneEnvironmentState.BeginRead(world,world.Identity);
         ScenePostProcessPreflight.ValidateValues(snapshot,_postModules);
@@ -23,7 +23,7 @@ internal sealed unsafe partial class CandidatePresentation
         try{ScenePostProcessPreflight.ValidateFiles(snapshot,library);_postRuntime=new(_renderer,files,library,_postModules,()=>!_closed);_postLibrary=library;return _postRuntime;}
         catch{if(!ReferenceEquals(library,_postLibrary))library.Dispose();throw;}
     }
-    private void PreflightPost(World world,SceneDocumentSnapshot scene)
+    private void PreflightPost(World world,ISceneContent scene)
     {
         if(_pipelineStartup?.HasRetainedProbe==true)throw new InvalidOperationException("Retained pipeline startup probe requires host close before new preparation.");
         var runtime=PreparePostRuntime(world,scene);

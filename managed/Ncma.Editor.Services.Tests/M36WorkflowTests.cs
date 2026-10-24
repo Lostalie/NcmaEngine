@@ -74,9 +74,9 @@ internal static class M36WorkflowTests
             workspace.History(workspace.Stamp,true);owner.RefreshAssets();Check(flow.Count==1,"Asset Redo did not restore catalog");
             PreparePlacement(flow,owner,workspace,modelId,AssetKind.StaticMesh,new(1,2,-3));
             var placement=flow.PlacementPlan!;objectId=placement.Objects[0];placement.Objects[0]=Guid.NewGuid();placement.Operations[0]=new{op="create",objectId=Guid.NewGuid(),name="Tampered"};
-            flow.CommitPlacement(placement.PlanId);Check(owner.Document.World.Get<StaticMeshData>(owner.Document.World.FindEntity(objectId)).MeshId==meshId,"Owned placement plan was modified by caller");
-            Check(owner.Document.World.Get<TransformData>(owner.Document.World.FindEntity(objectId)).Position==new System.Numerics.Vector3(1,2,-3),"Placement not baked into flat transform");
-            int count=owner.Document.World.Count;workspace.History(workspace.Stamp,false);Check(owner.Document.World.Count==0,"Placement must be one history entry");workspace.History(workspace.Stamp,true);Check(owner.Document.World.Count==count,"Scene placement Redo");
+            flow.CommitPlacement(placement.PlanId);Check(owner.Document.GetComponent<StaticMeshData>(objectId).MeshId==meshId,"Owned placement plan was modified by caller");
+            Check(owner.Document.GetComponent<TransformData>(objectId).Position==new System.Numerics.Vector3(1,2,-3),"Placement not baked into flat transform");
+            int count=owner.Document.ObjectCount;workspace.History(workspace.Stamp,false);Check(owner.Document.ObjectCount==0,"Placement must be one history entry");workspace.History(workspace.Stamp,true);Check(owner.Document.ObjectCount==count,"Scene placement Redo");
             flow.Assign(workspace.Stamp,objectId,meshId,AssetKind.StaticMesh);Reject(()=>flow.Assign(workspace.Stamp,objectId,modelId,AssetKind.StaticMesh));
             Guid materials=record.Subassets.Single(s=>s.Kind==AssetKind.MaterialSet&&!s.Tombstone).AssetId;
             Check(owner.Assets!.Imports.Generations.MaterialSlots(record,materials)>=owner.Assets.Imports.Generations.MaterialSlots(record,meshId),"Cached material slot coverage");
@@ -95,7 +95,7 @@ internal static class M36WorkflowTests
                 Check(held.RetainedUsage.Count==2,"Prepared generation index was not published");
             }
             flow.Assign(workspace.Stamp,objectId,materials,AssetKind.MaterialSet);
-            Check(owner.Document.World.Get<StaticMeshData>(owner.Document.World.FindEntity(objectId)).MaterialSetId==materials,"Typed material set assignment");
+            Check(owner.Document.GetComponent<StaticMeshData>(objectId).MaterialSetId==materials,"Typed material set assignment");
             PreparePlacement(flow,owner,workspace,modelId,AssetKind.StaticMesh,Vector3.Zero);
             var stale=flow.PlacementPlan!;workspace.CreateObject(workspace.Stamp);Reject(()=>flow.CommitPlacement(stale.PlanId));workspace.History(workspace.Stamp,false);
             workspace.Save(workspace.Stamp,scenePath);
@@ -106,9 +106,9 @@ internal static class M36WorkflowTests
             flow.PrepareCommit(flow.Job.JobId);Wait(flow,owner,()=>flow.Prepared is not null);var hero=flow.Prepared!;
             flow.CommitImport(workspace.Stamp,hero.Ticket,true);owner.RefreshAssets();
             PreparePlacement(flow,owner,workspace,hero.Record.AssetId,AssetKind.Character,new(0,0,-3));var heroPlacement=flow.PlacementPlan!;heroObject=heroPlacement.Objects[0];flow.CommitPlacement(heroPlacement.PlanId);
-            global::Ncma.Runtime.Entity character=owner.Document.World.FindEntity(heroObject);Check(owner.Document.World.Has<SkinnedMeshData>(character)&&owner.Document.World.Has<ClipPlaybackData>(character),"Character placement missing skin/clip components");
+            Guid character=heroObject;Check(owner.Document.HasComponent<SkinnedMeshData>(character)&&owner.Document.HasComponent<ClipPlaybackData>(character),"Character placement missing skin/clip components");
             var clip=hero.Record.Subassets.First(s=>s.Kind==AssetKind.Clip&&!s.Tombstone);flow.Assign(workspace.Stamp,heroObject,clip.AssetId,AssetKind.Clip);
-            Check(owner.Document.World.Get<ClipPlaybackData>(owner.Document.World.FindEntity(heroObject)).ClipId==clip.AssetId,"Typed clip selection");Reject(()=>flow.Assign(workspace.Stamp,objectId,clip.AssetId,AssetKind.Clip));
+            Check(owner.Document.GetComponent<ClipPlaybackData>(heroObject).ClipId==clip.AssetId,"Typed clip selection");Reject(()=>flow.Assign(workspace.Stamp,objectId,clip.AssetId,AssetKind.Clip));
             workspace.Save(workspace.Stamp,scenePath);
             string metadata=Path.Combine(projectRoot,"assets/Hero.fbx.ncmeta"),beforeCancel=Hash(metadata);
             // Cached browser copies still work when metadata is locked: no per-frame disk reads.
@@ -130,9 +130,9 @@ internal static class M36WorkflowTests
         using(var reopened=new EditorSessionOwner("Reopen",components:RenderComponentRegistry.CreateRegistry(),validateComposition:SceneRenderValidation.RequireComposition)) {
             var workspace=new EditorWorkspace(reopened);workspace.Open(workspace.Stamp,scenePath,true);reopened.Edit!.Resynchronize();
             reopened.ConfigureAssets(projectRoot,project,2);reopened.PrepareRenderAssets(projectRoot,project);
-            Check(reopened.Document.World.Get<StaticMeshData>(reopened.Document.World.FindEntity(objectId)).MeshId==meshId,"Scene restart lost UUID reference");
+            Check(reopened.Document.GetComponent<StaticMeshData>(objectId).MeshId==meshId,"Scene restart lost UUID reference");
             Check(reopened.RenderAssets!.Assets.RequireMesh(meshId,AssetKind.StaticMesh).Generation==1,"Restart reparsed or lost generation");
-            Check(reopened.Document.World.Has<ClipPlaybackData>(reopened.Document.World.FindEntity(heroObject)),"Restart lost character animation references");closingAssets=reopened.Assets;
+            Check(reopened.Document.HasComponent<ClipPlaybackData>(heroObject),"Restart lost character animation references");closingAssets=reopened.Assets;
         }
         Check(closingAssets!.Completion.Wait(TimeSpan.FromSeconds(10)),"Reopened owner shutdown");
         // Same application entry services render this newly authored scene through the real offscreen GUI path.

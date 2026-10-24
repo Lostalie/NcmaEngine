@@ -50,7 +50,7 @@ internal static partial class Program
         }
         internal void SaveDescriptor(EnvironmentAssetDescriptor descriptor) => File.WriteAllBytes(MetadataPath, descriptor.Encode());
         internal SceneDocument Scene()
-        { var doc = Document(); doc.World.Set(doc.World.CreateEntity("Environment"), Configuration); return doc; }
+        { var doc = Document(); doc.SetComponent(doc.CreateObject("Environment"), Configuration); return doc; }
         internal RuntimeAssetSnapshot Prepare(bool strict = true) => RuntimeAssetLoader.Prepare(Root, Project, [Ref(Id, AssetKind.Environment)], strict);
     }
     private static RuntimeEnvironmentAsset EnvironmentAsset(RuntimeAssetLease lease, Guid id) => (RuntimeEnvironmentAsset)lease.Require(id, AssetKind.Environment);
@@ -88,13 +88,13 @@ internal static partial class Program
             }),
             ("M7.3-C1 scene independent nonspatial configuration and exact reference", () => {
                 var f = new EnvironmentFixture(); var doc = f.Scene(); doc.ValidateAuthoring();
-                Check(doc.World.Count == 1 && !doc.World.Has<Ncma.Runtime.TransformData>(doc.World.GetEntities()[0]));
+                Check(doc.ObjectCount == 1 && !doc.HasComponent<Ncma.Runtime.TransformData>(doc.GetObjectIds()[0]));
                 Check(SceneAssetPreparation.HasEnabledEnvironment(doc.CaptureSnapshot()) && SceneAssetPreparation.References(doc.CaptureSnapshot()).SequenceEqual(new[] { Ref(f.Id, AssetKind.Environment) }));
                 using var prepared = SceneAssetPreparation.Prepare(f.Root, f.Project, doc.CaptureSnapshot(), true);
                 Check(SceneRenderValidation.Inspect(doc.CaptureSnapshot(), prepared.Metadata, true).Count == 0);
             }),
             ("M7.3-C1 Off and empty scenes have no asset IO", () => {
-                var doc = Document(); doc.World.Set(doc.World.CreateEntity("Off"), EnvironmentLightingData.Off);
+                var doc = Document(); doc.SetComponent(doc.CreateObject("Off"), EnvironmentLightingData.Off);
                 Check(SceneAssetPreparation.References(doc.CaptureSnapshot()).Length == 0 && !SceneAssetPreparation.HasEnabledEnvironment(doc.CaptureSnapshot()));
                 using var prepared = SceneAssetPreparation.Prepare(Path.Combine(OutputRoot(), "missing-" + Guid.NewGuid()), Guid.NewGuid(), doc.CaptureSnapshot(), true);
                 Check(prepared.Assets.List().Count == 0 && prepared.Assets.PinnedGenerations == 0);
@@ -116,8 +116,8 @@ internal static partial class Program
             ("M7.3-C1 scene whole-candidate duplicate rejected including Off", () => {
                 var f = new EnvironmentFixture(); var d = f.Scene(); var s = d.CaptureSnapshot();
                 AtomicReject(d, s with { Objects = [s.Objects[0], s.Objects[0] with { Id = Guid.NewGuid() }] });
-                var r = d.World.Components; AtomicReject(d, s with { Objects = [s.Objects[0], s.Objects[0] with { Id = Guid.NewGuid(), Components = [new(EnvironmentLightingData.TypeId, 1, r.Encode(EnvironmentLightingData.Off))] }] });
-                Check(d.World.Count == 1);
+                var r = d.Components; AtomicReject(d, s with { Objects = [s.Objects[0], s.Objects[0] with { Id = Guid.NewGuid(), Components = [new(EnvironmentLightingData.TypeId, 1, r.Encode(EnvironmentLightingData.Off))] }] });
+                Check(d.ObjectCount == 1);
             }),
             ("M7.3-C1 present wrong generation hash or kind never fallback", () => {
                 var f = new EnvironmentFixture(); var d = f.Scene();
@@ -131,7 +131,7 @@ internal static partial class Program
             }),
             ("M7.3-C1 scene snapshot save load preserves exact configuration", () => {
                 var f = new EnvironmentFixture(); var d = f.Scene(); byte[] bytes = d.CaptureBytes(); var other = Document(); other.RestoreSnapshot(SceneDocumentCodec.Decode(bytes));
-                Check(bytes.SequenceEqual(other.CaptureBytes()) && other.World.Get<EnvironmentLightingData>(other.World.GetEntities()[0]) == f.Configuration);
+                Check(bytes.SequenceEqual(other.CaptureBytes()) && other.GetComponent<EnvironmentLightingData>(other.GetObjectIds()[0]) == f.Configuration);
                 string path = Path.Combine(f.Root, "environment.ncmascene"); SceneDocumentFiles.Save(d, path); var read = Document(); SceneDocumentFiles.Load(read, path); Check(bytes.SequenceEqual(read.CaptureBytes()));
             }),
             ("M7.3-C1 descriptor foreign project duplicate and author collision", () => {
@@ -208,12 +208,12 @@ internal static partial class Program
             }),
             ("M7.3-C1 package absence never falls back to valid author files", () => {
                 var f = new EnvironmentFixture(); AssetReject(() => SceneAssetPreparation.Prepare(f.Root, f.Project, f.Scene().CaptureSnapshot(), false, "assets/missing.ncpak")); Check(!Locked(f.FilePath));
-                var d = f.Scene(); d.World.Set(d.World.GetEntities()[0], f.Configuration with { Generation = 2 }); AssetReject(() => SceneAssetPreparation.CreateRuntimePackage(f.Root, f.Project, d.CaptureSnapshot(), [])); Check(!Locked(f.FilePath));
+                var d = f.Scene(); d.SetComponent(d.GetObjectIds()[0], f.Configuration with { Generation = 2 }); AssetReject(() => SceneAssetPreparation.CreateRuntimePackage(f.Root, f.Project, d.CaptureSnapshot(), [])); Check(!Locked(f.FilePath));
             }),
             ("M7.3-C1 mixed model and environment closure omit unused payload", () => {
                 var f = new AssetFixture(); var e = new EnvironmentFixture(); var d = EnvironmentAssetDescriptor.FromPackage(f.Project, e.Package);
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(f.Root, d.Path))!); File.WriteAllBytes(Path.Combine(f.Root, d.Path), e.Package.CopyBytes());
-                File.WriteAllBytes(Path.Combine(f.Root, "assets/environment.ncenv"), d.Encode()); var scene = f.Scene(); scene.World.Set(scene.World.CreateEntity("Environment"), e.Configuration);
+                File.WriteAllBytes(Path.Combine(f.Root, "assets/environment.ncenv"), d.Encode()); var scene = f.Scene(); scene.SetComponent(scene.CreateObject("Environment"), e.Configuration);
                 var index = RuntimeAssetPackage.Inspect(SceneAssetPreparation.CreateRuntimePackage(f.Root, f.Project, scene.CaptureSnapshot(), []), f.Project);
                 Check(index.Assets.Length == 4 && index.Assets.Count(a => a.Kind == AssetKind.Environment) == 1 && index.Assets.Count(a => a.Encoding == "environment") == 1);
                 File.WriteAllBytes(Path.Combine(f.Root, "assets/environment.ncenv"), (d with { AssetId = f.Mesh, Path = $"out/assets/{f.Project:N}/{f.Mesh:N}/1-{d.ContentHash}.nce" }).Encode());
@@ -227,9 +227,9 @@ internal static partial class Program
             ("M7.3-C1 single command history permissions scope and stale session", EnvironmentCommandTests),
             ("M7.3-C1 Play leases isolate configuration and freeze editor", () => {
                 var f = new EnvironmentFixture(); using var editor = new EditorSessionOwner("Environment", components: RenderComponentRegistry.CreateRegistry(), validateComposition: SceneRenderValidation.RequireComposition);
-                editor.Document.RestoreSnapshot(f.Scene().CaptureSnapshot()); editor.Edit!.Resynchronize(); editor.PrepareRenderAssets(f.Root, f.Project); byte[] original = editor.Document.CaptureBytes(); Guid id = editor.Document.World.GetUuid(editor.Document.World.GetEntities()[0]);
+                editor.Document.RestoreSnapshot(f.Scene().CaptureSnapshot()); editor.Edit!.Resynchronize(); editor.PrepareRenderAssets(f.Root, f.Project); byte[] original = editor.Document.CaptureBytes(); Guid id = editor.Document.GetObjectIds()[0];
                 var play = editor.StartPlay(); Check(editor.Edit.Invoke(RenderingEditorAdapter.EnvironmentRequest(editor.Edit, id, f.Configuration with { Strength = .5f }, editor.Edit.Revision), Permissions).Code == "play_frozen");
-                play.Document.World.Set(play.Document.World.FindEntity(id), f.Configuration with { Strength = .25f }); Check(editor.PlayRenderAssets!.Assets.Identity == editor.RenderAssets!.Assets.Identity && original.SequenceEqual(editor.Document.CaptureBytes()));
+                play.Scene.World.Set(play.Scene.World.FindEntity(id), f.Configuration with { Strength = .25f }); Check(editor.PlayRenderAssets!.Assets.Identity == editor.RenderAssets!.Assets.Identity && original.SequenceEqual(editor.Document.CaptureBytes()));
                 editor.StopPlay(); Check(original.SequenceEqual(editor.Document.CaptureBytes()) && !editor.Edit.State.Frozen);
             }),
             ("M7.3-C1 32 package pin borrow close cycles", () => {
@@ -242,9 +242,9 @@ internal static partial class Program
                 using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
                 var f = new AssetFixture(); var e = new EnvironmentFixture(); var descriptor = EnvironmentAssetDescriptor.FromPackage(f.Project, e.Package);
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(f.Root, descriptor.Path))!); File.WriteAllBytes(Path.Combine(f.Root, descriptor.Path), e.Package.CopyBytes()); File.WriteAllBytes(Path.Combine(f.Root, "assets/environment.ncenv"), descriptor.Encode());
-                var scene = f.Scene(); scene.World.Set(scene.World.CreateEntity("Environment"), e.Configuration); var options = f.Player(scene);
+                var scene = f.Scene(); scene.SetComponent(scene.CreateObject("Environment"), e.Configuration); var options = f.Player(scene);
                 var project = Ncma.Application.ProjectContext.Load(options.Project!).Configuration with {
-                    SceneCamera = scene.World.GetUuid(scene.World.GetEntities().Single(o => scene.World.Has<CameraData>(o))) };
+                    SceneCamera = scene.GetObjectIds().Single(o => scene.HasComponent<CameraData>(o)) };
                 File.WriteAllBytes(options.Project!, JsonSerializer.SerializeToUtf8Bytes(project,
                     new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
                 var report = playerRunOwner0.Run(options, pluginRoot: Path.Combine(f.Root, "missing-plugins"), visible: false);
@@ -256,7 +256,7 @@ internal static partial class Program
                 Check(!Locked(Path.Combine(f.Root, descriptor.Path)) && !Locked(f.GenerationPath));
             }),
             ("M7.3-C2-C Editor apphost invalid dependency does not start gameplay or render", () => {
-                var f = new AssetFixture(); var e = new EnvironmentFixture(); var scene = f.Scene(); scene.World.Set(scene.World.CreateEntity("Environment"), e.Configuration); var options = f.Player(scene);
+                var f = new AssetFixture(); var e = new EnvironmentFixture(); var scene = f.Scene(); scene.SetComponent(scene.CreateObject("Environment"), e.Configuration); var options = f.Player(scene);
                 var repository = new DirectoryInfo(AppContext.BaseDirectory); while (repository is not null && !File.Exists(Path.Combine(repository.FullName, "Build.bat"))) repository = repository.Parent;
                 string configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
                 string exe = Path.Combine(repository!.FullName, "managed/Ncma.Editor.App/bin", configuration, "net8.0/NcmaEngine.exe");
@@ -272,18 +272,18 @@ internal static partial class Program
     }
     private static void EnvironmentCommandTests()
     {
-        var f = new EnvironmentFixture(); var doc = f.Scene(); var edit = new EditSession(doc); Guid id = doc.World.GetUuid(doc.World.GetEntities()[0]);
+        var f = new EnvironmentFixture(); var doc = f.Scene(); var edit = new EditSession(doc); Guid id = doc.GetObjectIds()[0];
         byte[] before = doc.CaptureBytes(); var request = RenderingEditorAdapter.EnvironmentRequest(edit, id, f.Configuration with { Strength = .25f, RotationRadians = .5f }, edit.Revision);
         Check(edit.Invoke(request).Code == "permission_denied" && before.SequenceEqual(doc.CaptureBytes()));
         Check(edit.Invoke(request, new(["ncma.scene.transaction"], objectScope: [Guid.NewGuid()], componentScope: [EnvironmentLightingData.TypeId])).Status == "denied");
         Check(edit.Invoke(request with { SessionId = Guid.NewGuid() }, Permissions).Code == "session_mismatch");
         Check(edit.Invoke(request with { ExpectedRevision = edit.Revision + 1 }, Permissions).Code == "revision_conflict");
         Check(edit.State.UndoCount == 0 && before.SequenceEqual(doc.CaptureBytes()));
-        var result = edit.Invoke(request, Permissions); Check(result.Changed && edit.State.UndoCount == 1); byte[] after = doc.CaptureBytes(); global::Ncma.Runtime.Entity oldObject = doc.World.FindEntity(id);
+        var result = edit.Invoke(request, Permissions); Check(result.Changed && edit.State.UndoCount == 1); byte[] after = doc.CaptureBytes(); ulong priorRevision = doc.Revision;
         Check(edit.Invoke(request, Permissions).Replayed && edit.State.UndoCount == 1);
         var undo = new CapabilityRequest(EditSession.ContractVersion, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.history.undo", Element(new { }));
         Check(edit.Invoke(undo, new(["ncma.history.undo"])).Code == "permission_denied" && after.SequenceEqual(doc.CaptureBytes()));
-        Check(edit.Invoke(undo, Permissions).Changed && before.SequenceEqual(doc.CaptureBytes())); AssetReject(() => _ = doc.World.GetName(oldObject));
-        Check(Invoke(edit, "ncma.history.redo", new { }).Changed && after.SequenceEqual(doc.CaptureBytes()) && doc.World.Get<EnvironmentLightingData>(doc.World.FindEntity(id)).Strength == .25f);
+        Check(edit.Invoke(undo, Permissions).Changed && before.SequenceEqual(doc.CaptureBytes())); AssetReject(() => doc.BakeRuntime(priorRevision));
+        Check(Invoke(edit, "ncma.history.redo", new { }).Changed && after.SequenceEqual(doc.CaptureBytes()) && doc.GetComponent<EnvironmentLightingData>(id).Strength == .25f);
     }
 }

@@ -14,7 +14,7 @@ public static class ScenePostProcessState
         if (count > 1) throw new ArgumentException("One scene post-process configuration required, including Off.");
         return count == 0 ? PostProcessData.Off : PostProcessData.Validate(value);
     }
-    public static PostProcessData Read(SceneDocumentSnapshot snapshot)
+    public static PostProcessData Read(ISceneContent snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var value = PostProcessData.Off; int count = 0;

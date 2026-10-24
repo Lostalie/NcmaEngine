@@ -12,7 +12,7 @@ public sealed record PlayStatus(Guid SessionId, Guid WorldId, PlayState State, u
     double FixedDeltaSeconds, double SimulationSeconds, double Accumulator, double InterpolationAlpha,
     int StepsExecuted, double DroppedSeconds, double TotalDroppedSeconds, PlayFault? Fault);
 
-// Owns lifecycle and the sole runner. Editor supplies a clone; Player owns its runtime document directly.
+// Owns lifecycle and the sole runner over a runtime scene; no authoring document or Undo.
 public sealed partial class PlaySession : IDisposable, IGameplayContext
 {
     private sealed class Instance(Guid objectId, BehaviourBindingData binding, Behaviour behaviour)
@@ -34,17 +34,17 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
                 if (item.Activated && item.Binding.Enabled) session.Invoke(item, "fixed_update", () => item.Behaviour.DispatchFixedUpdate(delta));
         }
     }
-    private readonly SceneDocument _document;
+    private readonly RuntimeSceneInstance _scene;
     private readonly SceneWorld _facade;
     private readonly WorldRunner _runner;
     private ICoupledStepParticipant? _coupled;
     private readonly List<IPlayCompositionLifetime> _compositionLifetimes = [];
-    private byte[]? _compositionStartup;
+    private RuntimeSceneCheckpoint? _compositionStartup;
     internal void AttachCompositionLifetime(IPlayCompositionLifetime lifetime)
     {
         Control();
         if (State != PlayState.Stopped || _compositionLifetimes.Count >= 16 || _compositionLifetimes.Contains(lifetime)) throw new InvalidOperationException("Register bounded host lifetimes before Start.");
-        _compositionStartup ??= _document.CaptureBytes();
+        _compositionStartup ??= _scene.CaptureCheckpoint();
         _compositionLifetimes.Add(lifetime);
     }
     internal void DetachCompositionLifetime(IPlayCompositionLifetime lifetime)
@@ -60,7 +60,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     private readonly InputBuffer _input = new();
     private readonly RenderBuffer _render = new();
     private InputState? _stepInput;
-    public ulong Tick { get { Verify(); return _document.World.Tick; } }
+    public ulong Tick { get { Verify(); return _scene.World.Tick; } }
     // Scalar presentation reads avoid allocating a complete diagnostic status for every character frame.
     public double FixedDeltaSeconds { get { Verify(); return _runner.FixedDeltaSeconds; } }
     public double InterpolationAlpha { get { Verify(); return State==PlayState.Running ? Math.Clamp(_runner.Accumulator/_runner.FixedDeltaSeconds,0,1) : 0; } }
@@ -81,23 +81,23 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     internal bool MeasureSteps { get; set; }
     internal StepProfile LastStepProfile { get; private set; }
     private Instance? _current;
-    public PlaySession(SceneDocument document, FrameTimePolicy policy = FrameTimePolicy.Interactive,
+    public PlaySession(RuntimeSceneInstance scene, FrameTimePolicy policy = FrameTimePolicy.Interactive,
         double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerFrame = 8, PlayAdvanceMode advanceMode = PlayAdvanceMode.Frames)
-        : this(document, new SceneWorld((document ?? throw new ArgumentNullException(nameof(document))).World), policy, fixedDeltaSeconds, maxStepsPerFrame, advanceMode) { _ownsFacade = true; }
-    internal PlaySession(SceneDocument document, SceneWorld facade, FrameTimePolicy policy = FrameTimePolicy.Interactive,
+        : this(scene, new SceneWorld((scene ?? throw new ArgumentNullException(nameof(scene))).World), policy, fixedDeltaSeconds, maxStepsPerFrame, advanceMode) { _ownsFacade = true; }
+    internal PlaySession(RuntimeSceneInstance scene, SceneWorld facade, FrameTimePolicy policy = FrameTimePolicy.Interactive,
         double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerFrame = 8, PlayAdvanceMode advanceMode = PlayAdvanceMode.Frames)
     {
-        document.VerifyAccess();
-        if (document.World != facade.Runtime || !Enum.IsDefined(policy) || !Enum.IsDefined(advanceMode) ||
+        scene.VerifyAccess();
+        if (scene.World != facade.Runtime || !Enum.IsDefined(policy) || !Enum.IsDefined(advanceMode) ||
             advanceMode == PlayAdvanceMode.FixedSteps && policy != FrameTimePolicy.Strict) throw new ArgumentException("Invalid Play context.");
-        _document = document; _facade = facade; _policy = policy; _advanceMode = advanceMode; _commands = new(this);
-        _runner = new(document.World, fixedDeltaSeconds, maxStepsPerFrame, RunStep);
+        _scene = scene; _facade = facade; _policy = policy; _advanceMode = advanceMode; _commands = new(this);
+        _runner = new(scene.World, fixedDeltaSeconds, maxStepsPerFrame, RunStep);
         _runner.AddSystem(new Dispatcher(this));
     }
     public Guid SessionId { get; private set; } = Guid.NewGuid();
     public PlayState State { get; private set; }
     public PlayFault? Fault { get; private set; }
-    public SceneDocument Document => _document;
+    public RuntimeSceneInstance Scene => _scene;
     internal SceneWorld Facade => _facade;
     public int BehaviourCount { get { Verify(); return _instances.Length; } }
     public PlayStatus Status
@@ -107,8 +107,8 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             Verify();
             double accumulator = _runner.Accumulator;
             double alpha = State == PlayState.Running ? Math.Clamp(accumulator / _runner.FixedDeltaSeconds, 0, 1) : 0;
-            return new(SessionId, _document.World.Identity, State, _frameCount, _document.World.Tick,
-                _runner.FixedDeltaSeconds, _document.World.Tick * _runner.FixedDeltaSeconds,
+            return new(SessionId, _scene.World.Identity, State, _frameCount, _scene.World.Tick,
+                _runner.FixedDeltaSeconds, _scene.World.Tick * _runner.FixedDeltaSeconds,
                 accumulator, alpha, _steps, _dropped, _totalDropped, Fault);
         }
     }
@@ -133,11 +133,12 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     public void AddCommittedObserver(ICommittedStepObserver observer)
     { Control();if(State==PlayState.Faulted)throw new InvalidOperationException("Recover Play before attaching an observer.");_runner.AddCommittedObserver(observer); }
     public void RemoveCommittedObserver(ICommittedStepObserver observer)
-    { _document.VerifyAccess();if(_disposed)return;Control();_runner.RemoveCommittedObserver(observer); }
+    { _scene.VerifyAccess();if(_disposed)return;Control();_runner.RemoveCommittedObserver(observer); }
     public void Start(Func<BehaviourBindingData, Behaviour> createBehaviour)
     {
         Control(); ArgumentNullException.ThrowIfNull(createBehaviour);
         if (State != PlayState.Stopped) throw new InvalidOperationException("Play session is already started.");
+        ResetSimulationCosts();
         _attemptTick = Tick;
         _busy = true; State = PlayState.Starting; SessionId = Guid.NewGuid(); Fault = null;
         _uiRegistrationFrozen = true; CancelUiInputCore();
@@ -147,15 +148,15 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         {
             _coupled?.Start();
             foreach (var lifetime in _compositionLifetimes) lifetime.Start();
-            var snapshot = _document.CaptureSnapshot();
+            var snapshot = _scene.CaptureSnapshot();
             var prepared = new List<Instance>();
             // Constructors/Export setters cannot mutate the live Play World.
-            using (_document.World.ReadOnly())
+            using (_scene.World.ReadOnly())
                 foreach (var obj in snapshot.Objects.OrderBy(o => o.Id))
                     foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                     {
                         var behaviour = createBehaviour(FactoryInput(binding)) ?? throw new ArgumentException("Null Behaviour.");
-                        behaviour.GameObject = new(_facade, _document.World.FindEntity(obj.Id));
+                        behaviour.GameObject = new(_facade, _scene.World.FindEntity(obj.Id));
                         prepared.Add(new(obj.Id, binding, behaviour));
                     }
             _instances = prepared.ToArray();
@@ -189,7 +190,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0) throw new ArgumentException("Invalid frame delta.");
         if (State == PlayState.Faulted) throw new InvalidOperationException("Stop/Restart the faulted Play session.");
         if (State is not (PlayState.Running or PlayState.Paused)) throw new InvalidOperationException("No active Play session.");
-        if (State == PlayState.Paused) return Status;
+        if (State == PlayState.Paused) { using var pausedCosts = BeginSimulationCosts(SimulationAdvanceKind.Frame, deltaSeconds); return Status; }
         // Strict preflight must reject without changing counters, accumulator or diagnostics.
         if (_policy == FrameTimePolicy.Strict &&
             (!double.IsFinite(_runner.Accumulator + deltaSeconds) ||
@@ -199,9 +200,10 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             !double.IsFinite(_totalDropped + deltaSeconds + _runner.Accumulator))
             throw new ArgumentException("Dropped-time counter would overflow.");
         ulong frame = checked(_frameCount + 1);
+        using var costs = BeginSimulationCosts(SimulationAdvanceKind.Frame, deltaSeconds);
         _attemptTick = Tick;
         _busy = true; _steps = 0; _dropped = 0; _phase = "fixed_update"; _current = null;
-        ulong tick = _document.World.Tick;
+        ulong tick = _scene.World.Tick;
         bool timeRecorded = false;
         try
         {
@@ -209,14 +211,15 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             _steps = _policy == FrameTimePolicy.Strict ? _runner.Advance(deltaSeconds) : _runner.AdvanceInteractive(deltaSeconds);
             _dropped = _runner.LastDroppedSeconds;
             AccumulateDropped(); timeRecorded = true;
-            using (_document.World.ReadOnly())
+            if (_simulationCostsEnabled) _simulationUpdateEntered = true;
+            using (_scene.World.ReadOnly())
                 foreach (var item in _instances)
                     if (item.Activated && item.Binding.Enabled) Invoke(item, "update", () => item.Behaviour.DispatchUpdate(_policy == FrameTimePolicy.Interactive ? Math.Min(deltaSeconds, 0.25) : deltaSeconds));
             _phase = "control"; _current = null;
         }
         catch (Exception error)
         {
-            _steps = checked((int)(_document.World.Tick - tick));
+            _steps = checked((int)(_scene.World.Tick - tick));
             _dropped = _runner.LastDroppedSeconds;
             if (!timeRecorded) AccumulateDropped();
             SetFault(error);
@@ -230,6 +233,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         Control();
         if (_advanceMode != PlayAdvanceMode.FixedSteps || State != PlayState.Running)
             throw new InvalidOperationException("Running fixed-step session required.");
+        using var costs = BeginSimulationCosts(SimulationAdvanceKind.FixedStep, _runner.FixedDeltaSeconds);
         _busy = true; _steps = 0; _dropped = 0; _phase = "fixed_update"; _current = null; _attemptTick = Tick;
         try { _runner.ClearAccumulator(); _steps = _runner.Advance(_runner.FixedDeltaSeconds); _phase = "control"; }
         catch (Exception error) { _steps = _runner.LastStepsExecuted; SetFault(error); }
@@ -256,6 +260,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     {
         Control();
         if (State != PlayState.Paused) throw new InvalidOperationException("Step requires Paused.");
+        using var costs = BeginSimulationCosts(SimulationAdvanceKind.PausedStep, _runner.FixedDeltaSeconds);
         _busy = true; _phase = "fixed_update"; _current = null; _steps = 0; _dropped = 0;
         try { _runner.ClearAccumulator(); _steps = _runner.Advance(_runner.FixedDeltaSeconds); }
         catch (Exception error) { _steps = _runner.LastStepsExecuted; SetFault(error); }
@@ -271,17 +276,17 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         {
             // Coupled reload is an explicit restart, not a reload over live numerical resources.
             Stop();
-            try { if (_coupled is not null) _coupled.RebuildStartup(); else _document.RestoreBytes(_compositionStartup!); Start(createBehaviour); return Pause(); }
+            try { if (_coupled is not null) _coupled.RebuildStartup(); else _scene.RestoreCheckpoint(_compositionStartup!, _scene.Revision); Start(createBehaviour); return Pause(); }
             catch (Exception error) { if (State == PlayState.Stopped) SetFault(error); throw; }
         }
         Pause();
         var prepared = new List<Instance>();
-        using (_document.World.ReadOnly())
-            foreach (var obj in _document.CaptureSnapshot().Objects.OrderBy(o => o.Id))
+        using (_scene.World.ReadOnly())
+            foreach (var obj in _scene.CaptureSnapshot().Objects.OrderBy(o => o.Id))
                 foreach (var binding in obj.Behaviours.OrderBy(b => b.Id))
                 {
                     var behaviour = createBehaviour(FactoryInput(binding)) ?? throw new ArgumentException("Null Behaviour.");
-                    behaviour.GameObject = new(_facade, _document.World.FindEntity(obj.Id));
+                    behaviour.GameObject = new(_facade, _scene.World.FindEntity(obj.Id));
                     prepared.Add(new(obj.Id, binding, behaviour));
                 }
         var instances = prepared.ToArray();
@@ -292,7 +297,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         {
             var errors = Cleanup();
             if (errors.Length != 0) throw new AggregateException("Reload cleanup failed.", errors);
-            _instances = instances; _factory = createBehaviour; SessionId = Guid.NewGuid();
+            _instances = instances; _factory = createBehaviour; SessionId = Guid.NewGuid(); ResetSimulationCosts();
             systems(); _input.Clear(resetSequence: true); _facade.Restored(); _runner.ResetFault(); _frameCount = 0;
             _facade.BeginPhase(initialization: true);
             foreach (var item in _instances)
@@ -316,6 +321,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     {
         Control();
         if (State == PlayState.Stopped) return;
+        ResetSimulationCosts();
         CancelUiInputCore();
         _busy = true; State = PlayState.Stopping;
         Exception[] errors;
@@ -340,7 +346,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     private Exception[] Cleanup()
     {
         var errors = new List<Exception>();
-        using (_document.World.ReadOnly())
+        using (_scene.World.ReadOnly())
             foreach (var item in _instances.Concat(_retired))
             {
                 item.Behaviour.Cleanup = new(item.ObjectId, item.Binding.Id, item.Binding.TypeName);
@@ -383,8 +389,8 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             {
                 _phase = "coupled_preflight";
                 // First validate managed candidate/signals/input without running factories twice.
-                _ = _facade.PreparePhase(world => _ = _document.PrepareRuntimeStep(world, _commands.Bindings), preflight: true);
-                using (_document.World.PreparationReadOnly()) _coupled.Preflight();
+                _ = _facade.PreparePhase(world => _ = _scene.PrepareRuntimeStep(world, _commands.Bindings), preflight: true);
+                using (_scene.World.PreparationReadOnly()) _coupled.Preflight();
                 // A caught rejected write in trusted preflight must still prevent numerical execution.
                 _ = _facade.PreparePhase(preflight: true);
                 _phase = "coupled_execute";
@@ -394,7 +400,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             Action? render = null, metadata = null, instances = null, receipts = null;
             Action commit = _facade.PreparePhase(world =>
             {
-                long a = Stamp(); metadata = _document.PrepareRuntimeStep(world, _commands.Bindings); long b = Stamp();
+                long a = Stamp(); metadata = _scene.PrepareRuntimeStep(world, _commands.Bindings); long b = Stamp();
                 instances = PrepareInstances(world, _commands.Bindings); long c = Stamp();
                 receipts = _commands.PrepareReceipts(world); long d = Stamp();
                 render = _render.Prepare(world); long e = Stamp();
@@ -420,7 +426,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         var prepared = new List<Instance>();
         var changes = new List<(Instance Instance, BehaviourBindingData Binding)>();
         var existing = _instances.ToDictionary(i => (i.ObjectId, i.Binding.Id));
-        using (_document.World.PreparationReadOnly())
+        using (_scene.World.PreparationReadOnly())
             foreach (var obj in bindings.OrderBy(o => o.Key))
             {
                 if (!world.TryResolve(obj.Key, out var entity)) continue;
@@ -446,7 +452,7 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     {
         var retiring = _retired; _retired = [];
         var errors = new List<Exception>();
-        using (_document.World.ReadOnly())
+        using (_scene.World.ReadOnly())
         {
             foreach (var item in retiring)
             {
@@ -476,8 +482,8 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         _coupled?.Faulted();
         string message = error.GetBaseException().Message;
         if (message.Length > 512) message = message[..512];
-        Fault = new(_coupled is null ? "gameplay_callback_failed" : "coupled_session_failed", _phase, SessionId, _document.World.Identity,
-            _document.World.Tick, _current?.ObjectId, _current?.Binding.Id, _current?.Binding.TypeName, message, _attemptTick);
+        Fault = new(_coupled is null ? "gameplay_callback_failed" : "coupled_session_failed", _phase, SessionId, _scene.World.Identity,
+            _scene.World.Tick, _current?.ObjectId, _current?.Binding.Id, _current?.Binding.TypeName, message, _attemptTick);
         _current = null;
     }
     private void AccumulateDropped()
@@ -486,16 +492,16 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
         if (!double.IsFinite(total)) throw new OverflowException("Dropped-time counter overflow.");
         _totalDropped = total;
     }
-    private void Verify() { _document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this); }
+    private void Verify() { _scene.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this); }
     private void Control()
     {
         Verify();
         if(_presentationRecovery is {} recovery){recovery.Reject();throw new InvalidOperationException("Play control is frozen during presentation recovery.");}
-        if (_busy || _document.World.IsUpdating) throw new InvalidOperationException("Reentrant Play control is forbidden.");
+        if (_busy || _scene.World.IsUpdating) throw new InvalidOperationException("Reentrant Play control is forbidden.");
     }
     public void Dispose()
     {
-        if (_disposed) { _document.VerifyAccess(); return; }
+        if (_disposed) { _scene.VerifyAccess(); return; }
         Control();
         try { Stop(); }
         finally { if (State == PlayState.Stopped) { if (_ownsFacade) _facade.Dispose(); _disposed = true; } }

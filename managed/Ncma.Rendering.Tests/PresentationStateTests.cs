@@ -36,28 +36,29 @@ internal static unsafe partial class Program
                 var blocks=DerivedAssetCodec.Decode(fixture.Plan.DerivedBytes);
                 var animated=fixture.Manifest.Clips.Select(id=>(Id:id,Clip:ModelPayloadCodec.DecodeClip(blocks.Single(b=>b.AssetId==id).Data).Clip))
                     .OrderByDescending(c=>c.Clip.Tracks.Sum(t=>t.Keys.Count(k=>k.Value!=t.Keys[0].Value))).First();
-                document.World.Set(document.World.FindEntity(objects[0]), document.World.Get<Ncma.Animation.ClipPlaybackData>(document.World.FindEntity(objects[0])) with{ClipId=animated.Id});
+                document.SetComponent(objects[0], document.GetComponent<Ncma.Animation.ClipPlaybackData>(objects[0]) with{ClipId=animated.Id});
                 using var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,document.CaptureSnapshot(),true);
-                using var play=new PlaySession(document);play.Start(_=>throw new Exception("No behaviour factory expected"));
+                var runtimeScene=document.BakeRuntime(document.Revision).Image.Instantiate(document.Components);
+                using var play=new PlaySession(runtimeScene);play.Start(_=>throw new Exception("No behaviour factory expected"));
                 RendererSession renderer=new(native,window,256,256);RenderResourceCache cache=new(renderer);
-                SceneRenderSession? scene=new(renderer,cache,document.World);SceneAnimationSession? retained=null;GpuViewTarget? target=null;
+                SceneRenderSession? scene=new(renderer,cache,runtimeScene.World);SceneAnimationSession? retained=null;GpuViewTarget? target=null;
                 try {
-                    scene.Prepare(prepared,document.CaptureSnapshot(),poseKernel:kernel,play:play);target=renderer.CreateViewTarget(256,256);ulong frame=0;
+                    scene.Prepare(prepared,runtimeScene.CaptureSnapshot(),poseKernel:kernel,play:play);target=renderer.CreateViewTarget(256,256);ulong frame=0;
                     byte[] Draw(){Pass(scene!.Submit(++frame,256,256,camera,target:target),"actual skin submitted "+source);var pixels=new byte[256*256*4];renderer.CaptureTarget(target!,pixels);renderer.Present();renderer.WaitIdle();return pixels;}
                     Draw();var initial=new byte[fixture.Source.Meshes[0].Vertices.Length*48];scene.CaptureCharacterVertices(objects[0],initial);
-                    for(int i=0;i<36;i++)play.AdvanceFrame(1d/60);play.Pause();var status=play.Status;var world=document.World;var bytes=document.CaptureBytes();
+                    for(int i=0;i<36;i++)play.AdvanceFrame(1d/60);play.Pause();var status=play.Status;var world=runtimeScene.World;var bytes=runtimeScene.CaptureCheckpoint().CopyBytes();
                     var before=Draw();var vertices=new byte[initial.Length];scene.CaptureCharacterVertices(objects[0],vertices);
                     Pass(!initial.SequenceEqual(vertices),"nonzero committed animation before recovery "+source);
                     retained=scene.RetainAnimationForRecovery();Pass(retained is not null&&ReferenceEquals(retained,scene.Animation),"exact CPU animation owner transfer "+source);
                     Reject(retained!.Dispose);Reject(()=>scene.RetainAnimationForRecovery());
-                    using(var premature=new SceneRenderSession(renderer,cache,world))Reject(()=>premature.Prepare(prepared,document.CaptureSnapshot(),poseKernel:kernel,play:play,retainedAnimation:retained));
+                    using(var premature=new SceneRenderSession(renderer,cache,world))Reject(()=>premature.Prepare(prepared,runtimeScene.CaptureSnapshot(),poseKernel:kernel,play:play,retainedAnimation:retained));
                     Pass(play.Status==status,"borrow/early-release refusals never restart or tick Play "+source);
                     scene.Dispose();scene=null;target.Dispose();target=null;cache.Dispose();ulong old=renderer.ReadFrameState().Generation;renderer.Dispose();
                     Pass(PinLocked(fixture.GenerationPath)&&play.Status==status,"CPU assets/clocks survive complete device close "+source);
                     renderer=new(native,window,256,256);cache=new(renderer);target=renderer.CreateViewTarget(256,256);
-                    using(var foreign=new SceneRenderSession(renderer,cache,fixture.Scene().Document.World))Reject(()=>foreign.Prepare(prepared,document.CaptureSnapshot(),poseKernel:kernel,play:play,retainedAnimation:retained));
-                    scene=new(renderer,cache,world);scene.Prepare(prepared,document.CaptureSnapshot(),poseKernel:kernel,play:play,retainedAnimation:retained);
-                    Pass(ReferenceEquals(scene.Animation,retained)&&ReferenceEquals(world,document.World)&&play.Status==status&&bytes.SequenceEqual(document.CaptureBytes()),"same World/status/clock instance at replacement "+source);
+                    using(var foreign=new SceneRenderSession(renderer,cache,BakeRenderScene(fixture.Scene().Document).World))Reject(()=>foreign.Prepare(prepared,runtimeScene.CaptureSnapshot(),poseKernel:kernel,play:play,retainedAnimation:retained));
+                    scene=new(renderer,cache,world);scene.Prepare(prepared,runtimeScene.CaptureSnapshot(),poseKernel:kernel,play:play,retainedAnimation:retained);
+                    Pass(ReferenceEquals(scene.Animation,retained)&&ReferenceEquals(world,runtimeScene.World)&&play.Status==status&&bytes.SequenceEqual(runtimeScene.CaptureCheckpoint().CopyBytes()),"same World/status/clock instance at replacement "+source);
                     Pass(renderer.ReadFrameState().Generation!=old&&before.SequenceEqual(Draw()),"new-device exact final pixels "+source);
                     var after=new byte[vertices.Length];scene.CaptureCharacterVertices(objects[0],after);Pass(vertices.SequenceEqual(after),"exact GPU vertices retain clip progress "+source);
                     play.Step();Draw();Pass(play.Tick==status.Tick+1&&play.State==PlayState.Paused,"original committed observer steps once after rebind "+source);
@@ -108,7 +109,7 @@ internal static unsafe partial class Program
             workspace.History(workspace.Stamp,true);DrawEditor();Pass(owner.Document.CaptureSnapshot().Objects.Any(o=>o.Id==id),"animated Redo after recovery rebuilds current World");
             editor.RebuildGraphics(editor.ReviewGraphicsRecovery());workspace.History(workspace.Stamp,false);
             editor.RebuildGraphics(editor.ReviewGraphicsRecovery());DrawEditor();
-            Pass(EnvironmentProductEvidence.Field<SceneRenderSession>(editor,"_editScene").Animation!.WorldId==owner.Document.World.Identity,"recovery before next normal frame drops obsolete snapshot clocks safely");
+            Pass(EnvironmentProductEvidence.Field<SceneRenderSession>(editor,"_editScene").Animation!.WorldId==OwnedEditProjection(editor).Scene.World.Identity,"recovery before next normal frame drops obsolete snapshot clocks safely");
         }
         // A first recovery can follow Undo before any normal frame replaced the stale scene.
         // Unlike the cases above, no CPU owner has been transferred to the host yet.
@@ -119,7 +120,7 @@ internal static unsafe partial class Program
             workspace.CreateObject(workspace.Stamp);workspace.History(workspace.Stamp,false);
             editor.RebuildGraphics(editor.ReviewGraphicsRecovery());
             var currentAnimation=EnvironmentProductEvidence.Field<SceneRenderSession>(editor,"_editScene").Animation!;
-            Pass(!ReferenceEquals(oldAnimation,currentAnimation)&&currentAnimation.WorldId==owner.Document.World.Identity,"first recovery after pending Undo retires stale owned animation without borrowing it");
+            Pass(!ReferenceEquals(oldAnimation,currentAnimation)&&currentAnimation.WorldId==OwnedEditProjection(editor).Scene.World.Identity,"first recovery after pending Undo retires stale owned animation without borrowing it");
         }
         File.WriteAllText(Path.Combine(output,"results.json"),JsonSerializer.Serialize(new{cases,actualDx11=true,asciiBinaryFbx=true,retainedCpuAnimation=true,retainedUiRuntime=true,formalEdit=true,formalPlayRecovery=false,wholeStageAccepted=false}));
         Console.WriteLine($"PASS M7.6 presentation state {cases} checks; {output}");return 0;

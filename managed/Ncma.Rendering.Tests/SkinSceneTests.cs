@@ -8,6 +8,7 @@ using Ncma.Assets;
 using Ncma.Assets.Authoring;
 using Ncma.Asset.Import;
 using Ncma.Editor.Services;
+using Ncma.Editor.App;
 using Ncma.Rendering;
 using Ncma.Rendering.Scene;
 using Ncma.Runtime;
@@ -38,14 +39,14 @@ internal static unsafe partial class Program
             var d=new SceneDocument("Skinned scene",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
             var m=Manifest;var objects=new Guid[count];
             for(int i=0;i<count;i++) {
-                global::Ncma.Runtime.Entity obj=d.World.CreateEntity("Character "+i);objects[i]=d.World.GetUuid(obj);
-                d.World.Set(obj, TransformData.Identity with{Position=new(-.7f+(i%8)*.12f,0,-3),Scale=new(.8f,1.1f,1)});
-                d.World.Set(obj, new SkinnedMeshData(Model,m.Meshes[0].Mesh,m.Skeleton!.Value,m.Meshes[0].Materials,true,true,uint.MaxValue));
-                d.World.Set(obj, new ClipPlaybackData(m.Clips[i% m.Clips.Length],true,true,1+i*.01,0));
+                Guid obj=d.CreateObject("Character "+i);objects[i]=obj;
+                d.SetComponent(obj, TransformData.Identity with{Position=new(-.7f+(i%8)*.12f,0,-3),Scale=new(.8f,1.1f,1)});
+                d.SetComponent(obj, new SkinnedMeshData(Model,m.Meshes[0].Mesh,m.Skeleton!.Value,m.Meshes[0].Materials,true,true,uint.MaxValue));
+                d.SetComponent(obj, new ClipPlaybackData(m.Clips[i% m.Clips.Length],true,true,1+i*.01,0));
             }
-            global::Ncma.Runtime.Entity camera=d.World.CreateEntity("Camera");d.World.Set(camera, TransformData.Identity);d.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
-            global::Ncma.Runtime.Entity light=d.World.CreateEntity("Light");d.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,.35f)});d.World.Set(light, DirectionalLightData.Default);
-            d.ValidateAuthoring();return(d,d.World.GetUuid(camera),objects);
+            Guid camera=d.CreateObject("Camera");d.SetComponent(camera, TransformData.Identity);d.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
+            Guid light=d.CreateObject("Light");d.SetComponent(light, TransformData.Identity with{Rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,.35f)});d.SetComponent(light, DirectionalLightData.Default);
+            d.ValidateAuthoring();return(d,camera,objects);
         }
     }
     private static ImportedModel SyntheticModel() {
@@ -121,24 +122,26 @@ internal static unsafe partial class Program
         SceneDocumentFiles.Load(editor.Document,saved);editor.PrepareRenderAssets(fixture.Root,fixture.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         var original=new byte[256*256*4];var moved=new byte[original.Length];var vertices=new byte[4*48];
-        var edit=new SceneRenderSession(renderer,cache,editor.Document.World);edit.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
+        byte[] authoring=editor.Document.CaptureBytes();
+        var projection=EditorSceneProjection.Bake(editor);
+        var edit=new SceneRenderSession(renderer,cache,projection.Scene.World);edit.Prepare(editor.RenderAssets!,projection.Scene.CaptureSnapshot(),poseKernel:kernel);
         try {
             Check(edit.Submit(frame++,256,256,camera,target:target),"Skinned production scene not rendered");renderer.CaptureTarget(target,original);renderer.Present();
             Check(edit.Costs.GeometryDraws==1&&edit.Costs.ShadowDraws==1&&edit.Animation!.Costs.Characters==1,"Shared animated geometry/shadow set");
             edit.Animation!.SetPreviewTime(.5);edit.Submit(frame++,256,256,camera,target:target);renderer.CaptureTarget(target,moved);renderer.Present();
-            Check(!original.SequenceEqual(moved)&&editor.Document.World.Tick==0,"Edit preview did not animate or advanced Play");
+            Check(!original.SequenceEqual(moved)&&projection.IsCurrent(editor)&&projection.Scene.World.Tick==0&&authoring.SequenceEqual(editor.Document.CaptureBytes()),"Edit preview did not animate or advanced Play");
             edit.CaptureCharacterVertices(objects[0],vertices);Check(Math.Abs(BinaryPrimitives.ReadSingleLittleEndian(vertices)-0)<.01,"Mixed binding GPU midpoint oracle");
             Check(Math.Abs(edit.Animation.RootDisplacement(objects[0]).X-.5)<1e-5,"Read-only root displacement");
             File.WriteAllBytes(Path.Combine(output,"skin-scene-start.png"),Png(256,256,original));File.WriteAllBytes(Path.Combine(output,"skin-scene-middle.png"),Png(256,256,moved));
             edit.Animation.SetPreviewTime(0);
             for(int cycle=0;cycle<8;cycle++) {
                 var play=editor.StartPlay();
-                using(var session=new SceneRenderSession(renderer,cache,play.Document.World)) {session.Prepare(editor.PlayRenderAssets!,play.Document.CaptureSnapshot(),poseKernel:kernel,play:play);
+                using(var session=new SceneRenderSession(renderer,cache,play.Scene.World)) {session.Prepare(editor.PlayRenderAssets!,play.Scene.CaptureSnapshot(),poseKernel:kernel,play:play);
                     play.Pause();play.Step();Check(play.Tick==1,"Paused step");session.Submit(frame++,256,256,camera,target:target);renderer.Present();
                     Check(Math.Abs(session.Animation!.RootDisplacement(objects[0]).X-1f/60)<1e-5,"Paused Step pose not current");
                     play.Resume();play.AdvanceFrame(1.0/60);session.Submit(frame++,256,256,camera,target:target);renderer.Present();
                     Check(play.Tick==2&&Math.Abs(session.Animation.RootDisplacement(objects[0]).X-1f/60)<1e-5,"Running interpolation did not use adjacent committed times");
-                    Check(editor.Document.World.Tick==0&&play.Document.World.Get<TransformData>(play.Document.World.FindEntity(objects[0]))==editor.Document.World.Get<TransformData>(editor.Document.World.FindEntity(objects[0])),"Root motion wrote gameplay transform");
+                    Check(projection.IsCurrent(editor)&&projection.Scene.World.Tick==0&&authoring.SequenceEqual(editor.Document.CaptureBytes())&&play.Scene.World.Get<TransformData>(play.Scene.World.FindEntity(objects[0]))==editor.Document.GetComponent<TransformData>(objects[0]),"Root motion wrote gameplay transform");
                     ulong rigCreates=kernel.Statistics.Rigs;play.Reload(_=>throw new Exception("No behaviours"));session.Animation.ResynchronizeAfterReload(play);
                     session.Submit(frame++,256,256,camera,target:target);renderer.Present();Check(play.Tick==2&&kernel.Statistics.Rigs==rigCreates&&Math.Abs(session.Animation.RootDisplacement(objects[0]).X-2f/60)<1e-5,"Reload reset active rig/clock instead of retaining committed time");
                     editor.StopPlay(); // Derived leases can detach after the application disposed Play.
@@ -147,25 +150,28 @@ internal static unsafe partial class Program
             }
             // Successful reimport retains persistent IDs only with exact unchanged evidence; Play pins old generation.
             var pinned=editor.StartPlay();
-            using(var session=new SceneRenderSession(renderer,cache,pinned.Document.World)) {session.Prepare(editor.PlayRenderAssets!,pinned.Document.CaptureSnapshot(),poseKernel:kernel,play:pinned);
+            using(var session=new SceneRenderSession(renderer,cache,pinned.Scene.World)) {session.Prepare(editor.PlayRenderAssets!,pinned.Scene.CaptureSnapshot(),poseKernel:kernel,play:pinned);
                 string old=fixture.GenerationPath;fixture.Plan=ModelImportPlanner.Build(fixture.Source,fixture.Plan.Record,fixture.Project,false,fixture.Plan.Record);fixture.Publish();editor.RefreshRenderAssets();
-                using(var candidate=new SceneRenderSession(renderer,cache,editor.Document.World)) {candidate.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot(),poseKernel:kernel);
+                var reimportProjection=EditorSceneProjection.Bake(editor);
+                using(var candidate=new SceneRenderSession(renderer,cache,reimportProjection.Scene.World)) {candidate.Prepare(editor.RenderAssets!,reimportProjection.Scene.CaptureSnapshot(),poseKernel:kernel);
                     pinned.Pause();pinned.Step();session.Submit(frame++,256,256,camera,target:target);renderer.Present();Check(PinLocked(old),"Active Play lost old-generation pin");
                     candidate.Submit(frame++,256,256,camera,target:target);renderer.Present();
                 }
                 // Bad candidate retains installed resources and document.
-                byte[] prior=editor.Document.CaptureBytes();global::Ncma.Runtime.Entity obj=editor.Document.World.FindEntity(objects[0]);var data=editor.Document.World.Get<ClipPlaybackData>(obj);editor.Document.World.Set(obj, data with{StartTime=2});
-                using var deniedAnimation=new SceneAnimationSession(editor.Document.World,kernel);
-                Reject(()=>deniedAnimation.Prepare(editor.RenderAssets!,editor.Document.CaptureSnapshot()));editor.Document.World.Set(obj, data);
+                byte[] prior=editor.Document.CaptureBytes();Guid obj=objects[0];var data=editor.Document.GetComponent<ClipPlaybackData>(obj);editor.Document.SetComponent(obj, data with{StartTime=2});
+                var invalidProjection=EditorSceneProjection.Bake(editor);
+                using var deniedAnimation=new SceneAnimationSession(invalidProjection.Scene.World,kernel);
+                Reject(()=>deniedAnimation.Prepare(editor.RenderAssets!,invalidProjection.Scene.CaptureSnapshot()));editor.Document.SetComponent(obj, data);
                 Check(editor.Document.CaptureBytes().SequenceEqual(prior)&&renderer.SkinStats.Meshes==2,"Failed animation candidate changed live resources/document");editor.StopPlay();
             }
         } finally {edit.Dispose();}
         Check(renderer.SkinStats.Meshes==0&&kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0,"Final animation native leases nonzero");
         // Editor missing references are diagnostic-only, with no bind-pose fallback or UUID rewrite.
         var (missingDoc,missingCamera,missingObjects)=fixture.Scene();var missingId=Guid.NewGuid();
-        global::Ncma.Runtime.Entity missingObj=missingDoc.World.FindEntity(missingObjects[0]);missingDoc.World.Set(missingObj, missingDoc.World.Get<ClipPlaybackData>(missingObj) with{ClipId=missingId});byte[] missingBytes=missingDoc.CaptureBytes();
+        Guid missingObj=missingObjects[0];missingDoc.SetComponent(missingObj, missingDoc.GetComponent<ClipPlaybackData>(missingObj) with{ClipId=missingId});byte[] missingBytes=missingDoc.CaptureBytes();
+        var missingRuntime=BakeRenderScene(missingDoc);
         using(var prepared=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,missingDoc.CaptureSnapshot(),false))
-        using(var scene=new SceneRenderSession(renderer,cache,missingDoc.World)) {scene.Prepare(prepared,missingDoc.CaptureSnapshot(),poseKernel:kernel);
+        using(var scene=new SceneRenderSession(renderer,cache,missingRuntime.World)) {scene.Prepare(prepared,missingRuntime.CaptureSnapshot(),poseKernel:kernel);
             Check(!scene.Submit(frame,256,256,missingCamera,target:target)&&scene.Diagnostics.Any(d=>d.Code=="animation_clip_missing"&&d.AssetId==missingId),"Missing clip silently fell back to bind pose");
             Check(missingBytes.SequenceEqual(missingDoc.CaptureBytes())&&renderer.SkinStats.Meshes==0,"Missing clip changed UUID or allocated GPU skin resources");
         }
@@ -179,10 +185,11 @@ internal static unsafe partial class Program
                     string from=other.GenerationPath;string relative=other.Plan.Record.Generation!.RelativePath.Replace(other.Project.ToString("N"),f.Project.ToString("N"));string to=Path.Combine(f.Root,relative);Directory.CreateDirectory(Path.GetDirectoryName(to)!);File.Copy(from,to);
                     File.WriteAllBytes(Path.Combine(f.Root,"assets",other.Model+".fbx.ncmeta"),AssetRecordCodec.Encode(other.Plan.Record with{SourcePath="assets/"+other.Model+".fbx",Generation=other.Plan.Record.Generation with{RelativePath=relative}}));
                 }
-                for(int i=1;i<count;i++){var other=fixtures[i-1];var manifest=other.Manifest;d.World.Set(d.World.FindEntity(ids[i]), new SkinnedMeshData(other.Model,manifest.Meshes[0].Mesh,manifest.Skeleton!.Value,manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.World.Set(d.World.FindEntity(ids[i]), new ClipPlaybackData(manifest.Clips[0],true,true,1,0));}
+                for(int i=1;i<count;i++){var other=fixtures[i-1];var manifest=other.Manifest;d.SetComponent(ids[i], new SkinnedMeshData(other.Model,manifest.Meshes[0].Mesh,manifest.Skeleton!.Value,manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.SetComponent(ids[i], new ClipPlaybackData(manifest.Clips[0],true,true,1,0));}
             }
             using var prepared=SceneAssetPreparation.Prepare(f.Root,f.Project,d.CaptureSnapshot(),true);
-            using var scene=new SceneRenderSession(renderer,cache,d.World);scene.Prepare(prepared,d.CaptureSnapshot(),poseKernel:kernel);
+            var runtime=BakeRenderScene(d);
+            using var scene=new SceneRenderSession(renderer,cache,runtime.World);scene.Prepare(prepared,runtime.CaptureSnapshot(),poseKernel:kernel);
             const int warmFrames=32;
             // Warm the same advancing-preview path that is measured, not the distinct seek API.
             // Cold lazy/runtime initialization is not cached-frame cost; the measured gate stays exactly zero.

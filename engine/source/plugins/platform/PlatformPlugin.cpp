@@ -19,6 +19,8 @@ std::mutex diagnosticsGate;
 std::deque<std::string> diagnostics;
 uint64_t module = 0;
 bool busy = false;
+HANDLE precisionTimer = nullptr;
+uint64_t precisionIdentity = 0;
 struct Window {
     GLFWwindow* pointer = nullptr;
     uint64_t handle = 0, sequence = 0;
@@ -125,7 +127,7 @@ uint32_t NCMA_CALL Shutdown(uint64_t context, NcmaErrorV1* error) noexcept
 {
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
         auto valid = Validate(context, error); if (valid) return valid;
-        if (window) return NcmaPlugin::Error(error, NCMA_BUSY, "Window still owned.");
+        if (window || precisionTimer) return NcmaPlugin::Error(error, NCMA_BUSY, "Platform resource still owned.");
         BusyScope scope; glfwTerminate(); glfwSetErrorCallback(nullptr); module = 0;
         std::lock_guard lock(diagnosticsGate); diagnostics.clear(); return NCMA_OK;
     });
@@ -135,7 +137,7 @@ uint32_t NCMA_CALL Status(uint64_t context, NcmaModuleStatusV1* output, NcmaErro
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
         if (!output) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
         auto valid = Validate(context, error); if (valid) return valid;
-        *output = {sizeof(*output), 1, window ? 1u : 0u, 0, window ? window->sequence : 0}; return NCMA_OK;
+        *output = {sizeof(*output), 1, (window ? 1u : 0u) + (precisionTimer ? 1u : 0u), 0, window ? window->sequence : 0}; return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL ReadDiagnostic(uint64_t context, uint8_t* output, uint32_t capacity, uint32_t* required, NcmaErrorV1* error) noexcept
@@ -151,7 +153,7 @@ uint32_t NCMA_CALL ReadDiagnostic(uint64_t context, uint8_t* output, uint32_t ca
         return NCMA_OK; // Non-consuming, repeatable bounded inspection.
     });
 }
-uint32_t NCMA_CALL PlatformCreateWindow(uint64_t context, const NcmaWindowDescriptionV1* desc, uint64_t* output, NcmaErrorV1* error) noexcept
+uint32_t CreateWindowCore(uint64_t context, const NcmaWindowDescriptionV1* desc, uint64_t* output, NcmaErrorV1* error, bool pixels)
 {
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
         auto valid = Validate(context, error); if (valid) return valid;
@@ -165,15 +167,44 @@ uint32_t NCMA_CALL PlatformCreateWindow(uint64_t context, const NcmaWindowDescri
         candidate->handle = NcmaPlugin::NewWindowsHandle();
         glfwDefaultWindowHints(); glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         glfwWindowHint(GLFW_VISIBLE, static_cast<int>(desc->visible));
-        glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+        glfwWindowHint(GLFW_SCALE_TO_MONITOR, pixels ? GLFW_FALSE : GLFW_TRUE);
+        if (pixels) {
+            glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+            glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+            GLFWmonitor* primary=glfwGetPrimaryMonitor();
+            if(!primary)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"Primary monitor unavailable.");
+            int x=0,y=0;glfwGetMonitorPos(primary,&x,&y);
+            glfwWindowHint(GLFW_POSITION_X,x);glfwWindowHint(GLFW_POSITION_Y,y);
+        }
         candidate->pointer = glfwCreateWindow(static_cast<int>(desc->width), static_cast<int>(desc->height), title.c_str(), nullptr, nullptr);
         if (!candidate->pointer) return NcmaPlugin::Error(error, NCMA_INTERNAL_ERROR, "Window creation failed.");
+        if (pixels) {
+            int width=0,height=0;glfwGetFramebufferSize(candidate->pointer,&width,&height);
+            if(width!=static_cast<int>(desc->width)||height!=static_cast<int>(desc->height)) {
+                glfwDestroyWindow(candidate->pointer);candidate->pointer=nullptr;
+                return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE,"Requested framebuffer pixel size unavailable.");
+            }
+        }
         glfwSetWindowUserPointer(candidate->pointer, candidate.get());
         glfwSetKeyCallback(candidate->pointer, Key); glfwSetMouseButtonCallback(candidate->pointer, Mouse);
         glfwSetCursorPosCallback(candidate->pointer, Pointer); glfwSetScrollCallback(candidate->pointer, Scroll);
         glfwSetCharCallback(candidate->pointer, Text); glfwSetWindowFocusCallback(candidate->pointer, Focus);
         glfwSetFramebufferSizeCallback(candidate->pointer, Resize);
         *output = candidate->handle; window = std::move(candidate); return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL PlatformCreateWindow(uint64_t context, const NcmaWindowDescriptionV1* desc, uint64_t* output, NcmaErrorV1* error) noexcept
+{
+    return CreateWindowCore(context,desc,output,error,false);
+}
+uint32_t NCMA_CALL CreatePixelWindow(uint64_t context,const NcmaPixelWindowDescriptionV1* desc,uint64_t* output,NcmaErrorV1* error) noexcept
+{
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=Validate(context,error);if(valid)return valid;
+        if(!desc||desc->window.struct_size!=sizeof(*desc)||desc->mode!=NCMA_BORDERLESS_PIXELS||desc->reserved)
+            return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        auto base=desc->window;base.struct_size=sizeof(base);
+        return CreateWindowCore(context,&base,output,error,true);
     });
 }
 uint32_t NCMA_CALL DestroyWindow(uint64_t context, uint64_t handle, NcmaErrorV1* error) noexcept
@@ -252,6 +283,54 @@ uint32_t NCMA_CALL Wait(uint64_t context, double seconds, NcmaErrorV1* error) no
         BusyScope scope; glfwWaitEventsTimeout(seconds); return NCMA_OK;
     });
 }
+uint32_t NCMA_CALL CreatePrecisionWait(uint64_t context, uint64_t* output, NcmaErrorV1* error) noexcept
+{
+    return NcmaPlugin::Guard(error, [&]() -> uint32_t {
+        auto valid=Validate(context,error); if(valid)return valid;
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(precisionTimer)return NcmaPlugin::Error(error,NCMA_BUSY);
+        *output=0;
+        const uint64_t identity=NcmaPlugin::NewWindowsHandle();
+        BusyScope scope;
+        HANDLE created=CreateWaitableTimerExW(nullptr,nullptr,CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+            TIMER_MODIFY_STATE|SYNCHRONIZE);
+        if(!created) {
+            const DWORD code=GetLastError();
+            return NcmaPlugin::Error(error,(code==ERROR_INVALID_PARAMETER||code==ERROR_NOT_SUPPORTED)?
+                NCMA_UNSUPPORTED_FEATURE:NCMA_INTERNAL_ERROR,"High-resolution wait timer creation failed.");
+        }
+        precisionTimer=created;precisionIdentity=identity;*output=identity;return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL PrecisionWait(uint64_t context, uint64_t identity, uint32_t microseconds, NcmaErrorV1* error) noexcept
+{
+    return NcmaPlugin::Guard(error, [&]() -> uint32_t {
+        auto valid=Validate(context,error); if(valid)return valid;
+        if(!precisionTimer||identity!=precisionIdentity)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        if(microseconds==0||microseconds>8000)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        BusyScope scope;LARGE_INTEGER due{};
+        due.QuadPart=-static_cast<LONGLONG>(microseconds)*10; // Relative 100ns units.
+        if(!SetWaitableTimerEx(precisionTimer,&due,0,nullptr,nullptr,nullptr,0))
+            return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"High-resolution timer arm failed.");
+        const DWORD result=WaitForSingleObject(precisionTimer,1000);
+        if(result!=WAIT_OBJECT_0) {
+            // Preserve resource on failure for explicit owner-thread destruction.
+            CancelWaitableTimer(precisionTimer);
+            return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"High-resolution timer wait failed or timed out.");
+        }
+        return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL DestroyPrecisionWait(uint64_t context, uint64_t identity, NcmaErrorV1* error) noexcept
+{
+    return NcmaPlugin::Guard(error, [&]() -> uint32_t {
+        auto valid=Validate(context,error); if(valid)return valid;
+        if(!precisionTimer||identity!=precisionIdentity)return NcmaPlugin::Error(error,NCMA_INVALID_HANDLE);
+        BusyScope scope;
+        if(!CloseHandle(precisionTimer))return NcmaPlugin::Error(error,NCMA_INTERNAL_ERROR,"Timer close failed; ownership retained.");
+        precisionTimer=nullptr;precisionIdentity=0;return NCMA_OK;
+    });
+}
 }
 extern "C" uint32_t NCMA_CALL ncma_platform_borrow_window_v1(uint64_t context, uint64_t handle, GLFWwindow** output, NcmaErrorV1* error) noexcept
 {
@@ -273,5 +352,15 @@ extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major, ui
 {
     const NcmaPlatformApiV1 api{{sizeof(NcmaPlatformApiV1), 1, 0, NCMA_PLATFORM, 0, Initialize, Shutdown, Status, ReadDiagnostic},
         PlatformCreateWindow, DestroyWindow, Poll, GetWindowState, SetTitle, SetIcon, RequestClose, Wait};
+    if(minor==1||minor==2) {
+        NcmaPlatformApiV1_1 extended{api,CreatePrecisionWait,PrecisionWait,DestroyPrecisionWait};
+        extended.base.module.struct_size=sizeof(extended);extended.base.module.minor=1;
+        if(minor==2) {
+            NcmaPlatformApiV1_2 pixels{extended,CreatePixelWindow};
+            pixels.base.base.module.struct_size=sizeof(pixels);pixels.base.base.module.minor=2;
+            return NcmaPlugin::CopyApi(major,minor,output,capacity,error,pixels,2);
+        }
+        return NcmaPlugin::CopyApi(major,minor,output,capacity,error,extended,1);
+    }
     return NcmaPlugin::CopyApi(major, minor, output, capacity, error, api);
 }

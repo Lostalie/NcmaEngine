@@ -9,7 +9,7 @@ using Ncma.Gameplay;
 namespace Ncma.Editor.App;
 
 internal enum EditorGraphicsPhase { Ready, Retiring, Preparing, Failed }
-internal readonly record struct EditorGraphicsReview(Guid Token, Guid Session, Guid World, ulong Revision,
+internal readonly record struct EditorGraphicsReview(Guid Token, Guid Session, Guid DocumentSession, ulong Revision,
     ulong DocumentGeneration, Guid Assets, ulong RendererGeneration, ulong Frame, bool AbandonActiveFrame,
     PlayStatus? Play,ulong PlayRevision,Guid PlayAssets);
 
@@ -60,9 +60,9 @@ internal sealed unsafe partial class CandidatePresentation
         if(!RecoveryModeReady()||_uiWorkspace?.HasDraft==true||_animationGraphs?.HasDraft==true)
             throw new InvalidOperationException("Graphics recovery requires idle Edit or healthy active Play, without unfinished drafts.");
         var frame=_renderer?.ReadFrameState()??default;
-        return new(token,owner.Edit!.SessionId,owner.Document.World.Identity,owner.Document.Revision,
+        return new(token,owner.Edit!.SessionId,owner.Document.SessionId,owner.Document.Revision,
             owner.Edit!.DocumentGeneration,owner.RenderAssets?.Assets.Identity??Guid.Empty,frame.Generation,frame.Frame,abandon,
-            owner.Play?.Status,owner.Play?.Document.Revision??0,owner.PlayRenderAssets?.Assets.Identity??Guid.Empty);
+            owner.Play?.Status,owner.Play?.Scene.Revision??0,owner.PlayRenderAssets?.Assets.Identity??Guid.Empty);
     }
     internal EditorGraphicsReview ReviewGraphicsRecovery(bool abandonActiveFrame=false)
     {
@@ -83,8 +83,10 @@ internal sealed unsafe partial class CandidatePresentation
         var editState=_editor!.Edit!.State;var play=_editor.Play;
         _graphicsRecoveryBusy=true;_graphicsRecoveryPoisoned=false;
         try {
-            using var read=SceneEnvironmentState.BeginRead(_editor!.Document.World,review.World);
+            var replacementProjection=CreateOrReuseEditProjection();
+            using var read=_editor!.Document.ReadOnly();
             _graphicsPhase=EditorGraphicsPhase.Retiring;
+            ObserveResourceMemory(RendererMemoryCheckpoint.BeforeGraphicsRetirement);
             _presenter?.CancelInteraction();_presenter?.SetViewportFrame(null,0);
             SuspendSceneHudInput();_pointerWasFocused=false;Array.Clear(_held);Array.Clear(_pressed);Array.Clear(_released);
             play?.CancelPresentationInput();
@@ -98,12 +100,13 @@ internal sealed unsafe partial class CandidatePresentation
             RetireGraphics();
             _graphicsPhase=EditorGraphicsPhase.Preparing;
             using(var playScope=play?.BeginPresentationRecovery()){
-                PrepareReplacementGraphics();playScope?.Validate();
+                PrepareReplacementGraphics(replacementProjection);playScope?.Validate();
             }
-            if(_graphicsRecoveryPoisoned||!ReferenceEquals(_editor.Play,play)||_editor.Play?.Status!=review.Play||(_editor.Play?.Document.Revision??0)!=review.PlayRevision||(_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty)!=review.PlayAssets||_editor.Edit!.State!=editState||_editor.Document.World.Identity!=review.World||_editor.Document.Revision!=review.Revision||_editor.Edit.DocumentGeneration!=review.DocumentGeneration||(_editor.RenderAssets?.Assets.Identity??Guid.Empty)!=review.Assets)
+            if(_graphicsRecoveryPoisoned||!ReferenceEquals(_editor.Play,play)||_editor.Play?.Status!=review.Play||(_editor.Play?.Scene.Revision??0)!=review.PlayRevision||(_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty)!=review.PlayAssets||_editor.Edit!.State!=editState||_editor.Document.SessionId!=review.DocumentSession||_editor.Document.Revision!=review.Revision||_editor.Edit.DocumentGeneration!=review.DocumentGeneration||(_editor.RenderAssets?.Assets.Identity??Guid.Empty)!=review.Assets)
                 throw new InvalidOperationException("Graphics recovery request changed during preparation.");
             _playScene?.CompleteDeferredAnimationBinding();SynchronizeSceneHud();
             _graphicsPhase=EditorGraphicsPhase.Ready;
+            ObserveResourceMemory(RendererMemoryCheckpoint.AfterGraphicsRebuild);
         }catch(Exception error){
             RememberGraphicsNativeFailure(error);
             _graphicsRecoveryFailure??=_graphicsPhase==EditorGraphicsPhase.Retiring?"graphics_retirement_failed":"graphics_preparation_failed";
@@ -117,31 +120,31 @@ internal sealed unsafe partial class CandidatePresentation
         if(_uiWorkspace is not null)_presenter?.AttachUi(_uiWorkspace,null);
         if(_animationGraphs is not null)_presenter?.AttachGraphAuthoring(_animationGraphs,null);
         _gui?.Dispose();_gui=null;
-        _pendingScene?.Dispose();_pendingScene=null;
-        // Undo can replace the World before the next normal scene synchronization. A stale
+        _pendingScene?.Dispose();_pendingScene=null;_pendingEditProjection=null;
+        // Undo changes authoring provenance before the next explicit bake. A stale
         // owned animation must be closed normally, not transferred as reusable CPU state.
         // A prior partial close is also no longer readable: resume Dispose directly. Any
         // CPU owner already transferred by this host remains in the retained fields.
         if(_retainedPlayAnimation is null&&_playScene is {} playScene&&
             playScene.PreparationPhase==ScenePreparationPhase.Ready&&
-            playScene.WorldId==_editor?.Play?.Document.World.Identity&&
+            playScene.WorldId==_editor?.Play?.Scene.World.Identity&&
             playScene.Animation?.AssetPublication==_editor?.PlayRenderAssets?.Assets.Identity)
             _retainedPlayAnimation=playScene.RetainAnimationForRecovery();
         if(_retainedEditAnimation is null&&_editScene is {} editScene&&
             editScene.PreparationPhase==ScenePreparationPhase.Ready&&
-            editScene.WorldId==_editor!.Document.World.Identity&&
-            editScene.Animation?.AssetPublication==_editor.RenderAssets?.Assets.Identity)
+            CurrentEditProjection is {} editProjection&&editScene.WorldId==editProjection.Scene.World.Identity&&
+            editScene.Animation?.AssetPublication==_editor!.RenderAssets?.Assets.Identity)
             _retainedEditAnimation=editScene.RetainAnimationForRecovery();
         _playScene?.Dispose();_playScene=null;
         _editScene?.Dispose();_editScene=null;
         // Explicit document/asset replacement invalidates those clocks under the existing
         // snapshot contract. Release the obsolete CPU owner after its last GPU borrower.
         if(_retainedEditAnimation is {} editAnimation&&
-            (editAnimation.WorldId!=_editor!.Document.World.Identity||editAnimation.AssetPublication!=(_editor.RenderAssets?.Assets.Identity??Guid.Empty))){
+            (CurrentEditProjection is not {} currentProjection||editAnimation.WorldId!=currentProjection.Scene.World.Identity||editAnimation.AssetPublication!=(_editor!.RenderAssets?.Assets.Identity??Guid.Empty))){
             editAnimation.Dispose();_retainedEditAnimation=null;
         }
         if(_retainedPlayAnimation is {} playAnimation&&
-            (playAnimation.WorldId!=_editor?.Play?.Document.World.Identity||playAnimation.AssetPublication!=(_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty))){
+            (playAnimation.WorldId!=_editor?.Play?.Scene.World.Identity||playAnimation.AssetPublication!=(_editor.PlayRenderAssets?.Assets.Identity??Guid.Empty))){
             playAnimation.Dispose();_retainedPlayAnimation=null;
         }
         _environmentStartup?.Dispose();_environmentStartup=null;
@@ -158,11 +161,12 @@ internal sealed unsafe partial class CandidatePresentation
         _viewportTarget?.Dispose();_viewportTarget=null;
         _sceneCache?.Dispose();_sceneCache=null;
         _renderService?.Dispose();_renderService=null;
+        ObserveResourceMemory(RendererMemoryCheckpoint.BeforeRendererClose);
         _renderer?.Dispose();_windowSurface?.CompleteShutdown();_renderer=null;
         // Keep shader/post/shadow/scene/HUD/font CPU pins, numerical kernels, platform,
         // loader, workspace participants, script catalog and the exact sole EditSession.
     }
-    private void PrepareReplacementGraphics()
+    private void PrepareReplacementGraphics(EditorSceneProjection projection)
     {
         var state=_window!.State;
         uint width=Math.Clamp(state.FramebufferWidth,1,8192),height=Math.Clamp(state.FramebufferHeight,1,8192);
@@ -178,19 +182,20 @@ internal sealed unsafe partial class CandidatePresentation
         _editAssets=_playAssets=_playSession=Guid.Empty;_configurationRevision=ulong.MaxValue;_configurationWorld=Guid.Empty;
         _graph=null;_viewWidth=_viewHeight=0;_failedSceneSync=null;_failedEnvironment=null;
         _sceneSynchronizationOk=false;
-        var world=_editor!.Document.World;var snapshot=_editor.Document.CaptureSnapshot();
+        projection.RequireCurrent(_editor!);_editProjection=projection;
+        var world=projection.Scene.World;var snapshot=projection.Scene.CaptureSnapshot();
         PreflightPost(world,snapshot);
-        if(_editor.RenderAssets is {} assets){_environmentStartup=new(_renderer,_sceneCache);_environmentStartup.Prepare(world,assets,snapshot,()=>!_closed&&!_graphicsRecoveryPoisoned);}
+        if(_editor!.RenderAssets is {} assets){_environmentStartup=new(_renderer,_sceneCache);_environmentStartup.Prepare(world,assets,snapshot,()=>!_closed&&!_graphicsRecoveryPoisoned);}
         if(_sceneHudPackage is not null){_sceneHud??=new(_uiTextResources);_sceneHud.Prepare(_sceneHudPackage,_renderer,plugins,new(width,height,1,default),interactive:uiActions is not null);}
         if(_playHud is not null){
             if(!ReferenceEquals(_playHudOwner,_editor.Play)||_sceneHudPackage is null)throw new InvalidOperationException("Retained Play HUD owner changed.");
             _playHud.Prepare(_sceneHudPackage,_renderer,plugins,new(width,height,1,default),interactive:true);
         }
         if(_editor.Play is {} play){
-            var playSnapshot=play.Document.CaptureSnapshot();PreflightPost(play.Document.World,playSnapshot);
-            if(_editor.PlayRenderAssets is {} playAssets){_playEnvironmentStartup=new(_renderer,_sceneCache);_playEnvironmentStartup.Prepare(play.Document.World,playAssets,playSnapshot,()=>!_closed&&!_graphicsRecoveryPoisoned);}
+            var playSnapshot=play.Scene.CaptureSnapshot();PreflightPost(play.Scene.World,playSnapshot);
+            if(_editor.PlayRenderAssets is {} playAssets){_playEnvironmentStartup=new(_renderer,_sceneCache);_playEnvironmentStartup.Prepare(play.Scene.World,playAssets,playSnapshot,()=>!_closed&&!_graphicsRecoveryPoisoned);}
         }
-        _hudReady=true;_hudRecovery=false;_hudObservedWorld=Guid.Empty;_hudObservedRevision=0;
+        _hudReady=true;_hudRecovery=false;_hudObservedDocument=Guid.Empty;_hudObservedRevision=0;
         _renderService.Configure(ClearConfiguration(_configuration),960,680);
         SynchronizeSceneResources();_environmentStartup?.Dispose();_environmentStartup=null;_playEnvironmentStartup?.Dispose();_playEnvironmentStartup=null;
         _sceneSynchronizationOk=true;_scenePreparationError=null;

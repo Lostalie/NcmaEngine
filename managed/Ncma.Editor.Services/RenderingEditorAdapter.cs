@@ -32,12 +32,11 @@ public static partial class RenderingEditorAdapter
     }
     public static RenderConfiguration ReadConfiguration(EditSession edit,Guid objectId)
     {
-        global::Ncma.Runtime.Entity item=edit.Document.World.FindEntity(objectId);
-        return edit.Document.World.Get<RenderConfiguration>(item);
+        return edit.Document.GetComponent<RenderConfiguration>(objectId);
     }
     public static CapabilityRequest SettingsRequest(EditSession edit,Guid objectId,RenderConfiguration configuration,ulong expectedRevision)
     {
-        var data=edit.Document.World.Components.Encode(configuration);
+        var data=edit.Document.Components.Encode(configuration);
         var input=JsonSerializer.SerializeToElement(new{label="Configure rendering",operations=new[]{new{op="set_component",objectId,typeId=RenderConfiguration.ComponentType,version=1,data}}});
         return new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,expectedRevision,"ncma.scene.transaction",input);
     }
@@ -63,7 +62,7 @@ public static partial class RenderingEditorAdapter
 
     public static CapabilityRequest EnvironmentRequest(EditSession edit, Guid objectId, Ncma.Scene.Rendering.EnvironmentLightingData configuration, ulong expectedRevision)
     {
-        var data = edit.Document.World.Components.Encode(configuration);
+        var data = edit.Document.Components.Encode(configuration);
         var input = JsonSerializer.SerializeToElement(new { label = "Configure environment", operations = new[] { new {
             op = "set_component", objectId, typeId = Ncma.Scene.Rendering.EnvironmentLightingData.TypeId, version = 1, data } } });
         return new(EditSession.ContractVersion, Guid.NewGuid(), edit.SessionId, expectedRevision, "ncma.scene.transaction", input);

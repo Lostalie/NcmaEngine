@@ -64,7 +64,7 @@ internal sealed partial class PlayerPresentation
         var play=_boundPlay??throw new InvalidOperationException("No bound Player session.");
         if(play.State is not (PlayState.Running or PlayState.Paused)||_assets is null)throw new InvalidOperationException("Only healthy bound gameplay permits graphics recovery.");
         var frame=_renderer?.ReadFrameState()??default;
-        return new(token,play.Status,play.Document.Revision,_assets.Assets.Identity,frame.Generation,frame.Frame,abandon);
+        return new(token,play.Status,play.Scene.Revision,_assets.Assets.Identity,frame.Generation,frame.Frame,abandon);
     }
     internal PlayerGraphicsReview ReviewGraphicsRecovery(bool abandonActiveFrame=false)
     {
@@ -83,6 +83,7 @@ internal sealed partial class PlayerPresentation
         _graphicsReview=null;_graphicsBusy=true;_graphicsRejected=false;_graphicsFailed=true;
         var play=_boundPlay!;
         try {
+            ObserveResourceMemory(RendererMemoryCheckpoint.BeforeGraphicsRetirement);
             _uiInput?.Cancel();play.CancelPresentationInput();_focused=false;Array.Clear(_held);Array.Clear(_pressed);Array.Clear(_released);
             _windowSurface?.BeginShutdown();
             if(_renderer is {} old){var frame=old.ReadFrameState();if(frame.Active&&!frame.Failed){
@@ -96,7 +97,7 @@ internal sealed partial class PlayerPresentation
             _ui?.RetireGraphics();_cache?.Dispose();_cache=null;
             _postRuntime?.Dispose();_postRuntime=null;_highShadows=null;
             _pipeline?.Dispose();_pipeline=null;
-            if(_renderer is {} retiring){var stats=retiring.Stats;retiring.Dispose();
+            if(_renderer is {} retiring){var stats=retiring.Stats;ObserveResourceMemory(RendererMemoryCheckpoint.BeforeRendererClose);retiring.Dispose();
                 _retiredSubmitted=checked(_retiredSubmitted+stats.SubmittedFrames);_retiredErrors=checked(_retiredErrors+stats.ValidationErrors);_retiredWarnings=checked(_retiredWarnings+stats.ValidationWarnings);
                 _windowSurface?.CompleteShutdown();_renderer=null;
             }
@@ -108,22 +109,23 @@ internal sealed partial class PlayerPresentation
                 if(_shadowLibrary is not null)_highShadows=_shadowLibrary.Prepare(_renderer,_shaderFiles!,Approved);
                 if(_postLibrary is not null)_postRuntime=new(_renderer,_shaderFiles!,_postLibrary,_postModules??PostProcessModules.Official(),Approved);
                 _pipeline=new(_renderer);_cache=new(_renderer);
-                var snapshot=play.Document.CaptureSnapshot();
-                _pipelineStartup=new(_renderer);_pipelineStartup.PreparePost(play.Document.World,snapshot,_postRuntime);
-                _pipelineStartup.Prepare(play.Document.World,snapshot,pipelineFactory,_postRuntime,Approved,_highShadows);
-                _environmentPreflight=new(_renderer,_cache);_environmentPreflight.Prepare(play.Document.World,_assets!,snapshot,Approved);
+                var snapshot=play.Scene.CaptureSnapshot();
+                _pipelineStartup=new(_renderer);_pipelineStartup.PreparePost(play.Scene.World,snapshot,_postRuntime);
+                _pipelineStartup.Prepare(play.Scene.World,snapshot,pipelineFactory,_postRuntime,Approved,_highShadows);
+                _environmentPreflight=new(_renderer,_cache);_environmentPreflight.Prepare(play.Scene.World,_assets!,snapshot,Approved);
                 if(_ui is not null)_ui.Prepare(_uiPackage!,_renderer,plugins,new(width,height,1,default),interactive:_uiActions is not null);
-                _scene=new(_renderer,_cache,play.Document.World);
-                _scene.Prepare(_assets!,snapshot,pipelineFactory:ScenePipelineStartup.Bind(_renderer,play.Document.World,pipelineFactory,Approved),
+                _scene=new(_renderer,_cache,play.Scene.World);
+                _scene.Prepare(_assets!,snapshot,pipelineFactory:ScenePipelineStartup.Bind(_renderer,play.Scene.World,pipelineFactory,Approved),
                     poseKernel:_poseKernel,play:play,interpolateTransforms:Ncma.Characters.CharacterComponents.HasPhysics(snapshot),
                     rootMotion:_rootMotion,animators:_animators,environmentPreparationAllowed:Approved,postProcessing:_postRuntime,
                     highShadows:_highShadows,retainedAnimation:_retainedAnimation,deferPlayObserver:true);
                 _environmentPreflight.Dispose();_environmentPreflight=null;_pipelineStartup.Dispose();_pipelineStartup=null;
                 scope.Validate();
             }
-            if(_graphicsRejected||!ReferenceEquals(play,_boundPlay)||play.Status!=review.Play||play.Document.Revision!=review.SceneRevision||_assets!.Assets.Identity!=review.Assets)
+            if(_graphicsRejected||!ReferenceEquals(play,_boundPlay)||play.Status!=review.Play||play.Scene.Revision!=review.SceneRevision||_assets!.Assets.Identity!=review.Assets)
                 throw new InvalidOperationException("Player recovery state changed during preparation.");
             _scene.CompleteDeferredAnimationBinding();_uiInput?.Observe();_graphicsFailed=false;
+            ObserveResourceMemory(RendererMemoryCheckpoint.AfterGraphicsRebuild);
         }catch(Exception error){RememberNativeFailure(error);throw;}finally{_graphicsBusy=false;}
     }
 }

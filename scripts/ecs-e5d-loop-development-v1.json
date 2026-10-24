@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "ecs-e5-d-loop-development-v1",
+  "kind": "default-off development observation, not performance acceptance",
+  "entryOption": "--loop-costs",
+  "hosts": ["Editor ApplicationLifetime.Run", "PlayerRunner actual headless/graphical loop"],
+  "clock": "Stopwatch monotonic timestamps; not the supplied simulation clock",
+  "rawCapacity": 512,
+  "overflow": "retain first prefix, count all omitted iterations; no full-run percentiles inferred",
+  "allocation": "owner thread only; excludes startup, report copies and serialization",
+  "phaseTimes": "wall ticks including scheduling, synchronous IO/waits and diagnostic overhead; NOT CPU execution time",
+  "present": "timestamp only after successful native Present return, even if later host validation fails",
+  "interval": "across all successful returns, including skipped/faulted/recovered iterations; NOT physical display timing",
+  "editorRecovery": "outside per-iteration samples; included in next Present return interval",
+  "playerRecovery": "inside Recovery phase; also included in next Present return interval",
+  "failure": "preserve completed and final faulted/stopped raw prefix",
+  "pacingModified": false,
+  "targetHardwareVerified": false,
+  "performanceAccepted": false,
+  "memoryAcceptance": "pending",
+  "remaining": ["target pacing/preset/resolution/route freeze", "physical display timing", "full-run bounded streaming", "GUI/extraction/residency/queue domains", "full regression and final same-source cohorts"]
+}

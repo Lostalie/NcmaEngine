@@ -112,6 +112,8 @@ internal sealed unsafe partial class EditorPresenter
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,47,"动画图检查 / 只读 MCP 审批",new("graph_toggle"),enabled:_graphs is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,49,"动画图运行观察 / MCP 审批",new("animruntime_toggle"),enabled:_animationRuntime is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,70,"AI 工作流审批 / 回执",new("wf_toggle"),enabled:workspace.Owner.Workflows is not null);
+        if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,71,"运行对象检查 / 只读 MCP 审批",new("runtime_toggle"),enabled:_runtimeInspection is not null);
+        if(menu==2||menu==3||all)Add(GuiItemKind.Button,24,72,"审阅并保留 Play 改动（本地）",new("keep_play_toggle"),enabled:workspace.Owner.RuntimeChanges is not null);
         if(menu==2||menu==5||all)Add(GuiItemKind.Button,24,48,"动画图创作工作区",new("anim_switch"),enabled:_graphAuthor is not null);
         if(menu==6||all){Add(GuiItemKind.Label,3,labelId++,"NcmaEngine · C# runtime / native plugins");Add(GuiItemKind.Label,3,labelId++,"AI 推理服务与 Vulkan 绘制未实现。");}
         Add(GuiItemKind.Button,24,45,"关闭菜单",new("workspace_close_menu"));End();

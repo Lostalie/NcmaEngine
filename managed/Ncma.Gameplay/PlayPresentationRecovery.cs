@@ -22,11 +22,11 @@ public sealed partial class PlaySession
         private readonly ulong _revision;
         private readonly IDisposable _read;
         private bool _rejected,_closed;
-        internal PresentationRecoveryScope(PlaySession play){_play=play;_status=play.Status;_revision=play.Document.Revision;_read=play.Document.World.ReadOnly();}
+        internal PresentationRecoveryScope(PlaySession play){_play=play;_status=play.Status;_revision=play.Scene.Revision;_read=play.Scene.World.ReadOnly();}
         internal void Reject()=>_rejected=true;
         public void Validate()
         {
-            _play.Verify();if(_closed||!ReferenceEquals(_play._presentationRecovery,this)||_rejected||_play.Status!=_status||_play.Document.Revision!=_revision)
+            _play.Verify();if(_closed||!ReferenceEquals(_play._presentationRecovery,this)||_rejected||_play.Status!=_status||_play.Scene.Revision!=_revision)
                 throw new InvalidOperationException("Play changed or a control reentry was rejected during presentation recovery.");
         }
         public void Dispose()

@@ -7,16 +7,17 @@ namespace Ncma.Editor.App;
 
 internal sealed unsafe partial class EditorPresenter
 {
-    private sealed record PostPreparationView(Guid World,ulong Revision,Guid Play,bool Ready,bool Failed,PostProcessData? Prepared,ulong Frame);
+    private sealed record PostPreparationView(Guid World,ulong Revision,Guid Play,bool Ready,bool Failed,PostProcessData? Prepared,ulong Frame,EditorSceneSourceStamp? Authoring);
     private PostPreparationView? _postPreparation;
     private int _postModuleOffset;
     private readonly HashSet<Guid> _postReadSelection=[];
     private PostModulesReadReview? _postReadReview;private bool _postReadReviewed;
-    internal void ShowPostPreparation(Guid world,ulong revision,Guid play,bool ready,bool failed,PostProcessData? prepared,ulong frame=0)=>_postPreparation=new(world,revision,play,ready,failed,prepared,frame);
+    internal void ShowPostPreparation(Guid world,ulong revision,Guid play,bool ready,bool failed,PostProcessData? prepared,ulong frame=0,EditorSceneSourceStamp? authoring=null)=>_postPreparation=new(world,revision,play,ready,failed,prepared,frame,authoring);
     internal string PostPreparationStatus {
         get {
-            var play=workspace.Owner.Play;var world=play?.Document.World??workspace.Owner.Document.World;
-            if(_postPreparation is not {} state||state.World!=world.Identity||state.Revision!=world.Revision||state.Play!=(play?.SessionId??Guid.Empty))return "后处理：等待当前版本";
+            var play=workspace.Owner.Play;var world=play?.Scene.World;
+            if(_postPreparation is not {} state||state.Play!=(play?.SessionId??Guid.Empty)||
+                (world is null ? state.Authoring is not {} source || !source.Matches(workspace.Owner) : state.Authoring is not null || state.World!=world.Identity || state.Revision!=world.Revision))return "后处理：等待当前版本";
             string prefix=play is null?"后处理：":"后处理（Play，编辑冻结）：";
             if(state.Failed)return prefix+"失败；视口已清空，详见控制台";
             if(!state.Ready||state.Prepared is null)return prefix+"等待当前版本";
@@ -48,6 +49,9 @@ internal sealed unsafe partial class EditorPresenter
     {
         if(workspace.Owner.PostProcessing is not {} service)return;var descriptions=service.Modules.Describe();
         bool has=_page!.Selected!.Components.Any(c=>c.TypeId==PostProcessData.TypeId);var value=has?PostValue():PostProcessData.Off;
+        Add(GuiItemKind.Label,3,label++,"Low v1：512 软阴影 / 移除可选后处理；保留 Tone 与曝光，可一次撤销");
+        Add(GuiItemKind.Button,2,control++,"应用场景画质：Low v1",new("post_quality_low",target),
+            enabled:writable&&!workspace.HasDraft&&workspace.Owner.Document.Components.Describe().Any(c=>c.TypeId==SceneShadowData.TypeId));
         if(!workspace.HasSceneComponent(PostProcessData.TypeId))Button(control++,"添加后处理配置（关闭）","transaction",writable,target,RenderingEditorAdapter.PostOperation(service.Modules,target,PostProcessData.Off));
         Add(GuiItemKind.Label,3,label++,"注册后处理模块 / 无源码执行入口");
         _postModuleOffset=Math.Clamp(_postModuleOffset,0,Math.Max(0,(descriptions.Length-1)/8*8));
@@ -75,6 +79,14 @@ internal sealed unsafe partial class EditorPresenter
         if(!action.Kind.StartsWith("post_",StringComparison.Ordinal)||action.Kind=="post_field")return false;
         var service=workspace.Owner.PostProcessing??throw new ArgumentException("Post authoring unavailable.");
         switch(action.Kind){
+            case "post_quality_low":
+                // A queued click can predate a draft in the same frame. Ignore it without
+                // throwing into the generic error handler, which would cancel that draft.
+                if(workspace.HasDraft)return true;
+                var request=RenderingEditorAdapter.QualityRequest(workspace.Owner.Edit!,action.Object,
+                    SceneQualityPresets.LowV1,service.Modules,_page!.Stamp.Revision);
+                workspace.Transaction(_page.Stamp,"Apply scene quality: Low v1",
+                    request.Input.GetProperty("operations").EnumerateArray().Select(o=>(object)o.Clone()).ToArray(),action.Object);break;
             case "post_tone":case "post_feature":
                 var next=action.Kind=="post_tone"?RenderingEditorAdapter.PostTone(service.Modules,PostValue(),Guid.Parse(action.Field)):
                     RenderingEditorAdapter.PostFeature(service.Modules,PostValue(),Guid.Parse(action.Field),action.Index);

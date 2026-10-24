@@ -105,7 +105,7 @@ public sealed partial class PlaySession
         _pendingUiInput = new(expected, owned); _uiSequence = sequence;
     }
 
-    private GameplayUiStamp UiStamp() => new(SessionId, _document.World.Identity, _document.Revision, Tick,
+    private GameplayUiStamp UiStamp() => new(SessionId, _scene.World.Identity, _scene.Revision, Tick,
         _uiInstance, _uiGeneration, _uiAdmission);
 
     private GameplayUiInput PrepareUiStep()

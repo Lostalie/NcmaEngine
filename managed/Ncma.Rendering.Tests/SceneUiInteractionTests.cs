@@ -24,8 +24,8 @@ internal static unsafe partial class Program
         output=Path.Combine(Path.GetFullPath(output),Guid.NewGuid().ToString("N"));Directory.CreateDirectory(output);
         var repo=new DirectoryInfo(Path.GetFullPath(plugins));while(!File.Exists(Path.Combine(repo.FullName,"Build.bat")))repo=repo.Parent!;
         var fixture=new SceneGpuFixture(output);var(document,camera,_,_)=fixture.Scene();
-        global::Ncma.Runtime.Entity target=document.World.CreateEntity("HUD target");document.World.Set(target, TransformData.Identity);
-        document.SetBindings(document.World.GetUuid(target),[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture.HudProbe",true,[])]);
+        Guid target=document.CreateObject("HUD target");document.SetComponent(target, TransformData.Identity);
+        document.SetBindings(target,[new(Guid.NewGuid(),"Ncma.Gameplay.UiFixture.HudProbe",true,[])]);
         int checks=0;var labels=new List<string>();
         void Pass(bool value,string label){Check(value,"UI interaction "+label);checks++;labels.Add(label);}
         void Reject(Action action,string label){try{action();}catch(Exception e)when(e is ArgumentException or InvalidOperationException or NotSupportedException){Pass(true,label);return;}throw new Exception("Accepted "+label);}
@@ -75,12 +75,13 @@ internal static unsafe partial class Program
             // Actual Player class: same input method used immediately after native Poll in production.
             using(var package=RuntimeUiPackage.Open(runtime,fixture.Project,selection))
             using(var pins=SceneAssetPreparation.Prepare(runtime,fixture.Project,document.CaptureSnapshot(),true,"assets/scene.ncpak"))
-            using(var owner=new RuntimeSessionOwner(document))
+            using(var owner=new RuntimeSessionOwner())
             using(var player=new PlayerPresentation(plugins,false)) {
-                player.Start();player.PrepareBeforeGameplay(document,pins,package,routes);owner.LoadGameplay(context.GameplayAssemblyPath);
-                var play=owner.StartPlay(compose:p=>{routes.Install(p);return null;});player.BindScene(play,pins,camera);
+                var runtimeScene=document.BakeRuntime(document.Revision).Image.Instantiate(document.Components);
+                player.Start();player.PrepareBeforeGameplay(runtimeScene,pins,package,routes);owner.LoadGameplay(context.GameplayAssemblyPath,runtimeScene);
+                var play=owner.StartPlay(runtimeScene,compose:p=>{routes.Install(p);return null;});player.BindScene(play,pins,camera);
                 var window=EnvironmentProductEvidence.Field<PlatformWindow>(player,"_window");var state=window.State;state.Focused=1;state.InputReset=state.Overflow=0;state.Sequence=0;
-                ulong sequence=0;Vector3 Position()=>document.World.Get<TransformData>(document.World.FindEntity(document.World.GetUuid(target))).Position;
+                ulong sequence=0;Vector3 Position()=>runtimeScene.World.Get<TransformData>(runtimeScene.World.FindEntity(target)).Position;
                 InputEvent Pointer(uint action,double x,double y)=>new(){Kind=2,Action=action,Sequence=++sequence,X=x,Y=y};
                 void Input(InputEvent[] input,double x=20,double y=20,double delta=1d/60) {
                     state.Sequence=sequence;state.PointerX=x;state.PointerY=y;player.ProcessInput(play,state,input);play.AdvanceFrame(delta);
@@ -137,7 +138,7 @@ internal static unsafe partial class Program
                     if(cycle==0){var shared=EnvironmentProductEvidence.Field<UiTextResources>(editor,"_uiTextResources");Pass(shared.Modules.Count==1,"one lazy Text context shared by independent Edit/Play HUDs");Reject(shared.Dispose,"live fonts prevent shared Text shutdown");Reject(()=>shared.Get(Path.Combine(plugins,"foreign")),"shared Text rejects changing plugin roots");}
                     Pass(editHud.Runtime.Stamp.Instance!=playHud.Runtime.Stamp.Instance&&playHud.Runtime.Widget(text.Id).Text=="","independent fresh Play UI instance");
                     Draw([Pointer(1,20,20),Pointer(0,20,20)],1d/60);
-                    Vector3 Position()=>play.Document.World.Get<TransformData>(play.Document.World.FindEntity(document.World.GetUuid(target))).Position;
+                    Vector3 Position()=>play.Scene.World.Get<TransformData>(play.Scene.World.FindEntity(target)).Position;
                     Pass(Position()==new Vector3(1,0,0),"Editor click reaches script once without physical edge");
                     Draw([new(){Kind=1,Key=32,Action=1,Sequence=++sequence}],1d/60);
                     Pass(Position()==new Vector3(2,0,0),"Editor HUD consumes Space before shortcuts/gameplay");

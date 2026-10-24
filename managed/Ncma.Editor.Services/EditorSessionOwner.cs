@@ -13,7 +13,6 @@ namespace Ncma.Editor.Services;
 public sealed class EditorSessionOwner : IDisposable
 {
     private readonly SceneDocument _document;
-    private readonly Ncma.SceneWorld _facade;
     private readonly RuntimeSessionOwner _runtime;
     private bool _disposed, _busy;
     private EditSession? _edit;
@@ -35,6 +34,8 @@ public sealed class EditorSessionOwner : IDisposable
     private readonly Func<PlaySession, IDisposable?>? _composePlay;
     private readonly Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? _composePreparedPlay;
     private readonly Action? _beforePlayStop;
+    private SceneBakeStamp? _playAuthoringSource;
+    private EditorRuntimeChanges? _runtimeChanges;
     private PlaySession? _play => _runtime.Play;
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null,
@@ -53,8 +54,8 @@ public sealed class EditorSessionOwner : IDisposable
         _document = new(name, components, snapshot => {
             _compositionPolicy?.Invoke(snapshot);
             if (_assetRoot is not null) _ = SceneRenderValidation.Inspect(snapshot, _renderAssets?.Metadata, catalog: _assets?.Snapshot.Catalog);
-        }); _facade = new(_document.World);
-        _runtime = new(_document, catalog);
+        });
+        _runtime = new(catalog);
         if (activateEditor) ActivateEditor();
     }
     public SceneDocument Document { get { Verify(); return _document; } }
@@ -62,6 +63,9 @@ public sealed class EditorSessionOwner : IDisposable
     public EditorWorkflows? Workflows { get { Verify(); return _workflows; } }
     public EditorEndpoint? Endpoint { get { Verify(); return _endpoint; } }
     public PlaySession? Play { get { Verify(); return _play; } }
+    // Origin of the currently isolated Play, never a write grant or a live document mirror.
+    public SceneBakeStamp? PlayAuthoringSource { get { Verify(); return _playAuthoringSource; } }
+    public EditorRuntimeChanges? RuntimeChanges { get { Verify(); return _runtimeChanges; } }
     public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
     public AssetInspectionService? AssetInspections { get { Verify(); return _assetInspections; } }
     public EditorEnvironmentWorkspace? Environments { get { Verify(); return _environments; } }
@@ -117,7 +121,6 @@ public sealed class EditorSessionOwner : IDisposable
         }
         return changed;
     }
-    internal Ncma.SceneWorld Facade { get { Verify(); return _facade; } }
     private void Verify()
     {
         _document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
@@ -132,6 +135,7 @@ public sealed class EditorSessionOwner : IDisposable
         if (_play is not null) throw new InvalidOperationException("Stop Play before activating Editor.");
         if (_edit is not null) throw new InvalidOperationException("Editor is already activated.");
         _edit = new(_document); RefreshCatalog();
+        _runtimeChanges = new(this);
         _workflows = new(_edit, _workflowTime);
         if(_postModules is not null)_postProcessing=new(new EditorWorkspace(this),_postModules,_workflowTime);
     }
@@ -154,29 +158,31 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify();
         if (_play is not null) throw new InvalidOperationException("Stop Play before loading gameplay.");
-        int count = _runtime.LoadGameplay(path); RefreshCatalog(); return count;
+        int count;
+        using (_document.ReadOnly()) count = _runtime.LoadGameplay(path, _document.CaptureSnapshot());
+        RefreshCatalog(); return count;
     }
     public PlaySession StartPlay()
     {
         Verify();
         if (_play is not null) throw new InvalidOperationException("Stop current Play first.");
-        var document = _document;
         PreparedSceneAssetLease? renderPins = _renderAssets?.AcquireLease();
         IDisposable? pins = null;
         try
         {
-            if (_edit is not null)
-            {
-                var playMetadata = renderPins?.Metadata;
-                document = _document.CreateIsolatedCopy(snapshot => {
-                    _compositionPolicy?.Invoke(snapshot);
-                    if (playMetadata is not null) _ = SceneRenderValidation.Inspect(snapshot, playMetadata);
-                });
-            }
+            var playMetadata = renderPins?.Metadata;
+            var baked = _document.BakeRuntime(_document.Revision, snapshot => {
+                if (playMetadata is not null) _ = SceneRenderValidation.Inspect(snapshot, playMetadata);
+            });
             pins = _assets?.PinForPlay();
             _busy = true;
-            var play = _runtime.StartPlay(document, d => _edit is null ? new PlaySession(d, _facade) : new PlaySession(d),
-                p=>_composePreparedPlay is null?_composePlay?.Invoke(p):_composePreparedPlay(p,renderPins));
+            PlaySession play;
+            using (_document.ReadOnly()) {
+                var scene = baked.Image.Instantiate(_document.Components);
+                play = _runtime.StartPlay(scene,
+                    compose:p=>_composePreparedPlay is null?_composePlay?.Invoke(p):_composePreparedPlay(p,renderPins));
+            }
+            _playAuthoringSource = baked.Source;
             _playAssets = pins; pins = null; _playRenderAssets = renderPins; renderPins = null; _edit?.SetFrozen(true); return play;
         }
         catch
@@ -193,7 +199,9 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify();
         _busy = true;
-        try { if(_play is not null)_beforePlayStop?.Invoke(); return _runtime.ReloadGameplay(path); }
+        try { if(_play is not null)_beforePlayStop?.Invoke();
+            using var read = _document.ReadOnly();
+            return _runtime.ReloadGameplay(path, _play is null ? _document.CaptureSnapshot() : null); }
         finally { try { _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); } finally { _busy = false; } }
     }
     public void StopPlay()
@@ -203,7 +211,7 @@ public sealed class EditorSessionOwner : IDisposable
         try { if(_runtime.Play is not null)_beforePlayStop?.Invoke(); _runtime.StopPlay(); }
         finally
         {
-            try { if (_runtime.Play is null) { _playAssets?.Dispose(); _playAssets = null; _playRenderAssets?.Dispose(); _playRenderAssets = null; _edit?.SetFrozen(false); } }
+            try { if (_runtime.Play is null) { _playAuthoringSource = null; _runtimeChanges?.Invalidate(); _playAssets?.Dispose(); _playAssets = null; _playRenderAssets?.Dispose(); _playRenderAssets = null; _edit?.SetFrozen(false); } }
             finally { _busy = false; }
         }
     }
@@ -227,7 +235,7 @@ public sealed class EditorSessionOwner : IDisposable
         _assets = null;
         _assetInspections?.Revoke(); _assetInspections = null;
         try { _endpoint?.Dispose(); } catch (Exception e) { errors.Add(e); }
-        _endpoint = null; _facade.Dispose();
+        _endpoint = null;
         _runtime.Dispose();
         _disposed = true;
         if (errors.Count != 0) throw new AggregateException(errors);

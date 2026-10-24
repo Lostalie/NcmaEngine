@@ -1,7 +1,9 @@
+#include "ClosedShaderReference.h"
 #include "../contracts/NcmaRenderer.h"
 #include "../contracts/NcmaRendererFrame.h"
 #include "../contracts/NcmaRendererFault.h"
 #include "../contracts/NcmaRendererTiming.h"
+#include "../contracts/NcmaRendererResourceLedger.h"
 #include "../PluginSupport.h"
 #include "../WindowsHandle.h"
 #include "../platform/PlatformPrivate.h"
@@ -86,6 +88,7 @@ struct Renderer {
     std::unordered_map<uint64_t,std::unique_ptr<Rendering::EnvironmentGpuKernel>> environments;
     NcmaEnvironmentGpuStatsV1 environmentStats{64,1,0,0,0,0,0,0,32ull*1024*1024};
     NcmaGpuWorkSampleV1 skinSample{{sizeof(NcmaGpuSampleV1),1}},uiSample{{sizeof(NcmaGpuSampleV1),1}};
+    NcmaGpuWorkSampleV1 skinResolved{{sizeof(NcmaGpuSampleV1),1}},uiResolved{{sizeof(NcmaGpuSampleV1),1}};
     std::unique_ptr<Rendering::SkinKernel> skinKernel;
     std::unique_ptr<Rendering::GpuWorkTimingKernel> uiTiming;
     uint64_t lastUiProductionFrame=0;
@@ -95,7 +98,7 @@ struct Renderer {
     ComPtr<ID3D11InfoQueue> validation;
     ComPtr<ID3D11Query> gpuDisjoint,gpuBegin,gpuEnd;
     bool measuring=false,timingPending=false,timingFailed=false;
-    NcmaGpuSampleV1 gpuSample{sizeof(NcmaGpuSampleV1),1};
+    NcmaGpuSampleV1 gpuSample{sizeof(NcmaGpuSampleV1),1},gpuResolved{sizeof(NcmaGpuSampleV1),1};
     std::string diagnostics;
     NcmaRendererStatsV1 stats{sizeof(NcmaRendererStatsV1)};
 };
@@ -255,6 +258,7 @@ void ResolveTiming(Renderer& r) {
     const bool valid=!data.Disjoint&&data.Frequency&&end>=begin;
     r.gpuSample.state=data.Disjoint?NCMA_GPU_SAMPLE_DISJOINT:valid?NCMA_GPU_SAMPLE_VALID:NCMA_GPU_SAMPLE_INVALID;
     r.gpuSample.milliseconds=valid?static_cast<double>(end-begin)*1000.0/static_cast<double>(data.Frequency):0;
+    r.gpuResolved=r.gpuSample;
     r.stats.gpu_sample_valid=valid?1u:0u;r.stats.gpu_ms=r.gpuSample.milliseconds;
     r.timingPending=false;
 }
@@ -740,12 +744,57 @@ uint32_t NCMA_CALL ReadGpuWorkSample(uint64_t context,uint64_t handle,uint32_t d
         *output=sample;return NCMA_OK;
     });
 }
+uint32_t NCMA_CALL ReadGpuTimingSnapshot(uint64_t context,uint64_t handle,uint32_t domain,NcmaGpuTimingSnapshotV1* output,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]()->uint32_t {
+        const auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(domain<1||domain>3)return NcmaPlugin::Error(error,NCMA_UNSUPPORTED_FEATURE);
+        NcmaGpuTimingSnapshotV1 snapshot{};
+        uint64_t observed=0;
+        if(domain==1) {
+            ResolveTiming(*renderer);
+            snapshot.current.timing=renderer->gpuSample;snapshot.last_resolved.timing=renderer->gpuResolved;
+            observed=renderer->lastFrame;
+        } else {
+            if(domain==2&&renderer->skinKernel)renderer->skinKernel->ResolveTiming(renderer->skinStats);
+            if(domain==3&&renderer->uiTiming)renderer->uiTiming->Resolve();
+            snapshot.current=domain==2?renderer->skinSample:renderer->uiSample;
+            snapshot.last_resolved=domain==2?renderer->skinResolved:renderer->uiResolved;
+            observed=domain==2?renderer->lastSkinFrame:renderer->lastUiProductionFrame;
+        }
+        for(auto* sample:{&snapshot.current,&snapshot.last_resolved}) {
+            sample->timing.generation=handle;sample->timing.domain=domain;sample->timing.observed_frame=observed;
+        }
+        *output=snapshot;return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL ReadResourceLedger(uint64_t context,uint64_t handle,NcmaRendererResourceLedgerV1* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]()->uint32_t {
+        const auto valid=Instance(context,handle,error);if(valid)return valid;
+        if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        if(capacity<sizeof(*output)){NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=sizeof(*output);return NCMA_BUFFER_TOO_SMALL;}
+        const auto ui=renderer->ui?renderer->ui->Stats(handle,renderer->pureUi):NcmaUiStatsV1{};
+        const NcmaRendererResourceLedgerV1 snapshot{sizeof(snapshot),1,handle,
+            (renderer->pureUi?1u:0u)|(renderer->failed?2u:0u)|(renderer->active?4u:0u),0,
+            {renderer->meshStats.resident_bytes,renderer->skinStats.resident_bytes,renderer->resourceStats.resident_bytes,
+             renderer->sceneStats.resident_bytes,renderer->environmentStats.resident_bytes,ui.resident_bytes,
+             renderer->uiTargetBytes,renderer->postStats.resident_bytes},
+            {renderer->meshes.size(),renderer->skins.size(),renderer->textures.size()+renderer->materials.size()+renderer->targets.size(),
+             renderer->scenePipelines.size(),renderer->environments.size(),ui.images+ui.lists,renderer->uiTargets.size(),renderer->postStats.bindings}};
+        *output=snapshot;return NCMA_OK;
+    });
+}
 uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* output,uint32_t capacity,NcmaErrorV1* error) noexcept {
     return NcmaPlugin::Guard(error,[&]() -> uint32_t {
         auto valid=Validate(context,error);if(valid)return valid;
-        if(version<1||version>20)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
+        if(version<1||version>22)return NcmaPlugin::Error(error,NCMA_ABI_MISMATCH);
         if(!output)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
-        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):version==10?sizeof(NcmaShaderStagesApiV1):version==11?sizeof(NcmaUiShadersApiV1):version==12?sizeof(NcmaRuntimeShadersApiV1):version==13?sizeof(NcmaEnvironmentCookApiV1):version==16?sizeof(NcmaPostApiV1):version==17?sizeof(NcmaRendererFrameApiV1):version==18?sizeof(NcmaRendererFaultApiV1):version==19?sizeof(NcmaRendererTimingApiV1):version==20?sizeof(NcmaRendererWorkTimingApiV1):sizeof(NcmaEnvironmentGpuApiV1);
+        if(version==22){
+            const NcmaRendererResourceLedgerApiV1 ledger{sizeof(ledger),1,1,ReadResourceLedger};
+            if(capacity<sizeof(ledger)){NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=sizeof(ledger);return NCMA_BUFFER_TOO_SMALL;}
+            std::memcpy(output,&ledger,sizeof(ledger));return NCMA_OK;
+        }
+        const uint32_t required=version==1?sizeof(NcmaSceneRenderApiV1):version==2?sizeof(NcmaSceneRenderApiV2):version==3?sizeof(NcmaResourceRenderApiV3):version==4?sizeof(NcmaScenePipelineApiV4):version==5?sizeof(NcmaSkinApiV5):version==6?sizeof(NcmaUiApiV1):version==7?sizeof(NcmaUiTargetApiV1):version==8?sizeof(NcmaShaderApiV1):version==9?sizeof(NcmaShaderPipelineApiV1):version==10?sizeof(NcmaShaderStagesApiV1):version==11?sizeof(NcmaUiShadersApiV1):version==12?sizeof(NcmaRuntimeShadersApiV1):version==13?sizeof(NcmaEnvironmentCookApiV1):version==16?sizeof(NcmaPostApiV1):version==17?sizeof(NcmaRendererFrameApiV1):version==18?sizeof(NcmaRendererFaultApiV1):version==19?sizeof(NcmaRendererTimingApiV1):version==20?sizeof(NcmaRendererWorkTimingApiV1):version==21?sizeof(NcmaRendererTimingSnapshotApiV1):sizeof(NcmaEnvironmentGpuApiV1);
         if(capacity<required) {
             NcmaPlugin::Error(error,NCMA_BUFFER_TOO_SMALL);error->required_bytes=required;return NCMA_BUFFER_TOO_SMALL;
         }
@@ -770,7 +819,8 @@ uint32_t NCMA_CALL QuerySceneRender(uint64_t context,uint32_t version,void* outp
         else if(version==17) {const NcmaRendererFrameApiV1 frame{sizeof(frame),1,1,ReadRendererFrame,AbandonRendererFrame};std::memcpy(output,&frame,sizeof(frame));}
         else if(version==18) {const NcmaRendererFaultApiV1 fault{sizeof(fault),1,1,ReadRendererFault};std::memcpy(output,&fault,sizeof(fault));}
         else if(version==19) {const NcmaRendererTimingApiV1 timing{sizeof(timing),1,1,ReadGpuSample};std::memcpy(output,&timing,sizeof(timing));}
-        else {const NcmaRendererWorkTimingApiV1 timing{sizeof(timing),1,3,ReadGpuWorkSample};std::memcpy(output,&timing,sizeof(timing));}
+        else if(version==20) {const NcmaRendererWorkTimingApiV1 timing{sizeof(timing),1,3,ReadGpuWorkSample};std::memcpy(output,&timing,sizeof(timing));}
+        else {const NcmaRendererTimingSnapshotApiV1 timing{sizeof(timing),1,7,ReadGpuTimingSnapshot};std::memcpy(output,&timing,sizeof(timing));}
         return NCMA_OK;
     });
 }

@@ -14,29 +14,40 @@ using Ncma.Ui.Rendering;
 
 internal static class GraphicsRecoveryJointEditorProbe
 {
+    private static EditorSceneProjection OwnedEditProjection(CandidatePresentation host) =>
+        EnvironmentProductEvidence.Field<EditorSceneProjection>(host,"_editProjection");
+
     internal static void Run(string requestPath)
     {
         using var e=new UiPublicationProductEvidence(requestPath);string[] native=[];var costs=new RelocatedPresentationCosts(e);
+        var simulationObservations=new List<SceneSimulationCostReport>();
+        var domains=new EcsDomainCosts(e);
         var quality=GraphicsRecoveryJointState.ShadowQuality(e.Project);uint shadowResolution=SceneShadowPresets.Get(quality).Budget.Resolution;
         foreach(int mode in new[]{0,1,2}){
             bool preparationFailure=false;
             RenderPipeline Factory(float exposure,float ambient,bool shadows){if(preparationFailure)throw new InvalidOperationException("test-only preparation fault");return ShadowJointPipelines.Create(mode,exposure,ambient,shadows,shadowResolution);}
             var context=ProjectContext.Load(GraphicsRecoveryJointState.Interactive(e.Project));
-            using var editor=new CandidatePresentation(e.Plugins,context,true,false,false,pipelineFactory:mode==0?null:Factory,uiActions:GraphicsRecoveryJointState.Routes(),presentationCosts:true);
+            using var editor=new CandidatePresentation(e.Plugins,context,true,false,false,pipelineFactory:mode==0?null:Factory,uiActions:GraphicsRecoveryJointState.Routes(),presentationCosts:true,simulationCosts:true);
             editor.Start();ulong frame=0;
             var inputState=EnvironmentProductEvidence.Field<PlatformWindow>(editor,"_window").State;inputState.Focused=1;inputState.InputReset=inputState.Overflow=0;ulong inputSequence=inputState.Sequence;
             byte[] Draw(bool fault=false,bool sliderInput=false,double delta=0,bool capture=true){byte[]? image=null;if(capture)editor.CaptureNextCompositeViewportForVerification((p,_,_)=>{image=p;if(fault)throw new InvalidOperationException("joint capture fault");});
                 InputEvent[] events=[];if(sliderInput){var area=editor.VerificationPresenter.Viewport;inputState.PointerX=area.X+58;inputState.PointerY=area.Y+66;InputEvent Pointer(uint action)=>new(){Kind=2,Action=action,Sequence=++inputSequence,X=inputState.PointerX,Y=inputState.PointerY};events=[Pointer(1),Pointer(0)];}inputState.Sequence=inputSequence;editor.SetWindowInputForVerification(inputState,events);
                 var f=new FrameContext(++frame,delta);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);try{editor.Present(f);}finally{if(capture)costs.Diagnostic(editor.LastPresentationCosts);}return image??(capture?throw new Exception("No final viewport"):[]);}
-            Draw();var editImage=Draw();var owner=editor.VerificationEditor;var edit=owner.Edit!;var editWorld=owner.Document.World;var editBytes=owner.Document.CaptureBytes();var editHistory=edit.State;
+            Draw();var editImage=Draw();var owner=editor.VerificationEditor;var edit=owner.Edit!;var editDocument=owner.Document;var editProjection=OwnedEditProjection(editor);var editBytes=owner.Document.CaptureBytes();var editHistory=edit.State;
             owner.RefreshAssets(true);owner.Assets?.PrepareStoredGenerationsAsync().GetAwaiter().GetResult();
             var play=owner.StartPlay();Draw();Draw(sliderInput:true,delta:1d/60);var hud=EnvironmentProductEvidence.Field<SceneUiPresentation>(editor,"_playHud");var hudRuntime=hud.Runtime;Guid slider=GraphicsRecoveryJointState.Slider(hudRuntime);
             e.Pass(hudRuntime.Widget(slider).Value==.5f&&GraphicsRecoveryJointState.GameplayValue(play)==.5f,"real viewport slider routes through fixed-step C# with graph/root/physics live");hudRuntime.CancelInput();play.Pause();for(int i=0;i<12;i++){e.Pass(play.Step().State==PlayState.Paused,"joint committed step");Draw();}
             e.Pass(GraphicsRecoveryJointState.PrivateProgress(play),"original SDK behaviour private progress before fault");
             var runtime=EnvironmentProductEvidence.Field<ScenePlayRuntime>(editor,"_sceneRuntime");var physics=EnvironmentProductEvidence.Field<PhysicsService>(editor,"_physics");
-            global::Ncma.Runtime.Entity actor=play.Document.World.GetEntities().Single(o=>play.Document.World.Has<AnimatorData>(o));Guid actorId=play.Document.World.GetUuid(actor);
-            e.Pass(runtime.Characters!.InspectRootMotion(actorId).DesiredDisplacement.X>.008f&&play.Document.World.Get<TransformData>(actor).Position.X>-.91f,"known synthetic 0.5m/s graph root moves through Jolt alongside real FBX actor");
-            string State()=>JsonSerializer.Serialize(new{play.Status,world=play.Document.World.Identity,scene=Convert.ToHexString(play.Document.CaptureBytes()),graph=runtime.Animators!.ReadFrame(actorId),root=runtime.Characters!.InspectRootMotion(actorId),movement=runtime.Characters.Status,numericalEpoch=runtime.Characters.NumericalEpoch,physics=physics.Inspect()});
+            var initialCosts=editor.LastSimulationCosts!.Value;
+            e.Pass(initialCosts.Advance is{Completed:true,Kind:SimulationAdvanceKind.PausedStep,CommittedSteps:1,IncludesUpdate:false}&&
+                initialCosts.Advance.SessionId==play.SessionId&&initialCosts.Advance.WorldId==play.Scene.World.Identity&&
+                initialCosts.LastCharacterStep is{} lastStep&&lastStep.Tick==play.Tick&&lastStep.Native.Sequence==runtime.Characters!.Status.CommittedSequence,
+                "real FBX/root/Jolt/HUD joint exposes exact final committed simulation costs");
+            simulationObservations.Add(initialCosts);
+            global::Ncma.Runtime.Entity actor=play.Scene.World.GetEntities().Single(o=>play.Scene.World.Has<AnimatorData>(o));Guid actorId=play.Scene.World.GetUuid(actor);
+            e.Pass(runtime.Characters!.InspectRootMotion(actorId).DesiredDisplacement.X>.008f&&play.Scene.World.Get<TransformData>(actor).Position.X>-.91f,"known synthetic 0.5m/s graph root moves through Jolt alongside real FBX actor");
+            string State()=>JsonSerializer.Serialize(new{play.Status,world=play.Scene.World.Identity,scene=Convert.ToHexString(play.Scene.CaptureCheckpoint().CopyBytes()),graph=runtime.Animators!.ReadFrame(actorId),root=runtime.Characters!.InspectRootMotion(actorId),movement=runtime.Characters.Status,numericalEpoch=runtime.Characters.NumericalEpoch,physics=physics.Inspect()});
             var expected=State();var history=edit.State;var old=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");var scene=EnvironmentProductEvidence.Field<SceneRenderSession>(editor,"_playScene");var animation=scene.Animation;
             var pixels=Draw();var vertices=new byte[4*48];scene.CaptureCharacterVertices(actorId,vertices);
             e.Pass(old.SkinStats.Meshes>=2&&old.EnvironmentStats.Live>0&&old.PostStats.Bindings>0&&old.UiTargetStats.Targets>0&&physics.Inspect().Worlds==1,"all graph/root/Jolt/FBX/IBL/Bloom/HUD live together");GraphicsRecoveryJointState.CheckShadow(e,scene,old,quality);
@@ -52,7 +63,12 @@ internal static class GraphicsRecoveryJointEditorProbe
             e.Pass(ReferenceEquals(hudRuntime,EnvironmentProductEvidence.Field<SceneUiPresentation>(editor,"_playHud").Runtime)&&hudRuntime.Widget(slider).Value==.5f&&GraphicsRecoveryJointState.GameplayValue(play)==.5f&&GraphicsRecoveryJointState.PrivateProgress(play),"same interactive HUD value and private behaviour state after failure/rebuild");
             var nextVertices=new byte[vertices.Length];EnvironmentProductEvidence.Field<SceneRenderSession>(editor,"_playScene").CaptureCharacterVertices(actorId,nextVertices);e.Pass(vertices.SequenceEqual(nextVertices),"exact GPU skinned vertices at retained graph clock");
             e.Pass(editor.GraphicsNativeFailure is{Operation:(uint)GpuFailureOperation.ExplicitAbandon,NativeCode:null},"copied first diagnostic survives retirement and preparation failures");
+            e.Pass(editor.LastSimulationCosts==initialCosts,"first paused graphics recovery retains the exact simulation sample");
             ulong tick=play.Tick;play.Step();Draw();e.Pass(play.Tick==tick+1&&runtime.Characters.Status.CommittedSequence==play.Tick&&runtime.Animators!.ReadFrame(actorId).Context.Tick==play.Tick,"one resumed quantum advances graph and numerical solver exactly once");
+            var steppedCosts=editor.LastSimulationCosts!.Value;
+            e.Pass(steppedCosts.Advance.AdvanceSequence==initialCosts.Advance.AdvanceSequence+1&&steppedCosts.Advance.TickBefore==tick&&
+                steppedCosts.Advance.TickAfter==tick+1&&steppedCosts.LastCharacterStep!.Value.Tick==tick+1,"explicit resumed Step produces exactly one new correctly stamped sample");
+            simulationObservations.Add(steppedCosts);
             e.Pass(GraphicsRecoveryJointState.PrivateProgress(play)&&GraphicsRecoveryJointState.GameplayValue(play)==.5f,"script not restarted and old HUD input not replayed");
             var warmRenderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
             var uiBefore=warmRenderer.UiStats;var envBefore=warmRenderer.EnvironmentStats;var graphBefore=warmRenderer.PipelineStats;var stateBefore=State();
@@ -75,10 +91,15 @@ internal static class GraphicsRecoveryJointEditorProbe
             e.Pass(secondOld.IsClosed&&EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer").ReadFrameState().Generation!=secondGeneration&&Draw().SequenceEqual(windowImage)&&State()==windowState,"second submitted fault after window transitions recovers a fresh generation without state replay");
             e.Pass(editor.GraphicsNativeFailure==firstDiagnostic&&ReferenceEquals(hudRuntime,EnvironmentProductEvidence.Field<SceneUiPresentation>(editor,"_playHud").Runtime)&&GraphicsRecoveryJointState.PrivateProgress(play),"second recovery retains first diagnostic, interactive widgets and private behaviour");
             GraphicsRecoveryJointState.CheckShadow(e,EnvironmentProductEvidence.Field<SceneRenderSession>(editor,"_playScene"),EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer"),quality);
-            Guid recoveredWorld=play.Document.World.Identity;owner.StopPlay();Draw();e.Pass(physics.Inspect().Worlds==0&&ReferenceEquals(editWorld,owner.Document.World)&&editBytes.SequenceEqual(owner.Document.CaptureBytes())&&edit.State==editHistory,"Stop drains solver and restores original Edit/history");
+            e.Pass(editor.LastSimulationCosts==steppedCosts,"subsequent paused graphics recovery/window transitions never manufacture or retime a simulation sample");
+            play.Resume();
+            domains.RunningWindow($"editor-running-mode-{mode}",EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer"),play,
+                ()=>Draw(delta:1d/60,capture:false),()=>editor.LastSimulationCosts,()=>editor.LastPresentationCosts,()=>physics.Inspect().Worlds);
+            play.Pause();
+            Guid recoveredWorld=play.Scene.World.Identity;owner.StopPlay();Draw();e.Pass(editor.LastSimulationCosts is null&&physics.Inspect().Worlds==0&&ReferenceEquals(editDocument,owner.Document)&&ReferenceEquals(editProjection,OwnedEditProjection(editor))&&editProjection.IsCurrent(owner)&&editBytes.SequenceEqual(owner.Document.CaptureBytes())&&edit.State==editHistory,"Stop clears simulation observation, drains solver and restores original Edit/history");
             e.Pass(Draw().SequenceEqual(editImage),"original Edit final image restored");
             for(int cycle=0;cycle<2;cycle++){
-                var again=owner.StartPlay();Draw();e.Pass(again.Document.World.Identity!=recoveredWorld,"new Play has isolated World after recovered Play stopped");
+                var again=owner.StartPlay();Draw();e.Pass(again.Scene.World.Identity!=recoveredWorld,"new Play has isolated World after recovered Play stopped");
                 Draw(sliderInput:true,delta:1d/60);again.Pause();again.Step();Draw();
                 e.Pass(GraphicsRecoveryJointState.PrivateProgress(again)&&GraphicsRecoveryJointState.GameplayValue(again)==.5f&&physics.Inspect().Worlds==1,"repeated Play starts one solver and fresh private scripts with functional HUD");
                 owner.ReloadGameplay(context.GameplayAssemblyPath);Draw();var reloaded=owner.Play!;
@@ -86,6 +107,11 @@ internal static class GraphicsRecoveryJointEditorProbe
                 var reloadedRuntime=EnvironmentProductEvidence.Field<ScenePlayRuntime>(editor,"_sceneRuntime");
                 reloaded.Pause();ulong beforeTick=reloaded.Tick,sequenceBefore=reloadedRuntime.Characters!.Status.CommittedSequence;var step=reloaded.Step();Draw();
                 var committed=reloadedRuntime.Characters.Status;
+                var reloadCosts=editor.LastSimulationCosts!.Value;
+                e.Pass(reloadCosts.Advance.SessionId==reloaded.SessionId&&reloadCosts.Advance.WorldId==reloaded.Scene.World.Identity&&
+                    reloadCosts.Advance.SessionId!=initialCosts.Advance.SessionId&&reloadCosts.LastCharacterStep is{} reloadStep&&
+                    reloadStep.Tick==reloaded.Tick&&reloadStep.Native.Sequence==committed.CommittedSequence,"reloaded joint simulation costs cannot reuse previous session identity");
+                simulationObservations.Add(reloadCosts);
                 costs.Window($"mode-{mode}-reload-{cycle}",EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer"),()=>Draw(capture:false),()=>editor.LastPresentationCosts);
                 e.Pass(step.State==PlayState.Paused&&reloaded.Tick==beforeTick+1&&committed.CommittedSequence==sequenceBefore+1&&committed.CommittedTick==reloaded.Tick&&reloadedRuntime.Animators!.ReadFrame(actorId).Context.Tick==reloaded.Tick&&physics.Inspect().Worlds==1,"post-reload graph and solver resume one committed quantum: "+JsonSerializer.Serialize(new{beforeTick,sequenceBefore,step,committed,physics=physics.Inspect()}));
                 owner.StopPlay();Draw();e.Pass(physics.Inspect().Worlds==0&&edit.State==editHistory&&editBytes.SequenceEqual(owner.Document.CaptureBytes())&&Draw().SequenceEqual(editImage),"repeated reload/Stop drains numerical world and restores original Edit image/history");
@@ -100,6 +126,8 @@ internal static class GraphicsRecoveryJointEditorProbe
             e.Pass(failed,"complete joint rejects broken startup closure: "+name);rejected.Dispose();e.Pass(EnvironmentProductEvidence.NativePaths(e.Root).Length==0,"broken joint closes graphics/physics owners: "+name);
         }
         costs.Save("Editor");
+        domains.Save("Editor");
+        File.WriteAllText(Path.Combine(e.Output,"simulation-observations.json"),JsonSerializer.Serialize(new{selectedFunctionalObservations=simulationObservations,formalMatrix=false,wholeFrame=false,targetPerformanceAccepted=false}));
         File.WriteAllText(Path.Combine(e.Output,"recovery-scope.json"),JsonSerializer.Serialize(new{actualProduct=true,shadowQuality=quality.ToString(),shadowResolution,realAsciiOrBinaryFbx=true,syntheticRootCompanion=true,physicalDeviceLoss=false,interactiveHud=true,syntheticPlatformEvents=true,privateBehaviourState=true,windowTransitions=true,repeatedRecovery=true,playReloadStopCycles=3,wholeM76Accepted=false}));e.Finish(native);
     }
     private static void Reject(Action action){try{action();}catch(Exception error)when(error is InvalidOperationException or Ncma.Interop.PluginException){return;}throw new Exception("Expected joint recovery rejection");}

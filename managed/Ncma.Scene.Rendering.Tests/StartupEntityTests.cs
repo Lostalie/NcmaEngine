@@ -80,14 +80,15 @@ internal static partial class Program
             }).GetAwaiter().GetResult();
         }));
         tests.Add(("E4-B invalid root and animator remain selected for validation", () => {
-            var d = Document(); var root = d.World.CreateEntity("missing dependencies"); d.World.Set(root, new RootMotionData(0));
+            var d = Runtime(); var root = d.World.CreateEntity("missing dependencies"); d.World.Set(root, new RootMotionData(0));
             Check(SceneStartupEntities.Without<RootMotionData, AnimatorData>(d.World).Single() == root);
             var animator = d.World.CreateEntity("missing skin"); d.World.Set(animator, new AnimatorData(Guid.NewGuid(), Guid.NewGuid()));
             Check(SceneStartupEntities.WithByUuid<AnimatorData>(d.World).Single() == animator);
-            Reject(d.ValidateAuthoring); // Selection must not hide malformed composition.
+            Reject(() => SceneRenderValidation.RequireComposition(d.CaptureSnapshot())); // Selection must not hide malformed composition.
         }));
         tests.Add(("E4-B follow camera keeps absent and recreated UUID behavior", () => {
-            var d = new SceneDocument("follow", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()));
+            var source = new SceneDocument("follow", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()));
+            var d = Bake(source);
             var target = d.World.CreateEntity("target"); d.World.Set(target, TransformData.Identity);
             var camera = d.World.CreateEntity("camera"); Guid id = d.World.GetUuid(camera);
             d.World.Set(camera, CameraData.Default); d.World.Set(camera, new FollowCameraData(d.World.GetUuid(target), 0, 2, 4, 1));

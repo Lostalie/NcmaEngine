@@ -34,9 +34,9 @@ public sealed class PreparedSceneAssetLease : IDisposable
 public static class SceneAssetPreparation
 {
     private static readonly ComponentRegistry Registry = RenderComponentRegistry.CreateRegistry();
-    public static bool HasEnabledEnvironment(SceneDocumentSnapshot scene) => scene.Objects.SelectMany(o => o.Components)
+    public static bool HasEnabledEnvironment(ISceneContent scene) => scene.Objects.SelectMany(o => o.Components)
         .Where(c => c.TypeId == EnvironmentLightingData.TypeId).Any(c => Registry.Decode<EnvironmentLightingData>(c).Enabled);
-    public static AssetRef[] References(SceneDocumentSnapshot scene)
+    public static AssetRef[] References(ISceneContent scene)
     {
         var refs = new HashSet<AssetRef>();
         foreach (var obj in scene.Objects)
@@ -65,7 +65,7 @@ public static class SceneAssetPreparation
     }
     // Explicit off-frame packaging of committed generations. Dynamic roots are host/author supplied,
     // never guessed from script strings. Cold source rebuild and Prefab runtime spawn remain absent.
-    public static byte[] CreateRuntimePackage(string root, Guid project, SceneDocumentSnapshot scene, IEnumerable<AssetRef> dynamicRoots)
+    public static byte[] CreateRuntimePackage(string root, Guid project, ISceneContent scene, IEnumerable<AssetRef> dynamicRoots)
     {
         ArgumentNullException.ThrowIfNull(dynamicRoots);
         var additional = dynamicRoots.Take(RuntimeAssetLoader.MaxRequired + 1).ToArray();
@@ -79,7 +79,7 @@ public static class SceneAssetPreparation
             _ = lease.RequireMesh(reference.Id.Value, reference.ExpectedKind);
         return RuntimeAssetPackage.Encode(lease);
     }
-    public static PreparedSceneAssetLease Prepare(string root, Guid project, SceneDocumentSnapshot scene, bool strictMissing, string? package = null)
+    public static PreparedSceneAssetLease Prepare(string root, Guid project, ISceneContent scene, bool strictMissing, string? package = null)
     {
         using var prepared = package is null ? RuntimeAssetLoader.Prepare(root, project, References(scene), strictMissing) :
             RuntimeAssetPackage.Prepare(root, package, project, References(scene)); // Explicit package never falls back to authoring files.
@@ -96,7 +96,7 @@ public static class SceneAssetPreparation
         }
         catch { lease.Dispose(); throw; }
     }
-    private static void ValidateAnimators(SceneDocumentSnapshot scene,RuntimeAssetLease lease)
+    private static void ValidateAnimators(ISceneContent scene,RuntimeAssetLease lease)
     {
         foreach (var obj in scene.Objects) foreach(var component in obj.Components.Where(c=>c.TypeId==Ncma.Animation.AnimatorData.TypeId)) {
             var binding=Registry.Decode<Ncma.Animation.AnimatorData>(component);

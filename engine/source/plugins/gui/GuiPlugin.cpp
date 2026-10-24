@@ -36,6 +36,8 @@ struct Gui {
     int theme = 0;
     uint32_t chromeMask = 0;
     bool frameActive = false, cancel = false, gpuDrawReady = false;
+    bool deviceObjectsReady = false;
+    uint64_t preparationAttempts = 0, preparationFailures = 0, preparationTicks = 0, lastPreparationTicks = 0;
     uint64_t rendererModule = 0, rendererHandle = 0;
     std::array<NcmaGpuResourceV3,64> images{};
     std::array<bool,64> cachedImages{};
@@ -62,6 +64,23 @@ uint32_t ValidateGui(uint64_t context, uint64_t handle, NcmaErrorV1* error)
     ImGui::SetCurrentContext(gui->context); return NCMA_OK;
 }
 struct BusyScope { BusyScope() { busy = true; } ~BusyScope() { busy = false; } };
+// Kept inside Begin: preparation cost is not silently moved out of frame timing.
+// The SDK patch rolls back partial objects before returning false.
+uint32_t PrepareDeviceObjects(Gui& g, NcmaErrorV1* error) {
+    if (!g.rendererHandle || g.deviceObjectsReady) return NCMA_OK;
+    LARGE_INTEGER start{}, end{}; QueryPerformanceCounter(&start);
+    const bool ready = ImGui_ImplDX11_CreateDeviceObjects();
+    QueryPerformanceCounter(&end);
+    g.preparationAttempts++;
+    g.lastPreparationTicks = static_cast<uint64_t>(end.QuadPart - start.QuadPart);
+    g.preparationTicks += g.lastPreparationTicks;
+    if (!ready) {
+        g.preparationFailures++;
+        return NcmaPlugin::Error(error, NCMA_INTERNAL_ERROR, "GUI DX11 device-object preparation failed; frame not begun.");
+    }
+    g.deviceObjectsReady = true;
+    return NCMA_OK;
+}
 // query7 UI targets already contain premultiplied RGB. Ordinary ImGui textures and
 // vertices remain straight-alpha; restore the backend state immediately after each image.
 void CachedImageBlend(const ImDrawList*,const ImDrawCmd* command) {
@@ -106,7 +125,26 @@ uint32_t NCMA_CALL Diagnostic(uint64_t context, uint8_t* output, uint32_t capaci
 {
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
         auto valid = Validate(context, error); if (valid) return valid;
-        return NcmaPlugin::Diagnostic(context, output, capacity, required, error);
+        if (!required || (capacity && !output)) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
+        if (!gui) { *required = 0; return NCMA_OK; }
+        LARGE_INTEGER frequency{}; QueryPerformanceFrequency(&frequency);
+        const auto* atlas = gui->context->IO.Fonts;
+        const uint64_t uploadBytes = gui->deviceObjectsReady ?
+            static_cast<uint64_t>(atlas->TexWidth) * atlas->TexHeight * (!atlas->TexPixelsUseColors && atlas->TexPixelsAlpha8 ? 1 : 4) : 0;
+        const std::string text = "{\"guiPreparation\":{\"version\":1,\"gui\":" + std::to_string(gui->handle) +
+            ",\"attempts\":" + std::to_string(gui->preparationAttempts) +
+            ",\"failures\":" + std::to_string(gui->preparationFailures) +
+            ",\"totalTicks\":" + std::to_string(gui->preparationTicks) +
+            ",\"lastTicks\":" + std::to_string(gui->lastPreparationTicks) +
+            ",\"frequency\":" + std::to_string(frequency.QuadPart) +
+            ",\"ready\":" + (gui->deviceObjectsReady ? "true" : "false") +
+            ",\"atlasWidth\":" + std::to_string(atlas->TexWidth) +
+            ",\"atlasHeight\":" + std::to_string(atlas->TexHeight) +
+            ",\"atlasUploadBytes\":" + std::to_string(uploadBytes) +
+            ",\"scope\":\"DX11 CreateDeviceObjects CPU wall incl rollback; excludes CPU atlas; per GUI lifetime aggregate, not full-run or GPU timing\",\"performanceAccepted\":false}}";
+        *required = static_cast<uint32_t>(text.size());
+        if (capacity < *required) return NcmaPlugin::Error(error, NCMA_BUFFER_TOO_SMALL);
+        std::memcpy(output, text.data(), text.size()); return NCMA_OK;
     });
 }
 uint32_t NCMA_CALL Create(uint64_t context, const NcmaGuiDescriptionV1* desc, uint64_t* output, NcmaErrorV1* error) noexcept
@@ -143,7 +181,7 @@ uint32_t NCMA_CALL Create(uint64_t context, const NcmaGuiDescriptionV1* desc, ui
                     throw std::runtime_error("Requested GUI font could not be loaded.");
             } else { ImFontConfig config; config.SizePixels = candidate->fontSize; io.Fonts->AddFontDefault(&config); } // Latin-only fallback.
             unsigned char* pixels = nullptr; int width = 0, height = 0;
-            io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+            io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
             if (!pixels || !width || !height) throw std::runtime_error("Font atlas build failed.");
             ImGui::StyleColorsDark();
             if (!ImGui_ImplGlfw_InitForOther(pointer, true)) throw std::runtime_error("GLFW GUI backend initialization failed.");
@@ -173,19 +211,21 @@ uint32_t NCMA_CALL Begin(uint64_t context, uint64_t handle, const NcmaWindowStat
         gui->gpuDrawReady = false;
         float scale = std::max(state->scale_x, state->scale_y);
         if (std::abs(scale - gui->rasterScale) > 0.01f) {
+            gui->deviceObjectsReady = false;
             if (gui->rendererHandle) ImGui_ImplDX11_InvalidateDeviceObjects();
             auto& io = ImGui::GetIO(); io.Fonts->Clear();
             if (!gui->fontPath.empty()) {
                 if (!io.Fonts->AddFontFromFileTTF(gui->fontPath.c_str(), gui->fontSize * scale, nullptr, gui->fontRanges.Data))
                     throw std::runtime_error("DPI font atlas rebuild failed.");
             } else { ImFontConfig config; config.SizePixels = gui->fontSize * scale; io.Fonts->AddFontDefault(&config); }
-            unsigned char* pixels = nullptr; int width = 0, height = 0; io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+            unsigned char* pixels = nullptr; int width = 0, height = 0; io.Fonts->GetTexDataAsAlpha8(&pixels, &width, &height);
             if (!pixels) throw std::runtime_error("DPI font atlas rebuild failed.");
             io.FontGlobalScale = 1 / scale; gui->rasterScale = scale;
         }
         gui->cancel = !state->focused || state->overflow || state->input_reset;
         if (gui->cancel) { ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); }
-        if (gui->rendererHandle) ImGui_ImplDX11_NewFrame();
+        valid = PrepareDeviceObjects(*gui, error); if (valid) return valid;
+        if (gui->rendererHandle) ImGui_ImplDX11_NewFrame(); // Already prepared; no unchecked lazy creation.
         ImGui_ImplGlfw_NewFrame();
         auto& io = ImGui::GetIO();
         io.DisplaySize = ImVec2(static_cast<float>(state->width), static_cast<float>(state->height));

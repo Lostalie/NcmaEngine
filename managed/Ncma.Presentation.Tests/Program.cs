@@ -18,6 +18,35 @@ static PluginSpecification[] Specs() => [
 static WindowState Focused(ulong sequence) => new() { StructSize = 136, Focused = 1, Sequence = sequence };
 var cases = new (string, Action)[]
 {
+    ("Explicit platform precision wait lifetime and bounded calls", () => {
+        using var loader=new PluginLoader();
+        loader.Load(root,[new("platform",ModuleKind.Platform,"NcmaPlatform.dll","NcmaPlatform.dll",1,1,[])]);
+        var module=loader.Modules.Single();Check(module.Status.LiveResources==0&&module.OutstandingLeases==0);
+        using var timer=new PlatformPrecisionWait(module);
+        Check(module.Status.LiveResources==1&&module.OutstandingLeases==1);
+        Reject(()=>new PlatformPrecisionWait(module));
+        Check(module.Status.LiveResources==1&&module.OutstandingLeases==1);
+        Reject(module.Dispose);
+        Reject(()=>timer.WaitMicroseconds(0));Reject(()=>timer.WaitMicroseconds(8001));
+        Check(Task.Run(()=>{try{timer.WaitMicroseconds(1);return false;}catch(InvalidOperationException){return true;}}).Result);
+        Check(Task.Run(()=>{try{timer.Dispose();return false;}catch(InvalidOperationException){return true;}}).Result);
+        timer.WaitMicroseconds(1);timer.WaitMicroseconds(8000);
+        using(var window=new PlatformWindow(module,"timer independence",320,200,false)) {
+            Check(module.Status.LiveResources==2);window.Dispose();
+            Check(module.Status.LiveResources==1);timer.WaitMicroseconds(1);
+        }
+        timer.Dispose();timer.Dispose();Reject(()=>timer.WaitMicroseconds(1));
+        Check(module.Status.LiveResources==0&&module.OutstandingLeases==0);
+        for(int i=0;i<32;i++){using var cycle=new PlatformPrecisionWait(module);cycle.WaitMicroseconds(1);}
+        Check(module.Status.LiveResources==0&&module.OutstandingLeases==0);
+    }),
+    ("Platform 1.0 has no implicitly created precision timer", () => {
+        using var loader=new PluginLoader();loader.Load(root,Specs());
+        var module=loader.Modules.Single(m=>m.Kind==ModuleKind.Platform);
+        int leases=module.OutstandingLeases;
+        Reject(()=>new PlatformPrecisionWait(module));
+        Check(module.AbiMinor==0&&module.Status.LiveResources==0&&module.OutstandingLeases==leases);
+    }),
     ("Native/CLR presentation layouts", () => {
         Check(Marshal.SizeOf<WindowState>() == 136 && Marshal.SizeOf<InputEvent>() == 40 && Marshal.SizeOf<WindowDescription>() == 32);
         Check(Marshal.SizeOf<GuiItem>() == 96 && Marshal.SizeOf<GuiFrame>() == 48 && Marshal.SizeOf<GuiEvent>() == 72 &&

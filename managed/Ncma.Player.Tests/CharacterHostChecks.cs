@@ -18,11 +18,16 @@ internal static class CharacterHostChecks
     internal static SceneDocument Fixture(int dense = 0)
     {
         var doc = new SceneDocument("K3 actual character", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), CharacterComponents.RequireComposition);
-        global::Ncma.Runtime.Entity actor = doc.World.CreateEntity("Character", Character); doc.World.Set(actor, TransformData.Identity with { Position = new(0, .1f, 0) }); doc.World.Set(actor, CharacterData.Default);
-        for (int i = 0; i < Math.Max(1, dense); ++i) { global::Ncma.Runtime.Entity floor = doc.World.CreateEntity("Floor" + i); doc.World.Set(floor, TransformData.Identity with { Position = new(0, -.5f, 0) }); doc.World.Set(floor, new BoxColliderData(20, .5f, 20, 1000, 1, false)); }
-        global::Ncma.Runtime.Entity wall = doc.World.CreateEntity("Wall"); doc.World.Set(wall, TransformData.Identity with { Position = new(2, 2, 0) }); doc.World.Set(wall, new BoxColliderData(.2f, 2, 20, 1000, 1, false));
-        global::Ncma.Runtime.Entity camera = doc.World.CreateEntity("Follow camera", Camera); doc.World.Set(camera, TransformData.Identity with { Position = new(0, 3, 6) }); doc.World.Set(camera, CameraData.Default); doc.World.Set(camera, new FollowCameraData(Character, 0, 3, 6, 1));
+        Guid actor = doc.CreateObject("Character", Character); doc.SetComponent(actor, TransformData.Identity with { Position = new(0, .1f, 0) }); doc.SetComponent(actor, CharacterData.Default);
+        for (int i = 0; i < Math.Max(1, dense); ++i) { Guid floor = doc.CreateObject("Floor" + i); doc.SetComponent(floor, TransformData.Identity with { Position = new(0, -.5f, 0) }); doc.SetComponent(floor, new BoxColliderData(20, .5f, 20, 1000, 1, false)); }
+        Guid wall = doc.CreateObject("Wall"); doc.SetComponent(wall, TransformData.Identity with { Position = new(2, 2, 0) }); doc.SetComponent(wall, new BoxColliderData(.2f, 2, 20, 1000, 1, false));
+        Guid camera = doc.CreateObject("Follow camera", Camera); doc.SetComponent(camera, TransformData.Identity with { Position = new(0, 3, 6) }); doc.SetComponent(camera, CameraData.Default); doc.SetComponent(camera, new FollowCameraData(Character, 0, 3, 6, 1));
         return doc;
+    }
+    private static RuntimeSceneInstance RuntimeFixture(int dense = 0)
+    {
+        var source = Fixture(dense);
+        return source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
     }
     internal static void Input(PlaySession play, ulong sequence, bool focused = true, int key = 68, bool pressed = false)
     {
@@ -36,25 +41,28 @@ internal static class CharacterHostChecks
         var passed = new List<string>();
         static void Reject(Action action) { try { action(); } catch (ArgumentException) { return; } throw new Exception("Expected invalid composition"); }
         {
-            var doc = Fixture(); global::Ncma.Runtime.Entity actor = doc.World.FindEntity(Character); doc.World.Set(actor, TransformData.Identity with { Scale = new(2, 1, 1) }); Reject(doc.ValidateAuthoring);
-            doc.World.Set(actor, TransformData.Identity); global::Ncma.Runtime.Entity camera = doc.World.FindEntity(Camera); doc.World.Set(camera, new FollowCameraData(Guid.NewGuid(), 0, 3, 6, 1)); Reject(doc.ValidateAuthoring);
-            doc.World.Set(camera, new FollowCameraData(Character, 0, 3, 6, 1)); doc.World.Set(actor, new BoxColliderData(1, 1, 1, 1000, 1, false)); Reject(doc.ValidateAuthoring);
+            var doc = Fixture(); Guid actor = Character; doc.SetComponent(actor, TransformData.Identity with { Scale = new(2, 1, 1) }); Reject(doc.ValidateAuthoring);
+            doc.SetComponent(actor, TransformData.Identity); Guid camera = Camera; doc.SetComponent(camera, new FollowCameraData(Guid.NewGuid(), 0, 3, 6, 1)); Reject(doc.ValidateAuthoring);
+            doc.SetComponent(camera, new FollowCameraData(Character, 0, 3, 6, 1)); doc.SetComponent(actor, new BoxColliderData(1, 1, 1, 1000, 1, false)); Reject(doc.ValidateAuthoring);
             Reject(() => CharacterData.Validate(CharacterData.Default with { Radius = float.NaN })); Reject(() => FollowCameraData.Validate(new(Character, 0, 3, 0, 1)));
         }
         passed.Add("Strict value schemas/composition: unit scale, exact follow UUID, exclusive shape and finite nondegenerate values");
         using (var disabled = new PhysicsService("unused-no-native-directory", enabled: false))
         foreach (int type in new[] { 0, 1, 2 }) {
             var doc = new SceneDocument("No physics startup", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), CharacterComponents.RequireComposition);
-            global::Ncma.Runtime.Entity ordinary = doc.World.CreateEntity("Ordinary"); doc.World.Set(ordinary, TransformData.Identity); var registry = doc.World.Components;
+            Guid ordinary = doc.CreateObject("Ordinary"); doc.SetComponent(ordinary, TransformData.Identity); var registry = doc.Components;
             ComponentSnapshot addition = type switch {
                 0 => new(CharacterData.TypeId, 1, registry.Encode(CharacterData.Default)),
                 1 => new(BoxColliderData.TypeId, 1, registry.Encode(new BoxColliderData(1, 1, 1, 1000, 1, false))),
                 _ => new(FollowCameraData.TypeId, 1, registry.Encode(new FollowCameraData(Character, 0, 3, 6, 1))) };
-            byte[] before = doc.CaptureBytes(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict);
+            Guid ordinaryId = ordinary;
+            var runtimeScene = doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);
+            byte[] authoring = doc.CaptureBytes();
+            byte[] before = runtimeScene.CaptureCheckpoint().CopyBytes(); using var play = new PlaySession(runtimeScene, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict);
             Check(CharacterPlayRuntime.Compose(play, disabled) is null, "No physics creates no numerical composition");
-            play.AddSystem(new SystemAction(_ => { try { play.Commands.AddComponent(doc.World.GetUuid(ordinary), addition); } catch (InvalidOperationException) { } }));
+            play.AddSystem(new SystemAction(_ => { try { play.Commands.AddComponent(ordinaryId, addition); } catch (InvalidOperationException) { } }));
             play.Start(_ => throw new Exception("No behaviours")); play.AdvanceFixedStep();
-            Check(play.State == PlayState.Faulted && play.Tick == 0 && disabled.Inspect().Worlds == 0 && before.SequenceEqual(doc.CaptureBytes()), "Disabled/no-binding Play refuses unsupported runtime physics/follow attachment without loading a solver");play.Stop();
+            Check(play.State == PlayState.Faulted && play.Tick == 0 && disabled.Inspect().Worlds == 0 && before.SequenceEqual(runtimeScene.CaptureCheckpoint().CopyBytes()) && authoring.SequenceEqual(doc.CaptureBytes()), "Disabled/no-binding Play refuses unsupported runtime physics/follow attachment without loading a solver");play.Stop();
         }
         passed.Add("No-binding disabled Play rejects startup-only component attachment with zero numerical worlds");
         using (var service = new PhysicsService(plugins, characterSupport: true))
@@ -62,7 +70,7 @@ internal static class CharacterHostChecks
             V3? reference = null;
             foreach (int hz in new[] { 0, 30, 60, 144 })
             {
-                var doc = Fixture(); byte[] startup = doc.CaptureBytes(); using var play = new PlaySession(doc, FrameTimePolicy.Strict, advanceMode: hz == 0 ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames);
+                var doc = RuntimeFixture(); byte[] startup = doc.CaptureCheckpoint().CopyBytes(); using var play = new PlaySession(doc, FrameTimePolicy.Strict, advanceMode: hz == 0 ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames);
                 using var runtime = CharacterPlayRuntime.Compose(play, service)!; play.Start(_ => throw new Exception("No behaviours")); Input(play, 1);
                 if (hz == 0) for (int i = 0; i < 120; ++i) Check(play.AdvanceFixedStep().State == PlayState.Running, "headless character step");
                 else for (int i = 0; i < hz * 2; ++i) Check(play.AdvanceFrame(1.0 / hz).State == PlayState.Running, "framerate character step");
@@ -70,8 +78,8 @@ internal static class CharacterHostChecks
                 Check(play.Tick == 120 && runtime.Status.CommittedSequence == 120 && runtime.Status.SnapshotValid && transform.Position.X < 1.51f && transform.Position.X > 1.45f, "actual wall/ground fixed-step movement");
                 Check(MathF.Abs(transform.Rotation.Y) > .7f, "character turns toward movement separately from camera");
                 if (reference is null) reference = transform.Position; else Check(V3.Distance(reference.Value, transform.Position) < 1e-5f, "30/60/144/headless same fixed-step sequence");
-                ulong tick = play.Tick; byte[] committed = doc.CaptureBytes(); var follow = CharacterPlayRuntime.FollowView(play, Camera, 640, 480);
-                Check(follow is not null && follow.Value.Position.X > 1.4f && committed.SequenceEqual(doc.CaptureBytes()) && play.Tick == tick, "follow camera readonly");
+                ulong tick = play.Tick; byte[] committed = doc.CaptureCheckpoint().CopyBytes(); var follow = CharacterPlayRuntime.FollowView(play, Camera, 640, 480);
+                Check(follow is not null && follow.Value.Position.X > 1.4f && committed.SequenceEqual(doc.CaptureCheckpoint().CopyBytes()) && play.Tick == tick, "follow camera readonly");
                 Check(CharacterPlayRuntime.FollowView(play, Guid.NewGuid(), 640, 480) is null, "missing camera uses invalid default Entity, not a live object");
                 play.Pause(); Input(play, 2, key: 32, pressed: true); play.AdvanceFrameIfFrames(hz); Check(play.Tick == tick, "pause no simulation");
                 play.Step(); Check(play.Tick == tick + 1, "single step quantum"); play.Resume(); Input(play, 3, focused: false);
@@ -85,7 +93,7 @@ internal static class CharacterHostChecks
             }
             passed.Add("Real Jolt 30/60/144Hz/headless parity, wall/ground, readonly follow, Pause/Step/focus and fresh reload");
             {
-                var doc = Fixture(); using var play = new PlaySession(doc, FrameTimePolicy.Strict, advanceMode: PlayAdvanceMode.FixedSteps); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(); using var play = new PlaySession(doc, FrameTimePolicy.Strict, advanceMode: PlayAdvanceMode.FixedSteps); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.Start(_ => throw new Exception("No behaviours")); Input(play, 1, key: -1); for (int i = 0; i < 12; ++i) play.AdvanceFixedStep();
                 float floor = doc.World.Get<TransformData>(doc.World.FindEntity(Character)).Position.Y; Input(play, 2, key: 32, pressed: true); play.AdvanceFixedStep();
                 Check(doc.World.Get<TransformData>(doc.World.FindEntity(Character)).Position.Y > floor + .04f, "jump from grounded copied state");
@@ -94,23 +102,26 @@ internal static class CharacterHostChecks
             }
             passed.Add("Grounded jump, gravity, landing and transient single consumption");
             {
-                var doc = Fixture(); byte[] before = doc.CaptureBytes(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(); byte[] before = doc.CaptureCheckpoint().CopyBytes(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.AddSystem(new SystemAction(_ => { var pending = play.Commands.SpawnEmpty("Late factory fault"); play.Commands.AttachBehaviour(pending.ObjectId, new(Guid.NewGuid(), "Missing.Type", true, [])); }));
                 play.Start(_ => throw new Exception("Injected late factory failure")); Input(play, 1, pressed: true); play.AdvanceFixedStep();
-                Check(play.State == PlayState.Faulted && play.Tick == 0 && !runtime.Status.SnapshotValid && runtime.Status.NumericalExecutionStarted && before.SequenceEqual(doc.CaptureBytes()), "real solver success followed by managed failure invalidates coupled snapshot without solver rollback"); play.Stop();
+                Check(play.State == PlayState.Faulted && play.Tick == 0 && !runtime.Status.SnapshotValid && runtime.Status.NumericalExecutionStarted && before.SequenceEqual(doc.CaptureCheckpoint().CopyBytes()), "real solver success followed by managed failure invalidates coupled snapshot without solver rollback"); play.Stop();
             }
             foreach (bool withCharacter in new[] { true, false })
             {
-                var doc = Fixture(); if (!withCharacter) { doc.World.Destroy(doc.World.FindEntity(Character)); doc.World.Remove<FollowCameraData>(doc.World.FindEntity(Camera)); }
-                global::Ncma.Runtime.Entity box = doc.World.CreateEntity("Dynamic box"); doc.World.Set(box, TransformData.Identity with { Position = new(-4, 3, 0) }); doc.World.Set(box, new BoxColliderData(.2f, .2f, .2f, 1000, 4, true));
+                var source = Fixture(); if (!withCharacter) { source.DeleteObject(Character); source.RemoveComponent<FollowCameraData>(Camera); }
+                Guid box = source.CreateObject("Dynamic box"); source.SetComponent(box, TransformData.Identity with { Position = new(-4, 3, 0) }); source.SetComponent(box, new BoxColliderData(.2f, .2f, .2f, 1000, 4, true));
+                Guid boxId = box;
+                var doc = source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
                 using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!; play.Start(_ => throw new Exception("No behaviours"));
                 for (int i = 0; i < 30; ++i) Check(play.AdvanceFixedStep().State == PlayState.Running, "dynamic body coupled step");
-                Check(doc.World.Get<TransformData>(doc.World.FindEntity(doc.World.GetUuid(box))).Position.Y < 2, "C# publishes real dynamic body results"); play.Stop();
+                Check(doc.World.Get<TransformData>(doc.World.FindEntity(boxId)).Position.Y < 2, "C# publishes real dynamic body results"); play.Stop();
             }
             passed.Add("Real post-solver managed failure fail-stop and dynamic box publication");
             {
-                var doc = Fixture(); doc.World.Destroy(doc.World.GetEntities().Single(o => doc.World.GetName(o) == "Wall"));
-                doc.World.Set(doc.World.GetEntities().Single(o => doc.World.GetName(o) == "Floor0"), TransformData.Identity with { Position = new(0, -.5f, 0), Rotation = System.Numerics.Quaternion.CreateFromAxisAngle(V3.UnitZ, .3f) });
+                var source = Fixture(); source.DeleteObject(source.GetObjectIds().Single(o => source.GetObjectName(o) == "Wall"));
+                source.SetComponent(source.GetObjectIds().Single(o => source.GetObjectName(o) == "Floor0"), TransformData.Identity with { Position = new(0, -.5f, 0), Rotation = System.Numerics.Quaternion.CreateFromAxisAngle(V3.UnitZ, .3f) });
+                var doc = source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
                 using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!; play.Start(_ => throw new Exception("No behaviours")); Input(play, 1);
                 for (int i = 0; i < 60; ++i) Check(play.AdvanceFixedStep().State == PlayState.Running, "actual slope step"); var position = doc.World.Get<TransformData>(doc.World.FindEntity(Character)).Position;
                 Check(position.X > 2 && position.Y > .6f && runtime.Status.SnapshotValid, "actual C# movement follows permitted slope"); play.Stop();
@@ -118,7 +129,7 @@ internal static class CharacterHostChecks
             passed.Add("Real Jolt slope grounding under C# locomotion policy");
             foreach (int mode in new[] { 0, 1, 2 })
             {
-                var doc = Fixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.AddSystem(new SystemAction(world =>
                 {
                     try
@@ -134,40 +145,42 @@ internal static class CharacterHostChecks
             passed.Add("Caught Transform/capsule/follow-config writes cannot bypass authority");
             foreach (int type in new[] { 0, 1, 2 })
             {
-                var doc = Fixture(); if (type == 0) { doc.World.Destroy(doc.World.FindEntity(Character)); doc.World.Remove<FollowCameraData>(doc.World.FindEntity(Camera)); }
-                if (type == 2) doc.World.Remove<FollowCameraData>(doc.World.FindEntity(Camera));
-                global::Ncma.Runtime.Entity ordinary = doc.World.CreateEntity("Unbound ordinary"); doc.World.Set(ordinary, TransformData.Identity);
-                var registry = doc.World.Components;
+                var source = Fixture(); if (type == 0) { source.DeleteObject(Character); source.RemoveComponent<FollowCameraData>(Camera); }
+                if (type == 2) source.RemoveComponent<FollowCameraData>(Camera);
+                Guid ordinary = source.CreateObject("Unbound ordinary"); source.SetComponent(ordinary, TransformData.Identity);
+                var registry = source.Components;
                 ComponentSnapshot addition = type switch {
                     0 => new(CharacterData.TypeId, 1, registry.Encode(CharacterData.Default)),
                     1 => new(BoxColliderData.TypeId, 1, registry.Encode(new BoxColliderData(1, 1, 1, 1000, 1, false))),
                     _ => new(FollowCameraData.TypeId, 1, registry.Encode(new FollowCameraData(Character, 0, 3, 6, 1))) };
-                byte[] before = doc.CaptureBytes(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
-                play.AddSystem(new SystemAction(_ => { try { play.Commands.AddComponent(doc.World.GetUuid(ordinary), addition); } catch (InvalidOperationException) { } }));
+                Guid ordinaryId = ordinary;
+                var doc = source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
+                byte[] before = doc.CaptureCheckpoint().CopyBytes(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                play.AddSystem(new SystemAction(_ => { try { play.Commands.AddComponent(ordinaryId, addition); } catch (InvalidOperationException) { } }));
                 play.Start(_ => throw new Exception("No behaviours")); play.AdvanceFixedStep();
-                Check(play.State == PlayState.Faulted && play.Tick == 0 && !runtime.Status.NumericalExecutionStarted && before.SequenceEqual(doc.CaptureBytes()), "Runtime attachment to unbound objects, including empty membership, poisons before solver");
-                play.Stop(); doc.World.Set(ordinary, CharacterData.Default with { Controlled = false });
+                Check(play.State == PlayState.Faulted && play.Tick == 0 && !runtime.Status.NumericalExecutionStarted && before.SequenceEqual(doc.CaptureCheckpoint().CopyBytes()), "Runtime attachment to unbound objects, including empty membership, poisons before solver");
+                play.Stop(); doc.World.Set(doc.World.FindEntity(ordinaryId), CharacterData.Default with { Controlled = false });
             }
             {
-                var doc = Fixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.AddSystem(new SystemAction(_ => { var ordinary = play.Commands.SpawnEmpty("Legal unbound"); play.Commands.AddComponent(ordinary.ObjectId, new("ncma.transform", 1, doc.World.Components.Encode(TransformData.Identity))); }));
                 play.Start(_ => throw new Exception("No behaviours")); Check(play.AdvanceFixedStep().State == PlayState.Running && doc.World.Count == 5, "Unbound ordinary structural commands remain legal"); play.Stop();
             }
             passed.Add("Whole-type topology freeze (including absent types), caught new bindings rejected before numerics and ordinary commands preserved");
             {
-                var doc = Fixture(80); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(80); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.Start(_ => throw new Exception("No behaviours")); var status = play.AdvanceFixedStep();
                 Check(status.State == PlayState.Faulted && play.Tick == 0 && !runtime.Status.SnapshotValid && runtime.Status.NumericalExecutionStarted, "real dense native overflow invalidates coupled world snapshot");
                 play.Stop(); Check(service.Inspect().Worlds == 0, "faulted domain released");
             }
             {
-                var doc = Fixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.AddCommittedObserver(new BadObserver()); play.Start(_ => throw new Exception("No behaviours")); var status = play.AdvanceFixedStep();
                 Check(status.State == PlayState.Faulted && play.Tick == 1 && runtime.Status.SnapshotValid && runtime.Status.CommittedSequence == 1, "postcommit fault retains actual solved tick"); play.Stop();
             }
             for (int cycle = 0; cycle < 32; ++cycle)
             {
-                var doc = Fixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
+                var doc = RuntimeFixture(); using var play = new PlaySession(doc, advanceMode: PlayAdvanceMode.FixedSteps, policy: FrameTimePolicy.Strict); using var runtime = CharacterPlayRuntime.Compose(play, service)!;
                 play.Start(_ => throw new Exception("No behaviours")); Check(play.AdvanceFixedStep().State == PlayState.Running, "cycle actual step"); play.Stop(); Check(service.Inspect().Worlds == 0, "32 actual domains drained");
             }
             passed.Add("Actual solver failure/committed observer fault, no rollback claim and 32 start/step/stop lifecycles");

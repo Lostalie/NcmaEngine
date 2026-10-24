@@ -11,14 +11,14 @@ using Ncma.Scene.Rendering;
 namespace Ncma.Editor.Services;
 using Vector3 = System.Numerics.Vector3;
 
-// Disposable derived authoring scene. No application Play/WorldRunner/Behaviour/solver/IO in Advance/Draw.
+// Disposable explicitly baked preview runtime. No application Play/WorldRunner/Behaviour/solver/IO in Advance/Draw.
 public sealed class EditorAnimationGraphPreview(RendererSession renderer, Func<PoseKernel> kernel) : IDisposable
 {
     private RenderResourceCache? _cache; private SceneRenderSession? _scene; private PreparedSceneAssetLease? _assets;
-    private SceneDocument? _document; private GpuViewTarget? _target; private Guid _camera,_object; private bool _disposed;
+    private RuntimeSceneInstance? _runtimeScene; private GpuViewTarget? _target; private Guid _camera,_object; private bool _disposed;
     public bool Prepared => _scene is not null;
-    public Guid WorldId => _document?.World.Identity??Guid.Empty;
-    public ulong Tick => _document?.World.Tick??0;
+    public Guid WorldId => _runtimeScene?.World.Identity??Guid.Empty;
+    public ulong Tick => _runtimeScene?.World.Tick??0;
     public AnimationGraphFrame? GraphFrame => _scene?.Animation?.PreviewFrame(_object);
     public AnimationGraphDebugFrame? GraphDebug => _scene?.Animation?.PreviewDebug(_object);
     public void Prepare(RuntimeAssetSnapshot snapshot,Guid graphId)
@@ -30,12 +30,13 @@ public sealed class EditorAnimationGraphPreview(RendererSession renderer, Func<P
             var rig=(RuntimeDataAsset)_assets.Assets.Require(d.SkeletonId,AssetKind.Skeleton);var model=(RuntimeDataAsset)_assets.Assets.Require(rig.ModelId,AssetKind.Character);
             var manifest=ModelAssetManifestCodec.Decode(model.CopyData());var binding=manifest.Meshes.First(m=>_assets.Assets.RequireMesh(m.Mesh,AssetKind.SkinnedMesh).SkeletonId==d.SkeletonId);
             var mesh=_assets.Assets.RequireMesh(binding.Mesh,AssetKind.SkinnedMesh);float radius=Math.Max(.5f,(mesh.BoundsMax-mesh.BoundsMin).Length());var center=(mesh.BoundsMax+mesh.BoundsMin)*.5f;
-            _document=new("Animation graph independent preview",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);
-            global::Ncma.Runtime.Entity character=_document.World.CreateEntity("Preview character");_object=_document.World.GetUuid(character);_document.World.Set(character, TransformData.Identity);_document.World.Set(character, new SkinnedMeshData(model.Id,mesh.Id,d.SkeletonId,binding.Materials,true,true,uint.MaxValue));_document.World.Set(character, new AnimatorData(graphId,d.SkeletonId));
-            global::Ncma.Runtime.Entity camera=_document.World.CreateEntity("Preview camera");_camera=_document.World.GetUuid(camera);_document.World.Set(camera, TransformData.Identity with{Position=center+new Vector3(0,0,radius*3)});_document.World.Set(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=radius*1.4f});
-            global::Ncma.Runtime.Entity light=_document.World.CreateEntity("Preview light");_document.World.Set(light, TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.35f,-.35f,0)});_document.World.Set(light, DirectionalLightData.Default);
-            var scene=_document.CaptureSnapshot();_ = SceneRenderValidation.Inspect(scene,_assets.Metadata,true);
-            _cache=new(renderer);_scene=new(renderer,_cache,_document.World);_scene.Prepare(_assets,scene,poseKernel:kernel());
+            var document=new SceneDocument("Animation graph independent preview",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);
+            var character=document.CreateObject("Preview character");_object=character;document.SetComponent(character, TransformData.Identity);document.SetComponent(character, new SkinnedMeshData(model.Id,mesh.Id,d.SkeletonId,binding.Materials,true,true,uint.MaxValue));document.SetComponent(character, new AnimatorData(graphId,d.SkeletonId));
+            var camera=document.CreateObject("Preview camera");_camera=camera;document.SetComponent(camera, TransformData.Identity with{Position=center+new Vector3(0,0,radius*3)});document.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=radius*1.4f});
+            var light=document.CreateObject("Preview light");document.SetComponent(light, TransformData.Identity with{Rotation=Quaternion.CreateFromYawPitchRoll(.35f,-.35f,0)});document.SetComponent(light, DirectionalLightData.Default);
+            var baked=document.BakeRuntime(document.Revision, source => { _ = SceneRenderValidation.Inspect(source,_assets.Metadata,true); });
+            _runtimeScene=baked.Image.Instantiate(document.Components);
+            _cache=new(renderer);_scene=new(renderer,_cache,_runtimeScene.World);_scene.Prepare(_assets,_runtimeScene.CaptureSnapshot(),poseKernel:kernel());
         }catch{Close();throw;}
     }
     public void Advance(double delta) { ObjectDisposedException.ThrowIf(_disposed,this);_scene?.Animation?.AdvancePreview(delta); }
@@ -47,6 +48,6 @@ public sealed class EditorAnimationGraphPreview(RendererSession renderer, Func<P
         return _scene.Submit(frame,width,height,_camera,target:_target)?_target.ImageToken:null;
     }
     public byte[] Capture() { if(_target is null)throw new InvalidOperationException("Preview not drawn.");var bytes=new byte[_target.Width*_target.Height*4];renderer.CaptureTarget(_target,bytes);return bytes; }
-    public void Close() { _scene?.Dispose();_scene=null;_target?.Dispose();_target=null;_cache?.Dispose();_cache=null;_assets?.Dispose();_assets=null;_document=null; }
+    public void Close() { _scene?.Dispose();_scene=null;_target?.Dispose();_target=null;_cache?.Dispose();_cache=null;_assets?.Dispose();_assets=null;_runtimeScene=null; }
     public void Dispose(){if(_disposed)return;Close();_disposed=true;}
 }

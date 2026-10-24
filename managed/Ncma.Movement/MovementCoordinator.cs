@@ -12,7 +12,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     public const float MaxDisplacementPerStep = 1000;
     public const float MaxPositionMagnitude = 1_000_000;
     private readonly PlaySession _play;
-    private World World => _play.Document.World;
+    private World World => _play.Scene.World;
     private readonly Guid[] _targets;
     private readonly Dictionary<Guid, int> _index;
     private readonly Func<INumericMovementAdapter> _factory;
@@ -35,7 +35,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         if(!_publicationTypes.Add(typeof(T)))throw new ArgumentException("Register one complete publication set per component type.");
         _publications.Add(new Publication<T>(this,ids,source));
     }
-    private readonly byte[] _startup;
+    private readonly Ncma.Scene.RuntimeSceneCheckpoint _startup;
     private readonly NumericMovementInput[] _inputs;
     private readonly NumericMovementResult[] _results, _committed;
     private readonly bool[] _submitted;
@@ -62,7 +62,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     public MovementCoordinator(PlaySession play, ReadOnlySpan<Guid> targets, Func<INumericMovementAdapter> factory,StageMovementValues? stageManaged=null)
     {
         ArgumentNullException.ThrowIfNull(play); ArgumentNullException.ThrowIfNull(factory);
-        play.Document.World.VerifyAccess();
+        play.Scene.World.VerifyAccess();
         if (play.State != PlayState.Stopped || targets.IsEmpty || targets.Length > MaxTargets)
             throw new ArgumentException("Movement composition requires stopped Play and a bounded nonempty target set.");
         _play = play; _factory = factory; _stageManaged=stageManaged;_targets = targets.ToArray(); _index = [];
@@ -71,7 +71,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
                 throw new ArgumentException("Duplicate or missing movement target.");
         _inputs = new NumericMovementInput[_targets.Length]; _results = new NumericMovementResult[_targets.Length];
         _committed = new NumericMovementResult[_targets.Length]; _submitted = new bool[_targets.Length];
-        _startup = play.Document.CaptureBytes();
+        _startup = play.Scene.CaptureCheckpoint();
         play.AttachCoupledParticipant(this);
     }
 
@@ -127,8 +127,8 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
     {
         Verify();
         if (_adapter is not null || _authority is not null || World.Identity == _lastWorldId ||
-            !_play.Document.CaptureBytes().AsSpan().SequenceEqual(_startup))
-            throw new InvalidOperationException("Rebuild from the frozen startup document before reusing coupled Play.");
+            !_play.Scene.CaptureCheckpoint().CopyBytes().AsSpan().SequenceEqual(_startup.CopyBytes()))
+            throw new InvalidOperationException("Rebuild from the frozen runtime checkpoint before reusing coupled Play.");
         FillInputs();
         _authority = World.ClaimComponents<TransformData>(_targets);
         foreach (var claim in _frozenFactories) _frozenOwned.Add(claim());
@@ -223,7 +223,7 @@ public sealed class MovementCoordinator : IDisposable, ICoupledStepParticipant
         if (_adapter is not null || _authority is not null || _play.State != PlayState.Stopped)
             throw new InvalidOperationException("Release coupled resources before rebuilding startup.");
         // Scene restore creates a fresh World identity. Tick chronology is retained, never rolled back.
-        _play.Document.RestoreBytes(_startup);
+        _play.Scene.RestoreCheckpoint(_startup, _play.Scene.Revision);
     }
 
     private void FillInputs()

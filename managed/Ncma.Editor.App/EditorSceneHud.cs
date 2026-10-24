@@ -14,7 +14,7 @@ internal sealed unsafe partial class CandidatePresentation
     private Ncma.Assets.UiPackageReference? _sceneHudSelection;
     private bool _hudReady=true;
     private bool _hudRecovery;
-    private Guid _hudObservedWorld;
+    private Guid _hudObservedDocument;
     private ulong _hudObservedRevision;
     private readonly List<IDisposable> _hudRetained=[];
     private SceneUiPresentation? _playHud;
@@ -32,14 +32,14 @@ internal sealed unsafe partial class CandidatePresentation
     private SceneUiPresentation? ActiveSceneHud => !_hudReady?null:_editor?.Play is not null && uiActions is not null ? _playHud : _sceneHud;
 
     // Explicit committed revision boundary. No per-frame document serialization/file probing.
-    private void RefreshEditSceneHud(Ncma.Scene.SceneDocumentSnapshot? startup=null)
+    private void RefreshEditSceneHud(Ncma.Scene.ISceneContent? startup=null)
     {
         if(project is null||_editor is null||_hudRecovery)return;
         if(startup is null){
             if(_editor.Play is not null)return;
-            var doc=_editor.Document;Guid world=doc.World.Identity;ulong revision=doc.Revision;
-            if(_hudObservedWorld==world&&_hudObservedRevision==revision)return;
-            _hudObservedWorld=world;_hudObservedRevision=revision;startup=doc.CaptureSnapshot();
+            var doc=_editor.Document;Guid document=doc.SessionId;ulong revision=doc.Revision;
+            if(_hudObservedDocument==document&&_hudObservedRevision==revision)return;
+            _hudObservedDocument=document;_hudObservedRevision=revision;startup=doc.CaptureSnapshot();
         }
         SceneUiPresentation? candidate=null;RuntimeUiPackage? package=null;bool retiring=false;
         try{
@@ -66,7 +66,7 @@ internal sealed unsafe partial class CandidatePresentation
     {
         ClosePlayHud();
         // Composition callback uses its supplied committed Play snapshot, never reenters owner.
-        RefreshEditSceneHud(play.Document.CaptureSnapshot());if(!_hudReady)throw new InvalidOperationException("Current scene UI generation is not prepared.");
+        RefreshEditSceneHud(play.Scene.CaptureSnapshot());if(!_hudReady)throw new InvalidOperationException("Current scene UI generation is not prepared.");
         if (_sceneHudPackage is null || uiActions is null) return;
         uiActions.Validate(_sceneHudPackage.Capture()); uiActions.Install(play);
         // Retain a failed candidate for explicit orderly disposal; do not fall back to Edit state.

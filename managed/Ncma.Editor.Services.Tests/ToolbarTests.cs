@@ -28,8 +28,8 @@ internal static unsafe class ToolbarTests
         }
         Check(unchanged.AsSpan().SequenceEqual(owner.Document.CaptureBytes())&&revision==owner.Document.Revision);
         workspace.CreateObject(workspace.Stamp);toolbar.Build(2,1280,720);
-        toolbar.Apply([Event(toolbar,5,(uint)GuiItemKind.Button)],[]);Check(owner.Document.World.Count==1);
-        var undo=Event(toolbar,5);toolbar.Apply([undo],[]);Check(owner.Document.World.Count==0);toolbar.Apply([undo],[]);Check(owner.Document.World.Count==0);
+        toolbar.Apply([Event(toolbar,5,(uint)GuiItemKind.Button)],[]);Check(owner.Document.ObjectCount==1);
+        var undo=Event(toolbar,5);toolbar.Apply([undo],[]);Check(owner.Document.ObjectCount==0);toolbar.Apply([undo],[]);Check(owner.Document.ObjectCount==0);
         owner.Edit!.SetFrozen(true);toolbar.Build(3,1280,720);Check(toolbar.Items.ToArray().Single(i=>i.WidgetHigh==23&&i.WidgetLow==4).Enabled==0);owner.Edit.SetFrozen(false);
 
         using var loader=new PluginLoader();loader.Load(plugins,[new("platform",ModuleKind.Platform,"NcmaPlatform.dll","NcmaPlatform.dll",1,0,[]),

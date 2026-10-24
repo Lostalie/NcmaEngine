@@ -29,7 +29,8 @@ internal static unsafe partial class Program
         var package=cook.Cook(Guid.NewGuid(),1,source,new(8,4,8,128));
         var config=new EnvironmentLightingData(1,package.AssetId,package.Generation,package.ContentHash,1,0,true);
         void Publish(string projectRoot,Guid project,EnvironmentPackage p){var d=EnvironmentAssetDescriptor.FromPackage(project,p);string path=Path.Combine(projectRoot,d.Path);Directory.CreateDirectory(Path.GetDirectoryName(path)!);File.WriteAllBytes(path,p.CopyBytes());File.WriteAllBytes(Path.Combine(projectRoot,"assets/environment.ncenv"),d.Encode());}
-        var fixture=new SceneGpuFixture(output);var (document,camera,_,_)=fixture.Scene();
+        var fixture=new SceneGpuFixture(output);var (authoring,camera,_,_)=fixture.Scene();
+        byte[] authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));
         document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{Intensity=0,CastShadow=false});
         global::Ncma.Runtime.Entity env=document.World.CreateEntity("Environment");document.World.Set(env, config);Publish(fixture.Root,fixture.Project,package);
@@ -97,7 +98,7 @@ internal static unsafe partial class Program
         Pass(renderer.EnvironmentStats.Publications==before.Publications&&renderer.EnvironmentStats.UploadedBytes==before.UploadedBytes&&renderer.EnvironmentStats.Captures==before.Captures&&renderer.ResourceStats.Creates==resources.Creates&&renderer.ResourceStats.UploadedBytes==resources.UploadedBytes&&renderer.PipelineStats.Creates==plans&&cook.NativeCalls==cookCalls&&renderer.SubmitCalls==calls+64,"warm submit no cook/readback/upload/rebuild; one scene batch");
         session.Dispose();cache.Trim();Pass(renderer.EnvironmentStats.Live==0&&renderer.PipelineStats.Pipelines==0,"final ordered close clears resources");
         // An empty scene never requests an environment GPU or shader, even if metadata selects one.
-        var empty=new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry());empty.World.Set(empty.World.CreateEntity("Environment"), nextConfig);
+        var empty=BakeRenderScene(new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry()));empty.World.Set(empty.World.CreateEntity("Environment"), nextConfig);
         using(var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true))
         using(var flat=new SceneRenderSession(renderer,cache,empty.World))
         {flat.Prepare(emptyAssets,empty.CaptureSnapshot());
@@ -109,7 +110,7 @@ internal static unsafe partial class Program
             old.Submit(frame++,256,256,camera,ambient:0,target:target);renderer.Present();document.World.Set(env, nextConfig);
             old.RefreshEnvironment(nextAssets,()=>true);old.PrepareEnvironmentView(256,256,camera,ambient:0);
             Pass(old.Submit(frame++,256,256,camera,ambient:0,target:target),"old profile explicit promotion");renderer.CaptureTarget(target,image);renderer.Present();Pass(image.SequenceEqual(baseline),"promotion actual image parity");
-            var restored=document.CaptureSnapshot();document.RestoreSnapshot(restored);Bad(()=>old.RefreshEnvironment(nextAssets,()=>true));Bad(()=>old.Submit(frame,256,256,camera,target:target));
+            var restored=document.CaptureCheckpoint();document.RestoreCheckpoint(restored,document.Revision);Bad(()=>old.RefreshEnvironment(nextAssets,()=>true));Bad(()=>old.Submit(frame,256,256,camera,target:target));
         }
         // Real ASCII/binary imported NCA characters use the same shared skin/shadow/IBL path.
         string build=Directory.GetParent(root)!.Parent!.FullName;var repo=new DirectoryInfo(Path.GetFullPath(root));while(!Directory.Exists(Path.Combine(repo.FullName,"tests/assets/fbx")))repo=repo.Parent??throw new Exception("fixtures missing");
@@ -117,7 +118,7 @@ internal static unsafe partial class Program
         using var kernel=new PoseKernel(posePath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(posePath))));
         foreach(string f in new[]{"synthetic","blender_279_sausage_6100_ascii.fbx","blender_279_sausage_7400_binary.fbx"}){
             SkinFixture skinFixture;if(f=="synthetic")skinFixture=new(output);else{using var importer=new ImportKernel(importPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(importPath))));skinFixture=new(output,importer.LoadAndCopy(Path.Combine(repo.FullName,"tests/assets/fbx",f),30));}
-            var (skinDocument,skinCamera,objects)=skinFixture.Scene();skinDocument.World.Set(skinDocument.World.CreateEntity("Environment"), config);Publish(skinFixture.Root,skinFixture.Project,package);
+            var (skinAuthoring,skinCamera,objects)=skinFixture.Scene();var skinDocument=BakeRenderScene(skinAuthoring);skinDocument.World.Set(skinDocument.World.CreateEntity("Environment"), config);Publish(skinFixture.Root,skinFixture.Project,package);
             using var skinAssets=SceneAssetPreparation.Prepare(skinFixture.Root,skinFixture.Project,skinDocument.CaptureSnapshot(),true);
             using var skinSession=new SceneRenderSession(renderer,cache,skinDocument.World);skinSession.Prepare(skinAssets,skinDocument.CaptureSnapshot(),poseKernel:kernel,environmentPreparationAllowed:()=>true);
             skinSession.PrepareEnvironmentView(256,256,skinCamera,ambient:0);
@@ -158,6 +159,7 @@ internal static unsafe partial class Program
         });
         probeWorld=new("Boundary probe",registry);probeWorld.Set(probeWorld.CreateEntity("Probe"), new EnvironmentBoundaryProbe(1));
         var probeSnapshot=probeWorld.CaptureSnapshot();probeWorld.RestoreSnapshot(probeSnapshot);Pass(probeWorld.Count==1,"component validation/restore reject preparation reentry without changing document");
+        Pass(authoringBytes.SequenceEqual(authoring.CaptureBytes()),"runtime environment mutation and restore never write the authoring source");
         File.WriteAllText(Path.Combine(output,"shared-environment-results.json"),JsonSerializer.Serialize(new{cases,maxError,warmFrames=64,allocatedBytes=allocated,elapsedMilliseconds=elapsed,formalHostsEnabled=false,validationErrors=finalStats.ValidationErrors,validationWarnings=finalStats.ValidationWarnings},new JsonSerializerOptions{WriteIndented=true}));
         Console.WriteLine($"PASS M7.3-C2-B shared SceneRenderSession cases={cases} pixelError={maxError} warmAllocation={allocated} API0/0; formal hosts remain pending");return 0;
     }

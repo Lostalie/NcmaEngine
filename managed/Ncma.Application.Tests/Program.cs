@@ -16,6 +16,18 @@ static void Reject(Action action)
 string root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 string configuration = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)).Parent!.Name;
 string assembly = Path.Combine(root, "managed/Ncma.Gameplay.Sample/bin", configuration, "net8.0/Ncma.Gameplay.Sample.dll");
+try { LoopCostTests.Run(); }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+try { LoopStreamTests.Run(); }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+try { PresentationStageTests.Run(); }
+catch(Exception e){Console.Error.WriteLine("FAIL presentation stages: "+e);return 1;}
+try { StartupCostTests.Run(); }
+catch(Exception e){Console.Error.WriteLine("FAIL startup costs: "+e);return 1;}
+try { ProcessMemoryTests.Run(); }
+catch(Exception e){Console.Error.WriteLine("FAIL process memory: "+e);return 1;}
+try { FramePacerTests.Run(); }
+catch (Exception error) { Console.Error.WriteLine(error); return 1; }
 try { ApplicationLifetimeRecoveryTests.Run(); }
 catch (Exception error) { Console.Error.WriteLine(error); return 1; }
 try { ApplicationPresentationRecoveryTests.Run(); }
@@ -64,24 +76,26 @@ var cases = new (string, Action)[]
     ("Editor Play is isolated and stopping restores editing", () => {
         using var owner = new EditorSessionOwner("Edit");
         owner.LoadGameplay(assembly);
-        global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Character"); owner.Document.World.Set(obj, TransformData.Identity);
-        owner.Document.SetBindings(owner.Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Ncma.Gameplay.Sample.RotatorBehaviour", true, [])]);
+        Guid obj = owner.Document.CreateObject("Character"); owner.Document.SetComponent(obj, TransformData.Identity);
+        owner.Document.SetBindings(obj, [new(Guid.NewGuid(), "Ncma.Gameplay.Sample.RotatorBehaviour", true, [])]);
         owner.Edit!.Resynchronize();
         byte[] before = owner.Document.CaptureBytes();
+        var reference = owner.Document.BakeRuntime(owner.Document.Revision).Image.Instantiate(owner.Document.Components);
         var play = owner.StartPlay();
-        Check(play.Document.World.Identity != owner.Document.World.Identity && owner.Edit.State.Frozen);
+        Check(play.Scene.World.Identity != reference.World.Identity && play.Scene.World.Identity != Guid.Empty && owner.Edit.State.Frozen);
         play.AdvanceFrame(1.0 / 60);
         Check(before.SequenceEqual(owner.Document.CaptureBytes()));
         Reject(owner.Catalog.Clear);
         owner.StopPlay(); Check(owner.Play is null && !owner.Edit.State.Frozen);
-        owner.StartPlay(); owner.StopPlay();
+        Guid firstWorld = play.Scene.World.Identity; var second = owner.StartPlay();
+        Check(second.Scene.World.Identity != firstWorld && before.SequenceEqual(owner.Document.CaptureBytes())); owner.StopPlay();
     }),
     ("Reload preserves edit generation on failed preflight", () => {
         using var owner = new EditorSessionOwner("Edit");
         owner.LoadGameplay(assembly);
         Guid generation = owner.Catalog.Snapshot.Generation;
-        global::Ncma.Runtime.Entity obj = owner.Document.World.CreateEntity("Bad");
-        owner.Document.SetBindings(owner.Document.World.GetUuid(obj), [new(Guid.NewGuid(), "Missing.Type", true, [])]);
+        Guid obj = owner.Document.CreateObject("Bad");
+        owner.Document.SetBindings(obj, [new(Guid.NewGuid(), "Missing.Type", true, [])]);
         Reject(() => owner.LoadGameplay(assembly));
         Check(owner.Catalog.Snapshot.Generation == generation);
         Reject(() => owner.StartPlay()); Check(owner.Play is null && !owner.Edit!.State.Frozen);
