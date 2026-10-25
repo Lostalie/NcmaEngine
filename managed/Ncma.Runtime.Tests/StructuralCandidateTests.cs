@@ -80,7 +80,7 @@ internal static class StructuralCandidateTests
                 })); Reject(world.CommitStep); world.AbortStep(); Check(world.GetName(a) == "A");
             }),
             ("full world snapshot budget is retained", () => {
-                var registry = ComponentRegistry.CreateDefault();
+                var registry = global::Ncma.Runtime.CompositionRegistry.Build();
                 registry.Register<TextData>("test.text", 1, """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", value => value);
                 var world = new World(components: registry); var text = new TextData(new string('X', 63000));
                 for (int i = 0; i < 64; ++i) world.Set(world.CreateEntity("Existing"), text);

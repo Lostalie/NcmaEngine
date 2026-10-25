@@ -36,7 +36,7 @@ internal static unsafe partial class Program
         }
         internal string GenerationPath=>Path.Combine(Root,Plan.Record.Generation!.RelativePath);
         internal (SceneDocument Document,Guid Camera,Guid[] Objects) Scene(int count=1) {
-            var d=new SceneDocument("Skinned scene",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
+            var d=new SceneDocument("Skinned scene",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);
             var m=Manifest;var objects=new Guid[count];
             for(int i=0;i<count;i++) {
                 Guid obj=d.CreateObject("Character "+i);objects[i]=obj;
@@ -118,7 +118,7 @@ internal static unsafe partial class Program
         string path=Path.Combine(native,"NcmaAnimationKernel.dll");using var kernel=new PoseKernel(path,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
         var fixture=new SkinFixture(output);var (document,camera,objects)=fixture.Scene();
         string saved=Path.Combine(fixture.Root,"start.ncmascene");SceneDocumentFiles.Save(document,saved);
-        using var editor=new EditorSessionOwner("Restart scene",components:RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),validateComposition:SceneRenderValidation.RequireComposition);
+        using var editor=new EditorSessionOwner("Restart scene",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),validateComposition:SceneRenderValidation.RequireComposition);
         SceneDocumentFiles.Load(editor.Document,saved);editor.PrepareRenderAssets(fixture.Root,fixture.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         var original=new byte[256*256*4];var moved=new byte[original.Length];var vertices=new byte[4*48];

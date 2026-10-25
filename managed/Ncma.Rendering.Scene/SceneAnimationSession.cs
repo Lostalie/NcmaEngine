@@ -65,7 +65,7 @@ public sealed class SceneAnimationSession : IDisposable,ICommittedStepObserver
             _rootMotion=rootMotion;_animators=animators;
             animators?.VerifyPresentation(world,prepared.Assets);
             _publication=prepared.Assets.Identity;
-            _assets=prepared.Assets.AcquireLease();var registry=RenderComponentRegistry.CreateRegistry();int bones=0,palettes=0,previewScratch=0;
+            _assets=prepared.Assets.AcquireLease();var registry=global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);int bones=0,palettes=0,previewScratch=0;
             var previewSources=new Dictionary<Guid,GraphPoseSnapshotSource>();
             foreach(var obj in startup.Objects){var component=obj.Components.SingleOrDefault(c=>c.TypeId==SkinnedMeshData.TypeId);if(component is null)continue;
                 var source=registry.Decode<SkinnedMeshData>(component);

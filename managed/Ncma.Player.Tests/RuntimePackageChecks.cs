@@ -75,7 +75,8 @@ internal static class RuntimePackageChecks
         }
         Check(savedScene.SequenceEqual(File.ReadAllBytes(Path.Combine(package, "sample/start.ncmascene"))), "Packed Play changed the authored scene");
         // Real moved apphosts from an unrelated cwd, without resident authoring/import assemblies.
-        // Null validates the pack without initializing GPU/pose; graphical exercises the actual DLLs.
+        // This fixture is presentation-only: Null does not open its pack or initialize GPU/pose;
+        // graphical exercises the actual DLLs. Root-consuming Null tamper coverage is below in SkinnedHostChecks.
         foreach (bool headless in new[] { true, false }) {
             var start = new ProcessStartInfo(Path.Combine(package, "NcmaPlayer.exe")) { WorkingDirectory = output, UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true };
@@ -101,8 +102,10 @@ internal static class RuntimePackageChecks
         var rejectedOptions = PlayerOptions.Parse(["--project", project, "--ticks", "6", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-corrupt-packed-player.json")]);
         var rejected = playerRunOwner2.Run(rejectedOptions, pluginRoot: Path.Combine(package, "plugins"), visible: false);
         Check(rejected.ExitCode == 3 && rejected.Tick == 0 && rejected.Modules.Length == 0 && rejected.RenderedFrames == 0, "Corrupt package started gameplay/GPU or fell back");
-        var rejectedNull = playerRunOwner3.Run(PlayerOptions.Parse(["--project", project, "--headless", "--ticks", "2", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-corrupt-packed-null.json")]), visible: false);
-        Check(rejectedNull.ExitCode == 3 && rejectedNull.Tick == 0 && rejectedNull.Modules.Length == 0 && rejectedNull.ShutdownErrors.Length == 0, "Corrupt Null package started gameplay or leaked pins");
+        Check(SceneAssetPreparation.References(scene, SceneAssetPolicy.Simulation).Length == 0, "Passive package fixture acquired simulation consumers");
+        var passiveNull = playerRunOwner3.Run(PlayerOptions.Parse(["--project", project, "--headless", "--ticks", "2", "--report", Path.Combine(output, Guid.NewGuid().ToString("N") + "-unused-corrupt-packed-null.json")]), visible: false);
+        Check(passiveNull.ExitCode == 0 && passiveNull.Tick == 2 && passiveNull.Modules.Length == 0 && passiveNull.RenderedFrames == 0 && passiveNull.ShutdownErrors.Length == 0, "Passive Null scene opened an unused visual package or leaked resources");
+        using (var unlocked = new FileStream(packed, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
         bool manifestRejected = false; try { DeploymentManifest.Validate(package); } catch (ArgumentException) { manifestRejected = true; }
         Check(manifestRejected, "Manifest accepted changed asset bytes");
         File.WriteAllBytes(packed, bytes); DeploymentManifest.Validate(package);

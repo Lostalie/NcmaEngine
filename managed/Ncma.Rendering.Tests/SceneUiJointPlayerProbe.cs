@@ -26,7 +26,10 @@ internal static class SceneUiJointPlayerProbe
             using var playerRunOwner2 = new Ncma.Player.App.PlayerRunner();
             var options=new PlayerOptions(Path.Combine(Path.GetDirectoryName(e.Project)!,name+".ncmaproject"),headless,headless?"null":"d3d11",2,1d/60,30,Path.Combine(e.Output,name+".json"),false,false);
             var rejected=playerRunOwner2.Run(options,pluginRoot:e.Plugins,visible:false);
-            e.Pass(rejected.ExitCode!=0&&rejected.Tick==0&&rejected.SessionId==Guid.Empty&&rejected.RenderedFrames==0&&rejected.ShutdownErrors.Length==0,"joint closure rejected before gameplay: "+name);
+            Console.WriteLine($"JOINT CLOSURE headless={headless} case={name} exit={rejected.ExitCode} tick={rejected.Tick}");
+            if(headless && name is "bad-model" or "bad-environment")
+                e.Pass(rejected.ExitCode==0&&rejected.Tick==2&&rejected.RenderedFrames==0&&rejected.Modules.Length==0&&rejected.ShutdownErrors.Length==0,"Simulation does not consume presentation-only closure: "+name);
+            else e.Pass(rejected.ExitCode!=0&&rejected.Tick==0&&rejected.SessionId==Guid.Empty&&rejected.RenderedFrames==0&&rejected.ShutdownErrors.Length==0,"joint closure rejected before gameplay: "+name);
             e.Pass(EnvironmentProductEvidence.NativePaths(e.Root).Length==0,"failed closure leaves no native: "+name);
         }
         if(high&&headless){

@@ -1,0 +1,37 @@
+<Project>
+  <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport/CaseHarness.cs" Link="TestSupport/CaseHarness.cs" />
+  </ItemGroup>
+  <!-- SDK compiler host is an explicit build dependency, not a product dependency.
+       Apply to composition-only projects too: analyzer references are not transitive. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'Ncma.CodeGen' and '$(MSBuildProjectName)' != 'Ncma.CodeGen.Tests'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Ncma.CodeGen/Ncma.CodeGen.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+  <!-- Dependencies belong to the compiler loader only. Do not add them to normal
+       ProjectReference outputs (the net8 test runner also references the generator). -->
+  <Target Name="NcmaResolveAnalyzerDependencies" BeforeTargets="CoreCompile" DependsOnTargets="ResolveProjectReferences"
+          Condition="'$(MSBuildProjectName)' != 'Ncma.CodeGen' and '$(MSBuildProjectName)' != 'Ncma.CodeGen.Tests'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)Ncma.CodeGen/Ncma.CodeGen.csproj"
+             Targets="NcmaGetAnalyzerDependencies" Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0"
+             RemoveProperties="RuntimeIdentifier;SelfContained" BuildInParallel="false">
+      <Output TaskParameter="TargetOutputs" ItemName="Analyzer" />
+    </MSBuild>
+  </Target>
+  <Target Name="NcmaRejectCompilerRuntimeDependencies" AfterTargets="ResolveReferences"
+          Condition="'$(MSBuildProjectName)' != 'Ncma.CodeGen' and '$(MSBuildProjectName)' != 'Ncma.CodeGen.Tests'">
+    <ItemGroup>
+      <_NcmaCompilerLeak Include="@(ReferencePath);@(ReferenceCopyLocalPaths)"
+          Condition="'%(Filename)' == 'Ncma.CodeGen' or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.CodeAnalysis'))" />
+    </ItemGroup>
+    <Error Code="NCMADEP001" Condition="'@(_NcmaCompilerLeak)' != ''" Text="Compiler-only dependency leaked into product references: @(_NcmaCompilerLeak)" />
+  </Target>
+  <Target Name="NcmaRejectCompilerPublishDependencies" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(MSBuildProjectName)' != 'Ncma.CodeGen' and '$(MSBuildProjectName)' != 'Ncma.CodeGen.Tests'">
+    <ItemGroup>
+      <_NcmaPublishCompilerLeak Include="@(ResolvedFileToPublish)"
+          Condition="'%(Filename)' == 'Ncma.CodeGen' or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.CodeAnalysis'))" />
+    </ItemGroup>
+    <Error Code="NCMADEP002" Condition="'@(_NcmaPublishCompilerLeak)' != ''" Text="Compiler-only dependency leaked into publish files: @(_NcmaPublishCompilerLeak)" />
+  </Target>
+</Project>

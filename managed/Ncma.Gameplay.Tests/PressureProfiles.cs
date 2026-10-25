@@ -38,7 +38,7 @@ internal static class PressureProfiles
     {
         foreach (var setup in new (int Objects, int Components, int Bindings)[] { (128, 9, 4), (32, 9, 64), (1024, 1, 1), (4096, 1, 1) })
         {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             const string schema = """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"number"}}}""";
             void Register<T>(int id) where T : struct => registry.Register<Extra<T>>("profile.extra." + id, 1, schema, v => v);
             Register<P0>(0); Register<P1>(1); Register<P2>(2); Register<P3>(3);

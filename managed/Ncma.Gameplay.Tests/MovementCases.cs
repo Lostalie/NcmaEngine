@@ -21,7 +21,7 @@ internal static class MovementCases
         var cases = new (string Name, Action Run)[]
         {
             ("Managed value publication shares numerical commit and rejects caught gameplay writes", () => {
-                var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
+                var registry=global::Ncma.Runtime.CompositionRegistry.Build();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
                 using var f=new Fixture(components:registry,prepare:(document,id)=>document.SetComponent(id,new OwnedValue(100)));
                 f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));Reject(()=>f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(1)));
                 f.Start();f.Play.AdvanceFixedStep();Check(f.Scene.World.Get<OwnedValue>(f.Target).Value==75&&f.Play.Tick==1);
@@ -29,12 +29,12 @@ internal static class MovementCases
                 f.Play.AdvanceFixedStep();Check(f.Play.State==PlayState.Faulted&&f.Play.Tick==1&&f.Adapter.Steps==1&&before.SequenceEqual(f.Scene.CaptureCheckpoint().CopyBytes()));
             }),
             ("Changed validator publication fails after solver without managed partial commit", () => {
-                var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v.Value==75?new(74):v);
+                var registry=global::Ncma.Runtime.CompositionRegistry.Build();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v.Value==75?new(74):v);
                 using var f=new Fixture(components:registry,prepare:(document,id)=>document.SetComponent(id,new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>new(75));f.Start();
                 byte[] before=f.Scene.CaptureCheckpoint().CopyBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
             }),
             ("Managed publication source cannot smuggle an ordinary World write", () => {
-                var registry=ComponentRegistry.CreateDefault();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
+                var registry=global::Ncma.Runtime.CompositionRegistry.Build();registry.Register<OwnedValue>("test.owned",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>v);
                 using var f=new Fixture(components:registry,prepare:(document,id)=>document.SetComponent(id,new OwnedValue(100)));f.Move.RegisterPublication<OwnedValue>([f.TargetId],_=>{try{f.Scene.World.Rename(f.Other, "illegal");}catch(InvalidOperationException){}return new(75);});f.Start();
                 byte[] before=f.Scene.CaptureCheckpoint().CopyBytes();f.Play.AdvanceFixedStep();f.CheckPostExecutionFailure(before);
             }),
@@ -284,7 +284,7 @@ internal static class MovementCases
             ("A custom registered normalizer cannot silently desynchronize numerical and World values", () => {
                 bool change = false;
                 var registry = new ComponentRegistry();
-                var schema = ComponentRegistry.CreateDefault().Describe().Single(d => d.TypeId == "ncma.transform").Schema.GetRawText();
+                var schema = global::Ncma.Runtime.CompositionRegistry.Build().Describe().Single(d => d.TypeId == "ncma.transform").Schema.GetRawText();
                 registry.Register<TransformData>("ncma.transform", 1, schema,
                     v => TransformData.Validate(change ? v with { Position = v.Position + Vector3.UnitX } : v));
                 using var f = new Fixture(components: registry); f.Start(); var before = f.Scene.CaptureCheckpoint().CopyBytes();
@@ -307,12 +307,7 @@ internal static class MovementCases
                 Reject(() => new MovementCoordinator(other, new Guid[MovementCoordinator.MaxTargets + 1], () => new FakeNumerics()));
             }),
         };
-        foreach (var test in cases)
-        {
-            try { test.Run(); Console.WriteLine("PASS " + test.Name); }
-            catch (Exception error) { throw new InvalidOperationException("FAIL " + test.Name, error); }
-        }
-        Console.WriteLine($"Movement tests: {cases.Length}/{cases.Length} passed (deterministic fake; NOT Jolt character acceptance).");
+        CaseHarness.RunOrThrow("Movement (deterministic fake; NOT Jolt character acceptance)", cases);
     }
 
     private readonly record struct OwnedValue(int Value):IComponent;

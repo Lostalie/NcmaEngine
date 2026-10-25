@@ -15,7 +15,7 @@ internal static class EditorPrefabTests
     }
     private static ComponentRegistry Registry()
     {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<AssetValue>("game.asset_value", 1,
             """{"type":"object","additionalProperties":false,"required":["asset"],"properties":{"asset":{"type":"string"}}}""", v => v);
         registry.Register<Label>("game.label", 1,
@@ -111,7 +111,7 @@ internal static class EditorPrefabTests
             Reject(() => flow.InspectPlacement(stamp, bytes, 1, new(0, 0, 0), _ => true)); Check(ui.Stamp == stamp && owner.Document.ObjectCount == 65);
         });
         yield return ("M3.7 editor reserves membership operations instead of splitting publication", () => {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             const string schema = """{"type":"object","additionalProperties":false,"properties":{}}""";
             registry.Register<C0>("game.c0", 1, schema, v => v); registry.Register<C1>("game.c1", 1, schema, v => v);
             registry.Register<C2>("game.c2", 1, schema, v => v); registry.Register<C3>("game.c3", 1, schema, v => v);

@@ -391,11 +391,20 @@ var cases = new (string Name, Action Run)[] {
     ("Headless scene accepts render metadata without resolving or loading 3D assets", () => {
 
         using var playerRunOwner12 = new Ncma.Player.App.PlayerRunner();
-        var doc = new SceneDocument("Null scene", Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(), Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
+        var doc = new SceneDocument("Null scene", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
         Guid obj = doc.CreateObject("Missing mesh"); doc.SetComponent(obj, TransformData.Identity);
         doc.SetComponent(obj, new Ncma.Scene.Rendering.StaticMeshData(Guid.NewGuid(), Guid.NewGuid(), true, true, uint.MaxValue));
         SaveScene(doc); var report = playerRunOwner12.Run(Options(1), pluginRoot: Path.Combine(output, "no-native"));
         Check(report.ExitCode == 0 && report.Tick == 1 && report.Modules.Length == 0 && report.RenderedFrames == 0);
+        // The host must decide demand before preparing an explicitly configured visual package.
+        Directory.CreateDirectory(Path.Combine(projectRoot, "assets"));
+        File.WriteAllText(Path.Combine(projectRoot, "assets/unused-visual.ncpak"), "intentionally not a runtime package");
+        var original = config; config = config with { AssetPackage = "assets/unused-visual.ncpak" }; Project();
+        try {
+            using var noVisualPackage = new Ncma.Player.App.PlayerRunner();
+            var result = noVisualPackage.Run(Options(1), pluginRoot: Path.Combine(output, "no-native"));
+            Check(result.ExitCode == 0 && result.Tick == 1 && result.Modules.Length == 0 && result.RenderedFrames == 0);
+        } finally { config = original; Project(); }
         Scene();
     }),
     ("Existing report never overwritten and report failure is non-success", () => {
@@ -419,30 +428,23 @@ var cases = new (string Name, Action Run)[] {
     }),
 };
 var passed = new List<string>();
-foreach (var test in cases) { try { test.Run(); passed.Add(test.Name); Console.WriteLine("PASS " + test.Name); }
-    catch (Exception e) { Console.Error.WriteLine("FAIL " + test.Name + ": " + e); return 1; } }
+var harness = new CaseHarness("Player");
+foreach (var test in cases) harness.Case(test.Name, () => { test.Run(); passed.Add(test.Name); });
 if (args.Length > 2) {
-    try {SimulationCompositionChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("Simulation composition 0/1/8/32, default-off/state oracle/reload/native identity");}
-    catch(Exception e){Console.Error.WriteLine("FAIL Simulation composition: "+e);return 1;}
-    try {ActionSampleChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("K6 generated procedural sample: 0/1 actor packed Headless/DX11, disabled unused physics/GPU and authoring preserved");Console.WriteLine("PASS "+passed[^1]);}
-    catch(Exception e){Console.Error.WriteLine("FAIL Action sample: "+e);return 1;}
-    try { foreach(string test in ActionJointChecks.Run(root,output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
-    catch(Exception e){Console.Error.WriteLine("FAIL Joint actions: "+e);return 1;}
-    try { foreach(string test in ActionCombatChecks.Run(output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
-    catch(Exception e){Console.Error.WriteLine("FAIL Actions: "+e);return 1;}
-    try { foreach(string test in RootMotionChecks.Run(root,output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
-    catch(Exception e){Console.Error.WriteLine("FAIL Root motion: "+e);return 1;}
-    try { foreach(string test in CharacterHostChecks.Run(output,Path.GetFullPath(args[2]))) {passed.Add(test);Console.WriteLine("PASS "+test);} }
-    catch(Exception e){Console.Error.WriteLine("FAIL Character host: "+e);return 1;}
-    try { foreach (string test in PackageChecks.Run(root, args[1], output, Path.GetFullPath(args[2]))) { passed.Add(test); Console.WriteLine("PASS " + test); } }
-    catch (Exception e) { Console.Error.WriteLine("FAIL Package: " + e); return 1; }
-    try { foreach(string test in SceneHostChecks.Run(output,Path.GetFullPath(args[2]))) { passed.Add(test);Console.WriteLine("PASS "+test); } }
-    catch(Exception e) { Console.Error.WriteLine("FAIL Scene Player: "+e);return 1; }
-    try { foreach(string test in SkinnedHostChecks.Run(root,output,Path.GetFullPath(args[2]))) { passed.Add(test);Console.WriteLine("PASS "+test); } }
-    catch(Exception e) { Console.Error.WriteLine("FAIL FBX Player: "+e);return 1; }
+    harness.Case("Simulation composition", () => {SimulationCompositionChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("Simulation composition 0/1/8/32, default-off/state oracle/reload/native identity");});
+    harness.Case("Action sample", () => {ActionSampleChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("K6 generated procedural sample: 0/1 actor packed Headless/DX11, disabled unused physics/GPU and authoring preserved");});
+    harness.Case("Joint actions", () => passed.AddRange(ActionJointChecks.Run(root,output,Path.GetFullPath(args[2]))));
+    harness.Case("Actions", () => passed.AddRange(ActionCombatChecks.Run(output,Path.GetFullPath(args[2]))));
+    harness.Case("Root motion", () => passed.AddRange(RootMotionChecks.Run(root,output,Path.GetFullPath(args[2]))));
+    harness.Case("Character host", () => passed.AddRange(CharacterHostChecks.Run(output,Path.GetFullPath(args[2]))));
+    harness.Case("Package", () => passed.AddRange(PackageChecks.Run(root,args[1],output,Path.GetFullPath(args[2]))));
+    harness.Case("Scene Player", () => passed.AddRange(SceneHostChecks.Run(output,Path.GetFullPath(args[2]))));
+    harness.Case("FBX Player", () => passed.AddRange(SkinnedHostChecks.Run(root,output,Path.GetFullPath(args[2]))));
 }
-File.WriteAllBytes(Path.Combine(output, "results.json"), JsonSerializer.SerializeToUtf8Bytes(new { passed = passed.Count, tests = passed }, json));
-Console.WriteLine($"Player tests: {passed.Count} passed."); return 0;
+int exitCode = harness.Finish();
+File.WriteAllBytes(Path.Combine(output, "results.json"), JsonSerializer.SerializeToUtf8Bytes(new { passed = passed.Count, tests = passed,
+    caseBoundaries = harness.Total, failed = harness.Failed, exitCode }, json));
+return exitCode;
 
 internal sealed class RetryComposition : IDisposable
 {

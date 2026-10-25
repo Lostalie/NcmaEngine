@@ -30,7 +30,7 @@ internal static partial class RuntimeChangeReviewTests
             Check(f.Changes.ConfirmStopAndApply(fresh, fresh.Fingerprint, new IndexedIds([f.Deleted])).Changed);
         });
         yield return ("E6 runtime object expansion enforces original operation budget before stopping", () => {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             const string schema = """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""";
             registry.Register<BudgetA>("budget.a", 1, schema, v => v);
             registry.Register<BudgetB>("budget.b", 1, schema, v => v);
@@ -52,7 +52,7 @@ internal static partial class RuntimeChangeReviewTests
             Check(owner.RuntimeChanges.IsCurrent(review) && owner.Play == play && before.SequenceEqual(owner.Document.CaptureBytes()) && owner.Edit.State == state);
         });
         yield return ("E6 changed normalization is rejected before confirmation and Play stop", () => {
-            int drift = 0; var registry = ComponentRegistry.CreateDefault();
+            int drift = 0; var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             registry.Register<BudgetA>("normalize.a", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => new(v.Value + drift));
             using var owner = new EditorSessionOwner("Normalization", components: registry);

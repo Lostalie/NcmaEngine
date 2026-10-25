@@ -20,7 +20,7 @@ internal static unsafe partial class Program
         Directory.CreateDirectory(Path.GetDirectoryName(generation)!);File.WriteAllBytes(generation,actor.Plan.DerivedBytes);
         File.WriteAllBytes(Path.Combine(imported.Root,"assets/root.fbx.ncmeta"),AssetRecordCodec.Encode(actor.Plan.Record));
         var graph=AnimatorGraph(actor);File.WriteAllBytes(Path.Combine(imported.Root,"assets/root.ncmaanim"),AnimationGraphCodec.Encode(graph));
-        var document=new SceneDocument("Full recovery joint",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
+        var document=new SceneDocument("Full recovery joint",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
         document.RestoreSnapshot(source.CaptureSnapshot());
         Guid obj=document.CreateObject("Graph root recovery actor");document.SetComponent(obj, TransformData.Identity with{Position=new(-1,0,-3)});
         document.SetComponent(obj, new SkinnedMeshData(actor.Model,actor.Manifest.Meshes[0].Mesh,graph.SkeletonId,actor.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));

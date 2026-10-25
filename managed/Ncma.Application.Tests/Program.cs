@@ -16,24 +16,16 @@ static void Reject(Action action)
 string root = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 string configuration = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)).Parent!.Name;
 string assembly = Path.Combine(root, "managed/Ncma.Gameplay.Sample/bin", configuration, "net8.0/Ncma.Gameplay.Sample.dll");
-try { LoopCostTests.Run(); }
-catch (Exception error) { Console.Error.WriteLine(error); return 1; }
-try { LoopStreamTests.Run(); }
-catch (Exception error) { Console.Error.WriteLine(error); return 1; }
-try { PresentationStageTests.Run(); }
-catch(Exception e){Console.Error.WriteLine("FAIL presentation stages: "+e);return 1;}
-try { StartupCostTests.Run(); }
-catch(Exception e){Console.Error.WriteLine("FAIL startup costs: "+e);return 1;}
-try { ProcessMemoryTests.Run(); }
-catch(Exception e){Console.Error.WriteLine("FAIL process memory: "+e);return 1;}
-try { FramePacerTests.Run(); }
-catch (Exception error) { Console.Error.WriteLine(error); return 1; }
-try { ApplicationLifetimeRecoveryTests.Run(); }
-catch (Exception error) { Console.Error.WriteLine(error); return 1; }
-try { ApplicationPresentationRecoveryTests.Run(); }
-catch (Exception error) { Console.Error.WriteLine(error); return 1; }
-try { PlayPresentationRecoveryTests.Run(); }
-catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+var harness = new CaseHarness("Application/services");
+harness.Case("loop costs", LoopCostTests.Run);
+harness.Case("loop stream", LoopStreamTests.Run);
+harness.Case("presentation stages", PresentationStageTests.Run);
+harness.Case("startup costs", StartupCostTests.Run);
+harness.Case("process memory", ProcessMemoryTests.Run);
+harness.Case("frame pacer", FramePacerTests.Run);
+harness.Case("lifetime recovery", ApplicationLifetimeRecoveryTests.Run);
+harness.Case("presentation recovery", ApplicationPresentationRecoveryTests.Run);
+harness.Case("Play presentation recovery", PlayPresentationRecoveryTests.Run);
 var cases = new (string, Action)[]
 {
     ("Catalogs are independent and descriptors are copied", () => {
@@ -193,10 +185,9 @@ var cases = new (string, Action)[]
         Reject(() => log.Write("Bad", "test", "", Guid.Empty));
     })
 };
-foreach (var (name, run) in cases) { run(); Console.WriteLine("PASS " + name); }
-Console.WriteLine($"M2.1 application/services: {cases.Length} cases passed.");
-SceneUiRoutingTests.Run();
-return 0;
+harness.Cases(cases);
+harness.Case("Scene UI routing", SceneUiRoutingTests.Run);
+return harness.Finish();
 
 [MethodImpl(MethodImplOptions.NoInlining)]
 static WeakReference Probe(string path)

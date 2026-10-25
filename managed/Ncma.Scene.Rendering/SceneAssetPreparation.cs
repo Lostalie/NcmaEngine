@@ -8,17 +8,19 @@ namespace Ncma.Scene.Rendering;
 public sealed class PreparedSceneAssetLease : IDisposable
 {
     private RuntimeAssetLease? _lease;
+    public SceneAssetPolicy Policy { get; }
     public PreparedSceneAssets Metadata { get; }
     public IReadOnlyList<RuntimeAssetDiagnostic> Diagnostics => Assets.Diagnostics;
     public RuntimeAssetLease Assets => _lease ?? throw new ObjectDisposedException(nameof(PreparedSceneAssetLease));
     public PreparedSceneAssetLease AcquireLease()
     {
         var lease = Assets.AcquireLease();
-        try { return new(lease); } catch { lease.Dispose(); throw; }
+        try { return new(lease, Policy); } catch { lease.Dispose(); throw; }
     }
-    public PreparedSceneAssetLease(RuntimeAssetLease assets)
+    public PreparedSceneAssetLease(RuntimeAssetLease assets, SceneAssetPolicy policy = SceneAssetPolicy.PresentationAndSimulation)
     {
         ArgumentNullException.ThrowIfNull(assets);
+        _ = SceneAssetPolicies.RequiresPresentation(policy); Policy = policy;
         var info = assets.List().Select(asset => asset switch {
             RuntimeMeshAsset mesh => new SceneAssetInfo(mesh.Id, mesh.Kind, mesh.Generation, mesh.ContentHash, mesh.MaterialSlots,
                 mesh.SkeletonId, mesh.ModelId, mesh.BoundsMin, mesh.BoundsMax),
@@ -31,28 +33,34 @@ public sealed class PreparedSceneAssetLease : IDisposable
     }
     public void Dispose() { _lease?.Dispose(); _lease = null; }
 }
-public static class SceneAssetPreparation
+public static partial class SceneAssetPreparation
 {
-    private static readonly ComponentRegistry Registry = RenderComponentRegistry.CreateRegistry();
+    private static readonly ComponentRegistry Registry = global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);
     public static bool HasEnabledEnvironment(ISceneContent scene) => scene.Objects.SelectMany(o => o.Components)
         .Where(c => c.TypeId == EnvironmentLightingData.TypeId).Any(c => Registry.Decode<EnvironmentLightingData>(c).Enabled);
-    public static AssetRef[] References(ISceneContent scene)
+    public static AssetRef[] References(ISceneContent scene, SceneAssetPolicy policy = SceneAssetPolicy.PresentationAndSimulation)
     {
+        ArgumentNullException.ThrowIfNull(scene);
+        bool presentation = SceneAssetPolicies.RequiresPresentation(policy);
         var refs = new HashSet<AssetRef>();
-        foreach (var obj in scene.Objects)
+        foreach (var obj in scene.Objects) {
+            // Plain ClipPlayback is presentation-only. Animator and RootMotion have actual
+            // fixed-step consumers; their model/rig identities remain mandatory without GPU.
+            bool simulation = obj.Components.Any(c => c.TypeId is Ncma.Animation.AnimatorData.TypeId or Ncma.Animation.RootMotionData.TypeId);
             foreach (var component in obj.Components)
                 switch (component.TypeId)
                 {
-                    case EnvironmentLightingData.TypeId:
+                    case EnvironmentLightingData.TypeId when presentation:
                         var environment = Registry.Decode<EnvironmentLightingData>(component);
                         if (environment.Enabled) Add(environment.AssetId, AssetKind.Environment); break;
-                    case StaticMeshData.TypeId:
+                    case StaticMeshData.TypeId when presentation:
                         var mesh = Registry.Decode<StaticMeshData>(component); Add(mesh.MeshId, AssetKind.StaticMesh); Add(mesh.MaterialSetId, AssetKind.MaterialSet); break;
-                    case SkinnedMeshData.TypeId:
-                        var skin = Registry.Decode<SkinnedMeshData>(component); Add(skin.CharacterId, AssetKind.Character); Add(skin.MeshId, AssetKind.SkinnedMesh); Add(skin.SkeletonId, AssetKind.Skeleton); Add(skin.MaterialSetId, AssetKind.MaterialSet); break;
-                    case MaterialOverrideData.TypeId:
+                    case SkinnedMeshData.TypeId when presentation || simulation:
+                        var skin = Registry.Decode<SkinnedMeshData>(component); Add(skin.CharacterId, AssetKind.Character); Add(skin.MeshId, AssetKind.SkinnedMesh); Add(skin.SkeletonId, AssetKind.Skeleton);
+                        if (presentation) Add(skin.MaterialSetId, AssetKind.MaterialSet); break;
+                    case MaterialOverrideData.TypeId when presentation:
                         var material = Registry.Decode<MaterialOverrideData>(component); if (material.MaterialId != Guid.Empty) Add(material.MaterialId, AssetKind.Material); break;
-                    case Ncma.Animation.ClipPlaybackData.TypeId:
+                    case Ncma.Animation.ClipPlaybackData.TypeId when presentation || simulation:
                         Add(Registry.Decode<Ncma.Animation.ClipPlaybackData>(component).ClipId, AssetKind.Clip); break;
                     case Ncma.Animation.AnimatorData.TypeId:
                         var animator = Registry.Decode<Ncma.Animation.AnimatorData>(component); Add(animator.GraphId, AssetKind.AnimationGraph); Add(animator.SkeletonId, AssetKind.Skeleton); break;
@@ -60,6 +68,7 @@ public static class SceneAssetPreparation
                         var action=Registry.Decode<Ncma.Animation.ActionDefinitionData>(component);
                         foreach(Guid id in new[]{action.IdleClip,action.RunClip,action.AttackClip,action.DodgeClip})Add(id,AssetKind.Clip);break;
                 }
+        }
         return refs.OrderBy(r => r.Id.Value).ThenBy(r => r.ExpectedKind).ToArray();
         void Add(Guid id, AssetKind kind) { if (refs.Count >= RuntimeAssetLoader.MaxRequired && !refs.Contains(new(new(id), kind))) throw new ArgumentException("Scene asset reference budget."); refs.Add(new(new(id), kind)); }
     }
@@ -79,18 +88,23 @@ public static class SceneAssetPreparation
             _ = lease.RequireMesh(reference.Id.Value, reference.ExpectedKind);
         return RuntimeAssetPackage.Encode(lease);
     }
-    public static PreparedSceneAssetLease Prepare(string root, Guid project, ISceneContent scene, bool strictMissing, string? package = null)
+    public static PreparedSceneAssetLease Prepare(string root, Guid project, ISceneContent scene, bool strictMissing, string? package = null,
+        SceneAssetPolicy policy = SceneAssetPolicy.PresentationAndSimulation)
     {
-        using var prepared = package is null ? RuntimeAssetLoader.Prepare(root, project, References(scene), strictMissing) :
-            RuntimeAssetPackage.Prepare(root, package, project, References(scene)); // Explicit package never falls back to authoring files.
+        var references = References(scene, policy);
+        // No active simulation consumer: do not open an unused visual package. This is not a
+        // fallback; a package selected by any active dependency must still validate completely.
+        bool noSimulationAssets = policy == SceneAssetPolicy.Simulation && references.Length == 0;
+        using var prepared = package is null || noSimulationAssets ? RuntimeAssetLoader.Prepare(root, project, references, strictMissing) :
+            RuntimeAssetPackage.Prepare(root, package, project, references);
         var lease = prepared.AcquireLease();
         try
         {
-            var result = new PreparedSceneAssetLease(lease);
-            _ = SceneRenderValidation.Inspect(scene, result.Metadata, strictMissing);
+            var result = new PreparedSceneAssetLease(lease, policy);
+            _ = SceneRenderValidation.Inspect(scene, result.Metadata, strictMissing, policy: policy);
             ValidateAnimators(scene,lease);
             // A present model-root reference is malformed even in Editor's missing-resource mode.
-            foreach (var reference in References(scene)) if (reference.ExpectedKind is AssetKind.StaticMesh or AssetKind.SkinnedMesh &&
+            foreach (var reference in references) if (reference.ExpectedKind is AssetKind.StaticMesh or AssetKind.SkinnedMesh &&
                 lease.TryResolve(reference.Id.Value, reference.ExpectedKind, out _)) _ = lease.RequireMesh(reference.Id.Value, reference.ExpectedKind);
             return result;
         }

@@ -44,10 +44,10 @@ internal static partial class Program
             }
             if (args.Length == 2 && args[1] == "--host-negatives")
             {
-                InstallationRefusals(Path.GetFullPath(args[0]));
-                HostFaults(Path.GetFullPath(args[0]));
-                Console.WriteLine($"PASS worker installation/lifecycle refusals: {checks} checks.");
-                return 0;
+                return CaseHarness.Run("Worker refusals", [
+                    ("installation", () => InstallationRefusals(Path.GetFullPath(args[0]))),
+                    ("host faults", () => HostFaults(Path.GetFullPath(args[0])))
+                ]);
             }
             if (args.Length == 2 && args[1] == "--owned-host")
             {
@@ -56,16 +56,13 @@ internal static partial class Program
                 return 0;
             }
             if (args.Length != 1) throw new ArgumentException("Repository path required.");
-            Authentication(Path.GetFullPath(args[0]));
-            ProtocolRefusals(Path.GetFullPath(args[0]));
-            RetainedWorkerWork(Path.GetFullPath(args[0]));
-            MalformedReplies(Path.GetFullPath(args[0]));
-            RealWorker(Path.GetFullPath(args[0]));
-            OwnedHost(Path.GetFullPath(args[0]));
-            InstallationRefusals(Path.GetFullPath(args[0]));
-            HostFaults(Path.GetFullPath(args[0]));
-            Console.WriteLine($"PASS real TLS C# / Python gRPC worker: {checks} checks; deterministic tool only, no inference or World mutation.");
-            return 0;
+            string root = Path.GetFullPath(args[0]);
+            return CaseHarness.Run("Real TLS C# / Python gRPC (no inference or World mutation)", [
+                ("authentication", () => Authentication(root)), ("protocol refusals", () => ProtocolRefusals(root)),
+                ("retained worker work", () => RetainedWorkerWork(root)), ("malformed replies", () => MalformedReplies(root)),
+                ("real worker", () => RealWorker(root)), ("owned host", () => OwnedHost(root)),
+                ("installation refusals", () => InstallationRefusals(root)), ("host faults", () => HostFaults(root))
+            ]);
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }

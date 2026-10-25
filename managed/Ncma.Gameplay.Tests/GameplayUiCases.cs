@@ -241,10 +241,6 @@ internal static class GameplayUiCases
                 play.SubmitUiActions(play.CurrentUiInputStamp, [Action(2)]); Check(play.AdvanceFixedStep().Tick == 2);
             })
         };
-        foreach (var test in cases) {
-            try { test.Run(); Console.WriteLine("PASS gameplay UI: " + test.Name); }
-            catch (Exception e) { throw new InvalidOperationException("FAIL gameplay UI: " + test.Name, e); }
-        }
-        Console.WriteLine($"Gameplay UI tests: {cases.Length}/{cases.Length} groups passed.");
+        CaseHarness.RunOrThrow("Gameplay UI", cases);
     }
 }

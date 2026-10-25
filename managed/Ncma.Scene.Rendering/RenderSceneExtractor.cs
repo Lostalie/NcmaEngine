@@ -67,14 +67,14 @@ public sealed class RenderSceneExtractor
         if (camera is null && cameraObject != Guid.Empty)
         {
             if (!_world.TryFindEntity(cameraObject, out var selectedEntity) || !_world.Has<CameraData>(selectedEntity) || !_world.Has<TransformData>(selectedEntity)) diagnostics.Add(new(cameraObject, "camera_missing"));
-            else try { camera = CreateCamera(cameraObject, Transform(selectedEntity), _world.Get<CameraData>(selectedEntity), width, height); }
+            else try { camera = CreateCamera(cameraObject, Transform(selectedEntity), CameraData.Generated.Read(_world, selectedEntity), width, height); }
                 catch (ArgumentException) { diagnostics.Add(new(cameraObject, "camera_invalid")); }
         }
         else if (camera is null) diagnostics.Add(new(Guid.Empty, "camera_selection_required"));
         SceneLightView? light = null; int primaryLights = 0;
         if (_lightQuery.GetQuery(worldId) is { } lights) foreach (global::Ncma.Runtime.Entity obj in lights)
         {
-            var data = _world.Get<DirectionalLightData>(obj); if (!data.IsPrimary) continue;
+            var data = DirectionalLightData.Generated.Read(_world, obj); if (!data.IsPrimary) continue;
             if (++primaryLights > 1) { diagnostics.Add(new(_world.GetUuid(obj), "multiple_primary_lights")); continue; }
             try
             {

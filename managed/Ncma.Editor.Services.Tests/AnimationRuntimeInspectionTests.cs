@@ -35,7 +35,7 @@ internal static class AnimationRuntimeInspectionTests
         var graph=new AnimationGraphDefinition(AnimationGraphCodec.CurrentVersion,Guid.NewGuid(),"Runtime approved graph",rig,Guid.Empty,[],[clip,end],[new(Guid.NewGuid(),clip.Id,"pose",end.Id,"pose")],[],[]);
         string graphFile=Path.Combine(sample.Root,"assets/runtime.ncmaanim");File.WriteAllBytes(graphFile,AnimationGraphCodec.Encode(graph));
         using var physics=new PhysicsService(plugins,characterSupport:true);ScenePlayRuntime? runtime=null;bool injectFailure=false;
-        using var owner=new EditorSessionOwner("Graph runtime",components:CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),validateComposition:CharacterComponents.RequireComposition,
+        using var owner=new EditorSessionOwner("Graph runtime",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),validateComposition:CharacterComponents.RequireComposition,
             composePreparedPlay:(play,assets)=>{runtime=ScenePlayRuntime.Compose(play,physics,assets);play.AddSystem(new Failure(()=>injectFailure));return runtime;});
         SceneDocumentFiles.Load(owner.Document,Path.Combine(sample.Root,"start.ncmascene"));
         foreach(Guid id in sample.Actors){owner.Document.RemoveComponent<ActionDefinitionData>(id);owner.Document.RemoveComponent<ClipPlaybackData>(id);owner.Document.SetComponent(id, new AnimatorData(graph.AssetId,rig));}

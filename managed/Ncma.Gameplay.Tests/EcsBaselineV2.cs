@@ -31,7 +31,7 @@ internal static class EcsBaselineV2
     }
     internal static SceneDocument Fixture(int count)
     {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Marker>("e0.marker", 1,
             """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
         var document = new SceneDocument("E0 deterministic fixture", registry);

@@ -47,10 +47,10 @@ internal static unsafe partial class Program
             Bad(() => defaults.Validate(settings with { StackJson = PostProcessData.EncodeStack([finite with { Parameters = parameters }]) }));
         Pass(defaults.Build(settings with { Enabled = false }, 64, 64, _ => throw new Exception("Off resolved resources")) is null, "Off skips callbacks/program resolution");
         Bad(() => defaults.Build(settings, 0, 64, _ => throw new Exception("bad size resolved resources")));
-        var registry = ComponentRegistry.CreateDefault(); PostProcessData.Register(registry);
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build(); PostProcessData.Register(registry);
         var document = new SceneDocument("Post policy", registry, scene => _ = ScenePostProcessState.Read(scene));
         Guid obj = document.CreateObject("Settings"); document.SetComponent(obj, normalized);
-        byte[] bytes = document.CaptureBytes(); var cloneRegistry = ComponentRegistry.CreateDefault(); PostProcessData.Register(cloneRegistry);
+        byte[] bytes = document.CaptureBytes(); var cloneRegistry = global::Ncma.Runtime.CompositionRegistry.Build(); PostProcessData.Register(cloneRegistry);
         var clone = new SceneDocument("Copy", cloneRegistry, scene => _ = ScenePostProcessState.Read(scene)); clone.RestoreBytes(bytes);
         var runtime=BakeRenderScene(clone);
         Pass(ScenePostProcessState.Read(clone.CaptureSnapshot()) == normalized && ScenePostProcessState.Read(runtime.World, runtime.World.Identity) == normalized, "scene roundtrip and flat value");

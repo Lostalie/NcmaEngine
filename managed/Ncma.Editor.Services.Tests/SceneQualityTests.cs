@@ -25,7 +25,7 @@ internal static class SceneQualityTests
         internal readonly PostProcessModules Modules = PostProcessModules.Official();
         internal Fixture(bool existing = true)
         {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             SceneShadowData.Register(registry); PostProcessData.Register(registry);
             Document = new("Quality", registry);
             var fallback = Document.CreateObject("Settings");

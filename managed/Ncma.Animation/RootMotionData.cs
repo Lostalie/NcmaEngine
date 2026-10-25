@@ -12,6 +12,7 @@ public readonly record struct RootMotionData(int RootBoneIndex) : IComponent
         if(value.RootBoneIndex is <0 or >1023)throw new ArgumentException("Invalid rig root index.");
         return value;
     }
+    [ComponentRegistration]
     public static ComponentRegistry Register(ComponentRegistry registry)
     {
         registry.Register<RootMotionData>(TypeId,1,JsonSerializer.Serialize(new {

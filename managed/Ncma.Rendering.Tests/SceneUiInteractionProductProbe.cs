@@ -54,7 +54,7 @@ internal static unsafe class SceneUiInteractionPlayerProbe
         var accepted=playerRunOwner1.Run(options with{Report=Path.Combine(e.Output,"accepted-report.json")},pluginRoot:e.Plugins,visible:false,uiActions:routes);
         e.Pass(accepted.ExitCode==0&&accepted.Tick>=2&&accepted.ShutdownErrors.Length==0&&accepted.ValidationErrors==0&&accepted.ValidationWarnings==0,"trusted formal PlayerRunner runs and closes: "+JsonSerializer.Serialize(accepted));
         if(headless){e.Pass(accepted.Tick==2&&accepted.Modules.Length==0&&accepted.RenderedFrames==0&&!Directory.Exists(e.Plugins),"Null exact ticks no plugins");e.Finish([]);return;}
-        var document=new SceneDocument(context.Configuration.Name,Ncma.Characters.CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),Ncma.Characters.CharacterComponents.RequireComposition);
+        var document=new SceneDocument(context.Configuration.Name,global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),Ncma.Characters.CharacterComponents.RequireComposition);
         SceneDocumentFiles.Load(document,context.StartupScenePath);
         Guid target=document.GetObjectIds().Single(o=>document.GetObjectName(o)=="HUD target");
         string[] native;

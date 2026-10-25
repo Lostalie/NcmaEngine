@@ -51,7 +51,7 @@ internal static class EnvironmentAuthoringTests
         internal EditorEnvironmentWorkspace Service=>Owner.Environments!;internal int Loads;private ulong _frame;
         internal Fixture(string output,string repository,Action<string>? fault=null) {
             Root=Path.Combine(output,"environment-author-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Path.Combine(Root,"assets"));
-            Owner=new("Environment authoring",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);
+            Owner=new("Environment authoring",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:CandidatePresentation.RequireComposition);
             Workspace=new(Owner);Owner.ConfigureAssets(Root,Project,1);Owner.ConfigureEnvironments(Root,Project,()=>{Loads++;return EnvironmentPresetLibrary.LoadDeployment(Path.Combine(repository,"out/bin"));},Time,fault);
             Id=Workspace.CreateObject(Workspace.Stamp);View=new(Workspace,null,Root,workspaceStyle:true);Build();
         }
@@ -119,7 +119,7 @@ internal static class EnvironmentAuthoringTests
                 f.Workspace.History(f.Workspace.Stamp,false);Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())&&!File.Exists(f.FilePath(r))&&File.Exists(nce));
                 f.Workspace.History(f.Workspace.Stamp,true);Check(after.SequenceEqual(f.Owner.Document.CaptureBytes())&&File.Exists(f.FilePath(r)));}
             f.Service.Synchronize();Check(f.Service.Rows().Single().State=="registered");string scene=Path.Combine(f.Root,"saved.ncmascene");f.Workspace.Save(f.Workspace.Stamp,scene);
-            using var reopened=new EditorSessionOwner("reopened",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);new EditorWorkspace(reopened).Open(new EditorWorkspace(reopened).Stamp,scene,true);Check(reopened.Document.GetComponent<EnvironmentLightingData>(f.Id)==f.Value);
+            using var reopened=new EditorSessionOwner("reopened",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:CandidatePresentation.RequireComposition);new EditorWorkspace(reopened).Open(new EditorWorkspace(reopened).Stamp,scene,true);Check(reopened.Document.GetComponent<EnvironmentLightingData>(f.Id)==f.Value);
         });
         yield return("M7.3-C3-B2 exact scope default deny unknown input stale proposal and original history",()=>{
             using var f=new Fixture(output,repository);var r=f.Review();Guid token=f.Approve(r);var edit=f.Owner.Edit!;var request=f.Service.Request(token);byte[] before=f.Owner.Document.CaptureBytes();
@@ -135,7 +135,7 @@ internal static class EnvironmentAuthoringTests
             using var f=new Fixture(output,repository);var r=f.Review();Reject(()=>f.Service.Approve(r,r.Fingerprint,false));Reject(()=>f.Service.Approve(r with{ObjectId=Guid.NewGuid()},r.Fingerprint,true));f.Time.Now=60000;Reject(()=>f.Approve(r));
             r=f.Review();f.Owner.Assets!.Clock.Advance();Reject(()=>f.Approve(r));r=f.Review();f.Workspace.CreateObject(f.Workspace.Stamp);Reject(()=>f.Approve(r));
             r=f.Review();Guid token=f.Approve(r);f.Time.Now+=60000;Reject(()=>f.Service.ApplyLocal(token));
-            f.Owner.RefreshAssets(true);f.Owner.StartPlay();Reject(()=>f.Review());f.Owner.StopPlay();Task.Run(()=>Reject(()=>f.Service.Rows())).GetAwaiter().GetResult();Check(!File.Exists(f.FilePath(r)));
+            f.Owner.RefreshAssets(true);f.Owner.PrepareRenderAssets(f.Root,f.Project);f.Owner.StartPlay();Check(f.Owner.PlayRenderAssets!.Assets.Identity==f.Owner.RenderAssets!.Assets.Identity&&f.Owner.PlayRenderAssets.Assets.List().Count==0);Reject(()=>f.Review());f.Owner.StopPlay();Task.Run(()=>Reject(()=>f.Service.Rows())).GetAwaiter().GetResult();Check(!File.Exists(f.FilePath(r)));
         });
         yield return("M7.3-C3-B2 publication faults compensate files and scene without history",()=>{
             foreach(string point in new[]{"journal_created","backup:0","published:0","metadata_published"}){
@@ -163,7 +163,7 @@ internal static class EnvironmentAuthoringTests
             using var f=new Fixture(output,repository);int history=f.Owner.Edit!.State.UndoCount;f.Click("选择合成中性预设…");Check(f.Service.Review is not null);f.Click("取消预设选择");Check(f.Service.Review is null&&f.Owner.Edit.State.UndoCount==history);
             f.Click("选择合成中性预设…");f.Click("已核对目标、资源和文件发布范围",1);f.Click("批准并应用预设（一次撤销）");Check(f.Owner.Edit.State.UndoCount==history+1&&f.Value.Enabled);
             f.Workspace.History(f.Workspace.Stamp,false);Check(!f.Owner.Document.HasComponent<EnvironmentLightingData>(f.Id));f.Workspace.History(f.Workspace.Stamp,true);
-            f.Owner.RefreshAssets(true);f.Owner.StartPlay();f.Build();var before=f.Owner.Document.CaptureBytes();f.Click("选择合成中性预设…");Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));f.Owner.StopPlay();
+            f.Owner.RefreshAssets(true);f.Owner.PrepareRenderAssets(f.Root,f.Project);f.Owner.StartPlay();f.Build();var before=f.Owner.Document.CaptureBytes();f.Click("选择合成中性预设…");Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()));f.Owner.StopPlay();
         });
         yield return("M7.3-C3-B2 real stdio bounded metadata default deny no file IO TTL audience epoch",()=>{
             using var f=new Fixture(output,repository);using var client=new Client(f,repository);var r=f.Review();f.Service.ApplyLocal(f.Approve(r));f.Service.Synchronize();

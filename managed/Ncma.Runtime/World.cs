@@ -38,7 +38,7 @@ public sealed partial class World
     {
         ValidateName(name);
         _name = name;
-        Components = components ?? ComponentRegistry.CreateDefault();
+        Components = components ?? global::Ncma.Runtime.CompositionRegistry.Build();
         Components.Freeze();
     }
 
@@ -197,6 +197,7 @@ public sealed partial class World
 
     internal void VerifyAccess()
     {
+        ScheduleCallbackScope.RejectWorldAccess();
         if (Environment.CurrentManagedThreadId != _ownerThread) throw new InvalidOperationException("World access requires its owner thread.");
     }
     private void VerifyStructuralAccess()
@@ -442,6 +443,7 @@ public sealed partial class World
                 _objects = objects; _uuidIndex = uuids; _storage = storage; _slots = slots; _revision++;
                 _committedEncoding = encoded; _encodingRevision = _revision;
                 if (_stepMembershipChanged) _membershipVersion = _revision; if (!_initializing) _tick++;
+                _lastScheduledPublication = attempt;
                 AbortStep();
             };
         }

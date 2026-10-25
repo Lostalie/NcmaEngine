@@ -23,7 +23,7 @@ internal static unsafe partial class Program
     {
         var f=new SkinFixture(output);var graph=AnimatorGraph(f);File.WriteAllBytes(Path.Combine(f.Root,"assets/root.ncmaanim"),AnimationGraphCodec.Encode(graph));
         SceneDocument Document(int count=1,bool wall=true) {
-            var d=new SceneDocument("Graph root",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
+            var d=new SceneDocument("Graph root",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
             for(int i=0;i<count;i++) {
                 Guid obj=d.CreateObject("Graph root actor");d.SetComponent(obj, TransformData.Identity with{Position=new(0,0,i*3)});
                 d.SetComponent(obj, new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));
@@ -187,7 +187,7 @@ internal static unsafe partial class Program
             }finally{play.Stop();}
         }
         ScenePlayRuntime? editorRuntime=null;SceneRenderSession? editorScene=null;bool failClose=false;
-        using(var editor=new EditorSessionOwner("Graph root Editor",components:CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),validateComposition:CharacterComponents.RequireComposition,
+        using(var editor=new EditorSessionOwner("Graph root Editor",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),validateComposition:CharacterComponents.RequireComposition,
             composePreparedPlay:(p,a)=>editorRuntime=ScenePlayRuntime.Compose(p,physics,a),beforePlayStop:()=>{if(failClose)throw new InvalidOperationException("Injected graph root derived close");editorScene?.Dispose();editorScene=null;})) {
             editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(f.Root,f.Project);byte[] edit=editor.Document.CaptureBytes();var editSource=EditorSceneSourceStamp.Read(editor);
             using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);

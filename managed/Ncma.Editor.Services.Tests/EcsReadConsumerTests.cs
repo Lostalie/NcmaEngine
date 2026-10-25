@@ -32,7 +32,7 @@ internal static class EcsReadConsumerTests
             Check(Affected(document, [Guid.NewGuid()]).Length == 0);
         });
         yield return ("E6-A authoring references preserve creation order, conflicts and complete 4096 union", () => {
-            var document = new SceneDocument("References", RenderComponentRegistry.CreateRegistry());
+            var document = new SceneDocument("References", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module));
             Guid match = Guid.NewGuid(), other = Guid.NewGuid();
             var ids = new HashSet<Guid> { match };
             Guid first = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"), second = Guid.Parse("11111111-1111-1111-1111-111111111111");

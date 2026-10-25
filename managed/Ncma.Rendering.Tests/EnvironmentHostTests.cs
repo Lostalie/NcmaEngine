@@ -161,7 +161,7 @@ internal static unsafe partial class Program
             if(!process.WaitForExit(30000))throw new Exception("Actual environment apphost timeout");string text=stdout.GetAwaiter().GetResult()+stderr.GetAwaiter().GetResult();
             Pass(process.ExitCode==0,"actual apphost "+product+": "+text);
         }
-        var empty=new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry());SceneDocumentFiles.Save(empty,Path.Combine(fixture.Root,"empty.ncmascene"));
+        var empty=new SceneDocument("Empty",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module));SceneDocumentFiles.Save(empty,Path.Combine(fixture.Root,"empty.ncmascene"));
         Project(projectConfig with{StartupScene="empty.ncmascene",SceneCamera=null,AssetPackage=null,ShaderPackages=new(1,[oldFile])});
         var emptyReport=playerRunOwner8.Run(Options(),pluginRoot:Path.GetFullPath(root),visible:false);
         Pass(emptyReport.ExitCode==0&&emptyReport.ObjectCount==0&&emptyReport.ValidationErrors==0&&emptyReport.ValidationWarnings==0,"graphical empty with Flat2D-only closure requires no environment profile");Project(projectConfig);

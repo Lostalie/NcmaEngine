@@ -20,7 +20,7 @@ internal static partial class Program
             }
         }));
         tests.Add(("shadow-strict-format-values",()=>{
-            var registry=RenderComponentRegistry.CreateRegistry();
+            var registry=global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);
             foreach(string json in new[]{"{}","{\"version\":1}","{\"quality\":2}","{\"version\":1,\"quality\":4}","{\"version\":2,\"quality\":2}","{\"version\":1,\"quality\":-1}","{\"version\":1,\"quality\":\"High\"}","{\"version\":1,\"quality\":2,\"resolution\":8192}"}){
                 using var doc=JsonDocument.Parse(json);Reject(()=>registry.Decode<SceneShadowData>(new(SceneShadowData.TypeId,1,doc.RootElement.Clone())));
             }

@@ -9,13 +9,32 @@ public interface IWorldSystem
 public interface ICommittedStepObserver { void StepCommitted(World world, double fixedDeltaSeconds); }
 
 // Serial deterministic registration order. No native/AI/IPC dependency.
-public sealed class WorldRunner
+public sealed partial class WorldRunner
 {
     private List<IWorldSystem> _systems = new();
     private readonly List<ICommittedStepObserver> _observers = [];
     private readonly Action<Action> _executeStep;
     private double _accumulator;
     private bool _advancing;
+    private ScheduleExecutor? _schedule;
+    private Action<IReadOnlyList<ScheduleStructure>>? _submitStructure;
+    public ScheduleReport? ScheduleStatus { get { World.VerifyAccess(); return _schedule?.Inspect(); } }
+    public ScheduleGraph? ScheduleGraph { get { World.VerifyAccess(); return _schedule?.Graph; } }
+    public void ConfigureSchedule(ScheduleExecutor schedule) => ConfigureSchedule(schedule, null);
+    internal void ConfigureSchedule(ScheduleExecutor schedule, Action<IReadOnlyList<ScheduleStructure>>? submitStructure)
+    {
+        World.VerifyAccess(); ArgumentNullException.ThrowIfNull(schedule);
+        if (_advancing || World.IsUpdating || _schedule is not null) throw new InvalidOperationException("Configure one schedule at an idle boundary.");
+        CollectScheduleResources();
+        if(_retiredSchedules.Count>=MaxRetainedSchedules)throw new InvalidOperationException("Retired schedule capacity reached; existing session may continue without a new graph.");
+        schedule.Attach(World); _schedule = schedule; _submitStructure = submitStructure;
+    }
+    public void ClearSchedule()
+    {
+        World.VerifyAccess();
+        if (_advancing || World.IsUpdating) throw new InvalidOperationException("Cannot detach an executing schedule.");
+        RetireActiveSchedule(); CollectScheduleResources();
+    }
     public WorldRunner(World world, double fixedDeltaSeconds = 1.0 / 60.0, int maxStepsPerAdvance = 8)
     {
         ArgumentNullException.ThrowIfNull(world);
@@ -79,11 +98,20 @@ public sealed class WorldRunner
         LastStepsExecuted = 0;
         _accumulator = total;
         _advancing = true;
+        bool scheduleFailed=false; ulong stepStartTick=World.Tick;
         try
         {
             while (_accumulator + 1e-12 >= FixedDeltaSeconds && LastStepsExecuted < MaxStepsPerAdvance)
             {
-                _executeStep(() => { foreach (var system in _systems) system.FixedUpdate(World, FixedDeltaSeconds); });
+                stepStartTick=World.Tick;
+                try {
+                    _executeStep(() => {
+                        foreach (var system in _systems) system.FixedUpdate(World, FixedDeltaSeconds);
+                        try { _schedule?.Run(FixedDeltaSeconds, _submitStructure); }
+                        catch { scheduleFailed=true;throw; }
+                    });
+                }
+                finally { _schedule?.FinishAttempt(); }
                 _accumulator = Math.Max(0, _accumulator - FixedDeltaSeconds);
                 ++LastStepsExecuted;
                 // The tick is already committed. Observer failure faults the runner, never undoes that tick.
@@ -101,6 +129,8 @@ public sealed class WorldRunner
         catch (Exception exception)
         {
             IsFaulted = true;
+            _scheduleFault=scheduleFailed && World.Tick==stepStartTick;
+            _faultWorld=World.Identity;_faultTick=World.Tick;_faultRevision=World.Revision;
             LastError = exception.Message;
             throw;
         }
@@ -113,11 +143,18 @@ public sealed class WorldRunner
         if (_advancing || World.IsUpdating) throw new InvalidOperationException("Runner is updating.");
         _accumulator = 0;
     }
-    // Explicit recovery: component writes were aborted, but private System state/IO were not.
+    // Explicit recovery: precommit writes were aborted; postcommit observer failures retain
+    // the committed step. Private System/callback state and IO are never rolled back here.
     public void ResetFault()
     {
         ClearAccumulator();
+        // Only a schedule-origin precommit fault revokes the active graph. A failure in
+        // another system/commit/observer must not retire a healthy idle/aborted/committed graph.
+        // Never wait for a faulted worker here or silently rerun it on a new worker.
+        if(IsFaulted && _scheduleFault)RetireActiveSchedule();
+        CollectScheduleResources();
         IsFaulted = false;
+        _scheduleFault=false;
         LastError = null;
     }
 }

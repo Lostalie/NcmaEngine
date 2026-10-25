@@ -35,7 +35,7 @@ internal static unsafe partial class Program
                 [new(Mesh,AssetKind.StaticMesh,"mesh/0","Quad",false),new(ImportedSet,AssetKind.MaterialSet,"materials/0","Imported",false)],[],new(generation,hash,relative))));
         }
         internal (SceneDocument Document,Guid Camera,Guid Ground,Guid Caster) Scene() {
-            var d=new SceneDocument("Scene GPU",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
+            var d=new SceneDocument("Scene GPU",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);
             Guid ground=d.CreateObject("Ground");d.SetComponent(ground, TransformData.Identity with{Position=new(0,0,-4.5f),Scale=new(4,4,1)});d.SetComponent(ground, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
             Guid caster=d.CreateObject("Off-camera caster");d.SetComponent(caster, TransformData.Identity with{Position=new(3,0,-.5f)});d.SetComponent(caster, new StaticMeshData(Mesh,Set,true,true,uint.MaxValue));
             Guid camera=d.CreateObject("Explicit camera");d.SetComponent(camera, TransformData.Identity);d.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
@@ -47,7 +47,7 @@ internal static unsafe partial class Program
     static void TestSceneResources(RendererSession renderer,ref ulong frame,string output)
     {
         var fixture=new SceneGpuFixture(output);var (document,camera,ground,caster)=fixture.Scene();
-        using var editor=new EditorSessionOwner("GPU leases",components:RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),validateComposition:SceneRenderValidation.RequireComposition);
+        using var editor=new EditorSessionOwner("GPU leases",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),validateComposition:SceneRenderValidation.RequireComposition);
         editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(fixture.Root,fixture.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         byte[] original=new byte[256*256*4],changed=new byte[original.Length];
@@ -105,7 +105,7 @@ internal static unsafe partial class Program
                 editor.StopPlay();Check(PinLocked(oldPath),"GPU/CPU independent lease lifetime lost");edit.Dispose();Check(PinLocked(oldPath),"Active render lease prematurely released source");
             }
             Check(renderer.PipelineStats.Pipelines==0,"Scene GPU groups retained after final lease");
-            var empty=BakeRenderScene(new SceneDocument("Pure flat",RenderComponentRegistry.CreateRegistry()));
+            var empty=BakeRenderScene(new SceneDocument("Pure flat",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module)));
             using var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true);
             ulong groups=renderer.PipelineStats.Creates;
             using(var flat=new SceneRenderSession(renderer,cache,empty.World))
@@ -123,7 +123,7 @@ internal static unsafe partial class Program
         var fixture=new SceneGpuFixture(output);using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
         var rows=new List<object>();
         foreach(int count in new[]{0,1,256,4096}) {
-            var document=BakeRenderScene(new SceneDocument("Profile "+count,RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition));
+            var document=BakeRenderScene(new SceneDocument("Profile "+count,global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition));
             var cam=new SceneCameraView(Guid.Empty,Matrix4x4.CreateOrthographic(4,4,.1f,1000),Vector3.Zero,CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=4});
             int side=Math.Max(1,(int)Math.Ceiling(Math.Sqrt(count)));
             for(int i=0;i<count;i++) {

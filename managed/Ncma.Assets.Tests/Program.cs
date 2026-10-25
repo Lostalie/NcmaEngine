@@ -266,16 +266,16 @@ var tests = new (string Name, Action Run)[]
         Check(session.Invoke(Request(session, "ncma.history.redo", Raw("{}")), Permissions()).Changed);
         Check(new AssetCatalogScanner(new(root)).Scan().Catalog.List()[0].AssetId == r.AssetId);
     }),
-    ("Scene and asset commands interleave in one history without stale runtime identities", () => {
+    ("Scene and asset commands interleave in one authoring history with stable UUIDs", () => {
         var r = Record(); var (session, commands) = Setup(TestRoot(), r); Guid id = Guid.NewGuid();
         var create = Element(new { operations = new[] { new { op = "create", objectId = id, name = "Object" } } });
         Check(session.Invoke(Request(session, "ncma.scene.transaction", create), Permissions()).Changed);
         Check(session.Invoke(Request(session, AssetMetadataCommands.CapabilityName, Command(commands, r)), Permissions()).Changed);
-        Check(session.State.UndoCount == 2 && session.Document.World.GetEntities().Count() == 1);
+        Check(session.State.UndoCount == 2 && session.Document.ObjectCount == 1 && session.Document.ContainsObject(id));
         Check(session.Invoke(Request(session, "ncma.history.undo", Raw("{}")), Permissions()).Changed);
-        Check(session.Document.World.GetEntities().Count() == 1);
+        Check(session.Document.ObjectCount == 1 && session.Document.ContainsObject(id));
         Check(session.Invoke(Request(session, "ncma.history.undo", Raw("{}")), Permissions()).Changed);
-        Check(session.Document.World.GetEntities().Count() == 0);
+        Check(session.Document.ObjectCount == 0 && !session.Document.ContainsObject(id));
     }),
     ("Default read-only, stale revisions, frozen session, changed UUID and grants reject", () => {
         string root = TestRoot(); var r = Record(); bool current = true; var (session, commands) = Setup(root, r, () => current);
@@ -342,12 +342,14 @@ var tests = new (string Name, Action Run)[]
         Check(!session.Invoke(Request(session, AssetMetadataCommands.CapabilityName, Command(commands, r)), permissions).Changed);
         Check(session.Revision == revision && session.State.UndoCount == 0 && !File.Exists(Path.Combine(root, "assets", "Hero.ncmeta")));
     }),
-    ("Participant cannot mutate live World from prepare and requires owner-thread calls", () => {
+    ("Participant cannot mutate authoring document from prepare and requires owner-thread calls", () => {
         var session = new EditSession(new SceneDocument());
-        var participant = new ProbeParticipant(() => session.Document.World.CreateEntity("forbidden"));
+        byte[] before = session.Document.CaptureBytes(); ulong revision = session.Document.Revision;
+        var participant = new ProbeParticipant(() => session.Document.CreateObject("forbidden"));
         session.RegisterCommandParticipant(AssetMetadataCommands.Descriptor, participant);
         Check(!session.Invoke(Request(session, AssetMetadataCommands.CapabilityName, Raw("{}")), Permissions()).Changed);
-        Check(session.Document.World.GetEntities().Count() == 0 && session.State.UndoCount == 0);
+        Check(session.Document.ObjectCount == 0 && session.State.UndoCount == 0 && session.Document.Revision == revision &&
+            session.Document.CaptureBytes().SequenceEqual(before));
         var r = Record(); var (_, commands) = Setup(TestRoot(), r);
         Task.Run(() => Reject(() => commands.Prepare(Command(commands, r)))).GetAwaiter().GetResult();
     }),

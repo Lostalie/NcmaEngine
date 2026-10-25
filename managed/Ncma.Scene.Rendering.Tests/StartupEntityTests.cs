@@ -10,7 +10,7 @@ internal static partial class Program
     private readonly record struct Marker(int Value) : IComponent;
     private static ComponentRegistry StartupRegistry(bool marker = true)
     {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         if (marker) registry.Register<Marker>("test.marker", 1, """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", value => value);
         return registry;
     }
@@ -87,7 +87,7 @@ internal static partial class Program
             Reject(() => SceneRenderValidation.RequireComposition(d.CaptureSnapshot())); // Selection must not hide malformed composition.
         }));
         tests.Add(("E4-B follow camera keeps absent and recreated UUID behavior", () => {
-            var source = new SceneDocument("follow", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()));
+            var source = new SceneDocument("follow", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module));
             var d = Bake(source);
             var target = d.World.CreateEntity("target"); d.World.Set(target, TransformData.Identity);
             var camera = d.World.CreateEntity("camera"); Guid id = d.World.GetUuid(camera);

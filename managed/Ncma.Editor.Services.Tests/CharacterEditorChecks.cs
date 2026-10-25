@@ -46,7 +46,7 @@ internal static class CharacterEditorChecks
         string kernelPath=Path.Combine(plugins,"NcmaAnimationKernel.dll");using var kernel=new Ncma.Animation.Native.PoseKernel(kernelPath,Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(kernelPath))));
         PreparedSceneAssetLease? preparation=null;
         SceneRenderSession? scene = null; CharacterPlayRuntime? runtime = null; bool failClose = false; int closes = 0;
-        using var owner = new EditorSessionOwner("K3 Editor", components: CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), validateComposition: CharacterComponents.RequireComposition,
+        using var owner = new EditorSessionOwner("K3 Editor", components: global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module), validateComposition: CharacterComponents.RequireComposition,
             composePlay: p => runtime = CharacterPlayRuntime.Compose(p, physics,preparation), beforePlayStop: () =>
             {
                 Check(runtime!.Status.ResourcesOwned, "Derived close precedes solver close");

@@ -53,7 +53,10 @@ internal static unsafe partial class Program
         Project(config with{PostProcessLibrary=new(1,new string('0',64))});
         foreach(bool cpu in new[]{false,true}){
             using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
-            var bad=playerRunOwner3.Run(Options(cpu),pluginRoot:Path.GetFullPath(plugins),visible:false);Pass(bad.ExitCode==3&&bad.Tick==0&&bad.SessionId==Guid.Empty&&bad.ShutdownErrors.Length==0,"wrong explicit library hash before gameplay, no default fallback");}Project(config);
+            var bad=playerRunOwner3.Run(Options(cpu),pluginRoot:Path.GetFullPath(plugins),visible:false);
+            Console.WriteLine($"POST HASH cpu={cpu} exit={bad.ExitCode} tick={bad.Tick} session={bad.SessionId}");
+            if(cpu)Pass(bad.ExitCode==0&&bad.Tick==4&&bad.RenderedFrames==0&&bad.Modules.Length==0&&bad.ShutdownErrors.Length==0,"Simulation never consumes a presentation-only post library");
+            else Pass(bad.ExitCode==3&&bad.Tick==0&&bad.SessionId==Guid.Empty&&bad.ShutdownErrors.Length==0,"wrong explicit library hash before gameplay, no default fallback");}Project(config);
         document.SetComponent(obj, active with{ToneModule=Guid.NewGuid()});SceneDocumentFiles.Save(document,scenePath);var invalid=playerRunOwner4.Run(Options(),pluginRoot:Path.GetFullPath(plugins),visible:false);
         Pass(invalid.ExitCode==2&&invalid.SessionId==Guid.Empty&&invalid.Tick==0,"unknown registered module before gameplay");document.SetComponent(obj, active);SceneDocumentFiles.Save(document,scenePath);
         string packed="assets/game.ncpak";File.WriteAllBytes(Path.Combine(fixture.Root,packed),SceneAssetPreparation.CreateRuntimePackage(fixture.Root,fixture.Project,document.CaptureSnapshot(),[]));Project(config with{AssetPackage=packed});
@@ -62,7 +65,15 @@ internal static unsafe partial class Program
         report=playerRunOwner6.RunForVerification(Options() with{Ticks=16},Path.GetFullPath(plugins),(pixels,w,h)=>{captured++;last=pixels;},
             (play,tick)=>{if(captured>0)play.Scene.World.Set(play.Scene.World.FindEntity(settingId), active with{ToneModule=Guid.NewGuid()});});
         Pass(report.ExitCode==5&&captured==2&&last is not null&&last.Where((b,i)=>b!=last[i%4]).Any()==false&&report.ShutdownErrors.Length==0,"Player runtime corruption clears then faults without stale output");
-        using(var editor=new CandidatePresentation(Path.GetFullPath(plugins),ProjectContext.Load(projectPath),true,false,false)){
+        // A registered Tone without a file binding passes authoring validation but fails
+        // runtime argument preparation, exercising the actual constructed-owner boundary.
+        Guid missingTone=Guid.NewGuid();var official=PostProcessModules.Official().Describe();
+        var bloom=official.Single(m=>m.ModuleId==PostProcessLibrarySelection.BloomModule);
+        var missingBindingModules=new PostProcessModules(
+            official.Where(m=>m.Kind=="tone").Select(m=>new PostToneRegistration(m.ModuleId,m.Version,m.Name)).Append(new(missingTone,1,"Missing test binding")),
+            [new(bloom.ModuleId,bloom.Version,bloom.Order,bloom.Parameters,bloom.Requires,
+                (w,h,p,bytes)=>BloomFeature.Build(w,h,new(Levels:(int)p["levels"],Threshold:p["threshold"],SoftKnee:p["softKnee"],Intensity:p["intensity"],Scatter:p["scatter"]),bytes),bloom.Name)]);
+        using(var editor=new CandidatePresentation(Path.GetFullPath(plugins),ProjectContext.Load(projectPath),true,false,false,postProcessModules:missingBindingModules)){
             editor.Start();ulong frame=0;byte[] Draw(bool fault=false){byte[]? pixels=null;editor.CaptureNextViewportForVerification((p,w,h)=>{pixels=p;if(fault)throw new InvalidOperationException("Low quality test capture fault");});Pass(editor.PumpPlatform(),"Editor pump");var f=new FrameContext(++frame,1d/60);editor.ApplyEditorIntents(f);editor.PumpAgent(f);editor.BeginPresentation(f);editor.SubmitInput(f);editor.AdvancePlay(f);editor.Present(f);return pixels??throw new Exception("No viewport capture");}
             byte[] baseline=Draw();var owner=editor.VerificationEditor;var edit=owner.Edit!;
             if(authoring){
@@ -87,6 +98,11 @@ internal static unsafe partial class Program
             owner.Document.SetComponent(settingId, active with{ToneModule=Guid.NewGuid()});byte[] failed=Draw();Pass(!failed.SequenceEqual(beforePlay)&&failed.Where((b,i)=>b!=failed[i%4]).Any()==false,"invalid scene clears viewport, no stale effect");
             if(authoring)Pass(editor.VerificationPresenter.PostPreparationStatus.Contains("失败"),"failed prepared status exact world stamp");
             object? Field(string name)=>typeof(CandidatePresentation).GetField(name,System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(editor);
+            Pass(Field("_pendingScene") is null,"unknown module rejected during bake before constructing a render owner");
+            Pass(Draw().SequenceEqual(failed)&&Field("_pendingScene") is null,"unchanged invalid authoring does not construct a candidate");
+            owner.Document.SetComponent(settingId,active);Pass(Draw().SequenceEqual(beforePlay),"early bake rejection recovers exact pixels");
+            owner.Document.SetComponent(settingId,active with{ToneModule=missingTone});
+            Pass(Draw().SequenceEqual(failed),"missing runtime binding clears viewport after valid authoring bake");
             var retained=(SceneRenderSession?)Field("_pendingScene");
             Pass(retained is not null&&retained.PreparationPhase==ScenePreparationPhase.Empty,"actual rejected argument preparation retains its constructed owner");
             Pass(Draw().SequenceEqual(failed)&&ReferenceEquals(retained,Field("_pendingScene")),"unchanged failing request does not retry or overwrite candidate");
@@ -94,7 +110,7 @@ internal static unsafe partial class Program
             Pass(retained!.PreparationPhase==ScenePreparationPhase.Closed&&Field("_pendingScene") is null,"corrected committed request drains failed owner before new publication");
             // Real active native frame at the ordinary off-frame PumpAgent boundary.
             // Reflection only reads owners for evidence; no injected field ownership or cleanup.
-            owner.Document.SetComponent(settingId, active with{ToneModule=Guid.NewGuid()});_ = Draw();
+            owner.Document.SetComponent(settingId, active with{ToneModule=missingTone});_ = Draw();
             retained=(SceneRenderSession?)Field("_pendingScene");owner.Document.SetComponent(settingId, active);
             var renderer=(RendererSession)Field("_renderer")!;
             var blocked=new FrameContext(++frame,1d/60);

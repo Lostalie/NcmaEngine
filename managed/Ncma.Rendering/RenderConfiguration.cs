@@ -60,10 +60,10 @@ public readonly record struct RenderConfiguration(
             ReplaceToneStage?new ExposureToneStage(ToneExposureOverride==0?Exposure:ToneExposureOverride):null),
         "ncma.clear.v1" => new ClearPipeline(ClearRed,ClearGreen,ClearBlue),
         _ => throw new ArgumentException("Pipeline not registered.") };
-    public static ComponentRegistry CreateRegistry()
+    [ComponentRegistration]
+    internal static void Register(ComponentRegistry registry)
     {
-        var registry=ComponentRegistry.CreateDefault();
-        registry.Register<RenderConfiguration>(ComponentType,1,Schema,Validate);return registry;
+        registry.Register<RenderConfiguration>(ComponentType,1,Schema,Validate);
     }
     public const string Schema="""
         {"type":"object","additionalProperties":false,"required":["version","configurationId","pipelineType","exposure","metallic","roughness","toneExposureOverride","featureExposure","replaceToneStage","clearRed","clearGreen","clearBlue"],

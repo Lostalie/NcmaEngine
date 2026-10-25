@@ -51,7 +51,7 @@ public static class ActionSample
         sub.AddRange(clips.Select((id,i)=>new SubassetRecord(id,AssetKind.Clip,$"clip/{i}",new[]{"Idle","Run","Attack","Dodge"}[i],false)));
         // Provenance explicitly procedural. No raw FBX is produced or required; this is not cold-source import.
         Write(Path.Combine(root,"assets/procedural.fbx.ncmeta"),AssetRecordCodec.Encode(new(1,model,AssetKind.Character,"assets/procedural.fbx",sourceHash,"procedural_sample",1,settings,sub.ToArray(),[],new(1,hash,relative))));
-        var doc=new SceneDocument("Procedural action diagnostic (not user FBX acceptance)",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);
+        var doc=new SceneDocument("Procedural action diagnostic (not user FBX acceptance)",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
         var actors=new List<Guid>();var targets=new List<Guid>();
         for(int i=0;i<characters;i++) {
             Guid actor=doc.CreateObject("Character "+i,Id(100+i));doc.SetComponent(actor, TransformData.Identity with{Position=new(i*3,.1f,0)});doc.SetComponent(actor, CharacterData.Default with{Controlled=i==0});

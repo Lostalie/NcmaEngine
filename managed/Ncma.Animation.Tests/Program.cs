@@ -34,7 +34,7 @@ MontageIntervalWeightTests.Add(cases);
 Guid id=Guid.NewGuid();var settings=new ClipPlaybackData(id,true,false,1,0);
 cases.Add(("Pure managed core and persistent scalar component",()=>{
  Check(!typeof(ClipClock).Assembly.GetReferencedAssemblies().Any(a=>a.Name!.Contains("Native")||a.Name.Contains("Python")));
- var world=new World(components:ClipPlaybackData.Register(ComponentRegistry.CreateDefault()));global::Ncma.Runtime.Entity obj=world.CreateEntity("clip");Guid objectId=world.GetUuid(obj);world.Set(obj, settings);string bytes=world.SerializeSnapshot();world.LoadSnapshot(bytes);Check(world.Get<ClipPlaybackData>(world.FindEntity(objectId))==settings);Reject(()=>ClipPlaybackData.Validate(settings with{Speed=double.NaN}));Reject(()=>ClipPlaybackData.Validate(settings with{ClipId=Guid.Empty}));
+ var world=new World(components:ClipPlaybackData.Register(global::Ncma.Runtime.CompositionRegistry.Build()));global::Ncma.Runtime.Entity obj=world.CreateEntity("clip");Guid objectId=world.GetUuid(obj);world.Set(obj, settings);string bytes=world.SerializeSnapshot();world.LoadSnapshot(bytes);Check(world.Get<ClipPlaybackData>(world.FindEntity(objectId))==settings);Reject(()=>ClipPlaybackData.Validate(settings with{Speed=double.NaN}));Reject(()=>ClipPlaybackData.Validate(settings with{ClipId=Guid.Empty}));
 }));
 cases.Add(("Clock follows successful ticks; failed step does not advance",()=>{
  var world=new World();var clock=new ClipClock(world,settings,1);var runner=new WorldRunner(world,.1);runner.AddCommittedObserver(new Observer((w,h)=>clock.ObserveCommitted(w,settings,1,h)));
@@ -65,15 +65,17 @@ cases.Add(("Clock pause/speed/exact endpoint/loop and owner",()=>{
  Reject(()=>clock.ObserveCommitted(new World(),settings,1,.1));settings=new(id,true,false,1,0);
 }));
 cases.Add(("Play Pause/Resume/Step and successful-step observation",()=>{
- var doc=new SceneDocument();var world=doc.World;using var play=new PlaySession(doc);var clock=new ClipClock(world,settings,2);play.AddCommittedObserver(new Observer((w,h)=>clock.ObserveCommitted(w,settings,2,h)));play.Start(_=>throw new Exception("no behaviours"));
+ var doc=new SceneDocument();var authorBefore=doc.CaptureBytes();var runtime=doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);var world=runtime.World;using var play=new PlaySession(runtime);var clock=new ClipClock(world,settings,2);play.AddCommittedObserver(new Observer((w,h)=>clock.ObserveCommitted(w,settings,2,h)));play.Start(_=>throw new Exception("no behaviours"));
  play.Pause();play.AdvanceFrame(1);Check(clock.CommittedTick==0);play.Step();Check(clock.CommittedTick==1);play.Resume();play.AdvanceFrame(1.0/60);Check(clock.CommittedTick==2);play.Stop();
+ Check(doc.CaptureBytes().SequenceEqual(authorBefore));
 }));
 cases.Add(("Post-commit fault reports successful steps for Player fixed and paused single-step",()=>{
  foreach(bool headless in new[]{false,true}){
-  var doc=new SceneDocument();using var play=new PlaySession(doc,policy:headless?FrameTimePolicy.Strict:FrameTimePolicy.Interactive,advanceMode:headless?PlayAdvanceMode.FixedSteps:PlayAdvanceMode.Frames);
+  var doc=new SceneDocument();var authorBefore=doc.CaptureBytes();var runtime=doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);using var play=new PlaySession(runtime,policy:headless?FrameTimePolicy.Strict:FrameTimePolicy.Interactive,advanceMode:headless?PlayAdvanceMode.FixedSteps:PlayAdvanceMode.Frames);
   play.AddCommittedObserver(new Observer((w,h)=>throw new InvalidOperationException("post-commit fixture")));play.Start(_=>throw new Exception("no behaviours"));
   PlayStatus status;if(headless)status=play.AdvanceFixedStep();else{play.Pause();status=play.Step();}
   Check(status.Tick==1&&status.StepsExecuted==1&&status.State==PlayState.Faulted);play.Stop();
+  Check(doc.CaptureBytes().SequenceEqual(authorBefore));
  }
 }));
 string path=Path.GetFullPath(args[0]);string hash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
@@ -154,8 +156,12 @@ if(args.Length==3)foreach(string fixture in new[]{"blender_279_sausage_6100_asci
  string directory=Path.Combine(Path.GetFullPath(args[1]),"out","verification","m3-5",args[2]);Directory.CreateDirectory(directory);
  File.WriteAllText(Path.Combine(directory,fixture+".pose.json"),System.Text.Json.JsonSerializer.Serialize(new{fixture,bones=imported.Bones.Length,clips=imported.Clips.Length,cpuCharacterOracleMaxError=max,sourceHash=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source))),gpuSkinning=false,g5Accepted=false}));
 }));
-int passed=0;foreach(var (name,run)in cases){try{run();Console.WriteLine("PASS "+name);passed++;}catch(Exception e){Console.Error.WriteLine("FAIL "+name+"\n"+e);return 1;}}
-clip.Dispose();rig.Dispose();Check(kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&kernel.Statistics.RetainedBytes==0);Console.WriteLine($"Animation pose/clock candidate: {passed}/{cases.Count} passed; GPU/G5 not accepted.");return 0;
+var harness = new CaseHarness("Animation pose/clock (GPU/G5 not accepted)");
+harness.Cases(cases);
+harness.Case("final clip cleanup", clip.Dispose);
+harness.Case("final rig cleanup", rig.Dispose);
+harness.Case("final native ledger", () => Check(kernel.Statistics.Rigs==0&&kernel.Statistics.Clips==0&&kernel.Statistics.RetainedBytes==0));
+return harness.Finish();
 sealed class Observer(Action<World,double> run):ICommittedStepObserver{public void StepCommitted(World world,double fixedDeltaSeconds)=>run(world,fixedDeltaSeconds);}
 sealed class SystemStep(Action<World,double> run):IWorldSystem{public void FixedUpdate(World world,double fixedDeltaSeconds)=>run(world,fixedDeltaSeconds);}
 static class PinFixture{

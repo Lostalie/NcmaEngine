@@ -8,6 +8,10 @@ public readonly record struct EnvironmentLightingData(int Version, Guid AssetId,
     string ContentHash, float Strength, float RotationRadians, bool Enabled) : IComponent
 {
     public const string TypeId = "ncma.render.environment";
+    [ComponentRegistration]
+    internal static void Register(ComponentRegistry registry) => registry.Register<EnvironmentLightingData>(TypeId, 1,
+        RenderComponentRules.Schema(("version", "integer"), ("assetId", "string"), ("generation", "integer"), ("contentHash", "string"),
+            ("strength", "number"), ("rotationRadians", "number"), ("enabled", "boolean")), Validate);
     public static EnvironmentLightingData Off => new(1, Guid.Empty, 0, "", 0, 0, false);
     public EnvironmentLightingConfiguration ToConfiguration() => new(AssetId, Generation, ContentHash, Strength, RotationRadians, Enabled);
     public static EnvironmentLightingData Validate(EnvironmentLightingData value)

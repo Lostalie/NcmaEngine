@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ncma.Managed/Ncma.Managed.csproj" />
+    <ProjectReference Include="../Ncma.CodeGen/Ncma.CodeGen.csproj" />
+    <ProjectReference Include="../Ncma.Runtime/Ncma.Runtime.csproj" />
+    <ProjectReference Include="../Ncma.Characters/Ncma.Characters.csproj" />
+    <ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.6" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

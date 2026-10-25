@@ -47,7 +47,7 @@ internal static class OriginalCommandBatchTests
             Check(f.Edit.Invoke(f.History(true), f.Permissions(targets: [f.A])).Status == "denied");
         });
         yield return ("E6 original batch normalization drift refuses the whole candidate before installation", () => {
-            int drift = 0; var registry = Ncma.Runtime.ComponentRegistry.CreateDefault();
+            int drift = 0; var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             registry.Register<Normalized>("test.normalized", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => new(v.Value + drift));
             var d = new SceneDocument("Drift", registry); Guid id = d.CreateObject("Original"); d.SetComponent(id, new Normalized(1));

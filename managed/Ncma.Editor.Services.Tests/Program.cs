@@ -28,42 +28,27 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
 }
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
+if(args.Length==3&&args[2]=="--asset-policy-tests"){
+    return CaseHarness.Run("Asset policy host and dependency closure", AssetPolicyHostTests.Cases(root,args[1],output).Concat(BakeDependencyTests.Cases(root)));
+}
 if(args.Length==3&&args[2]=="--scene-quality-tests"){
-    int count=0;foreach(var(name,test)in SceneQualityTests.Cases()){
-        try{test();Console.WriteLine("PASS "+name);count++;}
-        catch(Exception e){Console.Error.WriteLine("FAIL "+name+"\n"+e);return 1;}
-    }
-    Console.WriteLine($"Scene quality: {count} groups passed");return 0;
+    return CaseHarness.Run("Scene quality", SceneQualityTests.Cases());
 }
 if(args.Length==3&&args[2]=="--presenter-panel-tests"){
-    int count=0;foreach(var(name,test)in PresenterPanelTests.Cases(root)){
-        try{test();Console.WriteLine("PASS "+name);count++;}
-        catch(Exception e){Console.Error.WriteLine("FAIL "+name+"\n"+e);return 1;}
-    }
-    Console.WriteLine($"Presenter panels: {count} groups passed");return 0;
+    return CaseHarness.Run("Presenter panels", PresenterPanelTests.Cases(root));
 }
 if(args.Length==3&&args[2]=="--presenter-build-section-tests"){
-    int count=0;foreach(var(name,test)in PresenterBuildSectionTests.Cases(output)){
-        try{test();Console.WriteLine("PASS "+name);count++;}
-        catch(Exception e){Console.Error.WriteLine("FAIL "+name+"\n"+e);return 1;}
-    }
-    Console.WriteLine($"Presenter Build sections: {count} groups passed");return 0;
+    return CaseHarness.Run("Presenter Build sections", PresenterBuildSectionTests.Cases(output));
 }
 if(args.Length==3&&args[2]=="--presenter-text-tests"){
-    int count=0;foreach(var(name,test)in PresenterTextTests.Cases().Concat(NoGcAllocationScopeTests.Cases())){
-        try{test();Console.WriteLine("PASS "+name);count++;}
-        catch(Exception e){Console.Error.WriteLine("FAIL "+name+"\n"+e);return 1;}
-    }
-    Console.WriteLine($"Presenter UTF-8: {count} groups passed");return 0;
+    return CaseHarness.Run("Presenter UTF-8", PresenterTextTests.Cases().Concat(NoGcAllocationScopeTests.Cases()));
 }
 if(args.Length==3&&args[2]=="--post-author-cpu-probe"){PostProcessAuthoringTests.CpuProbe(output);return 0;}
 if(args.Length==3&&args[2]=="--ui-package-preparation-tests"){
-    int count=0;foreach(var(name,test)in UiPackagePreparationTests.Cases(output)){test();Console.WriteLine("PASS "+name);count++;}
-    Console.WriteLine($"UI package preparation: {count} groups passed; {output}");return 0;
+    return CaseHarness.Run("UI package preparation", UiPackagePreparationTests.Cases(output));
 }
 if(args.Length==3&&args[2]=="--ui-selection-tests"){
-    int count=0;foreach(var(name,test)in UiSelectionTests.Cases(output)){test();Console.WriteLine("PASS "+name);count++;}
-    Console.WriteLine($"UI selection: {count} groups passed; {output}");return 0;
+    return CaseHarness.Run("UI selection", UiSelectionTests.Cases(output));
 }
 static void Compare(JsonElement a,JsonElement b) {
     Check(a.ValueKind==b.ValueKind);
@@ -332,7 +317,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         Check(blockedView.LastMessage.Contains("unsaved_confirmation_required") && before.SequenceEqual(owner.Document.CaptureBytes()) && blockedLog.Sequence==0);
     }),
     ("Reference lighting/shadow Core drafts, strict values, shared Undo and actual GPU changes", () => {
-        using var owner=new EditorSessionOwner("Shadow controls",components:RenderConfiguration.CreateRegistry());var ui=new EditorWorkspace(owner);
+        using var owner=new EditorSessionOwner("Shadow controls",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Rendering.Generated.ComponentModule.Module));var ui=new EditorWorkspace(owner);
         Guid id=ui.CreateObject(ui.Stamp);var initial=RenderConfiguration.Default(Guid.NewGuid());
         ui.Transaction(ui.Stamp,"Config",[new {op="set_component",objectId=id,typeId=RenderConfiguration.ComponentType,version=1,data=owner.Document.Components.Encode(initial)}],id);
         byte[] before=owner.Document.CaptureBytes();var view=new EditorPresenter(ui,null);view.Build(1,1280,720);
@@ -395,7 +380,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         Reject(()=>wire.Build(session,float.NaN,600,340));
     }),
     ("Paged JSON stays active when preview becomes smaller than a single control", () => {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<EditorJsonLabel>("test.long_json", 1, """{"type":"object","required":["value"],"properties":{"value":{"type":"string"}}}""", value => value);
         using var owner = new EditorSessionOwner("Page shrink", components: registry); var ui = new EditorWorkspace(owner); Guid id = ui.CreateObject(ui.Stamp);
         ui.Transaction(ui.Stamp, "Fixture", [new {op="set_component", objectId=id, typeId="test.long_json", version=1, data=new {value=new string('A', 1200)}}], id);
@@ -410,7 +395,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         ui.History(ui.Stamp, false); Check(before.SequenceEqual(owner.Document.CaptureBytes()));
     }),
     ("Dedicated reference-render controls validate, commit once and preserve identity", () => {
-        using var owner = new EditorSessionOwner("Render fields", components: RenderConfiguration.CreateRegistry()); var ui = new EditorWorkspace(owner);
+        using var owner = new EditorSessionOwner("Render fields", components: global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Rendering.Generated.ComponentModule.Module)); var ui = new EditorWorkspace(owner);
         Guid id = ui.CreateObject(ui.Stamp); var initial = RenderConfiguration.Default(Guid.NewGuid());
         ui.Transaction(ui.Stamp, "Config", [new {op="set_component", objectId=id, typeId=RenderConfiguration.ComponentType, version=1, data=owner.Document.Components.Encode(initial)}], id);
         var view = new EditorPresenter(ui, null); byte[] before = owner.Document.CaptureBytes(); int history = owner.Edit!.State.UndoCount;
@@ -443,7 +428,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         Reject(() => new JsonTextPages(new string((char)0xd800, 1)));
     }),
     ("Large component JSON page preview, stable boundaries, single commit and shared Undo", () => {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<EditorJsonLabel>("test.long_json", 1, """{"type":"object","required":["value"],"properties":{"value":{"type":"string"}}}""", value => value);
         using var owner = new EditorSessionOwner("Large JSON", components: registry);
         var ui = new EditorWorkspace(owner); Guid id = ui.CreateObject(ui.Stamp);
@@ -465,7 +450,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         ui.History(ui.Stamp, true); Check(owner.Document.GetComponent<EditorJsonLabel>(id).Value == value);
     }),
     ("Paged JSON invalid commit and navigation cancel drafts without damaging document", () => {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<EditorJsonLabel>("test.long_json", 1, """{"type":"object","required":["value"],"properties":{"value":{"type":"string"}}}""", value => value);
         using var owner = new EditorSessionOwner("Paged cancel", components: registry); var ui = new EditorWorkspace(owner); Guid id = ui.CreateObject(ui.Stamp);
         ui.Transaction(ui.Stamp, "Long fixture", [new {op="set_component", objectId=id, typeId="test.long_json", version=1, data=new {value=new string('A', 2500)}}], id);
@@ -627,7 +612,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         view.Apply([Event(view,14)],[]); view.Build(2,1280,720); view.Apply([Event(view,8)],[]); Check(ui.Capture().Total == 0 && owner.Play is not null);
     }),
     ("Generic component JSON allows incomplete typing but rejects invalid commit", () => {
-        using var owner=new EditorSessionOwner("JSON",components:RenderConfiguration.CreateRegistry()); var ui=new EditorWorkspace(owner); Guid id=ui.CreateObject(ui.Stamp);
+        using var owner=new EditorSessionOwner("JSON",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Rendering.Generated.ComponentModule.Module)); var ui=new EditorWorkspace(owner); Guid id=ui.CreateObject(ui.Stamp);
         var config=RenderConfiguration.Default(Guid.NewGuid()); var data=owner.Document.Components.Encode(config);
         ui.Transaction(ui.Stamp,"Configuration",[new {op="set_component",objectId=id,typeId=RenderConfiguration.ComponentType,version=1,data}],id);
         var view=new EditorPresenter(ui,null); view.Build(1,1280,720); byte[] before=owner.Document.CaptureBytes(), original=Encoding.UTF8.GetBytes(data.GetRawText()), invalid=Encoding.UTF8.GetBytes("{");
@@ -657,9 +642,11 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         byte[] before=owner.Document.CaptureBytes(); var view=new EditorPresenter(ui,null); view.Build(1,1280,720);
         bool Label(string value) => view.Items.ToArray().Any(i=>Encoding.UTF8.GetString(view.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))==value);
         Check(Label("Unknown.Type0") && !Label("Unknown.Type8")); view.Apply([Event(view,33)],[]); view.Build(2,1280,720);
-        Check(!Label("Unknown.Type0") && Label("Unknown.Type8") && !Label("Export16"));
+        string UnknownExport(int index) => "Export" + index.ToString("D2") + " (Export declaration unavailable)";
+        Check(!Label("Unknown.Type0") && Label("Unknown.Type8") && !Label(UnknownExport(16)));
         var next=view.Items.ToArray().Single(i=>Encoding.UTF8.GetString(view.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))=="Next Exports");
-        view.Apply([Event(view,next.WidgetLow)],[]); view.Build(3,1280,720); Check(Label("Export16") && !Label("Export00"));
+        view.Apply([Event(view,next.WidgetLow)],[]); view.Build(3,1280,720); Check(Label(UnknownExport(16)) && !Label(UnknownExport(0)));
+        Check(view.Items.ToArray().Single(i=>Encoding.UTF8.GetString(view.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))==UnknownExport(16)).Kind==(uint)GuiItemKind.Label);
         Check(before.SequenceEqual(owner.Document.CaptureBytes()));
     }),
     ("Configured script binding/Export, isolated Play and reload failure preservation", () => {
@@ -778,7 +765,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
         Check(reopened.Assets!.Snapshot.Catalog.List()[0].AssetId == record.AssetId);
     }),
     ("Scene camera selection and resource refresh are explicit local presentation intents", () => {
-        using var owner=new EditorSessionOwner("Camera UI",components:Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(),validateComposition:Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
+        using var owner=new EditorSessionOwner("Camera UI",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:Ncma.Scene.Rendering.SceneRenderValidation.RequireComposition);
         Guid camera=owner.Document.CreateObject("Camera");owner.Document.SetComponent(camera, TransformData.Identity);owner.Document.SetComponent(camera, Ncma.Scene.Rendering.CameraData.Default);
         owner.Edit!.Resynchronize();var workspace=new EditorWorkspace(owner);workspace.Select(workspace.Stamp,camera);
         var presenter=new EditorPresenter(workspace,null,root);presenter.Build(1,1280,720);byte[] before=owner.Document.CaptureBytes();ulong revision=owner.Document.Revision;
@@ -807,7 +794,7 @@ var cases = EnvironmentInspectorTests.Cases(output).Concat(AssetInspectionTests.
     ("M4.6 character/combat closed schemas, live stdio, precise UI approval/expiry/revoke/redaction and reload",()=>CharacterInspectionTests.Run(root,args[1],output)),
     ("M6.3-D graph runtime exact resource/Play/UI approval + real stdio read/expiry/revoke/reload/fault",()=>AnimationRuntimeInspectionTests.Run(root,args[1],output)),
     ("M7.3-C2-C formal Editor environment command requires grants and shares exact history", () => {
-        using var owner = new EditorSessionOwner("Environment pending", components:Ncma.Scene.Rendering.RenderComponentRegistry.CreateRegistry(), validateComposition:CandidatePresentation.RequireComposition);
+        using var owner = new EditorSessionOwner("Environment pending", components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), validateComposition:CandidatePresentation.RequireComposition);
         var workspace = new EditorWorkspace(owner); Guid id = workspace.CreateObject(workspace.Stamp);
         var off = Ncma.Scene.Rendering.EnvironmentLightingData.Off;
         var attach = RenderingEditorAdapter.EnvironmentRequest(owner.Edit!, id, off, owner.Edit!.Revision);
@@ -853,18 +840,28 @@ cases = cases.Concat(PresenterTextTests.Cases()).ToArray();
 cases = cases.Concat(NoGcAllocationScopeTests.Cases()).ToArray();
 cases = cases.Concat(PresenterPanelTests.Cases(root)).ToArray();
 cases = cases.Concat(PresenterBuildSectionTests.Cases(output)).ToArray();
+cases = cases.Concat(ComponentMetadataPresenterTests.Cases()).ToArray();
+cases = cases.Concat(GeneratedExportCatalogTests.Cases(root)).ToArray();
+cases = cases.Concat(DeclarationConsumerAuditTests.Cases(root)).ToArray();
 cases = cases.Concat(SceneQualityTests.Cases()).ToArray();
 cases = cases.Concat(RuntimeInspectionTests.Cases(output,root)).ToArray();
 cases = cases.Concat(RuntimeChangeReviewTests.Cases(root)).ToArray();
 cases = cases.Concat(RuntimeChangeReviewTests.ApplyCases(root)).ToArray();
 cases = cases.Concat(RuntimeChangeReviewTests.PresenterCases(root)).ToArray();
+cases = cases.Concat(RuntimeChangeReviewTests.ScheduleCases(root)).ToArray();
+cases = cases.Concat(BakeDependencyTests.Cases(root)).ToArray();
+cases = cases.Concat(AssetPolicyHostTests.Cases(root,args[1],output)).ToArray();
 cases = cases.Concat(OriginalBatchHistoryTests.Cases()).ToArray();
 if (args.Length == 3 && args[2] == "--post-authoring-tests") cases=cases.Where(c=>c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-authoring-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal)).ToArray();
-foreach (var (name, run) in cases) { try { run(); Console.WriteLine("PASS: " + name); } catch (Exception e) { Console.Error.WriteLine("FAIL: " + name + "\n" + e); return 1; } }
-Console.WriteLine($"Editor services: {cases.Length}/{cases.Length} passed.");
-return 0;
+// Explicit repair regression, not a replacement for the complete Services entry. Keep all
+// original case bodies and the full default registration; unrelated earlier failures remain failures.
+if (args.Length == 3 && args[2] == "--asset-owner-fixture-tests") cases = cases.Where(c =>
+    c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal) || c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal) ||
+    c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal) ||
+    c.Item1 == "M3.6 asset UI plan/grant/import/history/flat placement/frozen/cancel/stale/restart").ToArray();
+return CaseHarness.Run("Editor services", cases);
 
 public readonly record struct EditorJsonLabel(string Value) : IComponent;
 

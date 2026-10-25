@@ -7,8 +7,32 @@ namespace Ncma.Runtime;
 
 public interface IComponent { }
 
-public readonly record struct TransformData(Vector3 Position, Quaternion Rotation, Vector3 Scale) : IComponent
+[GenerateComponent("ncma.transform", 1, DefinitionSchema, nameof(Validate), nameof(Identity))]
+[ComponentField("position", "Position", "position", Flags = TransformData.FieldUsage)]
+[ComponentField("position.x", "Position.X", "position.x", Flags = TransformData.FieldUsage)]
+[ComponentField("position.y", "Position.Y", "position.y", Flags = TransformData.FieldUsage)]
+[ComponentField("position.z", "Position.Z", "position.z", Flags = TransformData.FieldUsage)]
+[ComponentField("rotation", "Rotation", "rotation", Flags = TransformData.FieldUsage)]
+[ComponentField("rotation.x", "Rotation.X", "rotation.x", Flags = TransformData.FieldUsage)]
+[ComponentField("rotation.y", "Rotation.Y", "rotation.y", Flags = TransformData.FieldUsage)]
+[ComponentField("rotation.z", "Rotation.Z", "rotation.z", Flags = TransformData.FieldUsage)]
+[ComponentField("rotation.w", "Rotation.W", "rotation.w", Flags = TransformData.FieldUsage)]
+[ComponentField("scale", "Scale", "scale", Flags = TransformData.FieldUsage)]
+[ComponentField("scale.x", "Scale.X", "scale.x", Flags = TransformData.FieldUsage)]
+[ComponentField("scale.y", "Scale.Y", "scale.y", Flags = TransformData.FieldUsage)]
+[ComponentField("scale.z", "Scale.Z", "scale.z", Flags = TransformData.FieldUsage)]
+public readonly partial record struct TransformData(Vector3 Position, Quaternion Rotation, Vector3 Scale) : IComponent
 {
+    internal const ComponentFieldFlags FieldUsage = ComponentFieldFlags.Persistent | ComponentFieldFlags.Editable | ComponentFieldFlags.RuntimeRead | ComponentFieldFlags.RuntimeWrite;
+    internal const string DefinitionSchema = """
+        {"type":"object","additionalProperties":false,"required":["position","rotation","scale"],
+         "properties":{"position":{"$ref":"#/$defs/vector"},"rotation":{"$ref":"#/$defs/quaternion"},
+         "scale":{"$ref":"#/$defs/vector"}},"$defs":{
+         "vector":{"type":"object","additionalProperties":false,"required":["x","y","z"],
+           "properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"}}},
+         "quaternion":{"type":"object","additionalProperties":false,"required":["x","y","z","w"],
+           "properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"},"w":{"type":"number"}}}}}
+        """;
     public static TransformData Identity => new(Vector3.Zero, Quaternion.Identity, Vector3.One);
 
     public static TransformData Validate(TransformData value)
@@ -21,7 +45,11 @@ public readonly record struct TransformData(Vector3 Position, Quaternion Rotatio
     }
 }
 
-public sealed record ComponentDescriptor(string TypeId, int Version, JsonElement Schema);
+public sealed record ComponentDescriptor(string TypeId, int Version, JsonElement Schema)
+{
+    // Consumers must deliberately project metadata; do not silently enlarge existing wire schemas.
+    [JsonIgnore] public ComponentMetadata? Metadata { get; internal init; }
+}
 
 // Explicit trusted registration, not arbitrary assembly/type loading from Agent input.
 public sealed class ComponentRegistry
@@ -52,25 +80,15 @@ public sealed class ComponentRegistry
     private readonly Dictionary<string, Registration> _byId = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, Registration> _byType = new();
     private bool _frozen;
+    private bool _registering;
 
-    public static ComponentRegistry CreateDefault()
+    public void Register<T>(string typeId, int version, string schema, Func<T, T> validate, bool runtimeAttachable = true,
+        ComponentFieldDefinition[]? fields = null, Func<T>? defaultFactory = null) where T : struct, IComponent
     {
-        var registry = new ComponentRegistry();
-        registry.Register<TransformData>("ncma.transform", 1, """
-            {"type":"object","additionalProperties":false,"required":["position","rotation","scale"],
-             "properties":{"position":{"$ref":"#/$defs/vector"},"rotation":{"$ref":"#/$defs/quaternion"},
-             "scale":{"$ref":"#/$defs/vector"}},"$defs":{
-             "vector":{"type":"object","additionalProperties":false,"required":["x","y","z"],
-               "properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"}}},
-             "quaternion":{"type":"object","additionalProperties":false,"required":["x","y","z","w"],
-               "properties":{"x":{"type":"number"},"y":{"type":"number"},"z":{"type":"number"},"w":{"type":"number"}}}}}
-            """, TransformData.Validate);
-        return registry;
-    }
-
-    public void Register<T>(string typeId, int version, string schema, Func<T, T> validate, bool runtimeAttachable = true) where T : struct, IComponent
-    {
+        if (_registering) throw new InvalidOperationException("Component registration callbacks cannot reenter registration.");
         if (_frozen) throw new InvalidOperationException("Register extensions before creating a World.");
+        _registering = true;
+        try {
         ArgumentNullException.ThrowIfNull(validate);
         if (string.IsNullOrWhiteSpace(typeId) || typeId.Length > 128 || version < 1)
             throw new ArgumentException("Component type identity/version is invalid.");
@@ -84,12 +102,42 @@ public sealed class ComponentRegistry
             throw new ArgumentException("Component schema must be an object.");
         var descriptor = new ComponentDescriptor(typeId, version, document.RootElement.Clone());
         var registration = new Registration<T>(descriptor, validate, runtimeAttachable);
+        if ((fields is null) != (defaultFactory is null)) throw new ArgumentException("Field metadata and default factory must be supplied together.");
+        if (fields is not null) {
+            if (fields.Length > ComponentMetadata.MaxFields) throw new ArgumentException("Component field metadata budget exceeded.");
+            // Copy before any caller callback; failed/reentrant defaults publish neither dictionary entry.
+            var copied = (ComponentFieldDefinition[])fields.Clone();
+            var metadata = ComponentMetadata.Prepare<T>(copied, descriptor.Schema);
+            var defaults = JsonSerializer.SerializeToElement(validate(defaultFactory!()), SceneJson.Options);
+            CheckPayload(defaults); registration.Check(defaults);
+            descriptor = descriptor with { Metadata = metadata.Capture(defaults) };
+            registration = new Registration<T>(descriptor, validate, runtimeAttachable);
+        }
         _byId.Add(typeId, registration);
         _byType.Add(typeof(T), registration);
+        } finally { _registering = false; }
     }
 
     public IReadOnlyList<ComponentDescriptor> Describe() => _byId.Values.Select(r => r.Descriptor)
         .OrderBy(d => d.TypeId, StringComparer.Ordinal).ToArray();
+
+    public ComponentDescriptor Describe(string typeId) => _byId.TryGetValue(typeId, out var registration) ? registration.Descriptor :
+        throw new ArgumentException("Unknown component type: " + typeId);
+
+    public bool TryDescribe(string typeId, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ComponentDescriptor? descriptor)
+    {
+        if (_byId.TryGetValue(typeId, out var registration)) { descriptor = registration.Descriptor; return true; }
+        descriptor = null; return false;
+    }
+
+    /// <summary>Cold serialized default from the registered metadata snapshot; applying it still requires original write validation/authority.</summary>
+    public ComponentSnapshot DefaultSnapshot(string typeId, int version)
+    {
+        var descriptor = Describe(typeId);
+        if (descriptor.Version != version) throw new ArgumentException("Component version does not match registered default.");
+        var metadata = descriptor.Metadata ?? throw new InvalidOperationException("Component has no declared default metadata.");
+        return new(descriptor.TypeId, descriptor.Version, metadata.DefaultValue);
+    }
 
     /// <summary>Type registration only, not live membership or write permission.</summary>
     public bool IsRegistered<T>() where T : struct, IComponent => _byType.ContainsKey(typeof(T));
@@ -102,7 +150,11 @@ public sealed class ComponentRegistry
             throw new ArgumentException("Component does not match the requested registered value type.");
     }
 
-    internal void Freeze() => _frozen = true;
+    internal void Freeze()
+    {
+        if (_registering) throw new InvalidOperationException("Cannot create a World during component registration.");
+        _frozen = true;
+    }
     internal ComponentDescriptor Describe(Type type) => Require(type).Descriptor;
     // Trusted registration policy, not serialized metadata or an Agent-controlled flag.
     internal void VerifyRuntimeAttachment(Type type)

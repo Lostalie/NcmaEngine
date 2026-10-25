@@ -13,7 +13,7 @@ internal static class PrefabTests
     private sealed record Fixture(SceneDocument Scene,Guid[] Ids,PrefabPolicy Policy,PrefabExtractionScope Scope,Guid Asset);
     private static Fixture Make(Func<BehaviourBindingData,bool>? trusted=null)
     {
-        var registry=ComponentRegistry.CreateDefault();
+        var registry=global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Link>("game.link",1,"""{"type":"object","additionalProperties":false,"required":["target","asset","label"],"properties":{"target":{"type":"string"},"asset":{"type":"string"},"label":{"type":"string"}}}""",v=>v);
         registry.Register<RuntimeOnly>("game.runtime_only",1,"""{"type":"object","additionalProperties":false,"required":["handle"],"properties":{"handle":{"type":"integer"}}}""",v=>v);
         var scene=new SceneDocument("Source",registry);Guid a=scene.CreateObject("A");Guid b=scene.CreateObject("B");Guid empty=scene.CreateObject("Empty");Guid asset=Guid.NewGuid();
@@ -117,7 +117,7 @@ internal static class PrefabTests
         yield return("M3.7-A object, operation and placement budgets reject detached partial plans",()=> {
             var f=Make();var prefab=Extract(f);Reject(()=>PrefabDocumentCodec.Encode(prefab with{Objects=Enumerable.Repeat(prefab.Objects[0],17).ToArray()},f.Policy));
             Reject(()=>PrefabTemplates.PreviewExpansion(prefab,f.Policy,new(0,float.PositiveInfinity,0),[]));Reject(()=>PrefabTemplates.PreviewExpansion(prefab,f.Policy,new(0,0,0),[Guid.Empty]));Reject(()=>PrefabTemplates.PreviewExpansion(prefab,f.Policy,new(0,0,0),Enumerable.Repeat(Guid.NewGuid(),65537)));
-            var registry=ComponentRegistry.CreateDefault();const string schema="""{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"integer"}}}""";
+            var registry=global::Ncma.Runtime.CompositionRegistry.Build();const string schema="""{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"integer"}}}""";
             registry.Register<C0>("game.c0",1,schema,v=>v);registry.Register<C1>("game.c1",1,schema,v=>v);registry.Register<C2>("game.c2",1,schema,v=>v);registry.Register<C3>("game.c3",1,schema,v=>v);
             registry.Register<C4>("game.c4",1,schema,v=>v);registry.Register<C5>("game.c5",1,schema,v=>v);registry.Register<C6>("game.c6",1,schema,v=>v);registry.Register<C7>("game.c7",1,schema,v=>v);
             var policy=new PrefabPolicy(registry);for(int i=0;i<8;i++)policy.AllowComponent("game.c"+i,1,[]);

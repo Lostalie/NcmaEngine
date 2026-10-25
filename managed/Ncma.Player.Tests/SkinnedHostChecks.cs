@@ -33,7 +33,7 @@ internal static class SkinnedHostChecks
             string generation = Path.Combine(root, plan.Record.Generation!.RelativePath); Directory.CreateDirectory(Path.GetDirectoryName(generation)!); File.WriteAllBytes(generation, plan.DerivedBytes);
             File.WriteAllBytes(Path.Combine(root, "assets/model.fbx.ncmeta"), AssetRecordCodec.Encode(plan.Record));
             var manifest = ModelAssetManifestCodec.ValidateBundle(plan.DerivedBytes, plan.Record);
-            var document = new SceneDocument("Imported FBX Player", RenderComponentRegistry.CreateRegistry(), SceneRenderValidation.RequireComposition);
+            var document = new SceneDocument("Imported FBX Player", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), SceneRenderValidation.RequireComposition);
             int characters = 0;
             foreach (var mesh in manifest.Meshes)
             {
@@ -60,7 +60,7 @@ internal static class SkinnedHostChecks
             }
             Check(!File.Exists(Path.Combine(root, "assets/model.fbx")), "Player accidentally deployed/reparsed FBX source");
             RuntimePackageChecks.Run(repository, root, output, plugins.Contains("windows-ninja-release", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug", config, document.CaptureSnapshot());
-            var coupled = new SceneDocument("FBX coupled character", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), CharacterComponents.RequireComposition);
+            var coupled = new SceneDocument("FBX coupled character", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module), CharacterComponents.RequireComposition);
             coupled.RestoreBytes(document.CaptureBytes());
             Guid actor = coupled.GetObjectIds().First(o => coupled.HasComponent<SkinnedMeshData>(o)); coupled.SetComponent(actor, CharacterData.Default with { FootOffsetY = 0 });
             coupled.SetComponent(actor, TransformData.Identity with { Position = new(0, .1f, -3) });
@@ -94,6 +94,23 @@ internal static class SkinnedHostChecks
                 Check(report.ExitCode == 0 && report.Tick >= 6 && report.ShutdownErrors.Length == 0 && report.ValidationErrors == 0 && report.ValidationWarnings == 0, "NCP1 retains typed character/collider/follow values without authoring source: " + report.Reason);
                 using var unlocked = new FileStream(packed, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
             }
+            // Unlike the passive clip above, RootMotion consumes this pack during simulation.
+            // Keep real valid/invalid pairs in both hosts; corruption must fail before scripts,
+            // physics or GPU startup, never silently become a presentation-only/Null scene.
+            Check(SceneAssetPreparation.References(coupled.CaptureSnapshot(), SceneAssetPolicy.Simulation).Length > 0, "Root-enabled scene lost its simulation dependencies");
+            byte[] validPacked = File.ReadAllBytes(packed);
+            File.WriteAllBytes(Path.Combine(packedRoot, "valid-package-evidence.ncpak"), validPacked);
+            byte[] corruptPacked = (byte[])validPacked.Clone(); corruptPacked[^1] ^= 1;
+            File.WriteAllBytes(packed, corruptPacked);
+            foreach (bool headless in new[] { true, false }) {
+                using var rejectedRunner = new PlayerRunner();
+                var flags = new List<string> { "--project", packedProject, "--ticks", "6", "--report", Path.Combine(packedRoot, headless ? "corrupt-null.json" : "corrupt-dx11.json") }; if (headless) flags.Add("--headless");
+                var rejected = rejectedRunner.Run(PlayerOptions.Parse(flags.ToArray()), pluginRoot: plugins, visible: false);
+                Check(rejected.ExitCode == 3 && rejected.Tick == 0 && rejected.Modules.Length == 0 && rejected.RenderedFrames == 0 && rejected.ShutdownErrors.Length == 0,
+                    "Corrupt simulation package started gameplay, loaded modules or fell back: " + rejected.Reason);
+                using var unlocked = new FileStream(packed, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            File.WriteAllBytes(packed, validPacked);
         }
         return ["ASCII/binary FBX import->NCA save/restart->real animated Player, 3 cycles each, no source FBX runtime, validation 0/0",
             "M3.9 ASCII/binary source-free runtime packages: 32 Play cycles each/graphical and Null apphosts/corrupt preflight/manifest 0/0",

@@ -108,6 +108,38 @@ function Restore-EditorDeployment([string]$Workspace, [string]$Destination, [str
     Write-DeploymentJournal $JournalPath $journal
 }
 
+function Invoke-DeploymentHost([string]$Executable, [string]$Arguments, [string]$LogBase) {
+    # Wait for the exact apphost, not Start-Process -Wait's Windows job tree.
+    # No shell/UI error dialog; retain both streams and the precise child identity.
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Executable
+    $info.Arguments = $Arguments
+    $info.WorkingDirectory = [IO.Path]::GetDirectoryName($Executable)
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $child = [Diagnostics.Process]::new()
+    $child.StartInfo = $info
+    try {
+        if (-not $child.Start()) { throw 'Deployment apphost did not start.' }
+        [IO.File]::WriteAllText($LogBase + '.process.json', (@{pid=$child.Id; startedUtc=$child.StartTime.ToUniversalTime().ToString('o'); executable=$Executable; arguments=$Arguments} | ConvertTo-Json))
+        $stdout = $child.StandardOutput.ReadToEndAsync()
+        $stderr = $child.StandardError.ReadToEndAsync()
+        $completed = $child.WaitForExit(30000)
+        if (-not $completed) {
+            # Only the process object created above; no name-based or reused-PID stop.
+            $child.Kill()
+            if (-not $child.WaitForExit(5000)) { throw 'Deployment apphost stop did not complete; inspect retained process receipt.' }
+        }
+        [IO.File]::WriteAllText($LogBase + '.stdout', $stdout.GetAwaiter().GetResult())
+        [IO.File]::WriteAllText($LogBase + '.stderr', $stderr.GetAwaiter().GetResult())
+        if (-not $completed) { throw 'Deployment apphost exceeded 30 seconds; output retained.' }
+        if ($child.ExitCode -ne 0) { throw "Deployment apphost failed ($($child.ExitCode)); see $LogBase" }
+    }
+    finally { $child.Dispose() }
+}
+
 function Invoke-EditorDeployment {
     param([string]$Workspace, [string]$Package, [string]$Destination, [scriptblock]$AfterBackup)
     $Workspace = [IO.Path]::GetFullPath($Workspace)
@@ -163,8 +195,8 @@ function Invoke-EditorDeployment {
     $manifest.product = 'NcmaEngine-editor'
     [IO.File]::WriteAllText((Join-Path $stage 'deployment-manifest.json'), ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $null = Assert-DeploymentContents $Workspace $stage
-    $validation = Start-Process -FilePath (Join-Path $stage 'NcmaEngine.exe') -ArgumentList '--validate-package' -WindowStyle Hidden -Wait -PassThru
-    if ($validation.ExitCode -ne 0) { throw 'Staged apphost/manifest validation failed.' }
+    Write-Host '[Ncma] Validating staged apphost.'
+    Invoke-DeploymentHost (Join-Path $stage 'NcmaEngine.exe') '--validate-package' (Join-Path $generation 'validate-host')
     $journal = [ordered]@{ schemaVersion = 1; generation = $id; destination = $Destination; phase = 'Prepared'; oldFiles = $oldFiles; configuration = $manifest.configuration; manualAcceptance = $false; selfContainedVerified = $false }
     Write-DeploymentJournal $journalPath $journal
     $moved = $false
@@ -176,8 +208,7 @@ function Invoke-EditorDeployment {
         $journal.phase = 'Installed'; Write-DeploymentJournal $journalPath $journal
         $null = Assert-DeploymentContents $Workspace $Destination
         $smokeArguments = '--smoke-test --project "' + (Join-Path $Destination 'sample\sample.ncmaproject') + '"'
-        $smoke = Start-Process -FilePath (Join-Path $Destination 'NcmaEngine.exe') -ArgumentList $smokeArguments -WindowStyle Hidden -Wait -PassThru
-        if ($smoke.ExitCode -ne 0) { throw 'Formal-path editor smoke failed.' }
+        Invoke-DeploymentHost (Join-Path $Destination 'NcmaEngine.exe') $smokeArguments (Join-Path $generation 'smoke-host')
         $journal.phase = 'Complete'; Write-DeploymentJournal $journalPath $journal
         Write-Host "[Ncma] C# editor deployed; recoverable backup: $backup"
     }

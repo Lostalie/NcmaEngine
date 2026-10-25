@@ -54,7 +54,7 @@ internal static class RuntimeSceneBakeTests
         });
         yield return ("E6-A independent loads have independent ECS identities", () => {
             var doc = Make(); var image = doc.BakeRuntime(doc.Revision).Image;
-            var a = image.Instantiate(ComponentRegistry.CreateDefault()); var b = image.Instantiate(ComponentRegistry.CreateDefault());
+            var a = image.Instantiate(global::Ncma.Runtime.CompositionRegistry.Build()); var b = image.Instantiate(global::Ncma.Runtime.CompositionRegistry.Build());
             Guid id = image.CopyObjectIds()[1]; var entity = a.World.FindEntity(id);
             Check(a.World.Identity != b.World.Identity && a.SessionId != b.SessionId, "Shared runtime identity");
             Reject(() => b.World.GetName(entity));
@@ -64,12 +64,12 @@ internal static class RuntimeSceneBakeTests
         });
         yield return ("E6-A script copies are isolated and UUID reuse does not resurrect bindings", () => {
             var doc = Make(); var image = doc.BakeRuntime(doc.Revision).Image;
-            var runtime = image.Instantiate(ComponentRegistry.CreateDefault()); Guid id = image.CopyObjectIds()[0];
+            var runtime = image.Instantiate(global::Ncma.Runtime.CompositionRegistry.Build()); Guid id = image.CopyObjectIds()[0];
             var bindings = runtime.GetBindings(id); bindings[0].Exports[0] = new("Corrupt", ExportKind.Boolean, 42);
             Check(runtime.GetBindings(id)[0].Exports[0].Name == "A", "Runtime binding aliases caller");
             runtime.World.Destroy(runtime.World.FindEntity(id)); runtime.World.CreateEntity("Replacement", id);
             Check(runtime.GetBindings(id).Length == 0, "Destroyed scripts resurrected");
-            Check(image.Instantiate(ComponentRegistry.CreateDefault()).GetBindings(id).Length == 1, "Image was mutated");
+            Check(image.Instantiate(global::Ncma.Runtime.CompositionRegistry.Build()).GetBindings(id).Length == 1, "Image was mutated");
         });
         yield return ("E6-A stale authoring revision rejected before conversion", () => {
             var doc = Make(); ulong old = doc.Revision; doc.CreateObject("New");
@@ -96,7 +96,7 @@ internal static class RuntimeSceneBakeTests
         });
         yield return ("E6-A incompatible registry load cannot replace active scene", () => {
             var doc = Make(); var image = doc.BakeRuntime(doc.Revision).Image;
-            var active = image.Instantiate(ComponentRegistry.CreateDefault()); Guid identity = active.World.Identity;
+            var active = image.Instantiate(global::Ncma.Runtime.CompositionRegistry.Build()); Guid identity = active.World.Identity;
             Reject(() => image.Instantiate(new ComponentRegistry()));
             Check(active.World.Identity == identity && active.World.Count == 2, "Failed load changed active World");
         });

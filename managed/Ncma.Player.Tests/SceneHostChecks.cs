@@ -26,7 +26,7 @@ internal static class SceneHostChecks
         Directory.CreateDirectory(Path.GetDirectoryName(generation)!);File.WriteAllBytes(generation,bytes);
         File.WriteAllBytes(Path.Combine(root,"assets/model.fbx.ncmeta"),AssetRecordCodec.Encode(new(1,model,AssetKind.StaticMesh,"assets/model.fbx",sourceHash,"ufbx",1,settings,
             [new(mesh,AssetKind.StaticMesh,"mesh/0","Triangle",false),new(slots,AssetKind.MaterialSet,"materials/0","Slots",false)],[],new(1,hash,relative))));
-        var document=new SceneDocument("Actual static Player",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);
+        var document=new SceneDocument("Actual static Player",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);
         Guid item=document.CreateObject("Mesh");document.SetComponent(item, TransformData.Identity with{Position=new(0,0,-4)});document.SetComponent(item, new StaticMeshData(mesh,slots,true,true,uint.MaxValue));
         Guid camera=document.CreateObject("Explicit camera");document.SetComponent(camera, TransformData.Identity);document.SetComponent(camera, CameraData.Default);
         Guid light=document.CreateObject("Primary light");document.SetComponent(light, TransformData.Identity);document.SetComponent(light, DirectionalLightData.Default);

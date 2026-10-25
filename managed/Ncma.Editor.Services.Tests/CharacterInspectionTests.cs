@@ -42,7 +42,7 @@ internal static class CharacterInspectionTests
     {
         var sample=ActionSample.Create(Path.Combine(output,"character-mcp"),Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),2);
         using var physics=new PhysicsService(plugins,characterSupport:true);CharacterPlayRuntime? runtime=null;
-        using var owner=new EditorSessionOwner("K6 inspection",components:CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),validateComposition:CharacterComponents.RequireComposition,
+        using var owner=new EditorSessionOwner("K6 inspection",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),validateComposition:CharacterComponents.RequireComposition,
             composePreparedPlay:(p,assets)=>runtime=CharacterPlayRuntime.Compose(p,physics,assets));
         var workspace=new EditorWorkspace(owner);workspace.Open(workspace.Stamp,Path.Combine(sample.Root,"start.ncmascene"),true);owner.Edit!.Resynchronize();owner.PrepareRenderAssets(sample.Root,sample.ProjectId);
         var clock=new Clock();var service=new CharacterInspectionService(owner,()=>runtime,clock);service.Register();owner.ConfigureEndpoint(true,output);var endpoint=owner.Endpoint!;
@@ -112,7 +112,7 @@ internal static class CharacterInspectionTests
         } finally{process.StandardInput.Close();if(!process.WaitForExit(5000))process.Kill(true);if(owner.Play is not null)owner.StopPlay();}
         Check(process.ExitCode==0&&errors.GetAwaiter().GetResult().Length==0,"stdio lifetime/log discipline");
         // Actual owner callback safety test in an independent coupled Play.
-        var doc=new Ncma.Scene.SceneDocument("K6 safe read",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);
+        var doc=new Ncma.Scene.SceneDocument("K6 safe read",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
         Ncma.Scene.SceneDocumentFiles.Load(doc,Path.Combine(sample.Root,"start.ncmascene"));
         using var assets=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,doc.CaptureSnapshot(),true);var runtimeScene=doc.BakeRuntime(doc.Revision).Image.Instantiate(doc.Components);using var isolated=new PlaySession(runtimeScene,FrameTimePolicy.Strict,advanceMode:PlayAdvanceMode.FixedSteps);
         using var isolatedRuntime=CharacterPlayRuntime.Compose(isolated,physics,assets)!;bool fail=false;

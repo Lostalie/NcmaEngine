@@ -13,16 +13,18 @@ internal static class EnvironmentInspectorTests
     private static void Reject(Action action) { try { action(); } catch (ArgumentException) { return; } throw new Exception("Invalid environment field accepted."); }
     private sealed class Fixture : IDisposable
     {
-        internal readonly EditorSessionOwner Owner = new("Environment Inspector", components:RenderComponentRegistry.CreateRegistry(), validateComposition:CandidatePresentation.RequireComposition);
+        internal readonly EditorSessionOwner Owner = new("Environment Inspector", components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), validateComposition:CandidatePresentation.RequireComposition);
         internal readonly EditorWorkspace Workspace;
         internal readonly EditorPresenter View;
         internal readonly Guid Id;
-        internal readonly EnvironmentLightingData Initial = new(1, Guid.NewGuid(), 1, new string('A',64), 1, 0, true);
+        internal readonly EnvironmentLightingData Initial;
         private ulong _frame;
-        internal Fixture(bool active = true) {
+        internal Fixture(string output, bool active = true) {
+            var assets = new EditorFixtureAssets(output, "environment-inspector"); Initial = assets.Environment();
             Workspace = new(Owner); Id = Workspace.CreateObject(Workspace.Stamp);
             var request = RenderingEditorAdapter.EnvironmentRequest(Owner.Edit!, Id, active ? Initial : EnvironmentLightingData.Off, Owner.Edit!.Revision);
             Check(Owner.Edit.Invoke(request,new(["ncma.scene.transaction"])).Changed);
+            assets.Prepare(Owner);
             View = new(Workspace, null, workspaceStyle:true); Build();
         }
         internal EnvironmentLightingData Value => Owner.Document.GetComponent<EnvironmentLightingData>(Id);
@@ -37,7 +39,7 @@ internal static class EnvironmentInspectorTests
     internal static IEnumerable<(string,Action)> Cases(string output)
     {
         yield return ("M7.3-C3-B1 Inspector draft/commit/shared Undo/Redo and degrees", () => {
-            using var f = new Fixture(); byte[] before = f.Owner.Document.CaptureBytes(); int history = f.Owner.Edit!.State.UndoCount;
+            using var f = new Fixture(output); byte[] before = f.Owner.Document.CaptureBytes(); int history = f.Owner.Edit!.State.UndoCount;
             f.View.Apply([f.Event(Strength,1),f.Event(Strength,2,2.5)],[]);
             Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Workspace.HasDraft);
             f.Build(); f.View.Apply([f.Event(Strength,3,2.5)],[]);
@@ -48,7 +50,7 @@ internal static class EnvironmentInspectorTests
             f.Build(); f.Change(Rotation,-180); Check(f.Value.RotationRadians == -MathF.PI);
         });
         yield return ("M7.3-C3-B1 canceled/invalid/nonfinite/forged/stale UI preserves document", () => {
-            using var f = new Fixture(); byte[] before = f.Owner.Document.CaptureBytes(); int history = f.Owner.Edit!.State.UndoCount;
+            using var f = new Fixture(output); byte[] before = f.Owner.Document.CaptureBytes(); int history = f.Owner.Edit!.State.UndoCount;
             var oldCommit = f.Event(Strength,3,8);
             f.View.Apply([f.Event(Strength,1),f.Event(Strength,2,8)],[]); f.View.CancelInteraction(); f.View.Apply([oldCommit],[]);
             Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()) && !f.Workspace.HasDraft);
@@ -60,7 +62,7 @@ internal static class EnvironmentInspectorTests
             f.View.Apply([stale],[]); Check(!f.Workspace.HasDraft && f.Value == f.Initial);
         });
         yield return ("M7.3-C3-B1 Off clears identity and cannot implicitly reactivate; Undo restores", () => {
-            using var f = new Fixture(); f.Change(Enabled,0); Check(f.Value == EnvironmentLightingData.Off); f.Build();
+            using var f = new Fixture(output); f.Change(Enabled,0); Check(f.Value == EnvironmentLightingData.Off); f.Build();
             Check(f.Item(Strength).Enabled == 0 && f.Item(Rotation).Enabled == 0 && f.Item(Enabled).Enabled == 0);
             f.Change(Enabled,1); Check(f.Value == EnvironmentLightingData.Off);
             f.Workspace.History(f.Workspace.Stamp,false); Check(f.Value == f.Initial);
@@ -69,7 +71,7 @@ internal static class EnvironmentInspectorTests
             Reject(()=>RenderingEditorAdapter.EnvironmentFieldOperation(f.Id,f.Initial,"enabled",.5));
         });
         yield return ("M7.3-C3-B1 single configuration and opt-in Off attachment", () => {
-            using var owner = new EditorSessionOwner("Empty",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);
+            using var owner = new EditorSessionOwner("Empty",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:CandidatePresentation.RequireComposition);
             var workspace = new EditorWorkspace(owner); Guid id = workspace.CreateObject(workspace.Stamp); var view = new EditorPresenter(workspace,null); view.Build(1,1280,720);
             var i = view.Items.ToArray().Single(i=>Encoding.UTF8.GetString(view.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))=="添加环境配置（关闭）"); var f=view.Frame;
             view.Apply([new(){Kind=i.Kind,WidgetHigh=i.WidgetHigh,WidgetLow=i.WidgetLow,Phase=3,Frame=f.Frame,ViewGeneration=f.ViewGeneration,DocumentGeneration=f.DocumentGeneration,Revision=f.Revision}],[]);
@@ -80,7 +82,7 @@ internal static class EnvironmentInspectorTests
             Check(!result.Changed && !owner.Document.HasComponent<EnvironmentLightingData>(other));
         });
         yield return ("M7.3-C3-B1 Agent exact scope/revision/session/revocation and original history", () => {
-            using var f = new Fixture(); var edit=f.Owner.Edit!; bool current=true;
+            using var f = new Fixture(output); var edit=f.Owner.Edit!; bool current=true;
             var grant=new CapabilityPermissions(["ncma.scene.transaction","ncma.history.undo","ncma.history.redo"],objectScope:[f.Id],componentScope:[EnvironmentLightingData.TypeId],isCurrent:()=>current);
             CapabilityRequest Request(Guid id,ulong revision)=>new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,revision,"ncma.scene.transaction",
                 JsonSerializer.SerializeToElement(new{label="Environment field",operations=new[]{RenderingEditorAdapter.EnvironmentFieldOperation(id,f.Initial,"strength",3)}}));
@@ -97,14 +99,14 @@ internal static class EnvironmentInspectorTests
             current=true; Check(edit.Invoke(History(),grant).Changed && f.Value==f.Initial);
         });
         yield return ("M7.3-C3-B1 save/reopen and Play freeze", () => {
-            using var f=new Fixture(); f.Change(Strength,4); string path=Path.Combine(output,"environment-inspector.ncmascene"); f.Workspace.Save(f.Workspace.Stamp,path);
-            using var reopened=new EditorSessionOwner("Reopen",components:RenderComponentRegistry.CreateRegistry(),validateComposition:CandidatePresentation.RequireComposition);
+            using var f=new Fixture(output); f.Change(Strength,4); string path=Path.Combine(output,"environment-inspector.ncmascene"); f.Workspace.Save(f.Workspace.Stamp,path);
+            using var reopened=new EditorSessionOwner("Reopen",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:CandidatePresentation.RequireComposition);
             var workspace=new EditorWorkspace(reopened); workspace.Open(workspace.Stamp,path,true); Check(reopened.Document.GetComponent<EnvironmentLightingData>(f.Id)==f.Value);
             byte[] before=f.Owner.Document.CaptureBytes(); f.Owner.StartPlay(); f.Build(); Check(f.Item(Strength).Enabled==0); f.Change(Strength,8);
             Check(before.SequenceEqual(f.Owner.Document.CaptureBytes())); f.Owner.StopPlay(); f.Build(); Check(f.Item(Strength).Enabled!=0);
         });
         yield return ("M7.3-C3-B1 status distinguishes authoring provenance and runtime World, and clears on recovery", () => {
-            using var f=new Fixture(); var preview=EditorSceneProjection.Bake(f.Owner); var world=preview.Scene.World;
+            using var f=new Fixture(output); var preview=EditorSceneProjection.Bake(f.Owner); var world=preview.Scene.World;
             Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
             f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,true,false,f.Value,preview.Source); Check(f.View.EnvironmentPreparationStatus.Contains("就绪"));
             f.View.ShowEnvironmentPreparation(world.Identity,world.Revision,Guid.Empty,false,true,null,preview.Source); Check(f.View.EnvironmentPreparationStatus.Contains("失败"));
@@ -120,7 +122,7 @@ internal static class EnvironmentInspectorTests
             Check(f.View.EnvironmentPreparationStatus.Contains("Play")); f.Owner.StopPlay(); Check(f.View.EnvironmentPreparationStatus.Contains("等待"));
         });
         yield return ("M7.3-C3-B1 unchanged Inspector reuses document cache", () => {
-            using var f=new Fixture(); int reads=f.Workspace.SnapshotReads;
+            using var f=new Fixture(output); int reads=f.Workspace.SnapshotReads;
             for(int i=0;i<32;i++)f.Build(); Check(f.Workspace.SnapshotReads==reads);
         });
     }

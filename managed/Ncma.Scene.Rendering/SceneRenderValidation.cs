@@ -33,12 +33,15 @@ public sealed class PreparedSceneAssets
 }
 public static class SceneRenderValidation
 {
-    private static readonly ComponentRegistry Registry = RenderComponentRegistry.CreateRegistry();
+    private static readonly ComponentRegistry Registry = global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);
     public static void RequireComposition(ISceneContent snapshot) => _ = Inspect(snapshot);
     public static IReadOnlyList<SceneRenderDiagnostic> Inspect(ISceneContent snapshot,
-        PreparedSceneAssets? assets = null, bool strictMissing = false, AssetCatalog? catalog = null)
+        PreparedSceneAssets? assets = null, bool strictMissing = false, AssetCatalog? catalog = null,
+        SceneAssetPolicy policy = SceneAssetPolicy.PresentationAndSimulation)
     {
         ArgumentNullException.ThrowIfNull(snapshot); bool validateActionReferences=assets is not null; assets ??= PreparedSceneAssets.Empty;
+        bool presentation = SceneAssetPolicies.RequiresPresentation(policy);
+        HashSet<AssetRef>? active = presentation ? null : new(SceneAssetPreparation.References(snapshot, policy));
         _ = ScenePostProcessState.Read(snapshot);
         _ = SceneUiState.Read(snapshot);
         _ = SceneShadowState.Read(snapshot);
@@ -127,6 +130,9 @@ public static class SceneRenderValidation
 
         SceneAssetInfo? Resolve(Guid obj, Guid id, AssetKind kind)
         {
+            // Inactive visual references remain serialized metadata, not resolved resources.
+            // All structural checks above still run; simulation references retain strict checks.
+            if (active is not null && !active.Contains(new(new(id), kind))) return null;
             if (catalog is not null)
             {
                 bool found = catalog.TryResolve(new(new(id), kind), out var root, out var code);

@@ -17,7 +17,7 @@ internal static class EcsReadDiagnostics
     private static void Check(bool condition) { if (!condition) throw new InvalidOperationException("Read lifecycle diagnostic mismatch."); }
     private static RuntimeSceneInstance Fixture(int count)
     {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         const string schema = """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":false}""";
         registry.Register<Marker>("e5c.marker", 1, schema, value => value);
         registry.Register<Flag>("e5c.flag", 1, schema, value => value);

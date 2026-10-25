@@ -504,27 +504,37 @@ var cases = new (string Name, Action Run)[]
         Check(play.Fault!.Message.Length == 512);
     }),
 };
-int passed = 0;
-foreach (var test in cases)
-{
-    try { test.Run(); Console.WriteLine("PASS " + test.Name); passed++; }
-    catch (Exception error) { Console.Error.WriteLine("FAIL " + test.Name + ": " + error); return 1; }
+var groups = new (string Name, Action Run)[] {
+    ("Core", () => CaseHarness.RunOrThrow("Gameplay.Core", cases)),
+    ("Schedule", () => CaseHarness.RunOrThrow("Gameplay.Schedule", SchedulePlayTests.Cases())),
+    ("Recovery", () => CaseHarness.RunOrThrow("Gameplay.Recovery", ScheduleRecoveryPlayTests.Cases())),
+    ("SimulationCosts", SimulationCostCases.Run),
+    ("IncrementalGameplay", IncrementalGameplayCases.Run),
+    ("IncrementalCommit", IncrementalCommitCases.Run),
+    ("StructuralBatch", StructuralBatchCases.Run),
+    ("Movement", MovementCases.Run),
+    ("Ui", GameplayUiCases.Run),
+    ("Harness", CaseHarness.VerifyAggregation),
+    ("Baseline", () => EcsBaseline.Run(args.Contains("--ecs-baseline"))),
+    ("ReadBaseline", () => EcsReadBaseline.Run(false, (_, _, _) => { })),
+    ("MemoryV2", EcsMemoryV2Tests.Run),
+    ("BaselineV2", () => EcsBaselineV2.Run(false)),
+    ("ReadBaselineV2", () => EcsReadBaselineV2.Run(false, (_, _, _) => { })),
+    ("DenseDiagnostics", () => EcsDenseDiagnostics.Run(false)),
+    ("ReadDiagnostics", () => EcsReadDiagnostics.Run(false))
+}.Concat(EcsJointCases.Cases()).ToArray();
+if (args.SequenceEqual(new[] { "--list-groups" })) {
+    foreach (var group in groups) Console.WriteLine(group.Name);
+    return 0;
 }
-Console.WriteLine($"Gameplay tests: {passed}/{cases.Length} passed.");
-try { SimulationCostCases.Run(); }
-catch (Exception error) { Console.Error.WriteLine("FAIL simulation costs: " + error); return 1; }
-try { IncrementalGameplayCases.Run(); }
-catch (Exception error) { Console.Error.WriteLine("FAIL incremental gameplay: " + error); return 1; }
-try { IncrementalCommitCases.Run(); }
-catch (Exception error) { Console.Error.WriteLine("FAIL incremental commit: " + error); return 1; }
-try { EcsJointCases.Run(); }
-catch (Exception error) { Console.Error.WriteLine("FAIL E3 joint: " + error); return 1; }
-try { StructuralBatchCases.Run(); }
-catch(Exception error){Console.Error.WriteLine(error);return 1;}
-try { MovementCases.Run(); }
-catch(Exception error){Console.Error.WriteLine(error);return 1;}
-try { GameplayUiCases.Run(); }
-catch(Exception error){Console.Error.WriteLine(error);return 1;}
+if (args.Length == 2 && args[0] == "--group") {
+    var selected = groups.Where(g => g.Name == args[1]).ToArray();
+    if (selected.Length != 1) throw new ArgumentException("Unknown Gameplay test group: " + args[1]);
+    return CaseHarness.Run("Gameplay", selected);
+}
+if (args.Any(a => a is not ("--benchmark" or "--pressure-benchmark" or "--ecs-baseline")))
+    throw new ArgumentException("Expected --group <name>, --list-groups or explicit benchmark options.");
+int exitCode = CaseHarness.Run("Gameplay", groups);
 if (args.Contains("--benchmark"))
 {
     Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { environment = Environment.OSVersion.ToString(), architecture = RuntimeInformation.ProcessArchitecture.ToString(), runtime = RuntimeInformation.FrameworkDescription, cpuCount = Environment.ProcessorCount }));
@@ -549,15 +559,8 @@ if (args.Contains("--benchmark"))
     }
 }
 if (args.Contains("--pressure-benchmark")) PressureProfiles.Run();
-// Always validate the measurement fixtures; opt-in measurements leave existing benchmark output unchanged.
-EcsBaseline.Run(args.Contains("--ecs-baseline"));
-EcsReadBaseline.Run(false, (_, _, _) => { });
-EcsMemoryV2Tests.Run();
-EcsBaselineV2.Run(false);
-EcsReadBaselineV2.Run(false, (_, _, _) => { });
-EcsDenseDiagnostics.Run(false);
-EcsReadDiagnostics.Run(false);
-return 0;
+// All seven original diagnostic fixture checks are registered above, including in CTest.
+return exitCode;
     }
 }
 

@@ -21,7 +21,7 @@ static JsonElement Create(Guid id, string name = "Hero") => Element(new { operat
 static JsonElement Rename(Guid id, string name) => Element(new { operations = new[] { new { op = "rename", objectId = id, name } } });
 static ComponentRegistry Extensions()
 {
-    var registry = ComponentRegistry.CreateDefault();
+    var registry = global::Ncma.Runtime.CompositionRegistry.Build();
     registry.Register<Health>("game.health", 1, """
         {"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}
         """, value => value.Points >= 0 ? value : throw new ArgumentException("Health must be nonnegative."));
@@ -66,7 +66,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Final installation rechecks revocation after trusted component validation", () => {
         bool active = true, revoke = false;
-        var registry = ComponentRegistry.CreateDefault(); registry.Register<Health>("game.health", 1,
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<Health>("game.health", 1,
             """{"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}""", h => { if (revoke) active = false; return h; });
         var doc = new SceneDocument(components: registry); Guid obj = doc.CreateObject("A"); var id = obj; doc.SetComponent(obj, new Health(1));
         var session = new EditSession(doc); var permission = new CapabilityPermissions(["ncma.scene.transaction"], objectScope: [id], isCurrent: () => active);
@@ -285,7 +285,7 @@ var cases = new (string Name, Action Run)[]
     }),
     ("Session owner thread and complete-document validator reentrancy", () => {
         SceneDocument? document = null; EditSession? session = null; bool armed = false; int blocked = 0; Guid callbackObject = Guid.NewGuid();
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Health>("game.health", 1, """{"type":"object","required":["points"],"properties":{"points":{"type":"integer"}}}""", v => {
             if (armed) {
                 try { document!.CreateObject("Reentrant"); } catch (InvalidOperationException) { blocked++; }
@@ -431,6 +431,7 @@ var cases = new (string Name, Action Run)[]
 };
 int failures = 0;
 cases = cases.Concat(OriginalCommandBatchTests.Cases()).ToArray();
+cases = cases.Concat(ComponentMetadataConsumerTests.Cases()).ToArray();
 foreach (var test in cases)
 {
     try { test.Run(); Console.WriteLine("PASS " + test.Name); }

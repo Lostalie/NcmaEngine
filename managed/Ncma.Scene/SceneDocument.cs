@@ -18,7 +18,7 @@ public sealed partial class SceneDocument
         Action<SceneDocumentSnapshot>? validateComposition = null)
     {
         _content = SceneDocumentCodec.Copy(new(SceneDocumentCodec.Version, name, []));
-        Components = components ?? ComponentRegistry.CreateDefault(); Components.Freeze();
+        Components = components ?? global::Ncma.Runtime.CompositionRegistry.Build(); Components.Freeze();
         _validateComposition = validateComposition;
     }
     public ComponentRegistry Components { get; }

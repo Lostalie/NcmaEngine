@@ -1,5 +1,45 @@
 # NcmaEngine
 
+2026-10-25 最新验证：E6 本机完整回归 Debug、Release 各 **131/131 通过**，无失败、超时或跳过；63 个托管项目双配置均 0 警告 / 0 错误。已按用户要求更新 `out/bin/NcmaEngine.exe` Release，包校验及图形冒烟通过，旧安装保留备份。偶发原子保存 `0x80070497` 根因仍待查；SDK8/VS 宿主矩阵及 E5-D 目标机性能验收不据此改判通过。[最新修复、验证和部署记录](docs/E6_UNIFIED_VALIDATION_PLAN.md)。以下为保留的历史进度。
+
+2026-10-24 资产闭包修正：采用[显式宿主策略](docs/SCENE_ASSET_POLICY.md)，Player Headless 与 Editor cpuOnly 统一使用 `Simulation`，图形宿主使用 `PresentationAndSimulation`；Animator/RootMotion 依赖仍必需，无活动视觉消费者才不解析视觉包，禁止失败后降级。全63托管工程双配置最终编译零警告/错误，原生全目标无增量工作；专项策略5/5、CPU宿主及原闭包7/7，两配置完整Player（66项）、SceneRendering（147项）、生命周期（46项）均通过。**这是定向修复，不是E6整体验收**；其余首轮失败项待修复与100入口重跑。正式EXE未变，无部署/提交/推送。[验证记录](docs/E6_UNIFIED_VALIDATION_PLAN.md#资产策略定向修复2026-10-24)。
+
+2026-10-24 E6统一首轮验证：全部63个托管工程及原生全目标的Debug/Release构建均零警告/错误；未调用整条Build.ps1/Build.bat。两配置`ctest -N`各100入口，全部实际调度，各89通过、9失败、2超时，**E6未通过**；失败入口内被阻断的用例不算覆盖。正式EXE SHA256仍为`C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61`，未部署/提交/推送。下一步修复资产准备/宿主生命周期/生成器及调度指标问题，定位部署与Gameplay超时后重跑完整回归；E5-D继续延期。[首轮结果和失败清单](docs/E6_UNIFIED_VALIDATION_PLAN.md)。以下“未运行”描述为此前状态。
+
+2026-10-24 B4-B补验：当前源码重新构建后，本机SDK9.0.315下Debug/Release各16条真实构建合同与各2项Editor/Player隔离发布均通过（共36条命令，含8条指定诊断负例）。正式EXE哈希未变，未启动/部署/提交/推送。SDK8、此次VS宿主复测及其余E6统一测试仍未完成，不能宣布整体E6通过。[执行记录与证据边界](docs/E6_UNIFIED_VALIDATION_PLAN.md#b4-b实际执行结果2026-10-24)。以下“未运行”记录为此前状态。
+
+2026-10-24 注册聚合修正：生成每程序集聚合入口，统一由`CompositionRegistry.Build()`组合；Editor/Player使用各自生成根，底层默认仅Runtime，避免反向依赖。四个主要手写工厂及UI/阴影/后处理三个私有工厂已移除，原schema、validator、挂载限制不变。10个相关测试工程及Editor/Player依赖Debug编译零警告/错误；新增6组用例**登记未运行**，留至整体E6验证。正式EXE未变，未部署/提交/推送。[具体边界](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。
+
+2026-10-24 字段契约修正：成员遍历、kind规则表、忽略/拒绝条件、schema与字段匹配及排序已统一到`Ncma.CodeGen.Shared/FieldContract.cs`；Roslyn与反射侧仅做适配。新增全生产`[GenerateComponent]`清单差分及边界用例，比较字段ID/顺序/kind/flags和路径。CodeGen.Tests、Runtime.Tests、Services.Tests含Editor隔离Debug编译均零警告/错误；**测试仅登记未运行**，等待整个E6统一验证。未部署/提交/推送，正式EXE不变。
+
+2026-10-24 当前构建合同：**生成器已改为netstandard2.0 + Microsoft.CodeAnalysis.CSharp4.8.0，取消SDK固定**。产品和生成器测试均net8；移除global.json、SDK9.0.315/Core-only守卫及机器Roslyn路径依赖。SDK9完整Editor与VS全框架MSBuild标准共享编译样例已通过；SDK8未安装未实测，VS非共享模式另有本机F:安全区域加载限制。[详细记录与边界](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。下一步仍为整个E6统一验证；未运行功能测试，正式EXE不变，无部署/提交/推送。下方固定SDK说法仅为历史。
+
+2026-10-24 当前进度：**E6-B4-B 构建/发布验证设施已实现并编译，尚未运行测试**。新增真实MSBuild增量/失效/负例与隔离Editor/Player发布两条入口，保留失败证据、检查编译器依赖及正式EXE不变；不启动或部署产物。下一步进入[整个E6统一验证](docs/E6_UNIFIED_VALIDATION_PLAN.md)，当前不能宣称E6验收通过。E5-D延期，未部署/提交/推送。以下为历史进度。
+
+2026-10-24 当前进度：**E6-B4-A 构建宿主与跨程序集身份检查已实现，未测试**。固定dotnet SDK **9.0.315/Core MSBuild**（产品仍net8）；所有托管组合工程接入analyzer-only检查，重复TypeId/畸形manifest编译诊断、编译器运行依赖守卫及Build.ps1测试分组补齐。新增5组用例未运行；CodeGen、Services含Editor、Player及脚本样例隔离编译均零警告/错误。[详细边界与记录](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。下一步 **B4-B真实MSBuild增量/失效与发布依赖验证设施**，然后整个E6末统一测试。E5-D延期，正式EXE未变，无部署/提交/推送。以下为历史进度。
+
+2026-10-24 当前进度：**E6-B3 消费一致性审计及有界实现收尾，未测试**。声明式标量Inspector接入原字段元数据；脚本Inspector消费原目录显示名/类别，移除固定±1000范围与整数静默取整，补上目录换代后的旧事件拒绝。序列化、AI查询、专用面板与运行读取边界已记录到[消费矩阵](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。新增4组用例只登记，Services.Tests含Editor最终完整Debug零警告/错误。下一步 **B4构建闭环**；整个E6末统一测试，E5-D延期。EXE未变，未部署/提交/推送。以下为历史进度。
+
+2026-10-24 当前进度：**E6-B3-C 脚本 Export 生成接入已实现，未测试**。显式声明的脚本生成公共数值Export访问器，仍进入原ScriptCatalog；Rotator三个Export已迁移，保留成员名持久化身份、数值校验、候选加载和卸载边界，不新增AI权限。新增4组生成器及3组目录用例仅登记；CodeGen.Tests、Gameplay.Sample、Services.Tests含Editor完整Debug均零警告/错误。下一步 **B3消费一致性审计，再B4构建闭环**；[详细记录](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。整个E6末统一测试，E5-D延期；正式EXE不变，未部署/提交/推送。下方为历史记录。
+
+2026-10-24 当前进度：**E6-B3-B 代表性组件迁移已实现，未测试**。角色胶囊、相机、方向光共30项字段接入生成注册和类型化访问，保持原身份/schema/默认值/校验及运行权限；真实角色启动与渲染提取器读取已迁移。新增5组用例仅登记；场景渲染与Services含Editor完整Debug编译最终零警告/错误，首轮测试源码编译失败证据保留。**B3尚未整体完成，下一步B3-C脚本Export生成与原目录消费**，随后剩余消费审计和B4。[实施记录](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。整个E6末统一测试；E5-D延期，EXE不变，未部署/提交/推送。下方为历史记录。
+
+2026-10-24 当前进度：**E6-B3-A 首批元数据消费方已接线，未测试**。Transform Inspector按FieldId读取/编辑，默认值来自原注册目录，仍走原事务和Undo；既有类型查询新增显式字段分页，不返回元数据默认值或场景/运行值，不新增权限。新增4组Core及2组Presenter待运行用例；Core.Tests和Services.Tests含Editor完整Debug编译零警告/错误。**B3整体尚未完成**，下一步代表性组件/typed访问迁移，再脚本Export生成和剩余消费审计。[实施记录](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。测试仍在整个E6末；E5-D延期，EXE不变，未部署/提交/推送。下方为历史进度。
+
+2026-10-24 当前进度：**E6-B2 字段元数据已实现（持久化组件子集，未测试）**。显式 FieldId、嵌套路径、默认值和用途标记进入原 ComponentRegistry；Transform接入13项声明，schema不变。字段/schema不一致编译拒绝，注册前置校验、只读快照及回调重入保护已接线；不新增AI权限，不自动扩展原响应。新增4组运行时与4组生成器用例仅登记；Runtime、CodeGen、Editor.Services+Editor最终 Debug 编译均零警告/错误。下一步 **B3 消费方迁移**，随后B4及整个E6统一测试。E5-D延期，正式EXE不变，未部署/提交/推送。下方B1为历史记录。
+
+2026-10-24 B1 历史进度：**E6-B 已开始，B1 代码生成基础已接入，尚未测试**。显式组件声明驱动增量生成器；真实 `TransformData` 改用生成注册及受检访问，保持原 ComponentRegistry/World/调度权限边界。新增3组运行时及6组生成器用例已登记未运行；Runtime.Tests、CodeGen.Tests、Editor.Services.Tests（含Editor）完整隔离 Debug 编译均0警告/0错误。生成器编译宿主暂用 SDK9/net9，产品仍 net8。**B2 字段元数据、B3 Inspector/AI 等消费方迁移、B4 构建闭环未完成**，不是整个 E6-B 验收。测试仍放在整个 E6 末，E5-D延期；正式EXE不变，无部署/提交/推送。[E6-B 分片合同](docs/ECS_IMPLEMENTATION_PLAN.md#ecs-e6-b)。下方“下一步 E6-B”为历史进度。
+
+2026-10-24 最新进度：**E6-C（C1–C5）实现已完成，等待整个 E6 统一测试**。已接通声明依赖图、受检串行/有界工作线程、原 WorldRunner/Play 固定步、原结构命令批次与回执、Stop/Reload 清理及 Editor 本地只读调度诊断。默认串行；任务读取副本、暂存输出，保留唯一提交与原生写权限，未注册图的旧逻辑不冒充已迁移任务。新增24组执行/宿主/界面用例及前片8组冷图用例均未运行；6个完整相关测试工程（Runtime、Gameplay、Editor.Services、Rendering、Player、Scene.Rendering）隔离 Debug 编译均0警告/0错误。编译失败源码/完整日志保留，编译不等于功能或性能验收。下一步 **E6-B 元数据与访问代码生成**；E5-D仍延期，正式EXE未更新，本轮未部署/提交/推送。详细边界见 [E6-C实现合同](docs/ECS_IMPLEMENTATION_PLAN.md#e6-c-完整实现合同2026-10-24实施收尾统一测试待执行)。
+
+2026-10-24 顺序调整（用户最新决定）：**E6-A 实现收尾 → E6-C 声明读写依赖调度 → E6-B 元数据与访问代码生成 → E6 整体统一测试**。E5-D 继续延期；小阶段只实施、静态检查与编译，不运行测试/冒烟/性能采样。E6-C 先依赖现有 ComponentRegistry 的稳定 TypeId/schema 版本，E6-B 后续生成同一声明合同，不新增平行类型目录。
+
+E6-C1 首片已实现但未运行验证：新增 ScheduleAccess/ScheduleTask/ScheduleResource 声明与不可变 ScheduleGraph，支持组件读/写、外部资源读/写、owner-thread 结构变更、阶段和显式 before/after；显式依赖先拓扑排序，冲突边再按确定性顺序添加，拒绝未知/重复/schema 不符/环/超预算声明。限制为128任务、每任务64访问与64显式链接、128资源、16阶段、8192边；返回复制后的任务/边/串行顺序及确定性合同哈希。新增8组回归用例已登记未执行，完整 Runtime.Tests Debug 编译0警告/0错误（4.18s）。这是**冷任务图基础，不是已接通的调度器**：未接 WorldRunner/PlaySession，尚无访问拦截、任务执行、工作线程、性能或功能验收；Worker 声明不授予跨线程 World 访问。正式 EXE 未更新，本轮未提交推送。下方旧 E6-B → E6-C 顺序为历史，以上述顺序为准。
+
+2026-10-24 E6-A 收尾实现（待整个 E6 统一验证）：本地保留 Play 差异面板现从统一事件分发处隔离后台控件/画布，并消费 UI 预览键盘输入，打开时取消已有交互。启动前新增资源与脚本绑定依赖预检：复用现有资产加载器的实际闭包，记录根引用、成员 UUID/类型/代次/哈希，拒绝缺失资源、错误租约和作者预览；纯逻辑/UI 场景不借用旧 3D 资源。脚本解析对已加载目录执行无构造器的类型/Export 检查（包含禁用绑定），记录模块标识与确定性合同哈希，并检查启动回调前后目录代次。Editor 记录来源/镜像哈希/依赖回执，Stop/Reload 清除；Player 先准备冷启动依赖，再实例化 ECS。既有 UI、Shader、物理依赖仍由对应宿主预检负责；脚本记录不是完整程序集文件/原生/操作系统依赖清单，也不代表 M9 发布包验收。
+
+本轮新增 10 组回归用例已登记、均未执行。最终完整 Editor.Services.Tests（含 Editor）、Scene.Rendering.Tests、Player.Tests（含 Player）、Rendering.Tests 的隔离 Debug 编译均为 0 警告/0 错误；中间脚本模块误用内部 ReadOnly 的 1 项编译失败已修复，原源码与日志保留。局部证据在 out/verification/ecs-e6/pre-runtime-change-input-first 和 pre-bake-dependencies-first，非全量源码冻结或功能验收。E6-A 当前实现覆盖已接通，仍须在 E6-B/C 实现后统一验证功能、GUI/IPC、生命周期、资源与性能；不以编译替代验收。E5-D 继续延期，正式 EXE C50742AD 未变。本轮未测试、部署或再次提交推送；前一开发快照 adcddab 已提交推送。下一步 E6-B 元数据与访问代码生成，E6-C 随后实施。下方旧的“依赖闭包/输入隔离待实现”等条目为历史进度。
+
 2026-10-24 开发中提交记录：E6-A 的本地 Play 差异界面已接入场景、UI 和动画图工作区。编辑/运行对象分别分页，共享 UUID 选择，支持运行时删除及新建对象；完整 before/after 差异与原命令分段显示，逐页审阅、逐 UUID 删除确认和最终 Stop/应用确认均独立。来源变化隐藏旧数据并撤销确认，确认面板打开时禁用场景快捷键和 HUD 输入。新增6组 Presenter 用例已登记但未执行；首次服务测试工程编译因错误引用不存在的计数属性失败2项，修正为既有只读诊断方式后完整 Editor.Services.Tests 及 Editor 依赖 Debug 编译0警告/0错误（6.12s）。日志与失败源码保留于 out/verification/ecs-e6/pre-runtime-change-ui-first（本地忽略目录，不随提交发布）。本次按用户要求提交开发中源码，不代表完整 E6 或性能验收；不运行测试、不部署 EXE。E6-A 仍需资产/脚本依赖闭包及整体验证，E6-B/C 尚未开始；测试统一留到整个 E6 结束，E5-D 继续延期。下方“界面尚未接入”等文字为历史进度。
 
 E6-A 变更桥受检执行服务已接通（实现待统一测试）：暂停运行差异可显式预检为原 transaction/delete 命令批次；本地确认接口要求同一最新票据、精确指纹及全部删除 UUID，确认后先按原生命周期 Stop，再进入唯一 EditSession/Commit/Undo。Stop 回调期间作者文档只读，失败不提交；确认一次消费，陈旧/替换/跨宿主票据拒绝，不自动重试。权限限定于审阅对象、创建对象、组件与绑定，未新增 MCP 入口或自动写回。32 个对象差异展开后仍受原128操作/64KiB完整输入限制；归一化仅允许既有组件排序，不得悄悄改变审阅值，变化时要求另行审阅。新增9组服务用例已登记未运行，覆盖混合变更与精确Undo/Redo、完整删除确认、失效/线程/回调、停止失败、组件绑定移除、空差异、160操作展开拒绝及归一化变化。首次编译因新测试缺 Runtime 命名空间出现3错误，源码/日志保留；修正后最终Core.Tests与完整Services.Tests及Editor依赖Debug编译0警告/0错误（2.11s/5.89s），不是功能验收。局部证据在 out/verification/ecs-e6/pre-runtime-change-apply-first，非全量冻结。**正式编辑器差异展示/人工确认按钮尚未接入，完整变更桥与资产/脚本闭包仍未完成**；随后推进E6-B/C，整个E6结束统一测试。E5-D继续延期，正式EXE C50742AD不变，无测试/冒烟/性能测量/部署/提交/推送。下方旧“执行连接未实现”为历史进度。

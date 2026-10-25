@@ -90,9 +90,4 @@ var cases = new (string, Action)[]
         }
     }),
 };
-foreach (var (name, run) in cases) {
-    try { run(); Console.WriteLine("PASS " + name); }
-    catch (Exception e) { Console.Error.WriteLine("FAIL " + name + ": " + e); return 1; }
-}
-Console.WriteLine($"M2.2 Interop: {cases.Length} cases passed.");
-return 0;
+return CaseHarness.Run("M2.2 Interop", cases);

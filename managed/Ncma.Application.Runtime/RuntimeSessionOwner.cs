@@ -57,11 +57,16 @@ public sealed class RuntimeSessionOwner : IDisposable
         PlaySession? candidate = null; IDisposable? lease = null; IDisposable? composition = null; _busy = true; _lastStartFailure = null;
         try
         {
+            // Resolve all bindings before factories/composition or any Start callback. No
+            // script constructors/setters run during this metadata-only closure check.
+            var scripts = Catalog.ResolveBindings(scene);
             using (scene.World.ReadOnly())
                 candidate = factory is null ? new PlaySession(scene) : factory(scene);
             if (candidate is null || !ReferenceEquals(candidate.Scene, scene)) throw new ArgumentException("Foreign Play scene.");
             using (scene.World.ReadOnly()) composition = compose?.Invoke(candidate);
+            Catalog.RequireCurrent(scripts);
             lease = Catalog.AcquireLease(); candidate.Start(Catalog.Instantiate);
+            Catalog.RequireCurrent(scripts); // Trusted lifecycle callbacks must not swap the resolved catalog.
             _composition = composition; _lease = lease; _play = candidate; return candidate;
         }
         catch (Exception original) {

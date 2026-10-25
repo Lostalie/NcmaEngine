@@ -51,8 +51,4 @@ cases.AddRange(RuntimeTests.Cases());
 cases.AddRange(WindowInputTests.Cases());
 cases.AddRange(CanvasTests.Cases(args));
 cases.AddRange(DirtyCanvasTests.Cases(args));
-foreach (var test in cases) {
-    try { test.Run(); Console.WriteLine("PASS " + test.Name); }
-    catch (Exception error) { Console.Error.WriteLine($"FAIL {test.Name}: {error}"); Environment.ExitCode = 1; return; }
-}
-Console.WriteLine($"Ncma UI: {cases.Count} cases passed.");
+Environment.ExitCode = CaseHarness.Run("Ncma UI", cases);

@@ -156,5 +156,5 @@ internal static class ActionJointChecks
             "K7 32 shared-service coupled action/skin/shadow/fault/recovery/Stop cycles: fresh identities, frozen startup, validation 0/0, numerical/pose/GPU drained (NOT one-hour/manual acceptance)"];
     }
     private static SceneDocument Load(ActionSampleResult sample)
-    {var doc=new SceneDocument("K7 bounded sample",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);SceneDocumentFiles.Load(doc,Path.Combine(sample.Root,"start.ncmascene"));return doc;}
+    {var doc=new SceneDocument("K7 bounded sample",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);SceneDocumentFiles.Load(doc,Path.Combine(sample.Root,"start.ncmascene"));return doc;}
 }

@@ -133,6 +133,7 @@ internal sealed unsafe partial class EditorPresenter
         var service = workspace.Owner.RuntimeChanges ?? throw new EditRejectedException("keep_play_service_missing");
         if (action.Kind is "keep_play_toggle" or "keep_play_close")
         {
+            CancelInteraction(); // Cancel any existing canvas/field gesture before entering review.
             _showKeepPlay = action.Kind != "keep_play_close" && !_showKeepPlay;
             ClearKeepPlayReview(); _keepObjects.Clear(); _keepPage = null; service.Discard();
             _activeMenu = -1; _generation = checked(_generation + 1);

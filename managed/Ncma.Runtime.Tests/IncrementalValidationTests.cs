@@ -96,7 +96,7 @@ internal static class IncrementalValidationTests
                 CheckPrepared(world, s => Check(s.Objects[0].Components.Length == 63 && s.Objects[0].Components[0].Data.GetProperty("value").GetInt32() == 777));
             }),
             ("lazy validation DTO copies retain ordering budget and observer isolation", () => {
-                var registry = ComponentRegistry.CreateDefault();
+                var registry = global::Ncma.Runtime.CompositionRegistry.Build();
                 registry.Register<TextData>("a.text", 1,
                     """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
                 var world = new World("lazy DTO", registry); var a = world.CreateEntity("first"); var b = world.CreateEntity("second");
@@ -246,7 +246,7 @@ internal static class IncrementalValidationTests
                 Check(calls == before + 2 && world.Get<TextData>(a).Text == "two");
             }),
             ("dirty component does not reencode unchanged peers or renamed values", () => {
-                var registry = ComponentRegistry.CreateDefault(); registry.Register<TextData>("text", 1,
+                var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<TextData>("text", 1,
                     """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
                 var world = new World(components: registry); var a = world.CreateEntity("A"); world.Set(a, TransformData.Identity); world.Set(a, new TextData("old"));
                 world.FixedStep(() => { }); long before = world.EncodedComponentCount;

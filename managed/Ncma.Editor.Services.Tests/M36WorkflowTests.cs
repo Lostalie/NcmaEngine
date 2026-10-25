@@ -49,7 +49,7 @@ internal static class M36WorkflowTests
         string Hash(string file)=>Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file)));
         Guid project=Guid.NewGuid();string scenePath=Path.Combine(projectRoot,"Main.ncmascene");Guid modelId,meshId,objectId,heroObject;
         AssetProjectAuthoring? closingAssets=null;
-        using(var owner=new EditorSessionOwner("Asset UI",components:RenderComponentRegistry.CreateRegistry(),validateComposition:SceneRenderValidation.RequireComposition)) {
+        using(var owner=new EditorSessionOwner("Asset UI",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:SceneRenderValidation.RequireComposition)) {
             var workspace=new EditorWorkspace(owner);using var flow=new EditorAssetWorkflow(workspace,projectRoot,project,1);
             owner.ConfigureAssets(projectRoot,project,1,flow.Scope);owner.ConfigureImportTools(new(dotnet,worker,Hash(worker),kernel,Hash(kernel)),flow.IsSourceApproved);
             Reject(()=>flow.PrepareSource(workspace.Stamp,"../outside.fbx",30,true));
@@ -99,7 +99,11 @@ internal static class M36WorkflowTests
             PreparePlacement(flow,owner,workspace,modelId,AssetKind.StaticMesh,Vector3.Zero);
             var stale=flow.PlacementPlan!;workspace.CreateObject(workspace.Stamp);Reject(()=>flow.CommitPlacement(stale.PlanId));workspace.History(workspace.Stamp,false);
             workspace.Save(workspace.Stamp,scenePath);
+            byte[] beforePlayPreparation=owner.Document.CaptureBytes();var beforePlayHistory=owner.Edit!.State;
+            owner.PrepareRenderAssets(projectRoot,project);
+            Check(beforePlayPreparation.SequenceEqual(owner.Document.CaptureBytes())&&owner.Edit.State==beforePlayHistory,"Play preparation changed authored bytes/history");
             workspace.PlayControl(workspace.Stamp,"start");Reject(()=>flow.PrepareSource(workspace.Stamp,"assets/Hero.fbx",6,false));Reject(()=>flow.Assign(workspace.Stamp,objectId,meshId,AssetKind.StaticMesh));workspace.PlayControl(workspace.Stamp,"stop");
+            Check(beforePlayPreparation.SequenceEqual(owner.Document.CaptureBytes())&&owner.Edit.State==beforePlayHistory,"Play/Stop changed authored bytes/history");
             flow.ForgetImport(flow.Job!.JobId);
             flow.PrepareSource(workspace.Stamp,"assets/Hero.fbx",6,false);Wait(flow,owner,()=>flow.SourcePlan is not null);flow.BeginImport(flow.SourcePlan!.PlanId);
             Wait(flow,owner,()=>flow.Job?.State is ImportJobState.Ready or ImportJobState.Failed);Check(flow.Job!.State==ImportJobState.Ready,flow.Job.Code);
@@ -127,7 +131,7 @@ internal static class M36WorkflowTests
             closingAssets=owner.Assets;
         }
         Check(closingAssets!.Completion.Wait(TimeSpan.FromSeconds(10)),"Authoring owner shutdown did not release project lock");
-        using(var reopened=new EditorSessionOwner("Reopen",components:RenderComponentRegistry.CreateRegistry(),validateComposition:SceneRenderValidation.RequireComposition)) {
+        using(var reopened=new EditorSessionOwner("Reopen",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:SceneRenderValidation.RequireComposition)) {
             var workspace=new EditorWorkspace(reopened);workspace.Open(workspace.Stamp,scenePath,true);reopened.Edit!.Resynchronize();
             reopened.ConfigureAssets(projectRoot,project,2);reopened.PrepareRenderAssets(projectRoot,project);
             Check(reopened.Document.GetComponent<StaticMeshData>(objectId).MeshId==meshId,"Scene restart lost UUID reference");

@@ -27,6 +27,7 @@ public sealed class RuntimeSceneImage
     public int ByteCount => _bytes.Length;
     public string ContentHash { get; }
     public byte[] CopyBytes() => (byte[])_bytes.Clone();
+    public RuntimeSceneSnapshot CopySnapshot() => RuntimeSceneCodec.Copy(_data);
 
     // Preserve authored object order: creation/query order is observable, not canonicalized away.
     public Guid[] CopyObjectIds() => _data.Objects.Select(o => o.Id).ToArray();

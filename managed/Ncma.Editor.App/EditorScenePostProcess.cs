@@ -25,6 +25,8 @@ internal sealed unsafe partial class CandidatePresentation
     }
     private void PreflightPost(World world,ISceneContent scene)
     {
+        // CPU hosts retain the value/composition contract, but never open visual shader libraries.
+        if(cpuOnly){ScenePostProcessPreflight.ValidateValues(scene,_postModules);return;}
         if(_pipelineStartup?.HasRetainedProbe==true)throw new InvalidOperationException("Retained pipeline startup probe requires host close before new preparation.");
         var runtime=PreparePostRuntime(world,scene);
         var high=PrepareShadowRuntime(world,scene);

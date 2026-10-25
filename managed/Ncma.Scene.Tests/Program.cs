@@ -14,7 +14,7 @@ static void Reject(Action action)
 }
 static ComponentRegistry Registry()
 {
-    var registry = ComponentRegistry.CreateDefault();
+    var registry = global::Ncma.Runtime.CompositionRegistry.Build();
     registry.Register<Health>("game.health", 1, """{"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}""",
         value => value.Points >= 0 ? value : throw new ArgumentException("Negative health."));
     return registry;
@@ -160,7 +160,7 @@ var cases = new (string, Action)[]
         Check(before.SequenceEqual(doc.CaptureBytes()) && rev == doc.Revision);
     }),
     ("Validator-normalized payload and total document size stay bounded", () => {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Label>("game.label", 1, """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""",
             _ => new Label(new string('x', 50000)));
         var doc = new SceneDocument("Bounded", registry);
@@ -170,7 +170,7 @@ var cases = new (string, Action)[]
             [new ComponentSnapshot("game.label", 1, JsonSerializer.SerializeToElement(new { value = "small" }))],
             i == 0 ? bindings : [])).ToArray();
         AtomicReject(doc, new(1, "Bounded", objects)); // Component payloads alone fit, combined normalized document does not.
-        var hugeRegistry = ComponentRegistry.CreateDefault();
+        var hugeRegistry = global::Ncma.Runtime.CompositionRegistry.Build();
         hugeRegistry.Register<Label>("game.label", 1, """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""",
             _ => new Label(new string('x', 70000)));
         var huge = new SceneDocument("Huge", hugeRegistry);
@@ -187,7 +187,7 @@ var cases = new (string, Action)[]
     }),
     ("Restore validator cannot mutate authoring objects or document", () => {
         SceneDocument? doc = null; bool armed = false; int blocked = 0;
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Health>("game.health", 1, """{"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}""", value => {
             if (armed) {
                 try { doc!.CreateObject("Reentrant"); } catch (InvalidOperationException) { blocked++; }

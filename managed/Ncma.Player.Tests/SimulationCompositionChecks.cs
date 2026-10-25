@@ -17,7 +17,7 @@ internal static class SimulationCompositionChecks
             var sample = ActionSample.Create(Path.Combine(output,"simulation-composition"), Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),count);
             byte[]? baseline = null;
             foreach (bool enabled in new[] { false, true }) {
-                var document = new SceneDocument("Simulation costs",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);
+                var document = new SceneDocument("Simulation costs",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
                 SceneDocumentFiles.Load(document,Path.Combine(sample.Root,"start.ncmascene"));
                 using var assets = SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,document.CaptureSnapshot(),true,"assets/action.ncpak");
                 using var physics = new PhysicsService(plugins,enabled:count!=0,characterSupport:count!=0);

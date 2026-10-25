@@ -19,7 +19,7 @@ internal static unsafe class UiSelectionTests
         internal readonly string Root;internal readonly Guid Project=Guid.NewGuid();internal readonly EditorSessionOwner Owner;internal readonly EditorWorkspace Workspace;
         internal readonly EditorUiWorkspace Ui;internal readonly EditorUiPackagePreparation Prepared;internal readonly EditorUiPublication Publication;internal readonly Guid Target;
         internal Fixture(string output){Root=Path.Combine(output,"ui-selection-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Path.Combine(Root,"assets"));
-            Owner=new("UI selection",components:RenderComponentRegistry.CreateRegistry(),validateComposition:SceneRenderValidation.RequireComposition);Workspace=new(Owner);Ui=new(Workspace,Root);Owner.ConfigureAssets(Root,Project,1,uiScope:Ui.Scope);
+            Owner=new("UI selection",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),validateComposition:SceneRenderValidation.RequireComposition);Workspace=new(Owner);Ui=new(Workspace,Root);Owner.ConfigureAssets(Root,Project,1,uiScope:Ui.Scope);
             Prepared=new(Ui,Root,Project);Publication=new(Workspace,Ui,Prepared,Root,Project);Target=Workspace.CreateObject(Workspace.Stamp);
             var d=UiDefinition.Create(Guid.NewGuid(),"HUD");File.WriteAllBytes(Path.Combine(Root,"assets/ui.ncmaui"),UiCodec.Encode(d));var review=Ui.ReviewFile(Workspace.Stamp,"assets/ui.ncmaui",false);Ui.ConfirmFile(review.Review,review.Document,true);}
         internal UiPackageReference Package(ulong gen){var r=Prepared.Review(Ui.Stamp,gen);return Prepared.Approve(r,r.Fingerprint,true);}
@@ -58,9 +58,9 @@ internal static unsafe class UiSelectionTests
             Click(600,"2");Click(601);fingerprint=Fingerprint();Click(602,fingerprint);Build();var stale=Event(31,603);f.Ui.Revoke();p.Apply([stale],[]);Check(f.Value==SceneUiData.Off);
         });
         yield return("UI selection defaults, explicit Off and strict scene cardinality",()=>{
-            var doc=new SceneDocument("UI",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);var p=new UiPackageReference(1,Guid.NewGuid(),1,"assets/a.ncupak",new('A',64));
+            var doc=new SceneDocument("UI",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);var p=new UiPackageReference(1,Guid.NewGuid(),1,"assets/a.ncupak",new('A',64));
             Check(SceneUiState.Resolve(doc.CaptureSnapshot(),p)==p);Guid obj=doc.CreateObject("UI");doc.SetComponent(obj, SceneUiData.Off);Check(SceneUiState.Resolve(doc.CaptureSnapshot(),p)==null);
-            doc.SetComponent(obj, SceneUiData.From(p));Check(SceneUiState.Resolve(doc.CaptureSnapshot(),null)==p);byte[] bytes=doc.CaptureBytes();var restored=new SceneDocument("UI",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);restored.RestoreBytes(bytes);Check(SceneUiState.Read(restored.CaptureSnapshot())==SceneUiData.From(p));
+            doc.SetComponent(obj, SceneUiData.From(p));Check(SceneUiState.Resolve(doc.CaptureSnapshot(),null)==p);byte[] bytes=doc.CaptureBytes();var restored=new SceneDocument("UI",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);restored.RestoreBytes(bytes);Check(SceneUiState.Read(restored.CaptureSnapshot())==SceneUiData.From(p));
             Reject(()=>SceneUiData.Validate(SceneUiData.Off with{Generation=1}));Reject(()=>SceneUiData.From(p with{Path="../x.ncupak"}));
             doc.SetComponent(doc.CreateObject("duplicate"), SceneUiData.Off);Reject(()=>SceneUiState.Read(doc.CaptureSnapshot()));
         });
@@ -72,7 +72,7 @@ internal static unsafe class UiSelectionTests
             f.Workspace.History(f.Workspace.Stamp,true);Check(f.Value==SceneUiData.From(a));
             var b=f.Package(2);f.Apply(b);Check(f.Value==SceneUiData.From(b));f.Workspace.History(f.Workspace.Stamp,false);Check(f.Value==SceneUiData.From(a));f.Workspace.History(f.Workspace.Stamp,true);Check(f.Value==SceneUiData.From(b));
             f.Apply(null);Check(f.Value==SceneUiData.Off);f.Workspace.History(f.Workspace.Stamp,false);Check(f.Value==SceneUiData.From(b));
-            string file=Path.Combine(f.Root,"saved.ncmascene");SceneDocumentFiles.Save(f.Owner.Document,file);var loaded=new SceneDocument("loaded",RenderComponentRegistry.CreateRegistry(),SceneRenderValidation.RequireComposition);SceneDocumentFiles.Load(loaded,file);Check(SceneUiState.Resolve(loaded.CaptureSnapshot(),a)==b);
+            string file=Path.Combine(f.Root,"saved.ncmascene");SceneDocumentFiles.Save(f.Owner.Document,file);var loaded=new SceneDocument("loaded",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);SceneDocumentFiles.Load(loaded,file);Check(SceneUiState.Resolve(loaded.CaptureSnapshot(),a)==b);
         });
         yield return("UI selection scopes, stale review, forged input and revoke recheck history",()=>{
             using var f=new Fixture(output);var a=f.Package(1);var review=f.Publication.Review(f.Workspace.Stamp,f.Target,a);

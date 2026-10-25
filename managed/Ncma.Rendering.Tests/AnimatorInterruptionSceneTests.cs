@@ -29,7 +29,7 @@ internal static unsafe partial class Program
                 new(Guid.NewGuid(),b.Id,a.Id,0,1,null,[new(parameter.Id,AnimationComparison.Equal,0,0,false)])]};
         File.WriteAllBytes(Path.Combine(f.Root,"assets/interrupt.ncmaanim"),AnimationGraphCodec.Encode(graph));
         SceneDocument Document(int count,bool root) {
-            var d=new SceneDocument("Interruptions",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
+            var d=new SceneDocument("Interruptions",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
             for(int i=0;i<count;i++) {
                 Guid o=d.CreateObject("Actor");d.SetComponent(o, TransformData.Identity with{Position=new(0,0,i*3)});
                 d.SetComponent(o, new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));

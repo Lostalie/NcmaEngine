@@ -27,7 +27,7 @@ internal static partial class RuntimeChangeReviewTests
         internal PlaySession Play => Owner.Play!;
         internal Fixture(string repository, bool large = false, Action? beforeStop = null)
         {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             if (large) registry.Register<Payload>("review.payload", 1,
                 """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
             Owner = new("Review", components: registry, beforePlayStop: beforeStop);

@@ -132,7 +132,7 @@ public sealed class EditorAssetWorkflow : IDisposable
             cancellation.ThrowIfCancellationRequested();using var prepared=RuntimeAssetLoader.Prepare(_root,_project,[new(new(rootId),kind)],true,cancellation:cancellation);using var lease=prepared.AcquireLease();
             var root=lease.Require(rootId,kind) as RuntimeDataAsset??throw new ArgumentException("Expected model manifest.");
             var manifest=ModelAssetManifestCodec.Decode(root.CopyData());if(manifest.Meshes.Length>16)throw new ArgumentException("Placement budget is 16 flat objects.");
-            var registry=RenderComponentRegistry.CreateRegistry();var ids=new List<Guid>();var operations=new List<object>();
+            var registry=global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);var ids=new List<Guid>();var operations=new List<object>();
             foreach(var part in manifest.Meshes) {
                 Guid id=Guid.NewGuid();ids.Add(id);operations.Add(new{op="create",objectId=id,name=Path.GetFileNameWithoutExtension(record.SourcePath)});
                 Component(id,TransformData.Identity with{Position=new(position.X,position.Y,position.Z)},"ncma.transform");

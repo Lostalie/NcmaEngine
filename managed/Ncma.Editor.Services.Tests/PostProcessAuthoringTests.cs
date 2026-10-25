@@ -29,12 +29,13 @@ internal static class PostProcessAuthoringTests
         internal readonly Clock Time=new();internal readonly string Root;internal readonly Guid Id;private ulong _frame;
         internal EditorPostProcessWorkspace Service=>Owner.PostProcessing!;
         internal Fixture(string output,PostProcessModules? modules=null,bool geometry=true){
-            Root=Path.Combine(output,"post-author-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(Root);
-            Owner=new("Post authoring",components:RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),validateComposition:CandidatePresentation.RequireComposition,workflowTime:Time,postProcessModules:modules);
+            var assets=new EditorFixtureAssets(output,"post-author");Root=assets.Root;
+            Owner=new("Post authoring",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),validateComposition:CandidatePresentation.RequireComposition,workflowTime:Time,postProcessModules:modules);
             Workspace=new(Owner);if(geometry){var mesh=Workspace.CreateObject(Workspace.Stamp);Workspace.Transaction(Workspace.Stamp,"Geometry",[
                 new{op="set_component",objectId=mesh,typeId="ncma.transform",version=1,data=Owner.Document.Components.Encode(TransformData.Identity)},
-                new{op="set_component",objectId=mesh,typeId=StaticMeshData.TypeId,version=1,data=Owner.Document.Components.Encode(new StaticMeshData(Guid.NewGuid(),Guid.NewGuid(),true,true,1))}]);}
+                new{op="set_component",objectId=mesh,typeId=StaticMeshData.TypeId,version=1,data=Owner.Document.Components.Encode(assets.Geometry())}]);}
             Id=Workspace.CreateObject(Workspace.Stamp);View=new(Workspace,null,Root,workspaceStyle:true);Build();Click("添加后处理配置（关闭）");
+            assets.Prepare(Owner); // Includes an actual empty lease for geometry=false fixtures.
         }
         internal PostProcessData Value=>Owner.Document.GetComponent<PostProcessData>(Id);
         internal void Build()=>View.Build(++_frame,1280,720);

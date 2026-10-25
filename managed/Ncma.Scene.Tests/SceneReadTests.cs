@@ -25,7 +25,7 @@ internal static class SceneReadTests
         Check(SceneDocumentCodec.Encode(a).SequenceEqual(SceneDocumentCodec.Encode(b)));
     private static ComponentRegistry Registry()
     {
-        var result = ComponentRegistry.CreateDefault();
+        var result = global::Ncma.Runtime.CompositionRegistry.Build();
         result.Register<TextValue>("test.text", 1, """{"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string"}}}""", v => v);
         result.Register<VolatileValue>("test.volatile", 1, """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
         return result;
@@ -123,7 +123,7 @@ internal static class SceneReadTests
                 doc.RemoveComponent<VolatileValue>(b); _ = doc.ReadPage(0, 1, out _); before = Captures(doc); _ = doc.ReadPage(0, 1, out _); Check(Captures(doc) == before);
             }),
             ("schema-invalid payload is rejected before publication and prior diagnostic data stays readable", () => {
-                var registry = ComponentRegistry.CreateDefault(); registry.Register<NumberValue>("test.mismatch", 1,
+                var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<NumberValue>("test.mismatch", 1,
                     """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""", v => v);
                 var doc = new SceneDocument("Diagnostic", registry); Guid id = doc.CreateObject("A"); var original = doc.CaptureSnapshot(); ulong revision = doc.Revision;
                 Reject(() => doc.SetComponent(id, new NumberValue(7)));

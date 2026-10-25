@@ -1,4 +1,346 @@
-# ECS 重构实施合同（E0–E5）
+# ECS 重构实施合同（E0–E6）
+
+2026-10-25 最新实测：E6 当前本机 Debug/Release 完整回归各 131/131 通过，无失败、超时或跳过；双配置全托管编译 0 警告 / 0 错误。正式 Release 编辑器已另经用户授权更新。偶发原子保存根因、SDK8/VS 宿主验证与 E5-D 目标机性能仍未关闭。[详细修复、证据与边界](E6_UNIFIED_VALIDATION_PLAN.md)。下方标题和历史失败记录不覆盖本条最新实测结论。
+
+<a id="ecs-e6-b"></a>
+
+## E6-B 元数据与访问代码生成（2026-10-24，便携分析器、字段规则及注册聚合收敛，整体统一首轮测试未通过）
+
+最新实测：五项前置门禁落实，Debug/Release完整托管63工程与原生全目标均零警告/错误。两配置CTest均实际执行100入口，各89通过、9失败、2超时，不能宣称E6完成。B4-B构建/发布、生产字段差分、注册聚合用例通过；CodeGen内存fixture各22/25，仍需处理manifest诊断、引用移除输出和JSON拒绝预期；Runtime主组83/84，调度指标被资源线程规则拒绝。Services/SceneRendering等入口在资产准备异常处提前失败，后续E6用例尚未完整覆盖。正式EXE不变，未运行整条Build脚本、无正式部署/提交/推送；E5-D继续延期。[完整失败清单与复测要求](E6_UNIFIED_VALIDATION_PLAN.md)。后文“未运行”均为此前状态。
+
+顺序：E6-A 实现收尾 → E6-C → **E6-B** → 整体 E6 统一测试。E5-D 延期。本节不把编译成功视为功能、增量失效或性能验收。
+
+### B4-B本机双配置实测（2026-10-24最新）
+
+按用户指出的未执行缺口补跑，不再以编译替代合同验证。当前源码新建Debug/Release验证入口，各执行16条构建合同和2项真实Editor/Player隔离发布，共36条子命令全部符合预期；8条预期拒绝命中指定诊断，没有意外失败或超时，未修改测试条件/产品代码。四轮success=true、正式EXE哈希C50742AD不变，所有进程已正常退出。
+
+涵盖干净/no-op/编辑/声明移除恢复、程序集引用冲突/移除/修复、最后有效DLL保留、netstandard2.0/Roslyn4.8 PE核验、编译/发布依赖泄漏负例与真实发布审计。实际SDK9.0.315；SDK8及此次VS矩阵未执行，新增字段差分/注册聚合内存用例和其余E6回归未运行，因此B4跨宿主和整个E6验收仍未完成。未启动/部署/提交/推送，E5-D延期。详见[完整范围与证据](E6_UNIFIED_VALIDATION_PLAN.md#b4-b实际执行结果2026-10-24)；`out/verification/ecs-e6/b4b-execution-first/execution-result.json`关联四轮原始回执。下方未执行说明保留为历史。
+
+### 注册聚合与唯一组合入口（2026-10-24）
+
+`ComponentGenerator`为有本地注册或引用模块的程序集生成唯一`<AssemblyName>.Generated.ComponentModule.Module`，并附带编译期模块manifest；纯组合程序集也生成依赖聚合。程序集名不是合法命名空间时使用稳定hash名称。源码里的`[GenerateComponent]`自动加入；暂不适合该有界元数据子集的组件，在原单类型注册方法上用`[ComponentRegistration]`显式加入，保留原schema、validator、nullable metadata、无默认值和runtimeAttachable，不凭空生成默认资产UUID或开放JSON支持。新增`NCMA009`拒绝错误方法签名、畸形模块manifest和占用的生成类型名。
+
+唯一工厂为`Ncma.Runtime.CompositionRegistry.Build(params ComponentModule[] roots)`。无参数只包含Runtime，维持低层依赖方向；完整宿主使用自身生成根：Editor的实际程序集名为`NcmaEngine`，Player为`NcmaPlayer`。调用方不再排列组件或手写模块依赖清单。Build先复制根、展开依赖，按ordinal身份确定顺序并去重；同ID不同模块实例、环、空项或超过128模块/根预算在注册回调前拒绝。之后在一份新建的原`ComponentRegistry`上依次注册；保留原重复TypeId/CLR类型、元数据、回调、冻结及扩展规则，无全局可变目录、不运行时反射扫描程序集。失败不返回半成品，可信回调的外部副作用不承诺回滚。
+
+已删除`ComponentRegistry.CreateDefault`、`RenderComponentRegistry.CreateRegistry/Register`、`CharacterComponents.Register`、`RenderConfiguration.CreateRegistry`及UI/Shadow/PostProcess三个私有`CreateRegistry`。全仓生产/测试调用者改为Build；渲染类只剩schema/数值规则工具，改名`RenderComponentRules`，不保留旧兼容工厂。三个私有解码器使用所在程序集聚合，其公开Read/Decode入口本就按具体类型过滤，没有必须维护的注册子集，因此不增加第二份过滤注册表。底层独立工具可选择显式生成根；低层`ComponentRegistry.Register<T>`仍是原可信扩展原语，不是另一份引擎类型清单。
+
+完整宿主目标清单为19类型（Runtime1、Animation4、Scene.Rendering9、Characters4、Rendering1），其中4类型保留生成字段metadata。新增3组CodeGen与3组Runtime用例登记未运行：生成+手写聚合/声明顺序/删除失效、错误声明拒绝、完整19类型与原挂载限制、菱形去重/复制/重复构建隔离、冲突/预算先行拒绝、原重复注册和失败隔离。既有身份菱形测试更新为允许一个聚合入口、禁止重复本地注册；原数值/负例/性能负载不缩减。正式EXE不变；验证限静态与编译，整体E6末才运行测试。证据目录`out/verification/ecs-e6/pre-composition-aggregate-first`保留改前托管源码和状态文档及编译日志，非全仓冻结；未部署/提交/推送。
+
+本片最终隔离Debug编译10个完整测试工程（同时覆盖现役Editor/Player依赖），均0警告/错误：CodeGen14.66s、Runtime3.66s、Services13.47s、Rendering19.20s、Scene.Rendering8.13s、Editor.Core3.70s、Scene3.52s、Gameplay4.71s、Animation4.48s、Player6.88s。首次Editor引用项目命名空间而非实际AssemblyName导致1错误37.01s；动画测试发现两处既存作者World/旧Play构造引用导致2错误4.16s。两轮失败与对应源码保留；前者修正生成根名称，后者使用现役Bake得到真正runtime，保留原tick/clock/postcommit fault断言并追加作者bytes不变检查。原始托管源码及状态文档823份已归档，选定当前源码/日志/产物receipt并非全仓冻结。Editor/Player依赖与产物无CodeGen/Roslyn运行依赖；未运行测试、未做本片SDK8/VS/Release宿主验收。
+
+### 字段契约唯一规则源（2026-10-24）
+
+`Ncma.CodeGen.Shared/FieldContract.cs`以链接源码同时进入生成器和Runtime，不引入运行时Roslyn依赖。两侧仅提取符号/反射事实；共享层负责以下顺序：
+
+1. 类型JSON自定义属性拒绝 → enum → 精确CLR标量kind表 → Entity/地址/引用/ref-like排除 → 值对象白名单与集合排除。
+2. 所有实例字段/属性（包括私有和本来会忽略的成员）先拒绝`System.Text.Json.Serialization`属性；静态成员忽略。公共readonly字段拒绝；属性要求公共getter和setter，getter-only/indexer忽略，公共getter+非公共setter拒绝。反射不实例化自定义属性。
+3. CamelCase路径、对象路径与叶子一起展开；原16层/128字段限制不变。原`FieldSchema`继续负责闭合schema；字段ID/路径/flags/完整覆盖与最终ordinal排序共用一份实现。未扩大受支持JSON子集，flags仍不是访问授权。
+
+新增`FieldContractTests`三组，登记到原CodeGenTests入口但**尚未运行**：
+
+- 扫描生产工程的真实源码属性符号，逐组件运行生成器模型与实际`ComponentMetadata.Prepare<T>`；运行时定义独立从属性读取并反向输入，逐项断言ID、顺序、kind、flags、CLR及JSON路径相等。当前涉及Transform/Character/Camera/DirectionalLight四个声明。源清单与已引用产品程序集清单必须完全一致，新模块未加入测试引用或程序集过期时失败，不静默漏测。
+- 全标量类型及enum、嵌套对象/叶子、flags和ordinal排序、只读属性/静态/indexer忽略；独立预期值防止两侧共享错误后一起“通过”。
+- 私有成员/公共成员/类型上的JSON自定义、readonly字段、私有setter、地址/Entity/string/DateTime拒绝差分。
+
+仅测试工程新增Characters依赖以及两侧对CodeGen.Tests的friend可见性；生产端不扫描程序集、不扩MCP或运行时写权限。隔离Debug完整编译CodeGen.Tests **26.39s**、Runtime.Tests **3.55s**、Services.Tests含Editor **45.61s**，均0警告/错误。首次恢复TLS错误与一处测试可空性错误已保留后修复；编译不代表上述差分测试或功能验收通过。证据`out/verification/ecs-e6/pre-field-contract-shared-first`为选定源码/日志/产物记录，非全仓源码冻结。正式EXE不变；未测试/部署/提交/推送。
+
+### 分片与交付边界
+
+| 分片 | 实现目标 | 当前状态 |
+| --- | --- | --- |
+| B1 显式组件声明和生成基础 | 增量生成器、稳定 TypeId/version、原注册目录、受检 typed World/调度访问；首先迁移真实 TransformData | 已接线，测试待整体 E6 |
+| B2 字段元数据 | 显式稳定 FieldId（不从声明顺序派生）、嵌套字段路径、默认值、编辑/持久化/运行访问标记；schema 与字段一致性检查；接入同一 ComponentRegistry | 持久化组件子集已实现，测试待整体 E6 |
+| B3 消费方迁移 | Inspector/序列化/AI schema 消费同一元数据；代表性引擎与脚本类型迁移；调度声明生成但仍由原图编译器验证 | 约定有界子集及消费审计已实现；待整个E6统一测试，非所有组件/脚本迁移 |
+| B4 构建与闭环 | 构建宿主版本合同、跨程序集重复 ID、发布依赖审计、增量/干净生成一致性及失效负例；补齐整体测试入口与完整消费者矩阵 | B4-B本机SDK9双配置36条命令实测通过；SDK8/此次VS复测及其余E6回归待执行，不是完整跨宿主或E6验收通过 |
+
+B2/B3 必须区分作者 UUID/事务与运行 Entity/World；生成访问不成为编辑写入口，不绕过原命令、权限、预览、批准、Undo、generation、只读、线程、候选步、预算或唯一提交。AI 仅获得已授权原 capability；不新增自动批准/运行写权限。旧兼容类型不恢复。
+
+### 构建宿主修正：netstandard2.0分析器，无SDK固定（最新）
+
+按用户最新决定，删除根`global.json`及`NcmaRequireCompilerHost/NCMAHOST001`，不再限制SDK9.0.315或拒绝全框架MSBuild。生成器改为`netstandard2.0`，包引用`Microsoft.CodeAnalysis.CSharp 4.8.0`并设PrivateAssets=all；测试程序降为net8，直接引用同版包，三个CTest路径同步。生成器自身及生成代码使用C#12，最低编译器API为Roslyn4.8（SDK8/9、VS17.8+），不是任意旧VS均兼容。参见[官方包目标框架](https://www.nuget.org/packages/Microsoft.CodeAnalysis.CSharp/4.8.0)与[Roslyn生成器说明](https://github.com/dotnet/roslyn/blob/main/docs/features/source-generators.cookbook.md)。
+
+没有重写JSON解析器或放宽schema：保留System.Text.Json，明确包版本8.0.6/PrivateAssets=all；仅将非宿主依赖作为Analyzer项交给Roslyn加载器。普通CodeGen项目引用只返回自身程序集，避免netstandard依赖混入net8测试ReferencePath；编译器自有Roslyn/Immutable/Metadata不作为附加分析器传入。产品引用/发布隔离守卫继续生效。9条诊断登记在未发布规则表并启用扩展分析器规则，没有关闭警告压制问题。
+
+HashData/ToHexString替换为标准SHA256实例+相同大写十六进制输出；Stack.TryPop、Dictionary.TryAdd/GetValueOrDefault、ASCII判定、Range/ToHashSet改为netstandard2.0可用等价写法，保留共同FieldSchema的预算/重复/闭包规则。内部IsExternalInit仅作生成器record编译标记，不成为产品兼容层。
+
+构建fixture移除两个SDK固定相关命令，现16条；新增生成器PE中`.NETStandard,Version=v2.0`及Roslyn4.8程序集引用检查，泄漏负例改用NuGet依赖。原增量、移除、冲突与发布用例不删减；测试仍未运行。
+
+证据边界：SDK9下CodeGen.Tests最终Debug8.86s、完整Services.Tests含Editor Debug42.31s均0警告/错误；VS2022 Community/Roslyn4.14全框架MSBuild共享编译真实Gameplay.Sample（含Runtime组件生成和脚本Export生成）3.96s、0警告/错误。实际产物确认netstandard2.0，隔离Editor/Sample的文件与deps无CodeGen/Roslyn运行依赖。SDK8未安装，未实测；VS非共享模式因CS8034/0x80131515未通过，独立只读Zone查询显示F:程序集URL为Internet，未修改信任策略。不能将共享模式结果冒充所有VS设置或SDK8验收。
+
+首次普通还原TLS失败；获准官方NuGet还原后出现11条分析器规则错误，再1条规则表格式错误，随后6条net8/netstandard引用冲突警告；均保留日志，依次补齐未发布规则表与分离分析器依赖，未用NoWarn绕过。后续Editor/VS普通还原也遇到TLS，官方还原成功后才编译。17份改前原文（含已删除global.json）、失败相关源、全部日志及选定receipt位于`out/verification/ecs-e6/pre-codegen-portable-first`，非全源码冻结。正式EXE C50742AD未变，无功能测试/冒烟/性能/发布/部署/提交/推送。
+
+下一步仍是整个E6统一验证，补齐SDK8环境及宿主矩阵后分别记录，不自动安装SDK、不把本机结果扩大成所有宿主通过。下方SDK固定内容为历史，已被本节取代。
+
+### B4-B 真实构建与发布验证设施（历史，已实现/编译，未运行）
+
+新增两个显式测试模式及CTest入口：`NcmaCodeGenTests.BuildContracts`、`NcmaCodeGenTests.PublishContracts`。普通build不运行；原Build.ps1前缀分组覆盖二者。前者准备18条SDK/MSBuild命令，后者隔离发布实际Editor/Player；均未执行。宿主/依赖守卫增加稳定错误码NCMAHOST001/NCMADEP001/NCMADEP002，负例必须匹配预期码而非任意非零退出。
+
+干净/no-op/编辑/声明移除恢复、组合引用替换/移除/修复、最后成功DLL保留、SDK真实解析/不可用固定版本、原编译器引用泄漏与Content发布泄漏、恢复后正常发布均已登记。通过PE元数据读取实际manifest/Generated类型和程序集依赖，不加载被测程序集；发布产物另查apphost/runtimeconfig/deps，保留文件哈希。不宣称无关旧.g.cs调试残留是有效编译输入，不删除旧文件掩盖失效。
+
+新鲜UUID隔离目录、reparse/越界拒绝、fixture改前历史、命令/PID/输出/binlog与失败回执、单子进程180秒期限、仅持有的子进程树清理及正式EXE前后检查已接入；不部署、不运行游戏。发布是net8/win-x64/framework-dependent，仍不裁剪/AOT/单文件；不是M9完整资源包验收。选定源码pins不是全冻结。
+
+核对A/C/B测试注册与当前CTest入口，新增[整体E6统一验证清单](E6_UNIFIED_VALIDATION_PLAN.md)。本片实现设施而非跑验收：CodeGen.Tests首轮Debug10.40s、审阅后Debug4.23s，最终同源Debug10.83s/Release10.39s，全部零警告/错误、终态，仅编译；测试、发布、GUI、IPC、性能均未运行。7份改前文件、审阅前设施源、完整日志和局部哈希保存在`out/verification/ecs-e6/pre-codegen-b4b-first`。正式EXE未变，无部署/提交/推送。
+
+**下一步：整个E6统一验证**，先准备当前双配置全部依赖并核对完整入口，再运行A/C/B及邻接回归；保留失败、修复后重测，不把历史编译绿色复用成验收。E6尚未验证通过，E5-D继续延期。
+
+### B4-A 编译宿主、跨程序集身份与入口（历史，实现待统一测试）
+
+**宿主合同**：根目录`global.json`固定SDK **9.0.315**（不自动roll forward、不用预览）；`managed/Directory.Build.targets`在构建/编译前要求Core MSBuild及同一SDK版本。从任意工作目录启动`Build.ps1`都会在仓库根运行并在退出时恢复目录。产品仍是net8，生成器及其专用测试为net9；没有将Player/游戏运行时升级为net9。全框架VS MSBuild不属于支持宿主；Rider等应选仓库固定的dotnet/Core MSBuild。SDK升级须同时审核global.json、宿主守卫及编译器合同，不能隐式漂移。
+
+**身份检查**：每个成功生成的组件附带程序集级`GeneratedComponentIdentity(TypeId,Version,Type)`声明。编译器仅读取Roslyn元数据，不加载组件程序集/执行组件构造，不建立运行目录。检查引用图中的manifest，并按程序集身份去重，允许菱形引用；本地与引用冲突、仅引用之间冲突均报`NCMA007`，不同schema版本也不能共享同一TypeId。畸形manifest、外来类型、重复类型或与原显式声明不符报`NCMA008`；原本地重复仍为`NCMA002`。生成器依赖CompilationProvider，引用替换会使检查失效重算。
+
+**覆盖边界**：统一targets给managed下所有普通工程直接接入analyzer-only引用，包括没有本地组件声明的Editor/Player组合工程；移除四个重复手写ProjectReference。生成器与其专用测试排除该自动引用以免循环。仅覆盖当前编译器可见、带生成manifest的声明；不声称穷尽任意手写注册函数、未引用的动态插件或旧二进制。原ComponentRegistry的重复ID/类型拒绝、加载及权限检查仍是运行期最终边界，不新增兼容目录、自动扫描注册或AI能力。
+
+**依赖与测试入口**：构建ResolveReferences及发布ComputeFilesToPublish后拒绝普通工程的Ncma.CodeGen/Microsoft.CodeAnalysis引用/文件；生成器和CodeGen.Tests本来需要编译器依赖，明确例外。此守卫是构建卫生，不是恶意改名DLL的安全扫描。`Build.ps1`补上CodeGen.Tests的构建、原生测试排除及托管测试包含；CMake测试固定仓库工作目录。没有执行Build.ps1、CTest或发布/部署脚本。
+
+新增5组CodeGen用例**登记未运行**：跨程序集本地冲突（含不同version）；无本地声明的组合冲突与引用顺序稳定性；菱形/相同叶类型名不同ID正例；畸形manifest拒绝且不崩溃；引用替换/移除/恢复后的增量driver与干净生成一致性。这些是编译器内存fixture，**不是已经完成的真实MSBuild增量/发布验证**，原有用例及阈值不变。
+
+本次仅编译与静态检查：CodeGen.Tests Debug **11.10s**、完整Services.Tests含正式Editor Debug **41.71s**、完整Player.Tests含Player Release **34.42s**、Gameplay.Sample Debug **9.86s**，全部零警告/错误且终态。PS/XML/JSON静态解析正常；检查上述隔离Editor/Player/Sample输出及deps，没有CodeGen/Roslyn运行依赖；已检查四个真实组件生成manifest。这不代表测试、GUI、实际发布或增量失效验收。13份改前原文与完整编译日志、局部哈希保存在`out/verification/ecs-e6/pre-codegen-b4a-first`，非全源码冻结。样例未安装到out/managed；正式EXE C50742AD未变，无部署/提交/推送。
+
+**下一步B4-B**：补齐真实MSBuild干净/增量/声明删除/引用替换产物矩阵、错误宿主与编译器依赖泄漏负例、隔离发布依赖及总体验收入口审计；先完成这些待运行验证设施与剩余实现，再在整个E6末统一运行所有测试。B4尚未整体收尾，E5-D继续延期。
+
+### B3 消费一致性审计收尾（历史，实现待统一测试）
+
+本次补齐两个实际消费缺口：B3-B组件仍只有JSON控件，Export控件没有使用目录标签且固定±1000范围。并发现脚本目录generation不属于EditorViewStamp，需要在事件提交前单独检查。没有重写持久化格式、扩大AI授权或移除现役扩展入口。
+
+| 消费链 | 唯一声明来源/当前实现 | 审计结论及边界 |
+| --- | --- | --- |
+| 组件生成注册、typed及调度访问 | Generated.Register → 原ComponentRegistry；Generated访问 → 原World/ScheduleContext | 原TypeId/version/schema/验证；生成声明不授予权限，未改造系统不冒充任务 |
+| 作者保存/加载、Prefab和Bake | SceneDocument.NormalizeComponents → Registry.Decode/EncodeObject/ValidateEncoding；原Codec与原事务 | 同一注册规则；JSON保存不加入FieldId/Metadata，Bake仍为独立运行实例边界 |
+| Transform与代表性组件Inspector | 原ComponentMetadata.Field/ReadSerializedField | Transform保留熟悉布局；其他组件仅在全部叶字段为number/integer/bool且<=16时生成完整表单；稳定FieldId+TypeId/version定位，不从顺序猜字段 |
+| 不支持表单的组件 | 原完整分页JSON；没有声明就不猜字段/默认值 | 非标量/超过16项/无元数据不截断，不是旧格式兼容；完整组件编辑仍受原schema/校验 |
+| 环境/后处理/阴影/UI/动画专用面板 | 现役类型化领域值、模块目录和原事务/批准流程 | 资产/模块/跨字段语义不能由简单字段标记替代；未虚称全部面板自动生成，也不绕过领域批准 |
+| 组件AI类型页 | 原Registry descriptor + 显式7项字段投影 | 分页及252KiB+4KiB封套不变；不返回元数据默认值/场景值，Editable/RuntimeWrite不是授权 |
+| 脚本加载/作者绑定/闭包 | 原ScriptCatalog核对生成公共Export → EditorSessionOwner.Describe深拷贝 → 原EditSession/ScriptBindingClosure | 同一Name/Kind/标签/默认值；持久化名字不改；默认读取仍可执行受信构造/getter，不是无副作用沙箱 |
+| 脚本Inspector/Attach | 原ScriptCatalog按TypeName+Name+Kind匹配，动作携带catalog generation | 标签使用Category/DisplayName；缺失/Kind不符显示不可用；事件先核对当前目录、上帧目录和Edit目录，阻止刷新前旧事件及旧draft |
+| 脚本AI类型页 | 既有ncma.engine.behaviour_types → 同一Edit目录快照 | 原公共默认值本来就返回，保持行为，不与组件字段页的无默认值承诺混淆；不返回私有ElapsedSeconds或live脚本对象 |
+| Play运行检查 | 原受批运行页/Entity代际/World/Play/共享受众与到期守卫 | 本次未改动，声明/作者表单不是运行读写权限 |
+
+新组件数字控件使用JSON数值文本，不凭元数据猜min/max，不把整数转double再写回；integer要求可表示的精确int64/uint64数字文本，number有限，bool仅0/1。整组件JSON仍经原手势草稿、完整验证、单次Commit及Undo/Redo。Editable只限制此控件，不能替代原完整组件API的授权规则。字符串、数组及更多字段继续完整JSON入口。
+
+Export数字控件使用不依赖区域设置的文本与原float/double/int/bool验证，不再固定±1000或把1.5静默取整。脚本持久化值本来是double；保留该合同，不声称任意精度脚本数字。原每页8绑定/16Export限制不变。目录换代在Apply中检查，旧操作经过共享异常路径取消draft；附加脚本也检查目录一致性，不授予新的live访问。
+
+新增4组Services审计用例登记未运行：真实Inspector与component_types路径一致、uint高位/范围外原合法数值/非法小数/checkbox/Undo/字节往返；无元数据JSON与Editable/冻结/旧事件；真实脚本Inspector与behaviour_types显示/默认合同、整数上限/非法小数/历史；目录替换在下次Build前拒绝Export及独立Attach事件、显式刷新后的正例与缺失声明。原用例/负载/阈值不删改。
+
+完整隔离Services.Tests含正式Editor Debug初次 **41.52s**、补齐AI/独立Attach断言后最终 **10.64s**，均0警告/0错误且终态。未运行测试/GUI/IPC/冒烟/性能，编译不构成功能验收。记录 `out/verification/ecs-e6/pre-codegen-b3-audit-first` 保留9份改前原文（含未改的既有metadata fixture）、审阅前新增测试源和局部哈希，非全源码冻结。正式EXE C50742AD未变，无部署/提交/推送。
+
+**B3在上述明确边界内实现收尾；下一步B4构建宿主与跨程序集冲突、干净/增量/失效负例、发布依赖和整体测试入口闭环。测试仍仅整个E6末，E5-D延期。** 全组件/全脚本迁移、继承及非数值Export生成、所有面板自动生成、无反射启动、零分配及全字段安全策略不在B3已完成范围。
+
+### B3-C 脚本Export生成与原目录接入（历史，实现待统一测试）
+
+本片以现有公共 `[Export]` 为唯一成员合同，显式 `[GenerateExports]` 选择生成访问。**成员名继续是原持久化身份**，不改绑定JSON/Kind、目录响应或闭包哈希内容结构；没有把组件FieldId强加到脚本导出格式。
+
+- 新增增量 `ExportGenerator` 和 `NCMA101` 诊断。首批支持public sealed partial、顶层非泛型、直接继承Behaviour、有public无参构造器且无required成员的类。只生成public实例可写float/double/int/bool字段/属性；拒绝private/static/readonly/init/ref/indexer、继承/嵌套/泛型等不支持形状，不静默漏掉声明。类型名512字节、成员/标签/类别128字节的既有UTF8上限保持，声明最多1024项，与原绑定容量一致。
+- 生成 `IGeneratedExportSource` 显式实现，提供冷启动数组及无实例捕获的typed Read/Write委托。`ExportNumbers` 复用原finite/float溢出/int整数范围/bool0或1约束；getter/default仍可能执行用户代码，不声称纯函数/零分配。没有生命周期派发器、自动注册副作用、平行目录或全局脚本类型缓存。
+- 原ScriptCatalog在原候选加载/busy范围内创建原型，冷反射核对完整公共Export集合的Name/Kind/DisplayName/Category，再使用生成getter取默认值，实例绑定用生成setter。缺marker或实现、缺失/重复/额外条目和元数据不符均拒绝；显式生成类型失败不退回反射。普通未声明生成的当前Export扩展仍沿原路径运行，不把它称为废弃兼容入口。
+- 原快照、ScriptBindingClosure、构造/候选切换/外来candidate拒绝/owner-thread/重入/lease/collectible unload流程保持；原PropertyInfo异常包装保留。委托随目录候选所有权释放，没有进程级委托缓存。它们是受信本地脚本装配API，非live Inspector/AI写能力，不暴露私有状态。任意受信构造器/访问器的外部副作用不保证回滚，未实现脚本沙箱。
+- 实际 `Ncma.Gameplay.Sample.RotatorBehaviour` 的Clockwise、DegreesPerSecond、Multiplier迁移；ElapsedSeconds保持非Export。默认值、成员名、标签/类别、旋转逻辑不改。示例项目仅加入分析器引用，产品仍net8；Inspector/AI沿原ScriptCatalog快照消费，没有新的capability或写权限。
+
+新增4组生成器用例已登记未运行：四种类型的生成/编译/动态实例值与非法数值拒绝、私有字段不进入输出、不支持形状/元数据预算诊断、同driver修改/移除/失效与确定性/空类。新增3组Services目录用例已登记未运行：真实生成示例目录/默认/绑定/私有状态缺席、非法kind/范围/成员与线程、外来/弃用/重载candidate和lease边界。已有目录卸载、Play与绑定业务用例保留，正式测试仍等待整个E6末。
+
+完整隔离Debug编译 `CodeGen.Tests` **10.15s**、`Gameplay.Sample` **9.64s**、`Services.Tests`含正式Editor **39.31s**，均0警告/0错误并已终态。只静态检查生成源码（仅三个公共Export）及Sample/Editor运行依赖（无CodeGen/Roslyn），不代表动态生成测试、实际目录加载、GUI/IPC、卸载回收或性能通过。记录位于 `out/verification/ecs-e6/pre-codegen-b3c-first`，10份改前文件及选定哈希，不是全源码冻结。示例只构建到隔离目录，未覆盖out/managed；整体E6测试前必须按正式测试流程重建示例。正式EXE C50742AD不变，无测试/冒烟/性能/部署/提交/推送。
+
+**本片结束时下一步（历史）：B3序列化、其他Inspector/AI与组件/脚本声明消费一致性审计；然后B4构建与完整门禁闭环，再整个E6统一测试。E5-D继续延期。** 最新审计见上方。继承/泛型/非数值Export生成、脚本新FieldId序列化、无反射装配及所有脚本迁移不在本片完成范围。
+
+### B3-B 代表性组件与类型化访问（历史，实现待统一测试）
+
+本片完成有现成合法默认值的三个实际组件，不代表所有组件、所有调用点或运行系统均已生成/迁入任务图。
+
+- `CharacterData`（13字段）、`CameraData`（10字段）、`DirectionalLightData`（7字段）声明显式FieldId/CLR路径/JSON路径，在原CharacterComponents/RenderComponentRegistry调用生成Register；没有平行目录。原TypeId、v1、schema属性及required顺序、默认值、验证函数均保持，原持久化JSON不增加FieldId或元数据。
+- Character仍为`runtimeAttachable=false`，字段用途为Persistent/Editable/RuntimeRead；相机/灯光另含RuntimeWrite。用途标记仅描述意图，不是授权；生成Write依旧调用原World.Set，物理域配置冻结、唯一提交、候选步、线程、generation、只读等实际边界不变。没有依据标记放宽写权限，也没有宣称所有标记都是字段级安全限制。
+- 正式CharacterPlayRuntime的角色启动读取、RenderSceneExtractor相机和主方向光读取改用生成类型化访问；生成Query只能冷建并缓存，现有缓存/组合查询和数值提交保持原实现。ReadAccess/WriteAccess/Channel/ReadScheduled/WriteScheduled保留原图编译与受检context；只新增对应验证用例，不把未改造业务系统宣称为调度任务。
+- Characters与Scene.Rendering显式引用仅构建用分析器，仍net8产品，SDK9/net9生成器宿主。两次独立编译产出的3份生成文本逐字节相同；Editor/Player运行deps与输出目录没有CodeGen/Roslyn依赖。此处不是完整增量失效或部署验收，B4继续负责。
+- FollowCamera、mesh等需要对象/资产上下文的类型不伪造UUID默认值；Health当前没有原默认声明，含字符串类型也不强行放进unmanaged子集。继续原手写注册，元数据明确缺失，不恢复旧兼容类型。
+
+新增5组Scene.Rendering用例登记未运行：独立原schema配方/默认值/字段一致性；typed校验/只读/线程/foreign/generation/query失效；原调度提交/跨阶段拒绝/过期context；角色运行挂载拒绝及原子回滚；作者字节往返、显式bake隔离与真实渲染提取数据。原有负载/阈值/业务测试未降低。
+
+完整隔离Debug编译：首轮Scene.Rendering.Tests失败1处CS1503（新增用例调用不可见内部ReadOnly，31.54s），保留精确失败源码/完整日志；改用公开固定步提交观察者触发真实只读边界，无新增friend/API。第二轮完整Scene.Rendering.Tests **9.23s**、完整Services.Tests含Editor **39.28s**，均0警告/0错误、全部终态。只做编译与源码/产物静态检查，未运行任何测试/冒烟/GUI/IPC/性能。11份改前原文及选定源码/日志/产物哈希见 `out/verification/ecs-e6/pre-codegen-b3b-first`，不是全源码冻结。正式EXE C50742AD未变，无部署/提交/推送。
+
+**本片结束时下一步（历史）：B3-C脚本Export生成声明与原目录消费；补齐序列化、其他Inspector和AI消费一致性审计；然后B4及整个E6统一测试。E5-D继续延期。** B3-C最新实现见上方记录。
+
+### B3-A 首批消费方（历史，实现待统一测试）
+
+本片只完成 Transform Inspector、序列化默认值和既有类型查询的字段声明页，不代表全引擎/脚本迁移。
+
+- ComponentRegistry 新增按 TypeId 的直接 Describe/TryDescribe 以及 DefaultSnapshot（要求精确版本和已有元数据）；无平行目录。默认快照来自注册时的规范化默认值，应用仍须原命令/权限/验证。没有改场景保存格式、写入 FieldId 或绕过完整组件校验。
+- ComponentMetadata 在构造时建立只读 FieldId 索引和 JSON 路径段缓存。Field/ReadSerializedField 只读调用者已有JSON，不读取World、不验证或授权整个payload；没有逐字段 LINQ/反射/路径Split。交互写JSON仍走原冷事务路径，未声称整个Editor零分配。
+- 正式 Inspector 的 Transform数值/标签/Editable标记来自原元数据，UX仍按10项熟悉顺序排列；动作携带FieldId，不再由数字索引猜测JSON组/坐标。修改完整组件JSON后进入原Begin/Update/Commit交互事务、原stale/frozen/权限/Undo/Redo边界，不引入运行写回。局部Editable检查只限制这个控件，不是安全授权，也不宣称禁止原完整组件API修改该字段。
+- Add Transform 使用注册默认快照，不再每帧硬编码Identity再序列化。没有默认声明时明确显示不可用；没有字段声明的现有手写组件仍使用原完整JSON编辑入口，不猜测FieldId。
+- 既有 `ncma.engine.component_types` 保留ReadOnly风险与原宿主接入，无新增capability。显式提供typeId才返回 `fieldPage`，offset>=0、默认16/最多32项；offset/limit必须伴随typeId，未知/非字符串typeId或额外输入拒绝。无typeId仍为原目录/schema查询。
+- 字段页只投影FieldId/JsonPath/ValueKind及4个用途布尔值，标记available、metadataVersion、总数/偏移/返回数/下一页/完成状态、defaultsIncluded=false、usageIsAuthority=false。不序列化带默认值的字段对象，不返回默认快照、场景/Play值或私有脚本状态。已有原schema文本照常返回，其中原有schema注释不被重新定义为秘密过滤。
+- 原252KiB数据+4KiB封套预算保持，描述/输入/输出schema同步修改；原元数据JsonIgnore保持。权限配对/批准/传输协议入口未改，编译成功不是实际MCP/IPC或GUI通过。
+
+新增4组Core+2组Presenter用例已登记未运行：分页一致性/无默认或场景值、闭合输入/旧会话和revision/只读不授写、序列化默认值原事务及往返/Undo/Redo、缺声明诚实返回；真实Presenter自定义默认值、FieldId映射改变后仍读写同一字段、陈旧/冻结事件及历史。保留原负载与阈值。
+
+完整隔离 Debug 编译 Core.Tests **13.22s**、Services.Tests含Editor **40.67s**，均0警告/0错误、终态成功；较早Core编译12.71s为中间源。新查询schema源码经JSON静态解析；12份改前原文复核、局部产物/日志哈希在 `out/verification/ecs-e6/pre-codegen-b3a-first`，不是全源码冻结。未执行测试/冒烟/GUI/IPC/性能；正式EXE C50742AD未变，未部署/提交/推送。
+
+**本片结束时剩余B3（历史）：B3-B代表性引擎/游戏组件与typed访问迁移；B3-C脚本Export生成声明/原目录消费；再完成序列化、其他Inspector及AI声明消费的一致性审计。** B3-B当前进度见上方最新记录。之后B4构建闭环，再整个E6统一测试；E5-D延期。
+
+### B2 字段元数据合同（历史，实现待统一测试）
+
+`ComponentField(FieldId, MemberPath, JsonPath)` 明确声明每个序列化字段及中间 object 路径。FieldId 是**组件 TypeId 内的稳定标识**，不从 CLR 名称、JSON 名称、反射顺序或声明位置计算；改名时由开发者保留 ID，删除/复用 ID 的历史迁移检查尚未实现。Transform 已声明13项，包括 Position/Rotation/Scale 与其数值子字段，原 `ncma.transform` v1/schema 未改。
+
+- 唯一注册入口仍为 ComponentRegistry.Register；生成代码提供定义数组与默认工厂。元数据附着原 ComponentDescriptor，不新增第二目录。手写注册未提供声明时 Metadata=null，不自动猜测 ID。Metadata 标记 JsonIgnore，避免原外部响应无意扩大；Inspector/AI 明确投影消费留 B3。
+- Flags 包含 Persistent/Editable/RuntimeRead/RuntimeWrite；默认 Persistent+RuntimeRead。当前只描述原持久化序列化字段，拒绝 Persistent=false、未知位及 Write无Read；不引入“隐藏字段仍被保存”的假过滤。标记不是权限或安全隔离，也尚未接通字段级写入限制；原能力/原事务/World/调度检查继续有效。
+- 生成器和运行注册共用有界 schema 规则源码；NCMA006 拒绝缺失/重复ID、错误路径/类型、未完整覆盖、未知标记、开放object、required不匹配、重复schema键、非法本地引用及不支持的schema关键字。显式 schema 仍由类型作者维护，不宣称已经从字段自动生成整个 schema。
+- 每组件最多128项（含object路径），FieldId 1..128 ASCII字符，路径最多256字符、CLR展开深度16，JSON/引用深度32、原schema/default 64KiB上限保留。支持原camelCase字段映射、数值/布尔/字符/Guid、枚举、显式列出的 Numerics 值类型及简单用户值类型组合；非公开setter、readonly字段、自定义JSON属性、隐式框架转换器/集合等失败关闭，不冒充完整STJ支持。
+- 注册先复制并完整检查字段定义，之后才调用默认工厂与原验证函数。默认值规范化后按原schema验证；私有Prepared元数据再捕获不可变JSON快照，各字段共享快照视图而非全值重复克隆。DescribeFields 是冷路径新数组；注册元数据不可通过它或只读Fields集合修改。
+- 注册回调期间拒绝重入注册或构造World冻结目录；异常不发布类型，正常返回才填入原双索引。默认工厂/验证函数仍是可信本地代码，外部IO/其他对象副作用不承诺回滚，注册目录不因此变成多线程容器。Generated.Default 也经原验证函数；目录保存注册当时的快照，不声称有副作用的工厂每次返回同值。
+- Runtime新增4组、CodeGen新增4组用例已登记未运行：默认值/只读隔离/原wire不扩展、调用者数组与规范化、错误预算/路径/schema/标记先拒绝且不发布、重入/冻结；编译诊断、字段改名保ID及使用标记失效、隐式转换器/readonly字段拒绝。B1用例沿用，仅正例声明补齐闭合schema/显式字段。
+
+最终完整隔离 Debug 编译：Runtime.Tests **7.40s**、CodeGen.Tests **7.65s**、Editor.Services.Tests含Editor **38.85s**，均0警告/0错误。中间各1处测试源码编译错误（原始字符串插值括号、泛型推断）已修正，失败原文/完整日志保留。静态核对原Transform schema未变、两份干净生成文本一致、Runtime没有生成器/Roslyn运行依赖；这不是功能/增量失效/性能验收。
+
+证据 `out/verification/ecs-e6/pre-codegen-b2-first`：9份改前原文，另2份项目文件重建改前内容并与B1精确哈希核对；中间源码/失败日志/选定产物固定，不是全源码冻结。正式EXE C50742AD未变，无测试/冒烟/GUI/IPC/性能/部署/提交/推送。**下一步 B3 消费方迁移，然后B4，整个E6末统一测试；E5-D延期。**
+
+### B1 已落地合同（历史，字段边界以上方B2为准）
+
+- `Ncma.CodeGen` 实现 Roslyn `IIncrementalGenerator`。仅处理明确的 `GenerateComponent` 声明，无运行时程序集扫描/自动注册；为同编译单元重复 ID 诊断使用冷 Collect，不声称逐类型生成完全独立。
+- B1 范围是顶层、非泛型、readonly partial、unmanaged 的 IComponent；递归拒绝 Entity/地址/指针字段。托管字段、脚本 Export 和字段级元数据留到后续合同，不默默降级。
+- 显式 TypeId、正 schema 版本、schema、验证函数和默认属性；NCMA001–005 错误阻断无效身份、重复 ID、不支持类型、错误成员、无效/超 64 KiB schema。当前仅检查 schema 根 object/JSON 深度32/字节预算，**未生成 FieldId，未做全部字段/schema 一致性诊断**。
+- 生成嵌套 `Generated`：注册、默认值、World 读/写/查询、ScheduleAccess 读/写、通道、ScheduleContext 读/写。均调用原受检 API；查询创建是冷操作，应缓存原计划；没有裸池引用、反射热路径或新目录。
+- `TransformData` 为第一真实迁移类型。原 `ncma.transform` v1、schema、Identity、Validate 保留，`ComponentRegistry.CreateDefault` 必须调用生成注册，没有手写回退。schema 文本仍显式声明，不宣称由字段自动推导。
+- 顺序确定的生成输出，hint 名由全限定类型 SHA256 限长；生成文件只在 obj 中，不提交生成快照。声明删除/更名/改 ID 失效用例已准备，尚未执行。
+- 编译工具暂以本机 .NET SDK 9.0.315 的 Roslyn 4.14 为准；生成器及其测试宿主 net9.0，产品 Runtime/Editor 仍 net8.0。SDK Roslyn 仅为编译引用，Runtime 项目以 Analyzer + `ReferenceOutputAssembly=false` 引用；无代码生成器运行依赖。尚未承诺 SDK8、其他 SDK/全框架 Visual Studio analyzer 宿主兼容；B4 需正式固定/验证工具链。
+
+### B1 统一测试登记（本轮不运行）
+
+- Runtime.Tests 新3组：注册身份/默认/冻结、World 验证/只读/线程/跨World/失效Entity、生成调度访问/真实提交/过期Context及跨阶段拒绝。
+- CodeGen.Tests 新6组：正例生成后的编译、源顺序确定性、同driver变更/无效化/删除、重复ID、身份/schema、类型/嵌套Entity、成员签名负例（部分合并在同组）。CMake `NcmaManaged` 构建目标和 `NcmaCodeGenTests` 入口已登记，CMake 尚未重新配置/执行。
+- 保留既有 E6-C 严格0B负载和阈值；本片不新增0B/整体性能通过声明。生成访问仍须在整体 E6 验证时覆盖权限/生命周期/冷启动与完整 Editor/Player 消费链。
+- 初次构建失败为 SDK Roslyn/net8 引用版本冲突，第二次为 Attribute.TypeId 命名冲突；原失败源码和完整日志保留。修正为编译宿主 net9、属性 `ComponentTypeId`，不隐藏系统 Attribute 成员。
+
+本片最终完整隔离 Debug 编译：Runtime.Tests 7.44s、CodeGen.Tests 7.70s、Editor.Services.Tests（含Editor）41.69s，均0警告/0错误、终态成功。静态核对原 Transform schema 文本未变，两份干净编译生成文本相同，Runtime deps/输出无生成器或 Roslyn 运行依赖；这些不是用例执行或完整发布依赖验收。
+
+证据目录：`out/verification/ecs-e6/pre-codegen-b1-first`（8份原文复核，局部源码/产物/日志固定，不是全源码冻结）。正式 EXE SHA256 C50742AD63620FB6EA2E068DBBFA98147EA870EE20C8A07CB6DD04AF8F7DCC61 未变，不运行测试/冒烟/GUI/IPC/性能采样，不提交推送。下一步 B2。
+
+## E6-C 完整实现合同（2026-10-24，实施收尾、统一测试待执行）
+
+故障来源退役修正（2026-10-24，实现/未测试）：`WorldRunner.ResetFault()` 从 `if(IsFaulted)` 改为 `if(IsFaulted && _scheduleFault)`，使用既有 `scheduleFailed && World.Tick==stepStartTick` 分类。只有调度源提交前故障退役活跃图；普通System在调度前抛错、任务完成后外层提交前失败、提交后observer故障不因此退役健康图。仍清累积器、故障标记和LastError，非阻塞收集已有退休资源；Play.RecoverScheduleFault资格不放宽，ClearSchedule/Stop/Reload显式退役不变。提交后故障保留已提交步，私有回调状态/IO不回滚，不自动恢复或重放。
+
+新增2组已注册未运行用例：串行/双worker × 调度前System/调度后提交前/提交后observer，检查原图引用保留、零新增回收债务、失败步World和资源提交状态、Reset后原图可继续；真正调度异常仍退役、旧执行器不能重新挂接且不重放。原超时worker隔离/回收测试保留。完整隔离 Debug 编译 Runtime.Tests 5.52s、Gameplay.Tests 25.11s、Editor.Services.Tests（含Editor）44.36s，均0警告/0错误、终态成功，非功能验收。证据 `pre-schedule-fault-origin-first` 保留4份原文、完整日志及局部哈希，非全源码冻结。测试仍在整个E6末统一运行，E5-D延期；正式EXE不变，无部署/提交/推送。
+
+跨阶段组件读取编译拒绝（2026-10-24，实现/未测试）：`ScheduleGraph` 合同升为v3，规范化声明校验后、构建阶段锚点/边前，用两遍声明扫描建立每种组件最早写阶段并检查后续访问。若同组件存在 `Write@P` 且后续任务 `Read@Q`（Q>P），抛出 `cross_phase_component_read_requires_resource`，附组件、writer/reader任务及阶段，提示显式 `Resource + ReadOutput`。现有Write包含Read权限，因此后阶段Write声明也同样拒绝，不能靠改声明模式绕过。同阶段快照读取、跨阶段纯Read、先Read后Write及独立Resource命名空间保留。显式Before/After不豁免此检查；不按实体范围细分，也不引入阶段中间提交或自动组件同步。合法图哈希含新合同版本，无v2兼容分支。
+
+新增2组图用例覆盖Read/Write后阶段拒绝、阶段间隔/显式依赖/输入排列稳定诊断及允许边界；新增1组串行/worker执行用例验证组件生产者通过资源输出向后阶段传值，ReadResource仍读输入、ReadOutput读前驱输出。原跨阶段组件冲突正例改为资源等价例；密集图保留原128任务、8128/8129边与8192预算断言，并新增跨阶段组件拒绝，不缩小负载掩盖失败。全部已注册未运行，测试仍在E6整体末尾统一执行，E5-D延期。完整隔离 Debug 编译 Runtime.Tests 5.52s、Gameplay.Tests 25.72s、Editor.Services.Tests（含Editor）45.13s，均0警告/0错误、终态成功，非功能验收。证据 `pre-schedule-cross-phase-first` 保留5份原文、完整日志及局部哈希，非全源码冻结；正式EXE不变，无部署/提交/推送。
+
+本轮新建对象写入预检（2026-10-24，实现/未测试）：所有任务完成后、任何普通/结构 staging 前，先收集整轮 `Create` UUID 集，并按原合并128结构操作上限计数；随后普通组件写集若命中新建集合，立即抛出 `scheduled_write_to_created_object`，提示使用 `Add<T>` 结构操作，附任务ID、UUID和组件类型。集合先完整收集，writer排在creator之前或之后都按同一规则拒绝。合法 `Create + Add<T>` 不属于普通组件写，不被本规则误拒；原唯一提交/冲突/权限/代次和预算不放宽。
+
+源码事实限定：当前公开 `Write<T>(index)` 只能写捕获时存在的行，全新UUID的 `Find` 返回-1，直接Write通常先被行号检查拒绝；未声称公开API已复现“未知实体”路径。新增3组待运行用例：内部受损输出注入（未开放产品接口）在串行/worker及creator前后顺序下均命中明确诊断，验证所有Stage探针为0和World字节/tick/revision不变；公开Create重复UUID+现有行Write的合并预检；跨任务合法Create+Add初始化成功。用例已注册未执行，E6末统一测试，E5-D延期。完整隔离 Debug 编译 Runtime.Tests 5.73s、Gameplay.Tests 27.66s、Editor.Services.Tests（含Editor）44.82s，均0警告/0错误、终态成功；编译不等于功能验收。证据 `pre-schedule-created-write-first` 保留4份原文、完整日志及选定哈希，非全源码冻结。正式EXE不变，无部署、提交或推送。
+
+诊断面板索引与分页修正（2026-10-24，实现/未测试）：统一 `SchedulePageSize=8`，任务/边偏移上限分别为 `ScheduleGraph.MaxTasks-SchedulePageSize`、`ScheduleGraph.MaxEdges-SchedulePageSize`，移除120/8184硬编码；上一页、下一页可用性及页面读取同用该页大小。显式刷新构造 `SchedulePanel` 时一次性创建 Ordinal `Dictionary<string,ScheduleTaskReport>`；每行 `TryGetValue`，不再 `report.Tasks.FirstOrDefault` 扫描及创建捕获谓词。索引随快照失效/关闭丢弃，缺失报告仍显示未执行/N/A，不自动读取运行中数据。新增实际Presenter用例覆盖128任务全页/首尾禁用、相同快照重复绘制/翻页复用同一索引、刷新替换索引、Tick失效及只读文档不变，已注册未运行。只优化任务报告查找；原图任务/边副本及界面字符串等仍有分配，不宣称整个面板零分配。完整隔离 Editor.Services.Tests（含Editor）Debug编译36.50s，0警告/0错误、终态成功；证据 `pre-schedule-panel-index-first` 保留4份修改前原文、完整日志及局部哈希，非全源码冻结。本轮无测试、部署或提交推送，正式EXE不变，E6末统一测试/E5-D延期保持。
+
+任务字节诊断（2026-10-24，实现/未测试）：`ScheduleTaskReport` 增加可空 `Bytes`、`AllocatedBytes`，本地只读诊断面板在每个任务行与 `timestampTicks` 并列显示；未执行/报告快照时未完成/测量不可用显示 N/A，不伪装成0B。没有兼容旧构造签名或新增远程权限。
+
+- `Bytes`：当前任务已被预算接受的输出预留 + 资源复制读取字节。重复同一脏行不重复计费，重复资源读/写按原预算计费，拒绝配额不计入；共享列捕获容量不分摊到各任务，类型化读取不逐次计费。因此不是对象总大小、总读写带宽、堆分配或最终提交字节，失败任务可以有非零成功预留。
+- `AllocatedBytes`：在实际 owner/worker 执行线程上，用 `GC.GetAllocatedBytesForCurrentThread()` 包围同步 `Context.Invoke`，包括回调、访问检查及异常路径的托管分配。排除执行前的列捕获/Context构造、队列、执行后的合并/报告及原生内存/子线程分配；不是整帧/整个调度器分配，也不是内存保留量。仅采样该线程计数，不使用进程全局差值、强制GC或新增NoGCRegion；异常负差值标不可用，不截为0。
+
+数据先由执行线程完成，再通过 Done 发布，owner 只读取已完成指标。失败报告包含全部已派发任务；超时仍未结束的任务保留 `unfinished/null/null`，不读正在写入的Context计数。报告为当时冻结快照，旧worker随后退出不改写旧报告。原单次提交、故障/回收和面板显式刷新/失效隔离不变。
+
+新增2组Runtime用例：串行/双worker、8步预热后空回调/Span输出读取/稀疏写严格0B与显式32KiB分配的分离、精确输出/资源复制配额；失败任务保留字节/分配但不提交，跳过任务无伪零报告。扩展原超时用例检查未知指标，并扩展实际Presenter用例核对未执行N/A、执行后同一行指标及口径说明；全部已注册未运行。完整隔离 Debug 编译 Runtime.Tests 5.59s、Gameplay.Tests 29.99s、Editor.Services.Tests（含Editor）43.41s，均0警告/0错误、终态成功。证据 `pre-schedule-task-metrics-first` 保留9份修改前原文、完整日志及选定哈希，非全源码冻结。这里提供运行时观测能力，不宣称已证实0B或整体性能通过；整个E6结束再统一测试，E5-D延期。正式EXE不变，无部署、提交或推送。
+
+共享配额修正（2026-10-24，实现/未测试）：`ScheduleBudget.Charge` 改为 CAS 循环：先读取已用值，按剩余容量判定，通过后才原子增加；CAS 竞争失败重新读取。拒绝不写计数，不出现先超额再减回的瞬间污染；负数拒绝，0B允许，恰好达到原16MiB上限允许，构造时校验初始预留范围。使用减法检查余额后再相加，避免大额请求的算术溢出。成功预留仍按原 attempt 生命周期保留，不引入退费接口或失败任务自动恢复。完整隔离 Debug 编译 Runtime.Tests 5.46s、Gameplay.Tests 27.49s、Editor.Services.Tests（含Editor）44.31s，均0警告/0错误、终态成功；仅编译通过，不是功能/并发/性能验收。正式EXE未变，未部署、提交或推送。
+
+新增3组待统一执行用例：连续4096次超额请求后仍可精确用尽余额、负数/极值/零额/初始预留边界；4路并发混合合法与非法请求，成功总额必须精确等于剩余8192B；共享预算下读/写超额不污染另一Context合法8B请求、拒绝读不改目标缓冲、失败Context继续保持sticky拒绝。这里验证的是共享计数隔离，不是失败后继续提交整帧；原调度图任一任务失败即失败、禁止部分提交的规则不变。用例已注册未运行，本轮仅静态/编译检查，E6整体末尾统一测试，E5-D延期。证据目录 `out/verification/ecs-e6/pre-schedule-budget-cas-first` 保留修改前原文及局部编译证据，非完整源码冻结。
+
+UUID 行索引修正（2026-10-24，实现/未测试）：保留 `ScheduleContext.Find<T>(Guid)`，不再 `Array.IndexOf` 扫描。每列的两个输入 bank 各持有私有、可复用的 `Dictionary<Guid,int>`；Capture 受检扩容时预留容量，随后 Clear 并在原 UUID/值捕获循环中同步填充。查找平均 O(1)，连续 N 次查找平均 O(N)，而不是旧 O(N²)；不承诺哈希表最坏 O(1)。捕获/清空仍随行数或保留容量线性处理，不是整帧零分配结论。删除、组件移除、行号移动和同 UUID 新 generation 在刷新时更新；未刷新的另一 bank 保留自己的快照。缺失 UUID（含空 UUID）仍返回 -1，权限/线程/取消/Context 失效检查仍先经过 Column<T>，没有 live World 查询。
+
+索引容量与列数组一起计入原保留16MiB预算；行保守估算由 `sizeof(T)+64` 改为 `sizeof(T)+128`，原 attempt 逻辑输入预算同步计费，上限不提高。这是保守载荷/索引计费，不是 CLR 总堆硬上限。只有 owner 在回调开始前重建，原超时 bank 租约规则保持，不在 worker 读取期间清空或跨执行器复用。
+
+新增3组已注册未运行用例：4096行反向逐一查找、串行/worker三步、预热后查找严格0B；双bank独立/删除/组件移除恢复/同UUID换代/清空/预算拒绝；Find未声明/跨线程/失效拒绝。原4096行捕获+稀疏/密集写的严格0B用例及其次数/阈值保持不变，也尚未运行。完整隔离 Debug 编译 Runtime.Tests 5.54s、Gameplay.Tests 29.07s、Editor.Services.Tests（含Editor）43.29s，均0警告/0错误，全部终态成功；不等于功能或性能验收。测试仍留到整个E6结束；本轮不部署或提交推送，E5-D继续延期。证据目录 `out/verification/ecs-e6/pre-schedule-column-index-first` 保存5份修改前原文、完整编译日志与选定哈希，非全源码冻结。
+
+列双缓冲与稀疏写修正（2026-10-24，实现/未测试）：每个执行器绑定一次 `EntityQuery` 与两组 `Entity/UUID/T` 列缓冲，按 attempt 交替使用；稳定成员/容量下刷新数组内容，不重建查询计划、数组或列映射。每组仅在首次使用/容量增长时受检扩容，逻辑 Count 与容量分离，Read/ObjectAt/Find 都限制在有效行；增删、同 UUID 的新 generation 与 World 替换分别按原查询成员版本/身份规则处理。**仍逐帧刷新所声明列的值，是 O(行数) 的快照读取，不是零拷贝或增量捕获。**
+
+可写任务×列不再分配整列 Values/bool Dirty。每个 bank/任务/列冷创建一个可复用稀疏写器，使用行号→稀疏槽索引、紧凑脏行号及 T 值；首写新增行，重复写同一行覆盖该值；容量仅随历史脏行高水位增长。每步复位稀疏索引/数量，合并前按原行号排序，避免回调写入顺序改变发布顺序；目标枚举改为 Count/TargetAt，不创建 yield 迭代器。写入仍暂存，原冲突检测、代次校验、原生保留写权及唯一提交不变，Read仍观察输入快照而非自身写集。
+
+预算分两层：原 attempt 的16MiB逻辑读/写预算继续计费；另外对执行器保留的查询成员缓存、两组列容量及全部稀疏写器容量统一限16MiB（不是每bank各16MiB）。扩容前 CAS 预留，超预算不扩容、捕获异常仍污染任务。类型化新增脏行的 `sizeof(T)+sizeof(row)` 也计入原单任务1MiB输出和全步预算，重复覆盖不重复计费。两层不能误称为整个进程只有16MiB：CLR/对象头、上下文、临时结构和扩容时旧数组等待GC等均不在硬堆上限承诺内。
+
+未完成 worker 仍占用当前 bank，执行器拒绝下一次 Run；故障退役不把缓冲交给新执行器或全局池，只有 worker 退出后才释放内部持有。过期 Context 无法访问后续复用的数组，外部仅得到值副本，没有新增 live World/ref/Span 租借。原共享 completed 视图及序列号方案保留，不恢复整表复制。新增 `ReadResource(id, Span<byte>)`、`ReadOutput(producer, resource, Span<byte>)`：写入调用者拥有的目标区，返回有效字节数，容量不足/权限失败先拒绝、不部分复制。原 byte[] 返回版本仍明确分配隔离副本，资源输出 `WriteResource` 仍分配，不能以新重载覆盖这些成本。
+
+新增6组待运行用例：4096行双bank与稀疏/全脏写器预热后局部8轮严格0B；成员增长/缩减/代次和World替换；4096行×64单行写者、串行/worker四步；保留预算拒绝；Span资源/前驱输出预热1024后4096轮严格0B及短目标原子拒绝；超时旧写器保留与新执行器四步独立缓冲。原类型化Read/Write0B用例次数/阈值不变，仅迁移冷构造。所有用例仅登记/编译，未测试；没有新增 NoGCRegion、缩负载或放宽0B。**完整调度步0B仍未达成**：Context/许可字典、完成表、CTS/定时器、任务完成对象、wave/LINQ、合并集合/报告/结构JSON及资源分配等仍须后续整体收敛，不能以这些局部断言代替验收。
+
+编译记录：首次 Runtime.Tests 因局部变量与参数重名报3错误/0警告（2.71s），精确失败源码及日志保留；修正后完整 Runtime.Tests5.26s、Gameplay.Tests16.99s、Editor.Services.Tests（含Editor）40.89s，隔离 Debug 均0警告/0错误、终态成功。证据 `pre-schedule-sparse-columns-first` 为7份修改前原文、失败源码/完整日志/选定产物哈希，不是完整冻结或功能/性能验收。测试留到整个E6末尾；E5-D延期，正式EXE不变，无部署/提交推送。
+
+完成结果视图修正（2026-10-24，实现/未测试）：移除每任务 `new(completed, StringComparer.Ordinal)`；每个执行 attempt 只创建一份 `ScheduleCompletionBuffer`（固定 Context/序列号槽位与一个 ReadView），任务ID→槽位使用执行器冷构造的 FrozenDictionary。每个 Context 仅持共享只读视图和启动批次的完成发布序列号上限，绑定开销不再随已完成任务数增长；完成表及每任务绑定合计为 O(T)，不再整表复制产生 O(T²)/帧引用条目。这里只描述完成表，不宣称整个调度步线性或零分配。
+
+结果由 owner 在任务 Done 且成功后只追加一次：先写 Context，再 Volatile 发布该槽位序列号，最后更新全局完成水位。worker 通过 acquire 读取槽位序列号，普通可变字典不再一边 Add 一边被 worker 读取。`ReadOutput` 只检查原前驱权限、按 producer 定位槽位、判断 `0 < sequence <= Context cutoff`、查询该生产者资源键；不扫描/复制全表，不接受失败、未完成、之后才完成或无前驱关系的结果。每个 attempt 独立槽位，不跨帧清空复用；超时回调持有旧视图直至按原回收合同退出。这里的“完成发布序列号”不是 World 提交序列：输出仍暂存，只有原固定步唯一提交后才对 World/资源正式发布。
+
+原声明/线程/Context失效/取消/ReadBudget保持；Context改为单次执行，不能在输出发布后再次运行修改字典。ReadOutput返回字节仍按原规则复制，保留数据隔离及字节预算，不因共享表暴露上游可变数组。新增4组用例：截止序列/返回值隔离/前驱拒绝、owner追加与worker读取、未完成/失败/重复/跨attempt/跨线程发布拒绝、128任务跨16阶段的串行/worker两步共享视图与新帧独立性。原严格0B类型化Read/Write用例仅迁移构造参数，次数/阈值不变；全部未运行，留到整个E6结束统一验证。
+
+完整隔离 Debug 编译：Runtime.Tests首次5.35s、负例断言静态收紧后3.20s；Gameplay.Tests16.69s、Editor.Services.Tests（含Editor）38.80s，均0警告/0错误、终态成功。负例需真实捕获拒绝异常，不能以 Context 吞入任意测试异常冒充拒绝通过。证据 `pre-schedule-completion-view-first` 保留6份修改前原文、中间用例源码、完整日志及局部哈希；编译不等于功能/并发/性能验收。正式EXE不变，本轮无部署/提交推送，E5-D继续延期。
+
+阶段图修正（2026-10-24，实现/未测试）：`ScheduleGraph` 合同升为 v2，阶段不再生成任务两两边。对 P 个非空阶段，仅建立 P−1 个 `$phase:<完成阶段>` 锚点；任务连向本阶段完成锚点，下一阶段任务等待该锚点，相邻锚点串链。每个锚点必须等全部入边完成，非“任意任务完成即放行”；空阶段跳过、单阶段/空图不创建锚点。阶段边数为 O(N+P)，预算仍为原8192，不提高阈值掩盖膨胀。128任务均分16阶段时，阶段边按结构由7680减至254、锚点15个（这是结构推导及待运行用例断言，不是实测性能）。当前128任务的合法旧任务DAG至多8128条唯一边，原问题在当前上限内并非已证实的8192超限；此修正消除冗余并为扩容留空间。
+
+跨阶段正向 Before/After 仍保存在原声明与哈希中，由锚点链实现，不另建冗余边；反向阶段依赖直接拒绝，未知/自依赖/同阶段环仍拒绝。同阶段显式依赖及读写/结构冲突保持原语义；跨阶段冲突已由锚点保证。`CopyEdges()` 的端点现在可能为合成锚点，新增 `CopyPhaseAnchors()` 提供辨识；`CopyTasks/CopySerialOrder` 仍只包含真实任务。任务标识符不允许 `$`，调用者不能伪装/引用锚点；v1不提供兼容分支。
+
+Executor 按紧凑直接入边放行任务、在 owner 上自动完成锚点，不创建锚点 kernel/Context/输出/worker槽，不在运行时重新展开阶段执行边。原冷构造 `ReadOutput` 祖先缓存继续穿透锚点保存真实任务祖先关系（最坏仍可为二次存储，不宣称整个编译器/调度器线性或零分配）；输入仍是原提交快照。前阶段任何失败不释放后阶段，同阶段独立 worker 可并行，唯一提交及回收合同不变。只读 Editor 面板辨识阶段完成锚点，不增加 AI 权限。
+
+新增3组图+2组执行用例，覆盖128×16线性边/确定哈希/拷贝隔离、稀疏阶段/显式正反依赖、128同阶段8128边与127+1两阶段8129边、串行/worker同阶段并行与跨阶段输出祖先、失败不放行，均未执行。完整隔离 Debug 编译 Runtime.Tests5.40s、Gameplay.Tests21.88s、Editor.Services.Tests（含Editor）39.39s，均0警告/0错误、终态成功。证据 `pre-schedule-phase-anchors-first` 保留8份修改前原文、完整编译日志及局部哈希；不是功能或性能验收。测试仍在整个E6结束统一执行，E5-D延期；不部署、不提交推送，正式EXE不变。
+
+超时恢复修正（2026-10-24，实现/未测试）：将执行故障与资源回收债务分离。`WorldRunner.ResetFault()` 不再等待 worker，永久退役故障图、撤销其提交资格和 Context，并可继续无图固定步。旧回调/缓冲/线程留在 Runner 的有界退役列表，`CollectScheduleResources()` 仅非阻塞回收；`WaitForScheduleResources()` 是卸载门禁，未退出抛专用 `ScheduleCleanupPendingException`，不是重新判定执行故障。每个 Runner 活跃图加未回收图最多4份（最多16个对应 worker），挂接时预留退役容量；满额禁止新图但不禁止恢复或无图运行。已退役执行器即使回收完毕也不能重新挂接，不自动重放失败任务。
+
+Play 新增本地 `CanRecoverScheduleFault/RecoverScheduleFault`：仅允许原调度回调提交前失败、World身份/tick/revision未变且无耦合/组合生命周期的会话；恢复保留已提交 World，清空旧输入/命令回执、更新 Play SessionId 使旧授权及句柄作用域失效，回到 Paused。不得宣称回滚 Behaviour 私有字段、用户闭包或文件/网络副作用。原生耦合、普通 Behaviour 与提交后故障仍不可用此入口恢复。可以在暂停边界明确挂接新图。Stop/Reload 先退役并等待回收，再释放脚本/原生资源；待回收异常保持原 Faulted 或 Paused，不触发新的 coupled fault。Editor 只读面板分开展示执行状态、可恢复性及刷新时回收债务，没有新增恢复按钮、AI 授权或 MCP 接口。
+
+新增3组 Runtime、2组 Gameplay 回归用例，另更新原超时用例：覆盖未退出时恢复、新图执行/迟到输出隔离、容量耗尽、World替换清理、Play epoch、Stop/Reload卸载门禁与耦合 fail-stop。均仅注册/编译，未运行；证据 `out/verification/ecs-e6/pre-schedule-recovery-first` 为局部原文/日志/哈希，不是完整源码冻结。测试仍在整个 E6 结束统一进行，E5-D继续延期，正式EXE不更新。
+
+本次修正完整隔离 Debug 编译：Runtime.Tests 5.27s、Gameplay.Tests 14.30s、Editor.Services.Tests（含 Editor）36.57s，均终态成功，0警告/0错误；不能据此宣称超时恢复或功能测试已通过。
+
+热路径修正（2026-10-24）：`ScheduleContext.Allowed` 原先每次捕获 `kind/id/write` 执行 `Access.Any`，确有逐行委托/闭包分配风险。现构造时一次性展开私有 `(Kind, Id) → Mode` 许可字典，Read/Write 校验仅查表，不再扫描声明或构造谓词；保持 Write 包含 Read、类别隔离及拒绝后任务失败。新增3组许可用例，其中正常GC下 owner/worker 各预热后4096次类型化访问严格0B断言，均未运行，不新增 NoGCRegion 豁免。完整 Runtime.Tests Debug 编译0警告/0错误5.27s，证据 `pre-schedule-permissions-first`；下方六工程结果属于该修正前源码。这里只移除已识别的热访问分配源，构造/捕获/资源复制/合并等仍分配，不能据编译或此局部用例声明整个调度步0B。
+
+本节取代下方历史 C1-only 进度。C1–C5 的实现范围为：稳定声明/冷图、受检串行执行、原固定步接线、有界隔离工作线程、只读诊断与生命周期。下一阶段为 E6-B，测试仍留到整个 E6 实现结束；**实现完成不等于测试通过或性能达标**。
+
+### 执行与数据合同
+
+- `ScheduleGraph` v2 复用现有组件 TypeId/schema，以阶段完成锚点链保证跨阶段顺序；先解析明确依赖，再添加同阶段确定性冲突边。调用者得到深拷贝声明、锚点、依赖边、真实任务串行顺序和合同哈希。E6-B 生成同一合同，不建立第二套注册表。
+- `ScheduleExecutor` 绑定一个真实 World 和一个 Runner。默认 `workerCount=0` 按编译顺序串行执行；显式选择 1–4 个固定后台线程，仅运行 Worker 任务，OwnerThread 任务不离开所属线程。
+- `ScheduleComponent.Of<T>()` 目前只支持 `unmanaged IComponent`。固定步开始捕获声明涉及的类型化列和 UUID，不捕获完整场景 JSON，不提供 Entity/World/池引用。带引用的复杂组件需要先由 owner-thread 转成受限数据通道，不能绕开此限制。
+- Context 校验任务声明、回调有效期和线程；即使调用者捕获异常，未声明读写、逃逸 Context 或通过闭包直接访问 live World/Query 仍使任务失败。任务只读原已提交值，自己的写集也不改变输入；显式依赖不会偷偷发布上游组件写入。`ReadOutput(producer, resource)` 仅可读取已完成前驱的不可变输出。
+- 外部资源是复制的 byte 数据通道，不是物理求解器/原生对象句柄。Write 包含读；一个资源只有一个输出生产者，多阶段结果使用不同通道。组件输出和结构命令按任务固定顺序合并，同一 UUID/组件重复写、destroy 与其他写混用、旧 System 与任务写冲突均拒绝，而非完成顺序决定结果。
+
+### 与正式固定步的边界
+
+`输入/生命周期 → Behaviour 与原 System（owner-thread） → 受检任务图 → 原候选预检 → 原生耦合域执行 → 原唯一提交 → 提交后观察`
+
+- 接入 `WorldRunner` 的原 `_executeStep`，因此 Editor 和 Player 的共用 `PlaySession` 自动使用同一个挂接点；未显式注册图时保留原有执行路径，不虚构任务。
+- Play 中结构命令转入原 `RuntimeCommandBuffer.SubmitBatch`，保留 E2 验证、待提交句柄、绑定元数据与回执。`LastScheduleSubmission` 仅表示提交票据，是否提交必须查询原 `Commands.GetReceipt`。
+- 类型化输出仍走原组件校验与原生组件写权限；声明 Write 不授予物理/动画宿主保留的写权。普通 Runner 使用 World 的原暂存结构入口，不产生第二个 World 或第二次提交。
+- 资源结果以实际固定步 attempt + tick 的提交身份发布。提交前故障丢弃，物理/观察者在提交后抛错则保留该已提交结果并 fail-stop，不能把已提交 tick 伪装成回滚。
+- Behaviour、输入/信号、编辑事务、动画/物理/渲染等现有系统仍是不可并行穿越的 owner-thread 边界；本片没有给任意旧 System 自动标记安全并行，也不把 Python/推理/IPC 放进固定步同步等待。
+
+### 预算、取消与生命周期
+
+- 冷图保持 128 任务、每任务 64 访问/64 显式链接、128 资源、16 阶段、8192 边。
+- 计算通道与输出使用每attempt 16 MiB逻辑计费预算，单任务新增输出（含类型化新增脏行）1 MiB、单资源64 KiB；执行器另有统一16 MiB保留容量预算，覆盖查询成员缓存、双列bank及全部稀疏写器容量。结构输出合并后最多128操作、完整序列化64 KiB。两层预算都不是整个托管堆的硬上限：字典/线程/CLR/用户私有分配与GC临时峰值仍须在整体性能验证中另测。
+- 队列最多 128 项；一次图执行采用共同 deadline（默认 2 秒，可配 1 ms–5 秒），Context 支持协作取消。超时取消并使 Context 失效；未退出的 worker、输入与回调仍由退役执行器持有，禁止复用或修改资源。执行故障可显式隔离恢复，资源卸载仍须 drain，二者独立。
+- 不强杀托管线程；可信 owner-thread 回调若永久阻塞仍会阻塞 owner，协作 deadline 不是硬实时抢占/恶意代码沙箱，也不能撤销任意文件/网络等副作用。
+- Stop/Reload 在卸载脚本及原生资源前先退役解除图绑定并 drain，失败保留所有权、要求显式重试。执行器由调用者拥有，Runner 保留未回收借用；解除绑定后 Dispose 仍可能因未退出而抛资源待回收异常，不会强杀线程。完整 World 替换使旧执行器失效，但仍允许安全解除/回收。
+
+### 诊断及 E6 末尾验证清单
+
+- Editor 场景、UI、动画图工作区提供“任务调度 / 本地只读诊断”：显式刷新，分页任务/边、声明、冲突原因、执行时间戳计数和故障；Play/World/tick/revision/状态变化隐藏旧内容。无图时明确显示未注册，不生成伪任务或性能值。
+- 冷图/报告提供复制的只读数据，可供受信任工具适配；没有新增 MCP 注册、AI 批准或远程改图权限。当前诊断面板不是节点式调度图编辑器。
+- 新增准备 16 组 Runtime、6 组 Gameplay、2 组 Presenter 用例，另有前片 8 组冷图用例，均未运行。覆盖声明/环/预算、串并等价、上下文/捕获 World、原结构回执、原生写权、超时保留/显式回收、Stop/Reload、提交前后故障及真实 Presenter 失效。
+- 4096 对象 × 8 步的串/工作线程诊断用例保留原始耗时/全进程分配差值，标记 `historicalPerformanceAcceptance=false`；不是旧 E3/E5 配对合同、0B 或目标机性能通过。小场景和真实领域吞吐/尾延迟、完整宿主/GUI/IPC/双配置与资源长稳门禁仍在 E6 统一验证时执行。
+- 本轮仅做静态及隔离编译；所有编译失败源码和日志保留在 `out/verification/ecs-e6/pre-schedule-execution-first`。正式 EXE 不更新，不部署/提交/推送，E5-D 延期债务不改判。
+
+编译交付记录：Runtime.Tests 6.57s、Gameplay.Tests 15.02s、Editor.Services.Tests（含 Editor）55.84s、Rendering.Tests（含 Editor/Player）63.14s、Player.Tests 48.30s、Scene.Rendering.Tests 49.48s，全部完整相关工程与依赖隔离 Debug 编译终态成功、0警告/0错误。中间主构造参数捕获1错误、测试 Transform 值类型写法1错误、测试作者字节API2错误、诊断缺 Core 命名空间4错误（两个宿主构建各报4处）均修正，原源码/完整失败日志保留；不删失败、不重写为通过。新增24组及冷图8组未执行；只读静态归档校验重核16份原文，正式 EXE C50742AD保持不变。局部哈希记录不是完整源码冻结或功能验收。
+
+## 历史：E6-C 优先实施分片（2026-10-24）
+
+1. **C1 声明与冷图编译**：本轮已实现基础，未验证；只规划，不执行。现有注册表解析组件身份，未来生成代码复用相同合同。
+2. **C2 受检串行执行**：owner-thread 执行作用域，组件/外部资源访问必须落在声明范围；禁止裸 World/池引用逃逸、跨 tick/await 或把声明当作写授权。未声明访问即失败，不能仅靠开发者承诺。
+3. **C3 正式固定步接线**：梳理 Behaviour、输入、信号、结构命令、动画/物理及提交阶段；复用现有暂存、预检和唯一发布点，显式依赖不隐式发布上游写集；外部求解后异常仍 fail-stop。不能直接给任意旧 System 标记“安全并行”。
+4. **C4 有界隔离工作线程**：仅接收不可变输入/受检任务输出，声明完整且可证明独立的纯计算任务允许并行；不移交 live World，队列/取消/故障有界；确定性合并后统一提交。owner-thread 任务仍留原线程。
+5. **C5 诊断与收尾**：复制的任务图、冲突来源、执行/故障诊断、生命周期收敛；准备串并等价、访问漏报、环、取消、结构合并及性能用例，不在 C 小片提前运行。
+
+C 全部实施后开始 E6-B：生成稳定身份、访问器、元数据和同一任务声明合同，检查无效声明与生成物失效。**全部 E6 实现结束后才统一运行测试、性能与实际宿主门禁**；C1 编译通过不代表 C 已完成，也不改变 E5-D 延期状态。
+
+2026-10-24 顺序调整（用户最新决定）：**E6-A 实现收尾 → E6-C 声明读写依赖调度 → E6-B 元数据与访问代码生成 → E6 整体统一测试**。E5-D 继续延期；小阶段只实施、静态检查与编译，不运行测试/冒烟/性能采样。E6-C 先依赖现有 ComponentRegistry 的稳定 TypeId/schema 版本，E6-B 后续生成同一声明合同，不新增平行类型目录。
+
+E6-C1 首片已实现但未运行验证：新增 ScheduleAccess/ScheduleTask/ScheduleResource 声明与不可变 ScheduleGraph，支持组件读/写、外部资源读/写、owner-thread 结构变更、阶段和显式 before/after；显式依赖先拓扑排序，冲突边再按确定性顺序添加，拒绝未知/重复/schema 不符/环/超预算声明。限制为128任务、每任务64访问与64显式链接、128资源、16阶段、8192边；返回复制后的任务/边/串行顺序及确定性合同哈希。新增8组回归用例已登记未执行，完整 Runtime.Tests Debug 编译0警告/0错误（4.18s）。这是**冷任务图基础，不是已接通的调度器**：未接 WorldRunner/PlaySession，尚无访问拦截、任务执行、工作线程、性能或功能验收；Worker 声明不授予跨线程 World 访问。正式 EXE 未更新，本轮未提交推送。下方旧 E6-B → E6-C 顺序为历史，以上述顺序为准。
+
+2026-10-24 E6-A 收尾实现（待整个 E6 统一验证）：本地保留 Play 差异面板现从统一事件分发处隔离后台控件/画布，并消费 UI 预览键盘输入，打开时取消已有交互。启动前新增资源与脚本绑定依赖预检：复用现有资产加载器的实际闭包，记录根引用、成员 UUID/类型/代次/哈希，拒绝缺失资源、错误租约和作者预览；纯逻辑/UI 场景不借用旧 3D 资源。脚本解析对已加载目录执行无构造器的类型/Export 检查（包含禁用绑定），记录模块标识与确定性合同哈希，并检查启动回调前后目录代次。Editor 记录来源/镜像哈希/依赖回执，Stop/Reload 清除；Player 先准备冷启动依赖，再实例化 ECS。既有 UI、Shader、物理依赖仍由对应宿主预检负责；脚本记录不是完整程序集文件/原生/操作系统依赖清单，也不代表 M9 发布包验收。
+
+本轮新增 10 组回归用例已登记、均未执行。最终完整 Editor.Services.Tests（含 Editor）、Scene.Rendering.Tests、Player.Tests（含 Player）、Rendering.Tests 的隔离 Debug 编译均为 0 警告/0 错误；中间脚本模块误用内部 ReadOnly 的 1 项编译失败已修复，原源码与日志保留。局部证据在 out/verification/ecs-e6/pre-runtime-change-input-first 和 pre-bake-dependencies-first，非全量源码冻结或功能验收。E6-A 当前实现覆盖已接通，仍须在 E6-B/C 实现后统一验证功能、GUI/IPC、生命周期、资源与性能；不以编译替代验收。E5-D 继续延期，正式 EXE C50742AD 未变。本轮未测试、部署或再次提交推送；前一开发快照 adcddab 已提交推送。下一步 E6-B 元数据与访问代码生成，E6-C 随后实施。下方旧的“依赖闭包/输入隔离待实现”等条目为历史进度。
 
 2026-10-24 开发中提交记录：E6-A 的本地 Play 差异界面已接入场景、UI 和动画图工作区。编辑/运行对象分别分页，共享 UUID 选择，支持运行时删除及新建对象；完整 before/after 差异与原命令分段显示，逐页审阅、逐 UUID 删除确认和最终 Stop/应用确认均独立。来源变化隐藏旧数据并撤销确认，确认面板打开时禁用场景快捷键和 HUD 输入。新增6组 Presenter 用例已登记但未执行；首次服务测试工程编译因错误引用不存在的计数属性失败2项，修正为既有只读诊断方式后完整 Editor.Services.Tests 及 Editor 依赖 Debug 编译0警告/0错误（6.12s）。日志与失败源码保留于 out/verification/ecs-e6/pre-runtime-change-ui-first（本地忽略目录，不随提交发布）。本次按用户要求提交开发中源码，不代表完整 E6 或性能验收；不运行测试、不部署 EXE。E6-A 仍需资产/脚本依赖闭包及整体验证，E6-B/C 尚未开始；测试统一留到整个 E6 结束，E5-D 继续延期。下方“界面尚未接入”等文字为历史进度。
 

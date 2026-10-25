@@ -12,6 +12,7 @@ public readonly record struct ClipPlaybackData(Guid ClipId, bool Playing, bool L
             !double.IsFinite(value.StartTime) || value.StartTime is <0 or >600) throw new ArgumentException("Invalid persistent clip playback settings.");
         return value;
     }
+    [ComponentRegistration]
     public static ComponentRegistry Register(ComponentRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(registry);

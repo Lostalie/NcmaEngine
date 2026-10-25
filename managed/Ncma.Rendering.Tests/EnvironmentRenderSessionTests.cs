@@ -98,7 +98,7 @@ internal static unsafe partial class Program
         Pass(renderer.EnvironmentStats.Publications==before.Publications&&renderer.EnvironmentStats.UploadedBytes==before.UploadedBytes&&renderer.EnvironmentStats.Captures==before.Captures&&renderer.ResourceStats.Creates==resources.Creates&&renderer.ResourceStats.UploadedBytes==resources.UploadedBytes&&renderer.PipelineStats.Creates==plans&&cook.NativeCalls==cookCalls&&renderer.SubmitCalls==calls+64,"warm submit no cook/readback/upload/rebuild; one scene batch");
         session.Dispose();cache.Trim();Pass(renderer.EnvironmentStats.Live==0&&renderer.PipelineStats.Pipelines==0,"final ordered close clears resources");
         // An empty scene never requests an environment GPU or shader, even if metadata selects one.
-        var empty=BakeRenderScene(new SceneDocument("Empty",RenderComponentRegistry.CreateRegistry()));empty.World.Set(empty.World.CreateEntity("Environment"), nextConfig);
+        var empty=BakeRenderScene(new SceneDocument("Empty",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module)));empty.World.Set(empty.World.CreateEntity("Environment"), nextConfig);
         using(var emptyAssets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,empty.CaptureSnapshot(),true))
         using(var flat=new SceneRenderSession(renderer,cache,empty.World))
         {flat.Prepare(emptyAssets,empty.CaptureSnapshot());
@@ -153,7 +153,7 @@ internal static unsafe partial class Program
             fileCache.Trim();Pass(fileRenderer.EnvironmentStats.Live==0&&fileRenderer.Stats.ValidationErrors==0&&fileRenderer.Stats.ValidationWarnings==0,"file-backed resource lifetime/API0/0");
         }
         global::Ncma.Runtime.Entity duplicate=document.World.CreateEntity("Duplicate environment");document.World.Set(duplicate, nextConfig);Bad(()=>SceneEnvironmentState.Read(document.World,document.World.Identity));
-        Ncma.Runtime.World? probeWorld=null;var registry=Ncma.Runtime.ComponentRegistry.CreateDefault();
+        Ncma.Runtime.World? probeWorld=null;var registry=global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<EnvironmentBoundaryProbe>("test.environment_boundary",1,"{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"value\"],\"properties\":{\"value\":{\"type\":\"integer\"}}}",v=>{
             if(probeWorld is not null)Bad(()=>SceneEnvironmentState.VerifyBoundary(probeWorld,probeWorld.Identity));return v;
         });

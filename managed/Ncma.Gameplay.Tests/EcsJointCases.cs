@@ -12,23 +12,27 @@ internal static class EcsJointCases
         BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(value)!;
     private static void Check(bool condition) { if (!condition) throw new Exception("E3 joint step assertion failed."); }
     private static Guid Id(int index) => new(index + 1, 0, 0, new byte[8]);
-    internal static void Run()
+    internal static void Run() => CaseHarness.RunOrThrow("E3/E4 joint", Cases());
+    internal static IEnumerable<(string Name, Action Run)> Cases()
     {
-        int passed = 0;
         foreach (int count in new[] { 100, 1000, 4096 })
         foreach (string workload in new[] { "none", "sparse", "full", "membership", "replace" })
-        {
-            var registry = ComponentRegistry.CreateDefault();
+        yield return ($"Joint.{count}.{workload}", () => {
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             registry.Register<Marker>("joint.marker", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
             var document = new SceneDocument("E3 joint fixture", registry);
             var ids = Enumerable.Range(0, count).Select(Id).ToArray();
-            for (int i = 0; i < count; i++)
-            {
-                Guid entity = document.CreateObject("Object " + i, ids[i]);
-                document.SetComponent(entity, TransformData.Identity with { Position = new(i, 0, 0) });
-                if (i % 100 == 0) document.SetComponent(entity, new Marker(i));
-            }
+            long setupStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+            // Cold fixture construction only: publish one fully validated authoring
+            // snapshot. Keep every original UUID/value/count and runtime workload.
+            document.RestoreSnapshot(new(SceneDocumentCodec.Version, document.Name, ids.Select((id, i) => {
+                var components = new List<ComponentSnapshot> {
+                    new("ncma.transform", 1, registry.Encode(TransformData.Identity with { Position = new(i, 0, 0) })) };
+                if (i % 100 == 0) components.Add(new("joint.marker", 1, registry.Encode(new Marker(i))));
+                return new SceneObjectData(id, "Object " + i, components.ToArray(), []);
+            }).ToArray()));
+            Console.WriteLine($"CHECKPOINT joint {count}/{workload} authoring ms={System.Diagnostics.Stopwatch.GetElapsedTime(setupStarted).TotalMilliseconds:F2}");
             byte[] authoringBytes = document.CaptureBytes();
             var scene = document.BakeRuntime(document.Revision).Image.Instantiate(registry);
             var world = scene.World;
@@ -62,6 +66,7 @@ internal static class EcsJointCases
                 markerPresent = !markerPresent; steps++;
             }));
             play.Start(_ => throw new Exception("No bindings expected."));
+            Console.WriteLine($"CHECKPOINT joint {count}/{workload} baked/started ms={System.Diagnostics.Stopwatch.GetElapsedTime(setupStarted).TotalMilliseconds:F2}");
             Check(play.AdvanceFrame(1d / 60).State == PlayState.Running);
             var captures = (Count(world, "_capturedSnapshotCount"), Count(world, "_copiedValidationSnapshotCount"), Count(scene, "_capturedSnapshots"));
             long encodes = Count(world, "_encodedComponentCount");
@@ -84,10 +89,8 @@ internal static class EcsJointCases
             scene.RestoreCheckpoint(checkpoint, scene.Revision);
             Check(checkpoint.CopyBytes().SequenceEqual(scene.CaptureCheckpoint().CopyBytes()) && world.Identity != oldWorld);
             Check(authoringBytes.SequenceEqual(document.CaptureBytes()));
-            passed++; Console.WriteLine($"PASS E3 joint {workload} objects={count}: no full World/Scene snapshots; values/queries/render/codec agree.");
-        }
-        Console.WriteLine($"E3 joint fixed-step tests: {passed}/15 passed.");
-        Console.WriteLine($"E4-E committed Play/query/render/inspection joint cases: {passed}/15 passed.");
+            Console.WriteLine($"PASS E3/E4 joint {workload} objects={count}: no full World/Scene snapshots; values/queries/render/codec agree.");
+        });
     }
 
     private static void VerifyInspection(RuntimeSceneInstance scene, EntityQuery query, HashSet<Guid> rendered)

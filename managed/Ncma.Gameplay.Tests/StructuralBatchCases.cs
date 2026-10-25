@@ -271,7 +271,7 @@ internal static class StructuralBatchCases
             }),
             ("bounded raw normalized and aggregate payloads", () => {
                 foreach (bool normalize in new[] { false, true }) {
-                    var registry = ComponentRegistry.CreateDefault(); registry.Register<TextData>("test.text", 1, TextSchema,
+                    var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<TextData>("test.text", 1, TextSchema,
                         value => normalize ? new(new string('N', 60000)) : value);
                     using var f = new Fixture(registry); bool rejected = false;
                     f.Probe.Fixed = _ => {
@@ -288,7 +288,7 @@ internal static class StructuralBatchCases
             ("caught validator reentrancy poisons the enclosing step", () => {
                 foreach (bool single in new[] { false, true }) {
                     Fixture? active = null; bool reentered = false;
-                    var registry = ComponentRegistry.CreateDefault(); registry.Register<TextData>("test.text", 1, TextSchema, value => {
+                    var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<TextData>("test.text", 1, TextSchema, value => {
                         if (active is not null) { reentered = true; Reject(() => {
                             if (single) active.Commands.Rename(active.Id, "Nested");
                             else active.Commands.SubmitBatch([new StructuralCommand.Rename(active.Target, "Nested")]);
@@ -316,7 +316,6 @@ internal static class StructuralBatchCases
                 f.Start(); f.Step(); Check(f.Play.State == PlayState.Faulted && f.Scene.World.Count == 1 && f.Play.Tick == 0);
             }),
         };
-        foreach (var test in cases) { test.Run(); Console.WriteLine("PASS structural batch " + test.Name); }
-        Console.WriteLine($"Structural batch tests: {cases.Length}/{cases.Length} passed.");
+        CaseHarness.RunOrThrow("Structural batch", cases);
     }
 }

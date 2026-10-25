@@ -102,7 +102,7 @@ internal static class RuntimeInspectionTests
                 scene.InspectBindings(stamp, id, int.MaxValue).Items.Length == 0 && scene.InspectExports(stamp, id, binding, int.MaxValue).Items.Length == 0, "Large offset overflow");
         });
         yield return ("E6-A runtime inspection rejects oversized whole responses without truncation or state changes", () => {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             const string schema = """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""";
             registry.Register<Payload<A>>("text.a", 1, schema, v => v); registry.Register<Payload<B>>("text.b", 1, schema, v => v);
             registry.Register<Payload<C>>("text.c", 1, schema, v => v); registry.Register<Payload<D>>("text.d", 1, schema, v => v);
@@ -128,7 +128,7 @@ internal static class RuntimeInspectionTests
             Check(scene.InspectObjects(stamp).Items.Length == 3, "Rejected read poisoned committed access");
         });
         yield return ("E6-A runtime inspection prevents encoder reentry writes and retains guard after failures", () => {
-            var registry = ComponentRegistry.CreateDefault(); registry.Register<HookValue>("hook", 1,
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<HookValue>("hook", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
             var source = new SceneDocument("Hook", registry); var entity = source.CreateObject("Original"); source.SetComponent(entity, new HookValue());
             var scene = source.BakeRuntime(source.Revision).Image.Instantiate(registry); var stamp = scene.GetInspectionStamp(); var id = entity;

@@ -24,7 +24,7 @@ internal static unsafe partial class Program
         bool approved=true;Action? onApproval=null;
         using var runtime=new PostProcessRuntime(renderer,shaderFiles,library,PostProcessModules.Official(),()=>{onApproval?.Invoke();return approved;});
         var fixture=new SceneGpuFixture(output);var(source,camera,_,_)=fixture.Scene();
-        var registry=RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry());
+        var registry=global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module);
         var authoring=new SceneDocument("Post scene",registry,s=>{SceneRenderValidation.RequireComposition(s);_=ScenePostProcessState.Read(s);});authoring.RestoreSnapshot(source.CaptureSnapshot());
         var authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity light=document.World.GetEntities().Single(o=>document.World.Has<DirectionalLightData>(o));document.World.Set(light, document.World.Get<DirectionalLightData>(light) with{CastShadow=false});

@@ -100,7 +100,7 @@ internal static partial class Program
                 Check(prepared.Assets.List().Count == 0 && prepared.Assets.PinnedGenerations == 0);
             }),
             ("M7.3-C1 environment schema and scalar restrictions", () => {
-                var f = new EnvironmentFixture(); var r = RenderComponentRegistry.CreateRegistry(); var c = new Ncma.Runtime.ComponentSnapshot(EnvironmentLightingData.TypeId, 1, r.Encode(f.Configuration));
+                var f = new EnvironmentFixture(); var r = global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module); var c = new Ncma.Runtime.ComponentSnapshot(EnvironmentLightingData.TypeId, 1, r.Encode(f.Configuration));
                 foreach (string field in new[] { "version", "assetId", "generation", "contentHash", "strength", "rotationRadians", "enabled" }) {
                     var node = JsonNode.Parse(c.Data.GetRawText())!.AsObject(); node.Remove(field);
                     AssetReject(() => r.Decode<EnvironmentLightingData>(c with { Data = JsonSerializer.SerializeToElement(node) }));
@@ -220,13 +220,13 @@ internal static partial class Program
                 AssetReject(() => RuntimeAssetLoader.Prepare(f.Root, f.Project, [f.Reference])); Check(!Locked(f.GenerationPath));
             }),
             ("M7.3-C1 Editor failed refresh preserves old publication", () => {
-                var f = new EnvironmentFixture(); using var editor = new EditorSessionOwner("Environment", components: RenderComponentRegistry.CreateRegistry(), validateComposition: SceneRenderValidation.RequireComposition);
+                var f = new EnvironmentFixture(); using var editor = new EditorSessionOwner("Environment", components: global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), validateComposition: SceneRenderValidation.RequireComposition);
                 editor.Document.RestoreSnapshot(f.Scene().CaptureSnapshot()); editor.PrepareRenderAssets(f.Root, f.Project); Guid identity = editor.RenderAssets!.Assets.Identity; string oldPath = f.FilePath;
                 f.Write(2); AssetReject(editor.RefreshRenderAssets); Check(editor.RenderAssets.Assets.Identity == identity && EnvironmentAsset(editor.RenderAssets.Assets, f.Id).Generation == 1 && Locked(oldPath) && !Locked(f.FilePath));
             }),
             ("M7.3-C1 single command history permissions scope and stale session", EnvironmentCommandTests),
             ("M7.3-C1 Play leases isolate configuration and freeze editor", () => {
-                var f = new EnvironmentFixture(); using var editor = new EditorSessionOwner("Environment", components: RenderComponentRegistry.CreateRegistry(), validateComposition: SceneRenderValidation.RequireComposition);
+                var f = new EnvironmentFixture(); using var editor = new EditorSessionOwner("Environment", components: global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), validateComposition: SceneRenderValidation.RequireComposition);
                 editor.Document.RestoreSnapshot(f.Scene().CaptureSnapshot()); editor.Edit!.Resynchronize(); editor.PrepareRenderAssets(f.Root, f.Project); byte[] original = editor.Document.CaptureBytes(); Guid id = editor.Document.GetObjectIds()[0];
                 var play = editor.StartPlay(); Check(editor.Edit.Invoke(RenderingEditorAdapter.EnvironmentRequest(editor.Edit, id, f.Configuration with { Strength = .5f }, editor.Edit.Revision), Permissions).Code == "play_frozen");
                 play.Scene.World.Set(play.Scene.World.FindEntity(id), f.Configuration with { Strength = .25f }); Check(editor.PlayRenderAssets!.Assets.Identity == editor.RenderAssets!.Assets.Identity && original.SequenceEqual(editor.Document.CaptureBytes()));

@@ -41,7 +41,7 @@ internal static unsafe partial class Program
     }
     static void TestConfiguration(RendererSession renderer,ref ulong frame,byte[] baseline,byte[] image)
     {
-        using var owner=new EditorSessionOwner("Rendering commands",components:RenderConfiguration.CreateRegistry());
+        using var owner=new EditorSessionOwner("Rendering commands",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Rendering.Generated.ComponentModule.Module));
         var edit=owner.Edit!; Guid objectId=Guid.NewGuid(),configId=Guid.NewGuid();
         var permission=new CapabilityPermissions(["ncma.scene.transaction","ncma.history.undo","ncma.history.redo"],objectScope:[objectId],createScope:[objectId],componentScope:[RenderConfiguration.ComponentType],allowDocumentHistory:false);
         CapabilityRequest Request(string capability,JsonElement input)=>new(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,capability,input);
@@ -51,7 +51,7 @@ internal static unsafe partial class Program
         Check(edit.Invoke(settings).Status=="denied","Agent defaults read-only.");
         Check(edit.Invoke(settings,permission).Changed,"Configure via Core.");
         byte[] saved=owner.Document.CaptureBytes();
-        var copy=new SceneDocument("Copy",RenderConfiguration.CreateRegistry());copy.RestoreBytes(saved);
+        var copy=new SceneDocument("Copy",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Rendering.Generated.ComponentModule.Module));copy.RestoreBytes(saved);
         Check(copy.GetComponent<RenderConfiguration>(objectId)==config,"Persisted configuration value/UUID.");
         using var service=new RenderPipelineService(renderer);service.Configure(config,256,256);
         var generation=service.Generation;service.Configure(config,256,256);Check(service.Generation==generation,"Unchanged plan not reused.");
@@ -398,8 +398,13 @@ internal static unsafe partial class Program
             if (args.Length == 3 && args[0] == "--environment-authoring-host-tests") return EnvironmentAuthoringHostTests(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--environment-preflight") return EnvironmentChild(args[1],args[2]);
             if (args.Length == 3 && args[0] == "--shader-package-preflight") return ShaderPackageChild(args[1], args[2]);
-            TestShaderContracts(); if (args.SequenceEqual(new[] { "--shader-contract-tests" })) return 0;
-            TestMeshUpload(); TestBindPoseUpload(); TestResourceData(); if (args.SequenceEqual(new[] { "--mesh-upload-tests" })) return 0;
+            if (args.SequenceEqual(new[] { "--shader-contract-tests" }))
+                return CaseHarness.Run("Shader contracts", [("shader contracts", TestShaderContracts)]);
+            if (args.SequenceEqual(new[] { "--mesh-upload-tests" }))
+                return CaseHarness.Run("Mesh upload contracts", [("shader contracts", TestShaderContracts),
+                    ("static mesh", TestMeshUpload), ("bind-pose mesh", TestBindPoseUpload), ("resource data", TestResourceData)]);
+            CaseHarness.RunOrThrow("Rendering prerequisites", [("shader contracts", TestShaderContracts),
+                ("static mesh", TestMeshUpload), ("bind-pose mesh", TestBindPoseUpload), ("resource data", TestResourceData)]);
             if(args.Length is not (3 or 4 or 6))return 2;
             string root=Path.GetFullPath(args[0]),baselinePath=Path.GetFullPath(args[1]),output=Path.GetFullPath(args[2]);Directory.CreateDirectory(output);
             Check(Marshal.SizeOf<RenderFrame>()==112 && Marshal.SizeOf<RendererStats>()==88 && Marshal.SizeOf<RenderPass>()==32,"Renderer layout");

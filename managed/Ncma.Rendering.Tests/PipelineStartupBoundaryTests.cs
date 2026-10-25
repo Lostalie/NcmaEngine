@@ -13,7 +13,7 @@ internal static unsafe partial class Program
         using var loader=new PluginLoader();loader.Load(Path.GetFullPath(plugins),Specs().Take(2).ToArray());
         using var window=new PlatformWindow(loader.Modules.Single(m=>m.Kind==ModuleKind.Platform),"Pipeline boundary",64,64,false);
         using var renderer=new RendererSession(loader.Modules.Single(m=>m.Kind==ModuleKind.Renderer),window,64,64);
-        var authoring=new SceneDocument("Boundary",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);
+        var authoring=new SceneDocument("Boundary",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);
         var authoringBytes=authoring.CaptureBytes();var document=BakeRenderScene(authoring);
         bool approved=true;int calls=0;Action? callback=null;bool inBuild=false;
         Func<float,float,bool,RenderPipeline>? bound=null;

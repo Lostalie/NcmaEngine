@@ -9,4 +9,3 @@ internal sealed record EcsDiagnosticState(string Format, ulong? Tick, byte[] Byt
     internal static EcsDiagnosticState FromRuntime(RuntimeSceneInstance scene) =>
         new(RuntimeSceneImage.Format, scene.World.Tick, RuntimeSceneCodec.Encode(scene.CaptureSnapshot()));
 }
-

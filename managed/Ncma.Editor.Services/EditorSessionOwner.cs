@@ -34,15 +34,20 @@ public sealed class EditorSessionOwner : IDisposable
     private readonly Func<PlaySession, IDisposable?>? _composePlay;
     private readonly Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? _composePreparedPlay;
     private readonly Action? _beforePlayStop;
+    public SceneAssetPolicy AssetPolicy { get; }
     private SceneBakeStamp? _playAuthoringSource;
+    private EditorPlayDependencies? _playDependencies;
+    public EditorPlayDependencies? PlayDependencies { get { Verify(); return _playDependencies; } }
     private EditorRuntimeChanges? _runtimeChanges;
     private PlaySession? _play => _runtime.Play;
     public ScriptCatalogService Catalog => _runtime.Catalog;
     public EditorSessionOwner(string name, ScriptCatalogService? catalog = null, bool activateEditor = true, Ncma.Runtime.ComponentRegistry? components = null,
         Action<SceneDocumentSnapshot>? validateComposition = null, Func<PlaySession, IDisposable?>? composePlay = null, Action? beforePlayStop = null,
         Func<PlaySession,PreparedSceneAssetLease?,IDisposable?>? composePreparedPlay = null, TimeProvider? workflowTime = null,
-        Ncma.Rendering.Scene.PostProcessModules? postProcessModules = null)
+        Ncma.Rendering.Scene.PostProcessModules? postProcessModules = null,
+        SceneAssetPolicy assetPolicy = SceneAssetPolicy.PresentationAndSimulation)
     {
+        _ = SceneAssetPolicies.RequiresPresentation(assetPolicy); AssetPolicy = assetPolicy;
         _postModules=components?.Describe().Any(c=>c.TypeId==PostProcessData.TypeId)==true?postProcessModules??Ncma.Rendering.Scene.PostProcessModules.Official():null;
         if(postProcessModules is not null&&_postModules is null)throw new ArgumentException("Post modules require the registered scene value component.");
         _compositionPolicy = snapshot=>{validateComposition?.Invoke(snapshot);if(_postModules is not null)Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(snapshot,_postModules);};
@@ -53,7 +58,7 @@ public sealed class EditorSessionOwner : IDisposable
         _beforePlayStop = beforePlayStop;
         _document = new(name, components, snapshot => {
             _compositionPolicy?.Invoke(snapshot);
-            if (_assetRoot is not null) _ = SceneRenderValidation.Inspect(snapshot, _renderAssets?.Metadata, catalog: _assets?.Snapshot.Catalog);
+            if (_assetRoot is not null) _ = SceneRenderValidation.Inspect(snapshot, _renderAssets?.Metadata, catalog: _assets?.Snapshot.Catalog, policy: AssetPolicy);
         });
         _runtime = new(catalog);
         if (activateEditor) ActivateEditor();
@@ -102,13 +107,13 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify(); if (_play is not null) throw new InvalidOperationException("Initial render asset preparation requires idle Edit.");
         if (_assetRoot is not null && (_assetRoot != Path.GetFullPath(projectRoot) || _assetProject != projectId)) throw new ArgumentException("Foreign asset project.");
-        var candidate = SceneAssetPreparation.Prepare(projectRoot, projectId, _document.CaptureSnapshot(), false,package);
+        var candidate = SceneAssetPreparation.Prepare(projectRoot, projectId, _document.CaptureSnapshot(), false,package,AssetPolicy);
         _renderAssets?.Dispose(); _renderAssets = candidate; _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;_renderAssetPackage=package;
     }
     public void RefreshRenderAssets()
     {
         Verify(); if (_assetRoot is null) throw new InvalidOperationException("No configured render asset project.");
-        var candidate = SceneAssetPreparation.Prepare(_assetRoot, _assetProject, _document.CaptureSnapshot(), false,_renderAssetPackage);
+        var candidate = SceneAssetPreparation.Prepare(_assetRoot, _assetProject, _document.CaptureSnapshot(), false,_renderAssetPackage,AssetPolicy);
         _renderAssets?.Dispose(); _renderAssets = candidate;
     }
     public bool RefreshAssets(bool force = false)
@@ -166,23 +171,30 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify();
         if (_play is not null) throw new InvalidOperationException("Stop current Play first.");
-        PreparedSceneAssetLease? renderPins = _renderAssets?.AcquireLease();
+        PreparedSceneAssetLease? renderPins = null;
         IDisposable? pins = null;
         try
         {
-            var playMetadata = renderPins?.Metadata;
+            SceneAssetDependencyClosure? assetClosure = null;
             var baked = _document.BakeRuntime(_document.Revision, snapshot => {
-                if (playMetadata is not null) _ = SceneRenderValidation.Inspect(snapshot, playMetadata);
+                if (SceneAssetPreparation.References(snapshot, AssetPolicy).Length != 0) renderPins = _renderAssets?.AcquireLease();
+                else if (_renderAssets is not null && _renderAssets.Assets.List().Count == 0) renderPins = _renderAssets.AcquireLease();
+                else if (_assetRoot is not null) renderPins = SceneAssetPreparation.Prepare(_assetRoot, _assetProject, snapshot, true, _renderAssetPackage, AssetPolicy);
+                assetClosure = SceneAssetPreparation.ResolveDependencies(snapshot, renderPins, AssetPolicy);
             });
+            var scriptClosure = Catalog.ResolveBindings(baked.Image);
+            var dependencies = new EditorPlayDependencies(baked.Source, baked.Image.ContentHash, assetClosure!, scriptClosure);
             pins = _assets?.PinForPlay();
             _busy = true;
             PlaySession play;
             using (_document.ReadOnly()) {
                 var scene = baked.Image.Instantiate(_document.Components);
+                Catalog.RequireCurrent(scriptClosure); assetClosure!.RequireCurrent(renderPins);
                 play = _runtime.StartPlay(scene,
                     compose:p=>_composePreparedPlay is null?_composePlay?.Invoke(p):_composePreparedPlay(p,renderPins));
             }
             _playAuthoringSource = baked.Source;
+            _playDependencies = dependencies;
             _playAssets = pins; pins = null; _playRenderAssets = renderPins; renderPins = null; _edit?.SetFrozen(true); return play;
         }
         catch
@@ -202,7 +214,7 @@ public sealed class EditorSessionOwner : IDisposable
         try { if(_play is not null)_beforePlayStop?.Invoke();
             using var read = _document.ReadOnly();
             return _runtime.ReloadGameplay(path, _play is null ? _document.CaptureSnapshot() : null); }
-        finally { try { _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); } finally { _busy = false; } }
+        finally { try { _playDependencies = null; _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); } finally { _busy = false; } }
     }
     public void StopPlay()
     {
@@ -211,7 +223,7 @@ public sealed class EditorSessionOwner : IDisposable
         try { if(_runtime.Play is not null)_beforePlayStop?.Invoke(); _runtime.StopPlay(); }
         finally
         {
-            try { if (_runtime.Play is null) { _playAuthoringSource = null; _runtimeChanges?.Invalidate(); _playAssets?.Dispose(); _playAssets = null; _playRenderAssets?.Dispose(); _playRenderAssets = null; _edit?.SetFrozen(false); } }
+            try { if (_runtime.Play is null) { _playAuthoringSource = null; _playDependencies = null; _runtimeChanges?.Invalidate(); _playAssets?.Dispose(); _playAssets = null; _playRenderAssets?.Dispose(); _playRenderAssets = null; _edit?.SetFrozen(false); } }
             finally { _busy = false; }
         }
     }

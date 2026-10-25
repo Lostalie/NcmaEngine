@@ -2,7 +2,8 @@ using Ncma;
 
 namespace Ncma.Gameplay.Sample;
 
-public sealed class RotatorBehaviour : Behaviour
+[GenerateExports]
+public sealed partial class RotatorBehaviour : Behaviour
 {
     [Export(DisplayName = "Speed", Category = "Rotation")]
     public float DegreesPerSecond { get; set; } = 45.0f;

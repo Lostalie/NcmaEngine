@@ -16,7 +16,7 @@ internal static partial class Program
     private static SceneAssetInfo MeshInfo => new(MeshId, AssetKind.StaticMesh, 1, Hash, 2, BoundsMin: new(-.5f), BoundsMax: new(.5f));
     private static SceneAssetInfo SetInfo => new(SetId, AssetKind.MaterialSet, 1, Hash, 2);
     private static PreparedSceneAssets Assets => new([MeshInfo, SetInfo]);
-    private static SceneDocument Document() => new("Scene rendering", RenderComponentRegistry.CreateRegistry(), SceneRenderValidation.RequireComposition);
+    private static SceneDocument Document() => new("Scene rendering", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), SceneRenderValidation.RequireComposition);
     private static Guid Geometry(SceneDocument doc, Vector3? position = null)
     { Guid obj = doc.CreateObject("Geometry"); doc.SetComponent(obj, TransformData.Identity with { Position = position ?? new(0, 0, -3) }); doc.SetComponent(obj, Mesh); return obj; }
     private static Guid Camera(SceneDocument doc)
@@ -43,10 +43,10 @@ internal static partial class Program
         if (root is null) throw new Exception("Repository not found.");
         var path = Path.Combine(root.FullName, "out/verification/m3-4"); Directory.CreateDirectory(path); return path;
     }
-    public static int Main()
+    public static int Main(string[] args)
     {
         var tests = new List<(string Name, Action Run)> {
-            ("registry-shared-values", () => { var r = RenderComponentRegistry.CreateRegistry(); Check(r.Describe().Count == 14 && r.Describe().Count(c => c.TypeId != EnvironmentLightingData.TypeId && c.TypeId != PostProcessData.TypeId&&c.TypeId!=SceneUiData.TypeId&&c.TypeId!=SceneShadowData.TypeId) == 10);Check(r.Decode<SceneUiData>(new(SceneUiData.TypeId,1,r.Encode(SceneUiData.Off)))==SceneUiData.Off); Check(r.Decode<PostProcessData>(new(PostProcessData.TypeId,1,r.Encode(PostProcessData.Off)))==PostProcessData.Off); Check(r.Decode<StaticMeshData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh))) == Mesh); Check(r.Decode<Ncma.Animation.RootMotionData>(new(Ncma.Animation.RootMotionData.TypeId,1,r.Encode(new Ncma.Animation.RootMotionData(0))))==new Ncma.Animation.RootMotionData(0)); Reject(() => r.Decode<CameraData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh)))); }),
+            ("registry-shared-values", () => { var r = global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module); Check(r.Describe().Count == 14 && r.Describe().Count(c => c.TypeId != EnvironmentLightingData.TypeId && c.TypeId != PostProcessData.TypeId&&c.TypeId!=SceneUiData.TypeId&&c.TypeId!=SceneShadowData.TypeId) == 10);Check(r.Decode<SceneUiData>(new(SceneUiData.TypeId,1,r.Encode(SceneUiData.Off)))==SceneUiData.Off); Check(r.Decode<PostProcessData>(new(PostProcessData.TypeId,1,r.Encode(PostProcessData.Off)))==PostProcessData.Off); Check(r.Decode<StaticMeshData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh))) == Mesh); Check(r.Decode<Ncma.Animation.RootMotionData>(new(Ncma.Animation.RootMotionData.TypeId,1,r.Encode(new Ncma.Animation.RootMotionData(0))))==new Ncma.Animation.RootMotionData(0)); Reject(() => r.Decode<CameraData>(new(StaticMeshData.TypeId, 1, r.Encode(Mesh)))); }),
             ("strict-schema-and-version", () => { var d = Document(); Guid g = Geometry(d); var snapshot = d.CaptureSnapshot(); foreach (var c in snapshot.Objects[0].Components) {
                 AtomicReject(d, snapshot with { Objects = [snapshot.Objects[0] with { Components = [c with { Version = 2 }] }] }); }
                 var component = snapshot.Objects[0].Components.Single(c => c.TypeId == StaticMeshData.TypeId);
@@ -83,11 +83,11 @@ internal static partial class Program
             }),
             ("transaction-remove-transform-rejected", () => { var d = Document(); Guid obj = Geometry(d); var edit = new EditSession(d); var bytes = d.CaptureBytes(); var result = Invoke(edit, "ncma.scene.transaction", new { operations = new[] { new { op = "remove_component", objectId = obj, typeId = "ncma.transform" } } }); Check(result.Status == "error" && !result.Changed && edit.State.UndoCount == 0 && bytes.AsSpan().SequenceEqual(d.CaptureBytes())); }),
             ("transaction-whole-candidate-undo-redo", () => { var d = Document(); var edit = new EditSession(d); var r = d.Components; Guid id = Guid.NewGuid(); object[] ops = [new { op = "create", objectId = id, name = "Mesh" }, new { op = "set_component", objectId = id, typeId = StaticMeshData.TypeId, version = 1, data = r.Encode(Mesh) }, new { op = "set_component", objectId = id, typeId = "ncma.transform", version = 1, data = r.Encode(TransformData.Identity) }]; Check(Invoke(edit, "ncma.scene.transaction", new { operations = ops }).Changed); var bytes = d.CaptureBytes(); Check(Invoke(edit, "ncma.history.undo", new { }).Changed && d.ObjectCount == 0); Check(Invoke(edit, "ncma.history.redo", new { }).Changed && bytes.AsSpan().SequenceEqual(d.CaptureBytes())); }),
-            ("validator-no-mutation-or-dto-rewrite", () => { SceneDocument? doc = null; bool armed = false; doc = new("Policy", RenderComponentRegistry.CreateRegistry(), s => { s.Objects[0] = s.Objects[0] with { Name = "Rewritten" }; if (armed) doc!.CreateObject("Forbidden"); }); Guid id = Geometry(doc); var s = doc.CaptureSnapshot(); doc.RestoreSnapshot(s); Check(doc.GetObjectName(id) == "Geometry"); armed = true; AtomicReject(doc, s); }),
+            ("validator-no-mutation-or-dto-rewrite", () => { SceneDocument? doc = null; bool armed = false; doc = new("Policy", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), s => { s.Objects[0] = s.Objects[0] with { Name = "Rewritten" }; if (armed) doc!.CreateObject("Forbidden"); }); Guid id = Geometry(doc); var s = doc.CaptureSnapshot(); doc.RestoreSnapshot(s); Check(doc.GetObjectName(id) == "Geometry"); armed = true; AtomicReject(doc, s); }),
             ("save-incomplete-authoring-preserves-file", () => { var d = Document(); Guid g = Geometry(d); string path = Path.Combine(OutputRoot(), Guid.NewGuid() + ".ncmascene"); SceneDocumentFiles.Save(d, path); var bytes = File.ReadAllBytes(path); d.RemoveComponent<TransformData>(g); Reject(() => SceneDocumentFiles.Save(d, path)); Check(bytes.AsSpan().SequenceEqual(File.ReadAllBytes(path))); }),
             ("isolated-clone-preserves-policy", () => { var d = Document(); Geometry(d); var clone = d.CreateIsolatedCopy(); Check(clone.SessionId != d.SessionId); clone.RemoveComponent<TransformData>(clone.GetObjectIds()[0]); Reject(clone.ValidateAuthoring); Check(d.HasComponent<TransformData>(d.GetObjectIds()[0])); }),
-            ("clone-validator-cannot-mutate-source", () => { SceneDocument? d = null; d = new("Source", RenderComponentRegistry.CreateRegistry(), _ => d!.CreateObject("Forbidden")); Geometry(d); var bytes = d.CaptureBytes(); Reject(() => d.CreateIsolatedCopy()); Check(bytes.AsSpan().SequenceEqual(d.CaptureBytes())); }),
-            ("editor-play-stop-isolation", () => { using var owner = new EditorSessionOwner("Isolated", components: RenderComponentRegistry.CreateRegistry(), validateComposition: SceneRenderValidation.RequireComposition); Geometry(owner.Document); var bytes = owner.Document.CaptureBytes(); var play = owner.StartPlay(); Check(play.Scene.World.Identity != Guid.Empty); global::Ncma.Runtime.Entity g = play.Scene.World.GetEntities()[0]; play.Scene.World.Set(g, play.Scene.World.Get<TransformData>(g) with { Position = new(10, 0, 0) }); owner.StopPlay(); Check(bytes.AsSpan().SequenceEqual(owner.Document.CaptureBytes())); }),
+            ("clone-validator-cannot-mutate-source", () => { SceneDocument? d = null; d = new("Source", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), _ => d!.CreateObject("Forbidden")); Geometry(d); var bytes = d.CaptureBytes(); Reject(() => d.CreateIsolatedCopy()); Check(bytes.AsSpan().SequenceEqual(d.CaptureBytes())); }),
+            ("editor-play-stop-isolation", () => { var f=new AssetFixture(); using var owner = new EditorSessionOwner("Isolated", components: global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module), validateComposition: SceneRenderValidation.RequireComposition); Guid id=Geometry(owner.Document);owner.Document.SetComponent(id,new StaticMeshData(f.Mesh,f.Set,true,true,uint.MaxValue));owner.PrepareRenderAssets(f.Root,f.Project); var bytes = owner.Document.CaptureBytes(); var play = owner.StartPlay(); Check(play.Scene.World.Identity != Guid.Empty); global::Ncma.Runtime.Entity g = play.Scene.World.GetEntities()[0]; play.Scene.World.Set(g, play.Scene.World.Get<TransformData>(g) with { Position = new(10, 0, 0) }); owner.StopPlay(); Check(bytes.AsSpan().SequenceEqual(owner.Document.CaptureBytes())); }),
             ("empty-no-camera-no-draw", () => { var d = Runtime(); var v = new RenderSceneExtractor(d.World).Extract(Assets, Guid.Empty, 800, 600); Check(v.Geometry.Count == 0 && v.ShadowCasters.Count == 0 && v.Diagnostics.Single().Code == "camera_selection_required"); }),
             ("non-spatial-no-draw", () => { var d = Runtime(); d.World.CreateEntity("Logic"); Guid camera = Camera(d); Check(new RenderSceneExtractor(d.World).Extract(Assets, camera, 800, 600).Geometry.Count == 0); }),
             ("explicit-camera-selection", () => { var d = Runtime(); Geometry(d); Camera(d); var second = Camera(d); var e = new RenderSceneExtractor(d.World); Check(e.Extract(Assets, Guid.Empty, 800, 600).Camera is null); Check(e.Extract(Assets, second, 800, 600).Camera!.Value.ObjectId == second); }),
@@ -105,6 +105,9 @@ internal static partial class Program
             ("skin-requires-prepared-gpu-session", () => { var d = Runtime(); global::Ncma.Runtime.Entity o = d.World.CreateEntity("Skin"); d.World.Set(o, new SkinnedMeshData(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), SetId, true, true, 1)); var v = new RenderSceneExtractor(d.World).Extract(Assets, Guid.Empty, 800, 600); Check(v.Geometry.Count == 0 && v.Diagnostics.Any(x => x.Code == "skinning_unprepared")); })
         };
         RegisterAssetTests(tests);
+        RegisterGeneratedDomainTests(tests);
+        RegisterAssetPolicyTests(tests);
+        RegisterBakeDependencyTests(tests);
         RegisterPackageTests(tests);
         RegisterEnvironmentAssetTests(tests);
         RegisterShadowSelectionTests(tests);
@@ -113,11 +116,11 @@ internal static partial class Program
         tests.Add(("M3.7-A explicit character/rig/mesh/material/clip template references",PrefabRenderReferences));
         tests.Add(("M3.7-A render template composition preflight preserves source",PrefabRenderComposition));
         foreach (int count in new[] { 1, 256, 4096 }) tests.Add(($"bounded-{count}-instances", () => BatchTest(count)));
-        int passed = 0;
-        foreach (var (name, run) in tests)
-        { try { run(); passed++; Console.WriteLine("PASS " + name); } catch (Exception e) { Console.Error.WriteLine("FAIL " + name + ": " + e); return 1; } }
-        Console.WriteLine($"Scene rendering foundation: {passed}/{tests.Count}; GPU scene rendering and G4 acceptance remain pending.");
-        return 0;
+        if (args.Length != 0) {
+            if (!args.SequenceEqual(new[] { "--asset-policy-tests" })) return 2;
+            tests = tests.Where(t => t.Name.StartsWith("asset policy:", StringComparison.Ordinal)).ToList();
+        }
+        return CaseHarness.Run("Scene rendering foundation (GPU/G4 acceptance separate)", tests);
     }
     private static void BatchTest(int count)
     {

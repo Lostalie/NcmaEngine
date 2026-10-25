@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <IsPackable>false</IsPackable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <!-- Roslyn 4.8 / C# 12 is the minimum API, not a pinned SDK or MSBuild runtime. -->
+  <ItemGroup>
+    <Compile Include="../Ncma.CodeGen.Shared/FieldSchema.cs" Link="ComponentContracts/FieldSchema.cs" />
+    <Compile Include="../Ncma.CodeGen.Shared/FieldContract.cs" Link="ComponentContracts/FieldContract.cs" />
+    <InternalsVisibleTo Include="Ncma.CodeGen.Tests" />
+    <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+    <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.6" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Project-reference analyzer dependencies must be registered with Roslyn's loader.
+       Never return host-owned Roslyn/Immutable/Metadata or product reference items. -->
+  <Target Name="NcmaGetAnalyzerDependencies" DependsOnTargets="ResolveReferences" Returns="@(_NcmaAnalyzerDependencies)">
+    <ItemGroup>
+      <_NcmaAnalyzerDependencies Include="@(ReferenceCopyLocalPaths)"
+          Condition="'%(ReferenceCopyLocalPaths.Extension)' == '.dll' and !$([System.String]::Copy('%(ReferenceCopyLocalPaths.Filename)').StartsWith('Microsoft.CodeAnalysis')) and '%(ReferenceCopyLocalPaths.Filename)' != 'System.Collections.Immutable' and '%(ReferenceCopyLocalPaths.Filename)' != 'System.Reflection.Metadata'"
+          IncludeRuntimeDependency="false" />
+    </ItemGroup>
+  </Target>
+</Project>

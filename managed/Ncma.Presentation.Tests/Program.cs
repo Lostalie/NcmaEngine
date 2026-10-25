@@ -141,12 +141,7 @@ var cases = new (string, Action)[]
         Check(!typeof(GuiSession).Assembly.GetReferencedAssemblies().Any(a => a.Name!.Contains("Editor") || a.Name.Contains("Scene")));
     }),
 };
-foreach (var (name, run) in cases) {
-    try { run(); Console.WriteLine("PASS " + name); }
-    catch (Exception e) { Console.Error.WriteLine("FAIL " + name + ": " + e); return 1; }
-}
-Console.WriteLine($"M2.3 presentation: {cases.Length} cases passed; synthetic/hidden CPU tests, manual UI and GPU acceptance pending.");
-return 0;
+return CaseHarness.Run("M2.3 presentation (synthetic/hidden CPU; manual UI/GPU acceptance pending)", cases);
 
 sealed unsafe class View
 {

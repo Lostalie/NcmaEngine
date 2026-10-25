@@ -47,7 +47,6 @@ internal static class IncrementalGameplayCases
                 Check(play.State == PlayState.Faulted && play.Tick == 1 && document.CaptureCheckpoint().CopyBytes().SequenceEqual(before));
             }),
         };
-        foreach (var test in cases) { test.Run(); Console.WriteLine("PASS incremental gameplay " + test.Name); }
-        Console.WriteLine($"Incremental gameplay tests: {cases.Length}/{cases.Length} passed.");
+        CaseHarness.RunOrThrow("Incremental gameplay", cases);
     }
 }

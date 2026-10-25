@@ -62,28 +62,26 @@ public sealed partial class PlayerRunner
             else
             {
                 if (project.Configuration.Plugins.Length != 0) throw new NotSupportedException("project_plugin_overrides_unimplemented");
-                var runtimeScene = LoadRuntimeScene(project);
-                if (Ncma.Scene.Rendering.SceneUiState.Resolve(runtimeScene.CaptureSnapshot(),project.Configuration.UiPackage) is { } uiSelection) {
+                var baked = LoadRuntimeScene(project);
+                var startup = baked.Image.CopySnapshot();
+                var assetPolicy = options.Headless ? Ncma.Scene.Rendering.SceneAssetPolicy.Simulation :
+                    Ncma.Scene.Rendering.SceneAssetPolicy.PresentationAndSimulation;
+                if (Ncma.Scene.Rendering.SceneUiState.Resolve(startup,project.Configuration.UiPackage) is { } uiSelection) {
                     phase = "dependencies";
                     uiPackage = Ncma.Ui.Rendering.RuntimeUiPackage.Open(project.Root, project.Configuration.ProjectId, uiSelection);
                     Ncma.Ui.Rendering.SceneUiPresentation.Validate(uiPackage, uiActions is not null);
                     uiActions?.Validate(uiPackage.Capture());
                 }
-                Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(runtimeScene.CaptureSnapshot(),postModules);
-                if(options.Headless&&project.Configuration.PostProcessLibrary is not null&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasSettings(runtimeScene.CaptureSnapshot())&&Ncma.Rendering.Scene.ScenePostProcessPreflight.HasGeometry(runtimeScene.CaptureSnapshot())) {
-                    phase="dependencies";postLibrary=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.PostProcessLibrary);
-                    Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateFiles(runtimeScene.CaptureSnapshot(),postLibrary);
-                }
-                bool hasPhysics = Ncma.Characters.CharacterComponents.HasPhysics(runtimeScene.CaptureSnapshot());
+                Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateValues(startup,postModules);
+                bool hasPhysics = Ncma.Characters.CharacterComponents.HasPhysics(startup);
                 if(hasPhysics && !project.Configuration.PhysicsEnabled)throw new ArgumentException("physics_bindings_require_enabled_project");
-                if (options.Headless && (project.Configuration.AssetPackage is not null || runtimeScene.World.Query<Ncma.Animation.RootMotionData>().Count != 0 || runtimeScene.World.Query<Ncma.Animation.AnimatorData>().Count != 0)) {
+                if (options.Headless && Ncma.Scene.Rendering.SceneAssetPreparation.References(startup, assetPolicy).Length != 0) {
                     phase = "dependencies";
-                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, runtimeScene.CaptureSnapshot(), true, project.Configuration.AssetPackage);
+                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage, assetPolicy);
                 }
                 if (!options.Headless)
                 {
                     phase = "dependencies";
-                    var startup = runtimeScene.CaptureSnapshot();
                     shaderFiles = RuntimeShaderFileSet.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.ShaderPackages);
                     if (uiPackage is not null && shaderFiles is not null) _ = shaderFiles.Get(ShaderProfile.Flat2D,false,false);
                     Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(shaderFiles,startup);
@@ -93,15 +91,22 @@ public sealed partial class PlayerRunner
                         postLibrary=RuntimePostProcessLibrary.ForHost(AppContext.BaseDirectory,project.Root,project.Configuration.PostProcessLibrary);
                         Ncma.Rendering.Scene.ScenePostProcessPreflight.ValidateFiles(startup,postLibrary);
                     }
-                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage);
+                    renderAssets = Ncma.Scene.Rendering.SceneAssetPreparation.Prepare(project.Root, project.Configuration.ProjectId, startup, true, project.Configuration.AssetPackage, assetPolicy);
                     if (Ncma.Scene.Rendering.SceneAssetPreparation.References(startup).Length != 0)
                     {
                         phase = "configuration";
                         if (project.Configuration.SceneCamera is not { } camera ||
-                            !runtimeScene.World.TryFindEntity(camera, out var cameraEntity) || !runtimeScene.World.Has<Ncma.Scene.Rendering.CameraData>(cameraEntity))
+                            !startup.Objects.Any(o => o.Id == camera && o.Components.Any(c => c.TypeId == Ncma.Scene.Rendering.CameraData.TypeId)))
                             throw new ArgumentException("scene_camera_selection_required");
                     }
                 }
+                phase = "dependencies";
+                var assetClosure = Ncma.Scene.Rendering.SceneAssetPreparation.ResolveDependencies(startup, renderAssets, assetPolicy);
+                owner = new();
+                owner.LoadGameplay(project.GameplayAssemblyPath, startup);
+                var scriptClosure = owner.Catalog.ResolveBindings(baked.Image);
+                // No live ECS is constructed until the explicit cold scene dependencies resolve.
+                var runtimeScene = baked.Image.Instantiate(baked.Components);
                 string plugins = Path.GetFullPath(pluginRoot ?? Path.Combine(AppContext.BaseDirectory, "plugins"));
                 phase = "dependencies"; physics = new(plugins, project.Configuration.PhysicsEnabled,characterSupport:hasPhysics);
                 if (physics.Inspect() is { Enabled: true } inspected) modules = [new("ncma.physics", inspected.AbiMajor, inspected.AbiMinor, (ulong)inspected.Capabilities)];
@@ -113,8 +118,7 @@ public sealed partial class PlayerRunner
                     CheckRun();modules = modules.Concat(presentation.Modules).ToArray();
                 }
                 Ncma.Characters.ScenePlayRuntime? sceneRuntime=null;
-                owner = new();
-                owner.LoadGameplay(project.GameplayAssemblyPath, runtimeScene);
+                owner.Catalog.RequireCurrent(scriptClosure); assetClosure.RequireCurrent(renderAssets);
                 phase = "initialize"; var play = owner.StartPlay(runtimeScene, factory: d => new PlaySession(d,
                     options.Headless ? FrameTimePolicy.Strict : FrameTimePolicy.Interactive, options.FixedDelta,
                     advanceMode: options.Headless ? PlayAdvanceMode.FixedSteps : PlayAdvanceMode.Frames),

@@ -36,6 +36,7 @@ internal sealed unsafe partial class EditorPresenter
         if(_characters is not null){Line();Add(GuiItemKind.Button,22,1,_showCharacters?"Hide Character Debug":"Character Debug",new("character_toggle"));}
         if(_runtimeInspection is not null){Line();Add(GuiItemKind.Button,62,1,"Runtime inspection",new("runtime_toggle"));}
         if(workspace.Owner.RuntimeChanges is not null){Line();Add(GuiItemKind.Button,64,1,"审阅并保留 Play 改动",new("keep_play_toggle"));}
+        Line();Add(GuiItemKind.Button,67,1,"任务调度诊断",new("schedule_toggle"));
         End();
     }
 
@@ -55,13 +56,7 @@ internal sealed unsafe partial class EditorPresenter
             foreach (var component in selected.Components.Skip(_componentOffset).Take(8))
             {
                 Add(GuiItemKind.Label, 3, labelId++, component.TypeId);
-                if (component.TypeId == "ncma.transform")
-                {
-                    var transform = component.Data.Deserialize<TransformData>(DataJson);
-                    double[] values = [transform.Position.X, transform.Position.Y, transform.Position.Z, transform.Rotation.X, transform.Rotation.Y, transform.Rotation.Z, transform.Rotation.W, transform.Scale.X, transform.Scale.Y, transform.Scale.Z];
-                    string[] names = ["Position X", "Position Y", "Position Z", "Rotation X", "Rotation Y", "Rotation Z", "Rotation W", "Scale X", "Scale Y", "Scale Z"];
-                    for (int i = 0; i < values.Length; i++) Add(GuiItemKind.Number, 2, control++, names[i], new("transform", selected.Id, Index: i), number: values[i], min: i is >= 3 and <= 6 ? -1 : -100, max: i is >= 3 and <= 6 ? 1 : 100, enabled: writable);
-                }
+                if (BuildDeclaredTransform(selected.Id, component, writable, ref control) || BuildDeclaredScalars(selected.Id, component, writable, ref control)) { }
                 else if (Encoding.UTF8.GetByteCount(component.Data.GetRawText()) <= 1023 && !(_jsonEdit is { } jsonActive && jsonActive.Object == selected.Id && jsonActive.Type == component.TypeId))
                     Add(GuiItemKind.Text, 2, control++, "Component JSON", new("component", selected.Id, component.TypeId, component.Version), component.Data.GetRawText(), enabled: writable);
                 else
@@ -123,8 +118,14 @@ internal sealed unsafe partial class EditorPresenter
                     BuildShadowInspector(selected.Id,component.Data.Deserialize<Ncma.Scene.Rendering.SceneShadowData>(DataJson),ref control,ref labelId,writable);
                 Button(control++, "Remove " + component.TypeId, "transaction", writable, selected.Id, new { op = "remove_component", objectId = selected.Id, typeId = component.TypeId });
             }
-            if (!selected.Components.Any(c => c.TypeId == "ncma.transform"))
-                Button(control++, "Add Transform", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id, typeId = "ncma.transform", version = 1, data = workspace.Owner.Document.Components.Encode(TransformData.Identity) });
+            if (!selected.Components.Any(c => c.TypeId == TransformData.Generated.TypeId))
+            {
+                if (workspace.Owner.Document.Components.TryDescribe(TransformData.Generated.TypeId, out var descriptor) &&
+                    descriptor.Metadata is not null && descriptor.Version == TransformData.Generated.SchemaVersion) {
+                    var initial = workspace.Owner.Document.Components.DefaultSnapshot(descriptor.TypeId, descriptor.Version);
+                    Button(control++, "Add Transform", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id, typeId = initial.TypeId, version = initial.Version, data = initial.Data });
+                } else Add(GuiItemKind.Label, 3, labelId++, "Transform default metadata unavailable");
+            }
             if (workspace.Owner.Document.Components.Describe().Any(c => c.TypeId == Ncma.Scene.Rendering.EnvironmentLightingData.TypeId) &&
                 !workspace.HasSceneComponent(Ncma.Scene.Rendering.EnvironmentLightingData.TypeId))
                 Button(control++, "添加环境配置（关闭）", "transaction", writable, selected.Id, new { op = "set_component", objectId = selected.Id,
@@ -147,10 +148,7 @@ internal sealed unsafe partial class EditorPresenter
                 Line();
                 Add(GuiItemKind.Button,2,control++,"Next Exports",new("exports_page",binding.Id,Index:16),enabled:exportOffset+16<binding.Exports.Length);
                 Add(GuiItemKind.Label,3,labelId++,$"Exports {binding.Exports.Length}; page {exportOffset/16+1}");
-                foreach (var export in binding.Exports.Skip(exportOffset).Take(16))
-                    Add(export.Kind == ExportKind.Boolean ? GuiItemKind.Checkbox : GuiItemKind.Number, 2, control++, export.Name,
-                        new("export", selected.Id, binding.Id + "/" + export.Name, (int)export.Kind), number: export.Value,
-                        min: export.Kind == ExportKind.Boolean ? 0 : -1000, max: export.Kind == ExportKind.Boolean ? 1 : 1000, enabled: writable);
+                BuildDeclaredExports(selected.Id, binding, catalog, exportOffset, writable, ref control, ref labelId);
                 Button(control++, "Remove binding", "transaction", writable, selected.Id, new { op = "remove_binding", objectId = selected.Id, bindingId = binding.Id });
             }
             _catalogOffset = Math.Clamp(_catalogOffset,0,Math.Max(0,(catalog.Types.Length-1)/8*8));

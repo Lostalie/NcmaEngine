@@ -29,7 +29,7 @@ internal static unsafe partial class Program
         bool approved=true;Action? callback=null;bool Approval(){callback?.Invoke();return approved;}
         var high=highFiles.Prepare(renderer,files,Approval);using var post=new PostProcessRuntime(renderer,files,postFiles,PostProcessModules.Official(),Approval);
         var fixture=new SceneGpuFixture(output);var(source,camera,_,_)=fixture.Scene();
-        var authoring=new SceneDocument("Shadow selection",RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),SceneRenderValidation.RequireComposition);authoring.RestoreSnapshot(source.CaptureSnapshot());
+        var authoring=new SceneDocument("Shadow selection",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),SceneRenderValidation.RequireComposition);authoring.RestoreSnapshot(source.CaptureSnapshot());
         var authoringBytes=authoring.CaptureBytes();var doc=BakeRenderScene(authoring);
         global::Ncma.Runtime.Entity setting=doc.World.CreateEntity("Shadows");doc.World.Set(setting, new SceneShadowData(1,SceneShadowQuality.Off));
         using var assets=SceneAssetPreparation.Prepare(fixture.Root,fixture.Project,doc.CaptureSnapshot(),true);using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(128,128);byte[] image=new byte[128*128*4];

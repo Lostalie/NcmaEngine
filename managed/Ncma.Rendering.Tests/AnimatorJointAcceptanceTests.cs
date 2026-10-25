@@ -31,7 +31,7 @@ internal static unsafe partial class Program
         foreach(int count in counts) {
             ScenePlayRuntime? runtime=null;SceneRenderSession? scene=null;bool failClose=false;
             using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);
-            using var editor=new EditorSessionOwner(stage+" joint Editor",components:CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),validateComposition:CharacterComponents.RequireComposition,
+            using var editor=new EditorSessionOwner(stage+" joint Editor",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),validateComposition:CharacterComponents.RequireComposition,
                 composePreparedPlay:(p,a)=>runtime=ScenePlayRuntime.Compose(p,physics,a),beforePlayStop:()=>{if(failClose)throw new InvalidOperationException("Joint close retention");scene?.Dispose();scene=null;});
             editor.Document.RestoreSnapshot(Document(count,true).CaptureSnapshot());editor.PrepareRenderAssets(fixture.Root,fixture.Project);
             byte[] unchanged=editor.Document.CaptureBytes();var editSource=EditorSceneSourceStamp.Read(editor);

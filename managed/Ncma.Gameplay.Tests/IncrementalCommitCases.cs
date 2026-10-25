@@ -149,7 +149,6 @@ internal static class IncrementalCommitCases
                 f.Step(); Check(built.SequenceEqual(bindings)); f.Step(); Check(built.Count == 2);
             }),
         };
-        foreach (var test in cases) { test.Run(); Console.WriteLine("PASS incremental commit " + test.Name); }
-        Console.WriteLine($"Incremental commit tests: {cases.Length}/{cases.Length} passed.");
+        CaseHarness.RunOrThrow("Incremental commit", cases);
     }
 }

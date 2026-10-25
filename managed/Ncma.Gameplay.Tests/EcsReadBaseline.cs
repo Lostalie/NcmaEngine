@@ -41,7 +41,7 @@ internal static class EcsReadBaseline
         foreach (int count in measured ? new[] { 100, 1000, 4096 } : new[] { 8 })
         foreach (string name in names)
         {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             registry.Register<Marker>("e5.marker", 1,
                 """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}},"additionalProperties":false}""", v => v);
             var doc = new SceneDocument("E5 read fixture", registry);

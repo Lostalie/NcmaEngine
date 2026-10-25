@@ -109,7 +109,7 @@ internal static class SceneUiRoutingTests
                 f.Bridge.Dispose(); Reject(() => f.Bridge.Observe());
             })
         };
-        foreach (var test in cases) { test.Run(); Console.WriteLine("PASS scene UI routing: " + test.Name); }
+        CaseHarness.RunOrThrow("Scene UI routing", cases);
         Console.WriteLine($"Scene UI routing: {cases.Length}/{cases.Length} groups passed.");
     }
 }

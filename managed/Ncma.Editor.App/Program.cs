@@ -9,6 +9,7 @@ using Ncma.Platform;
 using Ncma.Physics;
 using Ncma.Rendering;
 using Ncma.Assets.Authoring;
+using Ncma.Scene.Rendering;
 namespace Ncma.Editor.App;
 internal static class Program
 {
@@ -264,9 +265,10 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _log.Write("info", cpuOnly ? "presentation.cpu_only" : ReferencePreview ? "presentation.dx11_reference" : "presentation.dx11_scene", "Managed candidate presentation initialized.", _correlation);
         startup?.Phase(StartupStage.EditorOwner);
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
-            components: Ncma.Characters.CharacterComponents.Register(Ncma.Scene.Rendering.RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),
+            components: global::Ncma.Runtime.CompositionRegistry.Build(global::NcmaEngine.Generated.ComponentModule.Module),
             validateComposition: RequireComposition,
             composePreparedPlay:ComposePreparedPlay,postProcessModules:_postModules,
+            assetPolicy:cpuOnly ? SceneAssetPolicy.Simulation : SceneAssetPolicy.PresentationAndSimulation,
             beforePlayStop:()=>{VerifyGraphicsOwner();SuspendSceneHudInput();_pendingScene?.Dispose();_pendingScene=null;_pendingEditProjection=null;_playScene?.Dispose();_playScene=null;_retainedPlayAnimation?.Dispose();_retainedPlayAnimation=null;_playSession=_playAssets=Guid.Empty;});
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         var graphRuntime=new AnimationRuntimeInspectionService(_editor,()=>_sceneRuntime,()=>_playScene);graphRuntime.Register();
@@ -570,6 +572,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
                 // GUI composes its target into that frame; never submit a second frame or wait for it.
                 if(_presenter?.GraphPreviewSubmitted!=true){_renderService!.Configure(ClearConfiguration(_configuration),_state.FramebufferWidth,_state.FramebufferHeight);_renderService.Submit(frame.FrameId,0,0);}
             } else if (!ReferencePreview) {
+                // Runtime World guards do not protect the separate authoring document.
+                // Trusted graph/environment callbacks must not mutate either authority.
+                using var sourceRead=_editor.Document.ReadOnly();
                 var scene=CurrentSceneForPresentation(); // Includes edits after PumpAgent (e.g. keyboard shortcuts).
                 Guid camera=_presenter?.SceneCamera??project?.Configuration.SceneCamera??Guid.Empty;
                 Ncma.Scene.Rendering.SceneCameraView? browser=null;

@@ -280,6 +280,9 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
             catch (Exception error) { if (State == PlayState.Stopped) SetFault(error); throw; }
         }
         Pause();
+        // Retirement revokes publication immediately; unload still requires worker exit.
+        _runner.ClearSchedule(); _scheduleSubmission = null;
+        _runner.WaitForScheduleResources(TimeSpan.FromSeconds(2));
         var prepared = new List<Instance>();
         using (_scene.World.ReadOnly())
             foreach (var obj in _scene.CaptureSnapshot().Objects.OrderBy(o => o.Id))
@@ -320,6 +323,13 @@ public sealed partial class PlaySession : IDisposable, IGameplayContext
     public void Stop()
     {
         Control();
+        try {
+            if (State == PlayState.Running) Pause();
+            _runner.ClearSchedule(); _scheduleSubmission = null;
+            _runner.WaitForScheduleResources(TimeSpan.FromSeconds(2));
+        }
+        catch (ScheduleCleanupPendingException) { throw; } // Ownership debt is not a new simulation fault.
+        catch (Exception error) { SetFault(error); throw; }
         if (State == PlayState.Stopped) return;
         ResetSimulationCosts();
         CancelUiInputCore();

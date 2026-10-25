@@ -16,7 +16,7 @@ internal static class EntityQueryTests
     }
     private static World NewWorld()
     {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Label>("test.label", 1, """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""", value => value);
         registry.Register<Flag>("test.flag", 1, """{"type":"object","required":["enabled"],"properties":{"enabled":{"type":"boolean"}}}""", value => value);
         return new World(components: registry);

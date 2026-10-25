@@ -11,7 +11,7 @@ internal static class ActionSampleChecks
     {
         foreach(int count in new[]{0,1}) {
             var sample=ActionSample.Create(Path.Combine(output,"launchable-action-sample"),Path.Combine(repository,"out/managed/Ncma.Gameplay.Sample.dll"),count);
-            var doc=new SceneDocument("sample",CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()),CharacterComponents.RequireComposition);SceneDocumentFiles.Load(doc,Path.Combine(sample.Root,"start.ncmascene"));
+            var doc=new SceneDocument("sample",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);SceneDocumentFiles.Load(doc,Path.Combine(sample.Root,"start.ncmascene"));
             byte[] before=doc.CaptureBytes();
             using(var assets=SceneAssetPreparation.Prepare(sample.Root,sample.ProjectId,doc.CaptureSnapshot(),true,"assets/action.ncpak")) {
                 if(count!=0&&assets.Diagnostics.Any(d=>d.Code is not ("source_missing" or "imported_material_slots_only")))throw new Exception("Unexpected sample diagnostics: "+string.Join(",",assets.Diagnostics.Select(d=>d.Code)));

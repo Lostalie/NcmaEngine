@@ -63,7 +63,7 @@ internal static class ReadQueryTests
                 edit.SetFrozen(false);
             }),
             ("schema-invalid writes never enter authoring or alter current read results", () => {
-                var registry = ComponentRegistry.CreateDefault(); registry.Register<Diagnostic>("test.diagnostic", 1,
+                var registry = global::Ncma.Runtime.CompositionRegistry.Build(); registry.Register<Diagnostic>("test.diagnostic", 1,
                     """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""", v => v);
                 var doc = new SceneDocument("Diagnostic", registry); Guid id = doc.CreateObject("A");
                 var edit = new EditSession(doc); var original = Page(edit).Data.GetRawText(); ulong revision = doc.Revision;
@@ -98,7 +98,7 @@ internal static class ReadQueryTests
                 Check(Page(edit, 0, 1).Status == "ok");
             }),
             ("large detail pages retain bounded output shrinking with exact continuation", () => {
-                var registry = ComponentRegistry.CreateDefault();
+                var registry = global::Ncma.Runtime.CompositionRegistry.Build();
                 void Register<T>(string id) where T : struct, IComponent => registry.Register<T>(id, 1,
                     """{"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"type":"string"}}}""", v => v);
                 Register<TextA>("test.a"); Register<TextB>("test.b"); Register<TextC>("test.c"); Register<TextD>("test.d"); Register<TextE>("test.e");

@@ -39,8 +39,10 @@ if (args.Length == 2 && args[0] == "--live")
     Console.WriteLine("Live ImGui editor stdio -> private pipe -> current EditSession read-only smoke passed.");
     return 0;
 }
-Schema.Adversarial();
 string root = Path.GetFullPath(".");
+var harness = new CaseHarness("Editor transport");
+harness.Case("adversarial schemas", Schema.Adversarial);
+harness.Case("owner-thread pipe / real stdio workflow", () => {
 var doc = new SceneDocument("Pipe test"); Guid obj = doc.CreateObject("Original");
 var edit = new EditSession(doc); using var endpoint = new EditorEndpoint(edit, root);
 var descriptor = Wire.Decode<EndpointDescriptor>(File.ReadAllBytes(endpoint.DescriptorPath));
@@ -159,18 +161,19 @@ RunMcp(endpoint.DescriptorPath, false, () => {
     endpoint.Pump();
 });
 Check(Task.Run(() => { try { endpoint.Pump(); return false; } catch (InvalidOperationException) { return true; } }).Result, "Foreign thread pumped the model");
-Concurrency.Run(root);
-Lifetimes.Run(root);
-EcsReadTransportCases.Run(root);
-EcsPipeCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-domain-contract.json"),
-    Path.Combine(root, "out", "verification", "ecs-e5d", "pipe-smoke-" + Guid.NewGuid().ToString("N")), false);
-EcsPipeHistoryCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-domain-contract.json"),
-    Path.Combine(root, "out", "verification", "ecs-e5d", "history-smoke-" + Guid.NewGuid().ToString("N")), false);
-EcsMcpCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-mcp-contract.json"),
-    Path.Combine(root, "out", "verification", "ecs-e5d", "mcp-smoke-" + Guid.NewGuid().ToString("N")), false);
 endpoint.Dispose(); Check(!File.Exists(endpoint.DescriptorPath), "Owned discovery descriptor leaked");
 Console.WriteLine("Local IPC owner-thread pairing, active document, default read-only, shutdown and real stdio subprocess passed.");
-return 0;
+});
+harness.Case("concurrency", () => Concurrency.Run(root));
+harness.Case("lifetimes", () => Lifetimes.Run(root));
+harness.Case("ECS read transport", () => EcsReadTransportCases.Run(root));
+harness.Case("pipe cost fixture", () => Check(EcsPipeCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-domain-contract.json"),
+    Path.Combine(root, "out", "verification", "ecs-e5d", "pipe-smoke-" + Guid.NewGuid().ToString("N")), false) == 0, "Pipe cost fixture failed"));
+harness.Case("pipe history fixture", () => Check(EcsPipeHistoryCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-domain-contract.json"),
+    Path.Combine(root, "out", "verification", "ecs-e5d", "history-smoke-" + Guid.NewGuid().ToString("N")), false) == 0, "History fixture failed"));
+harness.Case("MCP cost fixture", () => Check(EcsMcpCosts.Run(Path.Combine(root, "scripts", "ecs-e5d-mcp-contract.json"),
+    Path.Combine(root, "out", "verification", "ecs-e5d", "mcp-smoke-" + Guid.NewGuid().ToString("N")), false) == 0, "MCP fixture failed"));
+return harness.Finish();
 }
 catch (Exception error) { Console.Error.WriteLine("Transport test failed: " + error);
     if (args.Length == 2 && args[0] == "--live") { var descriptor = Wire.Decode<EndpointDescriptor>(File.ReadAllBytes(args[1]));

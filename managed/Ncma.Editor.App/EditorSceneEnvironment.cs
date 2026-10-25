@@ -41,7 +41,7 @@ internal sealed unsafe partial class CandidatePresentation
     {
         RequireGraphicsReady();
         if(_playEnvironmentStartup is not null)throw new InvalidOperationException("A retained Play startup preflight must close before another Play attempt.");
-        PreparePlayHud(play);
+        if (!cpuOnly) PreparePlayHud(play);
         PreflightPost(play.Scene.World,play.Scene.CaptureSnapshot());
         if(_renderer is not null&&assets is not null) {
             _playEnvironmentStartup=new(_renderer,_sceneCache!);
@@ -90,7 +90,14 @@ internal sealed unsafe partial class CandidatePresentation
             }
             SynchronizeSceneResources();_sceneSynchronizationOk=true;_failedSceneSync=null;
         }
-        catch(Exception error)when(PreparationError(error)){_failedSceneSync=SceneSyncKey();_sceneSynchronizationOk=false;ScenePreparationFailed(error);}
+        catch(Exception error)when(PreparationError(error)){
+            // A rejected edit projection never becomes the current runtime World.
+            // Still report the authoring ambiguity once per failed source stamp;
+            // the Present-time runtime reader cannot see a rejected candidate.
+            if(_editor.Play is null && _editor.Document.GetObjectIds().Count(id=>_editor.Document.HasComponent<RenderConfiguration>(id))>1)
+                _log!.Write("warning","render.ambiguous_configuration","Multiple render configurations; keeping the last valid configuration.",_correlation);
+            _failedSceneSync=SceneSyncKey();_sceneSynchronizationOk=false;ScenePreparationFailed(error);
+        }
     }
     private bool PrepareSceneEnvironmentView(SceneRenderSession scene,uint width,uint height,Guid camera,SceneCameraView? browser,RenderConfiguration config)
     {

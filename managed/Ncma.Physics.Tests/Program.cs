@@ -97,7 +97,10 @@ static class Program {
     }
     public static int Main(string[] args) {
         try {
-            Layouts();string root=args[0],report=args[1];Directory.CreateDirectory(report);
+            string root=args[0],report=args[1];Directory.CreateDirectory(report);
+            var harness = new CaseHarness("Physics");
+            harness.Case("native layout/load/solver/lifetime workflow", () => {
+            Layouts();
             using(var disabled=new PhysicsModuleHost(Path.Combine(root,"missing"),false))Check(disabled.Module is null,"disabled path no DLL required");
             Reject(()=>new PhysicsModuleHost(Path.Combine(root,"missing")));
             string empty=Path.Combine(report,"empty-plugins");Directory.CreateDirectory(empty);
@@ -118,9 +121,10 @@ static class Program {
             }
             // Module init/shutdown generations and unload are tested separately from world reuse.
             for(int cycle=0;cycle<32;cycle++){using var host=new PhysicsModuleHost(root);using var w=PhysicsWorld.Create3D(host.Module!);w.Step(1f/60);}
-            PhysicsServiceTests.Run(root,report);
-            CharacterNumericsTests.Run(root);
-            Console.WriteLine("Physics H6: layouts, optional load, fixtures, preflight, handles, owner thread, 8 workloads, 32 world cycles, 32 module cycles passed.");return 0;
+            });
+            harness.Case("high-level service", () => PhysicsServiceTests.Run(root,report));
+            harness.Case("character numerics", () => CharacterNumericsTests.Run(root));
+            return harness.Finish();
         }catch(Exception e){Console.Error.WriteLine(e);return 1;}
     }
 }

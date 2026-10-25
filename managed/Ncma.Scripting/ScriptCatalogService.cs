@@ -13,13 +13,18 @@ public sealed record ScriptDescriptor(string TypeName, ExportDescriptor[] Export
 public sealed record ScriptCatalogSnapshot(Guid Generation, ScriptDescriptor[] Types);
 
 // Trusted bootstrap service. Never expose an assembly path parameter as an Agent capability.
-public sealed class ScriptCatalogService : IDisposable
+public sealed partial class ScriptCatalogService : IDisposable
 {
-    internal sealed record ExportMember(MemberInfo Member, uint Kind, string DisplayName, string Category, double DefaultValue)
+    internal sealed record ExportMember(MemberInfo Member, uint Kind, string DisplayName, string Category, double DefaultValue, GeneratedExportBinding? Generated = null)
     {
         public void Set(Behaviour instance, double number)
         {
-            if (!double.IsFinite(number)) throw new ArgumentException("Export value must be finite.");
+            number = ExportNumbers.Require(number, Kind);
+            if (Generated is { } generated) {
+                try { generated.Write(instance, number); }
+                catch (Exception error) when (Member is PropertyInfo) { throw new TargetInvocationException(error); }
+                return;
+            }
             object value = Kind switch
             {
                 1 when float.IsFinite((float)number) => (object)(float)number,
@@ -151,29 +156,48 @@ public sealed class ScriptCatalogService : IDisposable
         if (type.FullName is null || Encoding.UTF8.GetByteCount(type.FullName) >= 512)
             throw new ArgumentException("Behaviour type name exceeds the ABI budget.");
         var prototype = (Behaviour)Activator.CreateInstance(type)!;
+        bool declared = type.IsDefined(typeof(GenerateExportsAttribute), inherit: false);
+        if (declared != (prototype is IGeneratedExportSource))
+            throw new ArgumentException("Generated Export declaration and implementation must both be present.");
+        var generated = new Dictionary<string, GeneratedExportBinding>(StringComparer.Ordinal);
+        if (prototype is IGeneratedExportSource source) {
+            var bindings = source.DescribeGeneratedExports() ?? throw new ArgumentException("Missing generated Export declarations.");
+            if (bindings.Length > BehaviourBindingRules.MaxExportsPerBinding) throw new ArgumentException("Generated Export capacity exceeded.");
+            foreach (var binding in bindings)
+                if (binding is null || string.IsNullOrEmpty(binding.Name) || binding.Read is null || binding.Write is null || !generated.TryAdd(binding.Name, binding))
+                    throw new ArgumentException("Invalid or duplicate generated Export declaration.");
+        }
         var exports = new List<ExportMember>();
         foreach (MemberInfo member in type.GetMembers(BindingFlags.Public | BindingFlags.Instance).OrderBy(m => m.Name, StringComparer.Ordinal))
         {
             ExportAttribute? attribute = member.GetCustomAttribute<ExportAttribute>();
             if (attribute is null) continue;
             Type valueType;
-            object? value;
             if (member is PropertyInfo property && property.GetIndexParameters().Length == 0 &&
                 property.GetMethod?.IsPublic == true && property.SetMethod?.IsPublic == true)
-            { valueType = property.PropertyType; value = property.GetValue(prototype); }
+            { valueType = property.PropertyType; }
             else if (member is FieldInfo field && !field.IsInitOnly)
-            { valueType = field.FieldType; value = field.GetValue(prototype); }
+            { valueType = field.FieldType; }
             else throw new InvalidOperationException($"Export '{type.FullName}.{member.Name}' must be writable and public.");
             uint kind = valueType == typeof(float) ? 1u : valueType == typeof(double) ? 2u :
                 valueType == typeof(int) ? 3u : valueType == typeof(bool) ? 4u : 0u;
             if (kind == 0) throw new NotSupportedException($"Unsupported Export type: {valueType.Name} on {member.Name}.");
-            double number = Convert.ToDouble(value, CultureInfo.InvariantCulture);
-            if (!double.IsFinite(number)) throw new InvalidOperationException("Export defaults must be finite.");
             string display = attribute.DisplayName ?? member.Name, category = attribute.Category ?? "Gameplay";
             if (Encoding.UTF8.GetByteCount(member.Name) >= 128 || Encoding.UTF8.GetByteCount(display) >= 128 || Encoding.UTF8.GetByteCount(category) >= 128)
                 throw new ArgumentException("Export metadata exceeds the ABI budget.");
-            exports.Add(new(member, kind, display, category, number));
+            GeneratedExportBinding? accessor = null;
+            if (declared && (!generated.Remove(member.Name, out accessor) || accessor.Kind != kind || accessor.DisplayName != display || accessor.Category != category))
+                throw new ArgumentException("Generated Export differs from public attributed contract: " + member.Name);
+            double number;
+            if (accessor is not null) {
+                try { number = accessor.Read(prototype); }
+                catch (Exception error) when (member is PropertyInfo) { throw new TargetInvocationException(error); }
+            } else number = Convert.ToDouble(member is PropertyInfo p ? p.GetValue(prototype) : ((FieldInfo)member).GetValue(prototype), CultureInfo.InvariantCulture);
+            if (!double.IsFinite(number)) throw new InvalidOperationException("Export defaults must be finite.");
+            number = ExportNumbers.Require(number, kind);
+            exports.Add(new(member, kind, display, category, number, accessor));
         }
+        if (generated.Count != 0) throw new ArgumentException("Generated Export contains non-public or unannotated members.");
         return new(type, exports.ToArray());
     }
 

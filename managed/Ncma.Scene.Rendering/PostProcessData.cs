@@ -65,6 +65,7 @@ public readonly record struct PostProcessData(int Version, bool Enabled, Guid To
         return value with { StackJson = EncodeStack(DecodeStack(value.StackJson)) };
     }
     // Formal hosts consume this scene-wide value; gameplay cannot attach it during simulation.
+    [ComponentRegistration]
     public static void Register(ComponentRegistry registry) => registry.Register<PostProcessData>(TypeId, 1, """
         {"type":"object","additionalProperties":false,"required":["version","enabled","toneModule","toneVersion","exposureEv","stackJson"],
          "properties":{"version":{"type":"integer"},"enabled":{"type":"boolean"},"toneModule":{"type":"string"},

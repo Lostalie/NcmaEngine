@@ -3,8 +3,7 @@ namespace Ncma.Scene.Rendering;
 
 public static class ScenePostProcessState
 {
-    private static readonly ComponentRegistry Registry = CreateRegistry();
-    private static ComponentRegistry CreateRegistry() { var registry = ComponentRegistry.CreateDefault(); PostProcessData.Register(registry); return registry; }
+    private static readonly ComponentRegistry Registry = CompositionRegistry.Build(Generated.ComponentModule.Module);
     public static PostProcessData Read(World world, Guid expectedWorld)
         => Read(new SceneComponentReader<PostProcessData>(world), expectedWorld);
     public static PostProcessData Read(SceneComponentReader<PostProcessData> reader, Guid expectedWorld)

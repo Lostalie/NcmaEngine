@@ -19,6 +19,7 @@ public readonly record struct ActionDefinitionData(Guid DefinitionId, Guid IdleC
         return v;
     }
     private static bool Window(float a,float b)=>float.IsFinite(a)&&float.IsFinite(b)&&a>=0&&a<b&&b<=1;
+    [ComponentRegistration]
     public static ComponentRegistry Register(ComponentRegistry registry)
     {
         string[] ids=["definitionId","idleClip","runClip","attackClip","dodgeClip"];

@@ -53,6 +53,19 @@ internal static partial class RuntimeChangeReviewTests
 
     internal static IEnumerable<(string, Action)> PresenterCases(string repository)
     {
+        yield return ("E6 keep-Play review consumes keyboard and rejects underlying presenter events", () => {
+            using var f = new Fixture(repository); var ui = new KeepUi(f.Owner);
+            var underlying = ui.Item(2, 15); // Actual Stop button, still enabled in the underlying page.
+            ui.Click(64, 1);
+            byte[] before = f.Owner.Document.CaptureBytes(); var state = f.Owner.Edit!.State;
+            Check(ui.Presenter.UiKeyboard(257, "", false, false));
+            Check(ui.Presenter.UiKeyboard(0, "不应进入预览", false, false));
+            Check(!ui.Presenter.SceneHudInputAllowed && !ui.Presenter.Shortcut(83, true, false, false, true));
+            ui.Click(underlying.WidgetHigh, underlying.WidgetLow);
+            Check(f.Play.State == PlayState.Paused && before.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Edit.State == state);
+            Check(ui.Text().Contains("保留 Play"));
+            ui.Click(64, 2); Check(!ui.Presenter.UiKeyboard(257, "", false, false));
+        });
         yield return ("E6 presenter human diff route keeps created deleted and changed objects with original history", () => {
             using var f = new Fixture(repository); var d = f.Owner.Document; byte[] before = d.CaptureBytes(); var state = f.Owner.Edit!.State;
             var world = f.Play.Scene.World; world.Rename(world.FindEntity(f.Changed), "Kept through UI");

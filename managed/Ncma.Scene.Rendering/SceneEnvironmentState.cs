@@ -23,7 +23,7 @@ public static class SceneEnvironmentState
     }
     public static EnvironmentLightingData Read(ISceneContent snapshot)
     {
-        var registry=RenderComponentRegistry.CreateRegistry();var value=EnvironmentLightingData.Off;int count=0;
+        var registry=global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);var value=EnvironmentLightingData.Off;int count=0;
         foreach(var obj in snapshot.Objects)foreach(var component in obj.Components.Where(c=>c.TypeId==EnvironmentLightingData.TypeId)) {
             if(++count>1)throw new ArgumentException("One scene environment configuration required.");
             value=registry.Decode<EnvironmentLightingData>(component);

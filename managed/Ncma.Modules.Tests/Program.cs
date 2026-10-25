@@ -10,10 +10,11 @@ static class Program
     private static readonly ModuleOperation Operation = new(Guid.NewGuid(), "1.0", Guid.NewGuid(),
         "ncma.scene.propose", Guid.NewGuid(), Guid.NewGuid());
     private static int checks;
+    private static readonly CaseHarness Harness = new("Ncma.Modules (CPU only)");
 
     public static int Main()
     {
-        try { RunAll(); return 0; }
+        try { RunAll(); return Harness.Finish(); }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
 
@@ -36,10 +37,10 @@ static class Program
         Run("completed replies remain within outstanding budget", CompletedBudget);
         Run("unclaimed proposal expires before delivery", UnclaimedDeadline);
         Run("transport dispatch receives only remaining budget", DispatchBudget);
-        Console.WriteLine($"Ncma.Modules: 17 groups, {checks} checks passed (CPU only; no transport/inference/World mutation).");
+        Console.WriteLine($"Ncma.Modules: {checks} successful checks; group failures reported separately (no transport/inference/World mutation).");
     }
 
-    private static void Run(string name, Action test) { test(); Console.WriteLine($"PASS {name}"); }
+    private static void Run(string name, Action test) => Harness.Case(name, test);
     private static void Check(bool value) { if (!value) throw new Exception("Assertion failed."); checks++; }
     private static void Reject<T>(Action action) where T : Exception
     {

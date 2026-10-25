@@ -7,7 +7,7 @@ internal static class EcsStorageTests
     private readonly record struct Label(string Text, int Value) : IComponent;
     private static ComponentRegistry Registry()
     {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         registry.Register<Label>("test.label", 1, """
             {"type":"object","required":["text","value"],"properties":{"text":{"type":"string"},"value":{"type":"integer"}}}
             """, v => v.Value >= 0 ? v : throw new ArgumentException("Negative label value."));

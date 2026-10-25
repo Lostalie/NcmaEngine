@@ -188,7 +188,9 @@ internal static class PipelineHostProbe
                     {
                         var command=new CapabilityRequest(EditSession.ContractVersion,Guid.NewGuid(),edit.SessionId,edit.Revision,"ncma.scene.transaction",JsonSerializer.SerializeToElement(new{operations=new[]{new{op="set_component",objectId=id,typeId=PostProcessData.TypeId,version=1,data=owner.Document.Components.Encode(value)}}}));
                         Pass(edit.Invoke(command).Status=="denied","default Agent remains read-only");
-                        Pass(edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[id],componentScope:[PostProcessData.TypeId])).Changed,"original scoped post command");
+                        var result=edit.Invoke(command,new(["ncma.scene.transaction"],objectScope:[id],componentScope:[PostProcessData.TypeId]));
+                        if(!result.Changed)Console.WriteLine($"PIPELINE COMMAND mode={mode} status={result.Status} code={result.Code} data={result.Data}");
+                        Pass(result.Changed,"original scoped post command");
                     }
                     Set(active with{ExposureEv=-1});var changed=Draw();Pass(!changed.SequenceEqual(image),"command changes custom graph pixels");InspectCurrent();
                     workspace.History(workspace.Stamp,false);Pass(Draw().SequenceEqual(image),"sole Undo exact custom pixels");InspectCurrent();
@@ -203,7 +205,9 @@ internal static class PipelineHostProbe
                     var renderer=EnvironmentProductEvidence.Field<RendererSession>(editor,"_renderer");
                     foreach(Action forbidden in new Action[]{()=>owner.Document.CreateObject("forbidden Build write"),()=>renderer.Dispose()})
                     {
-                        onBuild=forbidden;Set(active with{ExposureEv=-1});var clear=Draw();
+                        onBuild=forbidden;Set(active with{ExposureEv=-1});
+                        byte[] authorBeforeCallback=owner.Document.CaptureBytes();var clear=Draw();
+                        Pass(owner.Document.CaptureBytes().SequenceEqual(authorBeforeCallback),"rejected render callback preserves exact authoring bytes");
                         Pass(clear.Where((b,i)=>b!=clear[i%4]).Any()==false,"Build callback rejects World write/renderer unload and clears");
                         onBuild=null;Set(active);Pass(Draw().SequenceEqual(image),"explicit recovery after callback fault");
                     }

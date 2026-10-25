@@ -40,7 +40,7 @@ internal static class RuntimeInspectionTests
         {
             Directory = Path.Combine(output, "runtime-inspection-" + Guid.NewGuid().ToString("N"));
             System.IO.Directory.CreateDirectory(Directory);
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             if (large)
             {
                 const string schema = """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""";

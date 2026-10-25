@@ -6,6 +6,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Ncma.CodeGen.Shared/FieldSchema.cs" Link="ComponentContracts/FieldSchema.cs" />
+    <Compile Include="../Ncma.CodeGen.Shared/FieldContract.cs" Link="ComponentContracts/FieldContract.cs" />
+    <InternalsVisibleTo Include="Ncma.CodeGen.Tests" />
     <InternalsVisibleTo Include="Ncma.Runtime.Tests" />
     <InternalsVisibleTo Include="Ncma.Gameplay.Tests" />
     <InternalsVisibleTo Include="Ncma.Scene.Tests" />

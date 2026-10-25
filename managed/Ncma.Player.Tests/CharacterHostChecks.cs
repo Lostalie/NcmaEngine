@@ -17,7 +17,7 @@ internal static class CharacterHostChecks
     private sealed class BadObserver : ICommittedStepObserver { public void StepCommitted(World world, double h) => throw new Exception("Injected post-commit fault"); }
     internal static SceneDocument Fixture(int dense = 0)
     {
-        var doc = new SceneDocument("K3 actual character", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), CharacterComponents.RequireComposition);
+        var doc = new SceneDocument("K3 actual character", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module), CharacterComponents.RequireComposition);
         Guid actor = doc.CreateObject("Character", Character); doc.SetComponent(actor, TransformData.Identity with { Position = new(0, .1f, 0) }); doc.SetComponent(actor, CharacterData.Default);
         for (int i = 0; i < Math.Max(1, dense); ++i) { Guid floor = doc.CreateObject("Floor" + i); doc.SetComponent(floor, TransformData.Identity with { Position = new(0, -.5f, 0) }); doc.SetComponent(floor, new BoxColliderData(20, .5f, 20, 1000, 1, false)); }
         Guid wall = doc.CreateObject("Wall"); doc.SetComponent(wall, TransformData.Identity with { Position = new(2, 2, 0) }); doc.SetComponent(wall, new BoxColliderData(.2f, 2, 20, 1000, 1, false));
@@ -49,7 +49,7 @@ internal static class CharacterHostChecks
         passed.Add("Strict value schemas/composition: unit scale, exact follow UUID, exclusive shape and finite nondegenerate values");
         using (var disabled = new PhysicsService("unused-no-native-directory", enabled: false))
         foreach (int type in new[] { 0, 1, 2 }) {
-            var doc = new SceneDocument("No physics startup", CharacterComponents.Register(RenderComponentRegistry.CreateRegistry()), CharacterComponents.RequireComposition);
+            var doc = new SceneDocument("No physics startup", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module), CharacterComponents.RequireComposition);
             Guid ordinary = doc.CreateObject("Ordinary"); doc.SetComponent(ordinary, TransformData.Identity); var registry = doc.Components;
             ComponentSnapshot addition = type switch {
                 0 => new(CharacterData.TypeId, 1, registry.Encode(CharacterData.Default)),

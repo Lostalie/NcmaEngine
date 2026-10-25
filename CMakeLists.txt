@@ -5,10 +5,13 @@ project(NcmaEngine VERSION 0.2.0 LANGUAGES C CXX)
 # VS installations with only the Chinese CL resources ignore VSLANG=1033. Some
 # CMake probes decode that localized prefix incorrectly; Ninja then loses header deps.
 # Match the verified resource fallback, not the user console language.
-string(STRIP "$ENV{VSLANG}" _ncma_cl_language)
-if(MSVC AND _ncma_cl_language STREQUAL "1033")
+if(MSVC)
     get_filename_component(_ncma_cl_directory "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    if(EXISTS "${_ncma_cl_directory}/2052/clui.dll" AND NOT EXISTS "${_ncma_cl_directory}/1033/clui.dll")
+    file(GLOB _ncma_cl_resources "${_ncma_cl_directory}/*/clui.dll")
+    list(LENGTH _ncma_cl_resources _ncma_cl_resource_count)
+    # Regeneration need not inherit the original VSLANG environment. With exactly
+    # one installed language resource the actual compiler fallback is unambiguous.
+    if(_ncma_cl_resource_count EQUAL 1 AND EXISTS "${_ncma_cl_directory}/2052/clui.dll")
         set(CMAKE_CL_SHOWINCLUDES_PREFIX "注意: 包含文件:  ")
     endif()
 endif()
@@ -370,6 +373,9 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/Ncma.Modules.Grpc.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.CodeGen.Tests/Ncma.CodeGen.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/Ncma.Runtime.Tests.csproj"
@@ -831,6 +837,17 @@ if(NCMA_BUILD_TESTS)
                 set_tests_properties(NcmaModuleTests.RelocatedClient PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endif()
         endif()
+        add_test(NAME NcmaCodeGenTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.CodeGen.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.CodeGen.Tests.dll")
+        set_tests_properties(NcmaCodeGenTests PROPERTIES TIMEOUT 60 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        add_test(NAME NcmaCodeGenTests.BuildContracts COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.CodeGen.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.CodeGen.Tests.dll"
+            --build-contracts "${CMAKE_SOURCE_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release> "${DOTNET_EXECUTABLE}")
+        add_test(NAME NcmaCodeGenTests.PublishContracts COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.CodeGen.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.CodeGen.Tests.dll"
+            --publish-contracts "${CMAKE_SOURCE_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release> "${DOTNET_EXECUTABLE}")
+        set_tests_properties(NcmaCodeGenTests.BuildContracts NcmaCodeGenTests.PublishContracts PROPERTIES
+            TIMEOUT 3600 RUN_SERIAL TRUE WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
         add_test(NAME NcmaManagedHeadlessTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Runtime.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Runtime.Tests.dll")
         set_tests_properties(NcmaManagedHeadlessTests PROPERTIES TIMEOUT 30)
@@ -853,9 +870,22 @@ if(NCMA_BUILD_TESTS)
                 "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release>)
             set_tests_properties(NcmaAssetImportTests PROPERTIES TIMEOUT 120)
         endif()
-        add_test(NAME NcmaGameplayTests COMMAND "${DOTNET_EXECUTABLE}"
-            "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Gameplay.Tests.dll")
-        set_tests_properties(NcmaGameplayTests PROPERTIES TIMEOUT 30)
+        # Independent case groups, not a larger timeout for the monolithic harness.
+        # Keep every original matrix cell and workload; each process still gets 30s.
+        set(ncma_gameplay_groups Core Schedule Recovery SimulationCosts IncrementalGameplay
+            IncrementalCommit StructuralBatch Movement Ui Harness Baseline ReadBaseline MemoryV2
+            BaselineV2 ReadBaselineV2 DenseDiagnostics ReadDiagnostics)
+        foreach(joint_count IN ITEMS 100 1000 4096)
+            foreach(joint_workload IN ITEMS none sparse full membership replace)
+                list(APPEND ncma_gameplay_groups "Joint.${joint_count}.${joint_workload}")
+            endforeach()
+        endforeach()
+        foreach(gameplay_group IN LISTS ncma_gameplay_groups)
+            add_test(NAME "NcmaGameplayTests.${gameplay_group}" COMMAND "${DOTNET_EXECUTABLE}"
+                "${CMAKE_SOURCE_DIR}/managed/Ncma.Gameplay.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Gameplay.Tests.dll"
+                --group "${gameplay_group}")
+            set_tests_properties("NcmaGameplayTests.${gameplay_group}" PROPERTIES TIMEOUT 30)
+        endforeach()
         add_test(NAME NcmaEditorTransportTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Transport.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Transport.Tests.dll")
         set_tests_properties(NcmaEditorTransportTests PROPERTIES TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")

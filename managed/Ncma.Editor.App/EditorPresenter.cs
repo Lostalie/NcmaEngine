@@ -302,6 +302,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         BuildGraphReads(w,h,ref labelId);
         BuildAnimationRuntime(w,h,ref labelId);
         BuildRuntimeInspection(w,h,ref labelId);
+        if (_showSchedule) BuildSchedule(w,h,ref labelId);
         if (_showKeepPlay) BuildKeepPlayChanges(w,h,ref labelId);
         BuildWorkflows(w,h,ref labelId);
         if(workspaceStyle)WorkspaceSplitters();
@@ -371,6 +372,9 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if (_page is null || e.Frame != _frame.Frame || e.ViewGeneration != _generation || e.ViewGeneration != _frame.ViewGeneration || e.DocumentGeneration != _frame.DocumentGeneration ||
                     e.Revision != _frame.Revision || workspace.Stamp != _page.Stamp || !_actions.TryGetValue((e.WidgetHigh, e.WidgetLow), out var action)) continue;
                 if (!_items.Any(item => item.WidgetHigh == e.WidgetHigh && item.WidgetLow == e.WidgetLow && item.Enabled != 0 && item.Kind == e.Kind)) continue;
+                // The human review is modal at the shared dispatcher, including UI/graph canvases
+                // and events queued in the same native frame. Closing it requires its own action.
+                if (_showKeepPlay && !action.Kind.StartsWith("keep_play_", StringComparison.Ordinal)) continue;
                 if (e.Phase is < 1 or > 3 || !double.IsFinite(e.Value) || e.TextOffset > output.Length || e.TextLength > output.Length - e.TextOffset)
                     throw new ArgumentException("Invalid GUI event.");
                 string text = new UTF8Encoding(false, true).GetString(output.Slice((int)e.TextOffset, (int)e.TextLength));
@@ -378,7 +382,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyLayout(action,e))continue;
                 if(ApplyUi(action,e,text))continue;
                 if(ApplyGraphEditor(action,e,text))continue;
-                if (action.Kind is "name" or "transform" or "component" or "component_page" or "render_field" or "environment_field" or "post_field" or "export")
+                if (action.Kind is "export" or "attach") RequireExportCatalog(action);
+                if (action.Kind is "name" or "transform" or "declared_field" or "component" or "component_page" or "render_field" or "environment_field" or "post_field" or "export")
                 {
                     if (e.Phase == 1) {
                         workspace.BeginDraft(stamp, action.Object, "Edit " + action.Kind);
@@ -401,6 +406,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyGraphRead(action,e.Value))continue;
                 if(ApplyAnimationRuntime(action,e.Value))continue;
                 if(ApplyRuntimeInspection(action,e.Value))continue;
+                if(ApplySchedule(action))continue;
                 if(ApplyKeepPlayChanges(action,e.Value))continue;
                 if(ApplyWorkflow(action,e.Value))continue;
                 switch (action.Kind)
@@ -515,6 +521,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     private object Operation(ActionView action, string text, double number)
     {
+        if (action.Kind == "declared_field") return DeclaredScalarOperation(action, text, number);
         if(action.Kind=="post_field") {
             var modules=workspace.Owner.PostProcessing!.Modules;
             return RenderingEditorAdapter.PostOperation(modules,action.Object,RenderingEditorAdapter.PostField(modules,PostValue(),action.Field,number));
@@ -542,15 +549,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         if (action.Kind == "component") return new { op = "set_component", objectId = action.Object, typeId = action.Field, version = action.Index, data = JsonSerializer.Deserialize<JsonElement>(text) };
         if (action.Kind == "export")
         {
-            int slash = action.Field.IndexOf('/');
-            return new { op = "set_export", objectId = action.Object, bindingId = Guid.Parse(action.Field[..slash]), name = action.Field[(slash + 1)..], kind = action.Index,
-                value = action.Index == (int)ExportKind.Integer ? Math.Round(number) : number };
+            return DeclaredExportOperation(action, text, number);
         }
-        var component = _page!.Selected!.Components.Single(c => c.TypeId == "ncma.transform");
-        var node = JsonNode.Parse(component.Data.GetRawText())!;
-        string group = action.Index < 3 ? "position" : action.Index < 7 ? "rotation" : "scale";
-        string coordinate = "xyzw"[action.Index < 3 ? action.Index : action.Index < 7 ? action.Index - 3 : action.Index - 7].ToString();
-        node[group]![coordinate] = number;
-        return new { op = "set_component", objectId = action.Object, typeId = "ncma.transform", version = 1, data = JsonSerializer.SerializeToElement(node) };
+        return DeclaredTransformOperation(action, number);
     }
 }

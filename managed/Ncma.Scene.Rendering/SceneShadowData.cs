@@ -13,6 +13,7 @@ public readonly record struct SceneShadowData(int Version, SceneShadowQuality Qu
         if (value.Version != 1 || !Enum.IsDefined(value.Quality)) throw new ArgumentException("Scene shadow version/quality.");
         return value;
     }
+    [ComponentRegistration]
     public static void Register(ComponentRegistry registry) => registry.Register<SceneShadowData>(TypeId, 1, """
         {"type":"object","additionalProperties":false,"required":["version","quality"],
          "properties":{"version":{"type":"integer"},"quality":{"type":"integer"}}}
@@ -21,8 +22,7 @@ public readonly record struct SceneShadowData(int Version, SceneShadowQuality Qu
 
 public static class SceneShadowState
 {
-    private static readonly ComponentRegistry Registry = CreateRegistry();
-    private static ComponentRegistry CreateRegistry() { var registry = ComponentRegistry.CreateDefault(); SceneShadowData.Register(registry); return registry; }
+    private static readonly ComponentRegistry Registry = CompositionRegistry.Build(Generated.ComponentModule.Module);
     // Absence means the official Medium default; custom pipelines retain their explicit policy
     // until a scene selection is authored. Preserve absence rather than synthesizing a component.
     public static SceneShadowData? Read(World world, Guid expectedWorld)

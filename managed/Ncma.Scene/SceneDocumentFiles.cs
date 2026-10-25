@@ -60,6 +60,12 @@ public static class SceneDocumentFiles
             if (File.Exists(full)) File.Replace(temporary, full, null);
             else File.Move(temporary, full);
         }
+        catch (IOException error)
+        {
+            // Keep atomic failure visible; never delete the target or fall back to
+            // overwrite/retry. Include the native code and exact path for diagnosis.
+            throw new IOException($"Atomic scene save failed: path={full}; native=0x{error.HResult:X8}; {error.Message}", error);
+        }
         finally
         {
             if (File.Exists(temporary)) File.Delete(temporary); // Only this operation's own temporary file.

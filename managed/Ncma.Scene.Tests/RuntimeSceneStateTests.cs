@@ -17,7 +17,7 @@ internal static class RuntimeSceneStateTests
         var entity = document.CreateObject("Logic");
         document.SetBindings(entity, [new(Guid.NewGuid(), "Game.Logic", true,
             [new("Value", ExportKind.Double, 0)])]);
-        return document.BakeRuntime(document.Revision).Image.Instantiate(ComponentRegistry.CreateDefault());
+        return document.BakeRuntime(document.Revision).Image.Instantiate(global::Ncma.Runtime.CompositionRegistry.Build());
     }
     private static void Commit(RuntimeSceneInstance scene, Dictionary<Guid, BehaviourBindingData[]> bindings, Action? stage = null)
     {

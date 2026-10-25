@@ -39,7 +39,7 @@ public sealed partial class CharacterPlayRuntime : IDisposable, IWorldSystem, IC
         _roots=new(play.Scene.World,assets);
         try{_graphRoots=new(play.Scene.World,assets,animators,128-_roots.TrackCount,262144-_roots.RetainedKeyCount);try{_actions=new(play.Scene.World,_roots);}catch{_graphRoots.Dispose();throw;}}catch{_roots.Dispose();throw;}
         _bindings = SceneStartupEntities.EitherByUuid<CharacterData, BoxColliderData>(play.Scene.World)
-            .Select(o => new Binding(play.Scene.World.GetUuid(o), play.Scene.World.Has<CharacterData>(o) ? play.Scene.World.Get<CharacterData>(o) : null, play.Scene.World.Has<BoxColliderData>(o) ? play.Scene.World.Get<BoxColliderData>(o) : null)).ToArray();
+            .Select(o => new Binding(play.Scene.World.GetUuid(o), play.Scene.World.Has<CharacterData>(o) ? CharacterData.Generated.Read(play.Scene.World, o) : null, play.Scene.World.Has<BoxColliderData>(o) ? play.Scene.World.Get<BoxColliderData>(o) : null)).ToArray();
         _coordinator = new(play, _bindings.Select(b => b.Id).ToArray(), () => {
             _profileTick=0;_roots.Initialize(play.Scene.World);_graphRoots.Initialize(play.Scene.World);_actions.Initialize(play.Scene.World,play.SessionId);return _domain = new Domain(physics, _bindings);
         },StageCombat);

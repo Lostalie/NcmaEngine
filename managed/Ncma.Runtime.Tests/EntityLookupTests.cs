@@ -53,7 +53,7 @@ internal static class EntityLookupTests
                 Task.Run(() => { Reject(() => w.TryFindEntity(id, out _)); Reject(() => w.TryFindEntity(Guid.Empty, out _)); }).GetAwaiter().GetResult();
             }),
             ("registration is not membership or write permission", () => {
-                var r = ComponentRegistry.CreateDefault(); var w = new World(components: r);
+                var r = global::Ncma.Runtime.CompositionRegistry.Build(); var w = new World(components: r);
                 Check(r.IsRegistered<TransformData>() && !r.IsRegistered<Unknown>() && w.Query<TransformData>().Count == 0);
                 var e = w.CreateEntity("empty"); Check(!w.Has<TransformData>(e) && r.IsRegistered<TransformData>());
             }),

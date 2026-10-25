@@ -37,7 +37,7 @@ internal static class AuthoringStoreTests
             Check(document.GetObjectIds().SequenceEqual([b]));
         });
         yield return ("E6 authoring stores frozen serialized values, custom getters cannot mutate past writes", () => {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             registry.Register<Dynamic>("dynamic", 1, """{"type":"object","required":["value"],"properties":{"value":{"type":"integer"}}}""", v => v);
             var document = new SceneDocument("Frozen authoring", registry); var id = document.CreateObject("A");
             Dynamic.Current = 7; document.SetComponent(id, new Dynamic());
@@ -97,7 +97,7 @@ internal static class AuthoringStoreTests
             copy.RenameObject(a, "Independent"); Check(document.GetObjectName(a) == "A");
         });
         yield return ("E6 authoring normalized budget failure preserves bytes and revision", () => {
-            var registry = ComponentRegistry.CreateDefault();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build();
             registry.Register<TextValue>("text", 1, """{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}""",
                 v => v.Text == "expand" ? new(new string('x', ComponentRegistry.MaxPayloadBytes + 1)) : v);
             var document = new SceneDocument("Budget", registry); var id = document.CreateObject("A");

@@ -18,6 +18,7 @@ public readonly record struct SceneUiData(int Version,bool Enabled,Guid Document
         if(!value.Enabled){if(value!=Off)throw new ArgumentException("Disabled scene UI must be canonical Off.");return value;}
         return From(value.Package!);
     }
+    [ComponentRegistration]
     public static void Register(ComponentRegistry registry)=>registry.Register<SceneUiData>(TypeId,1,"""
         {"type":"object","additionalProperties":false,"required":["version","enabled","documentId","generation","path","hash"],"properties":{
         "version":{"type":"integer"},"enabled":{"type":"boolean"},"documentId":{"type":"string"},"generation":{"type":"integer"},"path":{"type":"string"},"hash":{"type":"string"}}}
@@ -26,8 +27,7 @@ public readonly record struct SceneUiData(int Version,bool Enabled,Guid Document
 
 public static class SceneUiState
 {
-    private static readonly ComponentRegistry Registry=CreateRegistry();
-    private static ComponentRegistry CreateRegistry(){var r=ComponentRegistry.CreateDefault();SceneUiData.Register(r);return r;}
+    private static readonly ComponentRegistry Registry=CompositionRegistry.Build(Generated.ComponentModule.Module);
     public static SceneUiData? Read(ISceneContent snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);SceneUiData? found=null;

@@ -16,7 +16,7 @@ static void Reject(Action action)
 static JsonElement Json(string text) { using var document = JsonDocument.Parse(text); return document.RootElement.Clone(); }
 static ComponentRegistry Extensions()
 {
-    var registry = ComponentRegistry.CreateDefault();
+    var registry = global::Ncma.Runtime.CompositionRegistry.Build();
     registry.Register<Health>("game.health", 1, """
         {"type":"object","additionalProperties":false,"required":["points"],"properties":{"points":{"type":"integer"}}}
         """, value => value.Points >= 0 ? value : throw new ArgumentException("Health must be nonnegative."));
@@ -67,7 +67,7 @@ var cases = new (string Name, Action Run)[]
 
     }),
     ("Mutable reference component rejected", () => {
-        var registry = ComponentRegistry.CreateDefault();
+        var registry = global::Ncma.Runtime.CompositionRegistry.Build();
         Reject(() => registry.Register<BadComponent>("bad", 1, "{}", value => value));
         Reject(() => registry.Register<BadHandle>("bad.handle", 1, "{}", value => value));
     }),
@@ -134,6 +134,16 @@ var cases = new (string Name, Action Run)[]
     }),
 };
 
+cases = cases.Concat(GeneratedComponentTests.Cases()).ToArray();
+cases = cases.Concat(CompositionRegistryTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleGraphTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleExecutionTests.Cases()).ToArray();
+cases = cases.Concat(SchedulePermissionTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleRecoveryTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleCompletionTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleBufferTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleBudgetTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleMetricsTests.Cases()).ToArray();
 int failures = 0;
 foreach (var test in cases)
 {

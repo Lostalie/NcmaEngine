@@ -5,7 +5,7 @@ namespace Ncma.Rendering.Scene;
 
 public static class ScenePostProcessPreflight
 {
-    private static readonly ComponentRegistry RenderValues=RenderConfiguration.CreateRegistry();
+    private static readonly ComponentRegistry RenderValues=global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Rendering.Generated.ComponentModule.Module);
     public static bool HasSettings(ISceneContent scene)=>scene.Objects.Any(o=>o.Components.Any(c=>c.TypeId==PostProcessData.TypeId));
     public static bool HasGeometry(ISceneContent scene)=>scene.Objects.Any(o=>o.Components.Any(c=>c.TypeId is StaticMeshData.TypeId or SkinnedMeshData.TypeId));
     public static void ValidateValues(ISceneContent scene,PostProcessModules modules)

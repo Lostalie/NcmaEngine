@@ -34,7 +34,7 @@ internal static unsafe partial class Program
         var graph=AddMontage(basis,montage) with{Events=[new(Guid.NewGuid(),f.Manifest.Clips[0],.2,"Attack mark"),new(Guid.NewGuid(),f.Manifest.Clips[1],.6,"Recovery mark")]};
         File.WriteAllBytes(Path.Combine(f.Root,"assets/montage.ncmaanim"),AnimationGraphCodec.Encode(graph));
         SceneDocument Document(int count,bool root){
-            var d=new SceneDocument("Persistent Slot",CharacterComponents.Register(RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry())),CharacterComponents.RequireComposition);
+            var d=new SceneDocument("Persistent Slot",global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),CharacterComponents.RequireComposition);
             for(int i=0;i<count;i++){Guid o=d.CreateObject("Actor "+i);d.SetComponent(o, TransformData.Identity with{Position=new(0,0,i*3)});d.SetComponent(o, new SkinnedMeshData(f.Model,f.Manifest.Meshes[0].Mesh,graph.SkeletonId,f.Manifest.Meshes[0].Materials,true,true,uint.MaxValue));d.SetComponent(o, new AnimatorData(graph.AssetId,graph.SkeletonId));if(root){d.SetComponent(o, new RootMotionData(0));d.SetComponent(o, CharacterData.Default with{Controlled=false});}}
             if(root){Guid floor=d.CreateObject("Ground");d.SetComponent(floor, TransformData.Identity with{Position=new(0,-.2f,0)});d.SetComponent(floor, new BoxColliderData(100,.2f,100,1000,1,false));}
             Guid camera=d.CreateObject("Camera");d.SetComponent(camera, TransformData.Identity with{Position=new(0,0,5)});d.SetComponent(camera, CameraData.Default with{Projection=CameraProjection.Orthographic,OrthographicHeight=40});

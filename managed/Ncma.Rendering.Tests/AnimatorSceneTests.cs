@@ -92,7 +92,7 @@ internal static unsafe partial class Program
         }
         // Snapshot restore invalidates object references; restore source startup for the Editor clone.
         SceneAnimatorRuntime? live=null; SceneRenderSession? scene=null;bool closeFail=false;
-        using var editor=new EditorSessionOwner("Animator",components:RenderComponentRegistry.Register(RenderConfiguration.CreateRegistry()),validateComposition:SceneRenderValidation.RequireComposition,
+        using var editor=new EditorSessionOwner("Animator",components:global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module, global::Ncma.Rendering.Generated.ComponentModule.Module),validateComposition:SceneRenderValidation.RequireComposition,
             composePreparedPlay:(p,a)=>live=SceneAnimatorRuntime.Compose(p,a),beforePlayStop:()=>{if(closeFail)throw new InvalidOperationException("injected derived close retention");scene?.Dispose();scene=null;});
         editor.Document.RestoreSnapshot(document.CaptureSnapshot());editor.PrepareRenderAssets(f.Root,f.Project);
         using var cache=new RenderResourceCache(renderer);using var target=renderer.CreateViewTarget(256,256);

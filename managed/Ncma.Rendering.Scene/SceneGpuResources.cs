@@ -34,7 +34,7 @@ public sealed class SceneGpuResources : IDisposable
             ArgumentNullException.ThrowIfNull(cache); ArgumentNullException.ThrowIfNull(prepared); ArgumentNullException.ThrowIfNull(scene);
             if (renderer is not null) cache.VerifyFor(renderer);
             result._assets = prepared.AcquireLease(); var cpu = result._assets.Assets;
-            var registry = RenderComponentRegistry.CreateRegistry();
+            var registry = global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Scene.Rendering.Generated.ComponentModule.Module);
             var uploads = new Dictionary<Guid, MeshUploadData>();
             var materials = cpu.List().OfType<RuntimeMaterialAsset>().ToArray();
             foreach (var obj in scene.Objects)
