@@ -83,6 +83,7 @@ public sealed partial class EditSession
             (long)prepared.Before.Length + prepared.After.Length > MaxHistoryBytes)
             throw new ArgumentException("Participant memento exceeds history budget.");
         var memento = new ParticipantMemento((byte[])prepared.Before.Clone(), (byte[])prepared.After.Clone());
+        RequireReviewedParticipant(owner,memento);
         using (_document.ReadOnly()) owner.Authorize(memento);
         return Commit(request, fingerprint, candidate, before, _capabilities[request.Capability].Description,
             request.Capability, null, _selection, permissions: permissions, participant: new(owner, memento), impactRequest: impactRequest);
@@ -108,11 +109,13 @@ public sealed partial class EditSession
             {
                 entry.Owner.Validate(entry.Memento, forward);
                 if (!authorized()) throw new EditRejectedException("scope_denied");
+                RequireReviewedParticipant(entry.Owner,entry.Memento);
                 attempted = true;
                 entry.Owner.Publish(entry.Memento, forward);
                 entry.Owner.Authorize(entry.Memento);
             }
             if (!authorized()) throw new EditRejectedException("scope_denied");
+            RequireReviewedParticipant(entry.Owner,entry.Memento);
             install();
             installed = true;
             using (_document.ReadOnly()) entry.Owner.Complete(entry.Memento, forward);

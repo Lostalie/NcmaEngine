@@ -26,8 +26,45 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
         Frame = frame.Frame, ViewGeneration = frame.ViewGeneration, DocumentGeneration = frame.DocumentGeneration,
         Revision = frame.Revision, TextLength = (uint)textBytes };
 }
+if(args.Length==2&&args[0]=="--ai-relocated-product-child") return AiRelocatedProductBootstrap.Run(args[1]);
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
+if(args.Length==3&&args[2]=="--ai-offline-host-tests") {
+#if NCMA_AI
+    return CaseHarness.Run("M8.4 offline actual host", AiOfflineHostTests.Cases(root,args[1],output));
+#else
+    Console.Error.WriteLine("Offline AI host cases require the isolated NcmaEnableAI=true product; no skip fallback.");
+    return 1;
+#endif
+}
+if(args.Length==3&&args[2]=="--ai-domain-presenter-tests") {
+#if NCMA_AI
+    return CaseHarness.Run("M8.4 actual UI animation metadata presenter", AiDomainPresenterTests.Cases(output,root));
+#else
+    Console.Error.WriteLine("AI domain presenter cases require NcmaEnableAI=true and isolated ArtifactsPath; no skip/pass fallback.");
+    return 1;
+#endif
+}
+if(args.Length==3 && args[2] is "--ai-credential-tests" or "--ai-host-lifetime-tests") {
+#if NCMA_AI
+    return CaseHarness.Run("M8.4 credential / real host lifetime", args[2] == "--ai-credential-tests"
+        ? AiCredentialPromptTests.Cases() : AiHostLifetimeTests.Cases(root,args[1],output));
+#else
+    Console.Error.WriteLine("AI boundary cases require NcmaEnableAI=true and isolated ArtifactsPath; no skip/pass fallback.");
+    return 1;
+#endif
+}
+if(args.Length==3&&args[2]=="--ai-presenter-tests"){
+#if NCMA_AI
+    return CaseHarness.Run("M8.4 actual optional AI presenter events", AiPresenterTests.Cases());
+#else
+    Console.Error.WriteLine("AI presenter cases require NcmaEnableAI=true and an isolated ArtifactsPath; not skipped or accepted by default product.");
+    return 1;
+#endif
+}
+if(args.Length==3&&args[2]=="--domain-proposal-tests"){
+    return CaseHarness.Run("M8 domain proposals", DomainProposalTests.Cases().Concat(DomainProposalHostTests.Cases(output,root)).Concat(DomainIntegrationTests.Cases(output,root)).Concat(AiAnimationWorkflowTests.Cases(output,root)).Concat(MetadataContentTests.Cases(output)).Concat(AiMetadataWorkflowTests.Cases(output)));
+}
 if(args.Length==3&&args[2]=="--asset-policy-tests"){
     return CaseHarness.Run("Asset policy host and dependency closure", AssetPolicyHostTests.Cases(root,args[1],output).Concat(BakeDependencyTests.Cases(root)));
 }
@@ -852,6 +889,18 @@ cases = cases.Concat(RuntimeChangeReviewTests.ScheduleCases(root)).ToArray();
 cases = cases.Concat(BakeDependencyTests.Cases(root)).ToArray();
 cases = cases.Concat(AssetPolicyHostTests.Cases(root,args[1],output)).ToArray();
 cases = cases.Concat(OriginalBatchHistoryTests.Cases()).ToArray();
+cases = cases.Concat(DomainProposalTests.Cases()).ToArray();
+cases = cases.Concat(DomainProposalHostTests.Cases(output, root)).ToArray();
+cases = cases.Concat(DomainIntegrationTests.Cases(output, root)).ToArray();
+cases = cases.Concat(AiAnimationWorkflowTests.Cases(output, root)).ToArray();
+cases = cases.Concat(MetadataContentTests.Cases(output)).ToArray();
+cases = cases.Concat(AiMetadataWorkflowTests.Cases(output)).ToArray();
+cases = cases.Concat(AiPresenterTests.Cases()).ToArray();
+#if NCMA_AI
+cases = cases.Concat(AiCredentialPromptTests.Cases()).Concat(AiHostLifetimeTests.Cases(root,args[1],output)).ToArray();
+cases = cases.Concat(AiDomainPresenterTests.Cases(output,root)).ToArray();
+cases = cases.Concat(AiOfflineHostTests.Cases(root,args[1],output)).ToArray();
+#endif
 if (args.Length == 3 && args[2] == "--post-authoring-tests") cases=cases.Where(c=>c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-authoring-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal)).ToArray();

@@ -3,5 +3,8 @@
     <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Ncma.Editor.App/Ncma.Editor.App.csproj" /><ProjectReference Include="../Ncma.Samples/Ncma.Samples.csproj" /></ItemGroup>
+  <PropertyGroup Condition="'$(NcmaEnableAI)' == 'true'">
+    <DefineConstants>$(DefineConstants);NCMA_AI</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Editor.App/Ncma.Editor.App.csproj" /><ProjectReference Include="../Ncma.Samples/Ncma.Samples.csproj" /><ProjectReference Include="../Ncma.Editor.Modules/Ncma.Editor.Modules.csproj" /></ItemGroup>
 </Project>

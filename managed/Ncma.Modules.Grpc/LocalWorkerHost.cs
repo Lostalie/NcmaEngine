@@ -46,12 +46,7 @@ public sealed class LocalWorkerHost : IDisposable
         this.installation = installation; this.context = context; this.authorized = authorized; time = timeProvider ?? TimeProvider.System;
     }
 
-    private static void Validate(ModuleContext value)
-    {
-        if (value.ProjectId == Guid.Empty || value.HostSessionId == Guid.Empty || value.DocumentId == Guid.Empty || value.Generation <= 0 ||
-            value.Revision < 0 || value.ObservationTick < 0 || (value.WorldId == Guid.Empty && value.ObservationTick != 0))
-            throw new ArgumentException("Invalid worker host context.");
-    }
+    private static void Validate(ModuleContext value) => value.Validate();
     private void Verify()
     {
         if (Environment.CurrentManagedThreadId != owner || callback) throw new InvalidOperationException("Worker owner/nonreentry boundary.");

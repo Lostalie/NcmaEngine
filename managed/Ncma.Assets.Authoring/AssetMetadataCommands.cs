@@ -6,8 +6,9 @@ using Ncma.Assets.Authoring.Storage;
 namespace Ncma.Assets.Authoring;
 
 // Metadata create/settings participant; source relocation uses the separate exact file capability.
-public sealed class AssetMetadataCommands : IEditCommandParticipant, IDisposable
+public sealed class AssetMetadataCommands : IEditCommandParticipant, IEditCommandReview, IDisposable
 {
+    public JsonElement DescribePrepared(ParticipantMemento prepared) => AssetCommandReview.Describe(prepared);
     public const string CapabilityName = "ncma.assets.metadata.edit";
     private readonly AssetProjectPaths _paths;
     private readonly AssetWriteScope _scope;

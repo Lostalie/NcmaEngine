@@ -97,7 +97,8 @@ internal static partial class Program
     {
         using var worker = new WorkerFixture(root);
         var adapter = worker.Connect();
-        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 0);
+        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            ulong.MaxValue, ulong.MaxValue, Guid.NewGuid(), ulong.MaxValue, Guid.NewGuid(), Guid.NewGuid(), ulong.MaxValue);
         var session = new ModuleSession(new ModuleCatalog([TextStatisticsModule.Operation]), adapter, context);
         try
         {
@@ -184,7 +185,7 @@ internal static partial class Program
             var operation = TextStatisticsModule.Operation;
             var bootstrap = JsonSerializer.Serialize(new
             {
-                version = 1, instance = Instance, secret = Convert.ToHexString(Secret),
+                version = 2, instance = Instance, secret = Convert.ToHexString(Secret),
                 keyPem = key.ExportPkcs8PrivateKeyPem(), certificatePem = certificate.ExportCertificatePem() + "\n" + ca.ExportCertificatePem(),
                 operation = new
                 {
@@ -214,7 +215,7 @@ internal static partial class Program
                 var ready = ReadReady(process.StandardOutput.BaseStream).GetAwaiter().GetResult();
                 using var document = JsonDocument.Parse(ready);
                 var data = document.RootElement;
-                Check(data.GetProperty("version").GetInt32() == 1 && data.GetProperty("instance").GetGuid() == Instance &&
+                Check(data.GetProperty("version").GetInt32() == 2 && data.GetProperty("instance").GetGuid() == Instance &&
                     data.GetProperty("processId").GetInt32() > 0, "Private ready pipe version/instance identity.");
                 var reported = data.GetProperty("processId").GetInt32();
                 var candidateProcess = Process.GetProcessById(reported);

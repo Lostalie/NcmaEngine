@@ -349,6 +349,17 @@ endif()
 if(NCMA_BUILD_MANAGED)
     find_program(DOTNET_EXECUTABLE dotnet)
     if(DOTNET_EXECUTABLE)
+        # A distinct build-time product, never staged over the default Editor.
+        # Explicit target only: no test execution, deployment, model or Python startup.
+        # CTest entries below remain registered even when this target was not built;
+        # missing optional verification binaries must fail, not silently skip.
+        if(WIN32 AND NCMA_BUILD_TESTS)
+            add_custom_target(NcmaManagedAiVerification
+                COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_SOURCE_DIR}/scripts/Prepare-AiVerification.ps1"
+                    -Configuration $<IF:$<CONFIG:Debug>,Debug,Release> -DotnetExecutable "${DOTNET_EXECUTABLE}"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" VERBATIM)
+        endif()
         add_custom_target(NcmaManaged
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Sample/Ncma.Ui.Sample.csproj"
@@ -370,6 +381,9 @@ if(NCMA_BUILD_MANAGED)
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Tests/Ncma.Modules.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.AI.Tests/Ncma.AI.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/Ncma.Modules.Grpc.Tests.csproj"
@@ -821,7 +835,54 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaModuleTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Tests.dll")
         set_tests_properties(NcmaModuleTests PROPERTIES TIMEOUT 60)
+        add_test(NAME NcmaModuleTests.AIContracts COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.AI.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.AI.Tests.dll")
+        set_tests_properties(NcmaModuleTests.AIContracts PROPERTIES TIMEOUT 60)
         if(WIN32)
+            # Four bounded entry points use the actual NCMA_AI product and the
+            # existing aggregate harness. Never run these against the default DLL.
+            set(_ncma_ai_test_dll "${CMAKE_BINARY_DIR}/m8-4-ai/bin/Ncma.Editor.Services.Tests/$<IF:$<CONFIG:Debug>,debug,release>/Ncma.Editor.Services.Tests.dll")
+            add_test(NAME NcmaAiEditorTests.Presenter COMMAND "${DOTNET_EXECUTABLE}" "${_ncma_ai_test_dll}"
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ai-presenter-tests)
+            add_test(NAME NcmaAiEditorTests.Credentials COMMAND "${DOTNET_EXECUTABLE}" "${_ncma_ai_test_dll}"
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ai-credential-tests)
+            add_test(NAME NcmaAiEditorTests.HostLifetime COMMAND "${DOTNET_EXECUTABLE}" "${_ncma_ai_test_dll}"
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ai-host-lifetime-tests)
+            add_test(NAME NcmaAiEditorTests.DomainPresenter COMMAND "${DOTNET_EXECUTABLE}" "${_ncma_ai_test_dll}"
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ai-domain-presenter-tests)
+            set_tests_properties(NcmaAiEditorTests.Presenter NcmaAiEditorTests.Credentials
+                NcmaAiEditorTests.HostLifetime NcmaAiEditorTests.DomainPresenter
+                PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;optional-ai"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            add_test(NAME NcmaAiPackageTests.Contracts COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiCandidatePackage.ps1")
+            set_tests_properties(NcmaAiPackageTests.Contracts PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
+            add_test(NAME NcmaAiPackageTests.VerificationInputs COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiVerificationInputs.ps1")
+            set_tests_properties(NcmaAiPackageTests.VerificationInputs PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
+            foreach(_ncma_ai_relocation IN ITEMS DefaultCpu DefaultDx11 AiCpu AiDx11)
+                add_test(NAME "NcmaAiPackageTests.Relocated.${_ncma_ai_relocation}" COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiRelocatedEditor.ps1"
+                    -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -Case "${_ncma_ai_relocation}")
+                set_tests_properties("NcmaAiPackageTests.Relocated.${_ncma_ai_relocation}"
+                    PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
+            endforeach()
+            add_test(NAME NcmaAiEditorTests.OfflineHost COMMAND "${DOTNET_EXECUTABLE}" "${_ncma_ai_test_dll}"
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ai-offline-host-tests)
+            set_tests_properties(NcmaAiEditorTests.OfflineHost PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;optional-ai"
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            foreach(_ncma_ai_host IN ITEMS DefaultCpu DefaultDx11 AiCpu AiDx11 AiConfiguredCpu AiConfiguredDx11)
+                add_test(NAME "NcmaAiPackageTests.ProductHost.${_ncma_ai_host}" COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiRelocatedEditor.ps1"
+                    -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -Case "${_ncma_ai_host}" -HostProbe
+                    -ProbeDll "${_ncma_ai_test_dll}" -DotnetExecutable "${DOTNET_EXECUTABLE}")
+                set_tests_properties("NcmaAiPackageTests.ProductHost.${_ncma_ai_host}" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
+            endforeach()
+            foreach(_ncma_ai_input IN ITEMS Fingerprint Index CrossShell)
+                add_test(NAME "NcmaAiPackageTests.Input.${_ncma_ai_input}" COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiCandidateInputs.ps1" -Group "${_ncma_ai_input}")
+                set_tests_properties("NcmaAiPackageTests.Input.${_ncma_ai_input}" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
+            endforeach()
             add_test(NAME NcmaModuleTests.NoPythonProducts COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
                 "${CMAKE_SOURCE_DIR}" --no-python-products "$<IF:$<CONFIG:Debug>,Debug,Release>")

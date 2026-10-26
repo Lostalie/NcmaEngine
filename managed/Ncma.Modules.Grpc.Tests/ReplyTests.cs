@@ -9,7 +9,7 @@ internal static partial class Program
         var before = checks;
         using var worker = new WorkerFixture(root, WorkerProbe.MalformedReplies);
         var adapter = worker.Connect();
-        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 0);
+        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 1, null, Guid.Empty, 0);
         var session = new ModuleSession(new ModuleCatalog([TextStatisticsModule.Operation]), adapter, context);
         void Expect(string kind, ModuleOutcomeStatus expected)
         {

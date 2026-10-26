@@ -14,9 +14,10 @@ public sealed class UiWriteScope
     private readonly Func<Guid, UiResourceKind, bool> _dependency;
     private readonly Func<bool> _current;
     private Func<string,Guid,bool>? _hostTarget;
-    public static UiWriteScope ForHost(Func<string,Guid,bool> target,Func<Guid,UiResourceKind,bool> dependency,Func<bool> current)
+    private Func<UiDefinition,JsonElement>? _resourceProof;
+    public static UiWriteScope ForHost(Func<string,Guid,bool> target,Func<Guid,UiResourceKind,bool> dependency,Func<bool> current,Func<UiDefinition,JsonElement>? resourceProof=null)
     {
-        ArgumentNullException.ThrowIfNull(target);var scope=new UiWriteScope([],dependency,current);scope._hostTarget=target;return scope;
+        ArgumentNullException.ThrowIfNull(target);var scope=new UiWriteScope([],dependency,current);scope._hostTarget=target;scope._resourceProof=resourceProof;return scope;
     }
     public UiWriteScope(IEnumerable<KeyValuePair<string, Guid>> targets, Func<Guid, UiResourceKind, bool> dependency, Func<bool> current)
     {
@@ -31,14 +32,25 @@ public sealed class UiWriteScope
             e.Font != Guid.Empty && !_dependency(e.Font, UiResourceKind.Font) || e.Image != Guid.Empty && !_dependency(e.Image, UiResourceKind.Image)))
             throw new EditCommandRejectedException("ui_scope_denied", denied: true);
     }
-    internal UiWriteScope Bind(Func<bool> current) => _hostTarget is { } host?ForHost(host,_dependency,()=>_current()&&current()):new(_targets,_dependency,()=>_current()&&current());
+    internal JsonElement DescribeResources(UiDefinition definition)
+    {
+        if(_resourceProof is { } proof)return proof(definition).Clone();
+        if(definition.Elements.Any(e=>e.Font!=Guid.Empty||e.Image!=Guid.Empty))throw new EditCommandRejectedException("ui_resource_proof_unavailable");
+        return JsonSerializer.SerializeToElement(Array.Empty<object>());
+    }
+    internal UiWriteScope Bind(Func<bool> current) => _hostTarget is { } host?ForHost(host,_dependency,()=>_current()&&current(),_resourceProof):new(_targets,_dependency,()=>_current()&&current());
 }
 
 // Uses the existing checked Windows storage, journal and sole Editor.Core history.
 // Large candidates stay out of the capability request's 64 KiB envelope. Only trusted host code
 // can prepare a bounded proposal; no arbitrary document, file path or approval arrives via Agent JSON.
-public sealed class UiCommands : IEditCommandParticipant, IDisposable
+public sealed class UiCommands : IEditCommandParticipant, IEditCommandReview, IDisposable
 {
+    public JsonElement DescribePrepared(ParticipantMemento prepared)
+    {
+        Verify();_ = PathOf(prepared);var (_,after)=AssetDiskTransaction.States(prepared,true);
+        return JsonSerializer.SerializeToElement(new{files=AssetCommandReview.Describe(prepared),resources=_scope.DescribeResources(UiCodec.Decode(after[0].Data!))});
+    }
     public const string CapabilityName = "ncma.ui.document.commit";
     private sealed record Proposal(string Path, byte[] Bytes, ulong Revision);
     private readonly Dictionary<Guid, Proposal> _proposals = [];

@@ -43,15 +43,17 @@ public sealed class ModulePayload
     }
 }
 
-/// <summary>Exact authoring context. Runtime tick-tolerant proposals require a separate policy.</summary>
-public sealed record ModuleContext(Guid ProjectId, Guid HostSessionId, Guid DocumentId,
-    long Generation, long Revision, Guid WorldId, long ObservationTick)
+/// <summary>V2 exact authoring source; identities are not observation or execution grants.</summary>
+public sealed record ModuleContext(Guid ProjectId, Guid HostSessionId, Guid EditSessionId, Guid DocumentSessionId,
+    ulong DocumentGeneration, ulong Revision, Guid BehaviourCatalogGeneration, ulong ReviewEpoch,
+    Guid? Selection, Guid EndpointId, ulong AudienceRevision)
 {
-    internal void Validate()
+    // Shared by the inbox and optional worker host. No parallel context validation contract.
+    public void Validate()
     {
-        if (ProjectId == Guid.Empty || HostSessionId == Guid.Empty || DocumentId == Guid.Empty ||
-            Generation <= 0 || Revision < 0 || ObservationTick < 0 ||
-            (WorldId == Guid.Empty && ObservationTick != 0))
+        if (ProjectId == Guid.Empty || HostSessionId == Guid.Empty || EditSessionId == Guid.Empty ||
+            DocumentSessionId == Guid.Empty || DocumentGeneration == 0 || ReviewEpoch == 0 ||
+            Selection == Guid.Empty || (EndpointId == Guid.Empty && AudienceRevision != 0))
             throw new ArgumentException("Invalid module context.");
     }
 }
@@ -96,7 +98,7 @@ public sealed class ModuleCatalog
 
 public sealed class ModuleRequest
 {
-    public const int ContractVersion = 1;
+    public const int ContractVersion = 2;
     public int Version => ContractVersion;
     public Guid RequestId { get; }
     public Guid SessionId { get; }

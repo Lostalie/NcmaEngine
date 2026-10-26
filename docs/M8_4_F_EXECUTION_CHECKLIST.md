@@ -1,0 +1,58 @@
+# M8.4-F 整体统一验收执行清单
+
+2026-10-26。这是下一阶段执行计划，不是测试报告。本文件不授权真实模型调用、凭据读取、正式部署或Git提交。E5-D目标机性能验收继续延期。
+
+后续用户明确请求提交推送和更新EXE，已通过原受检流程部署Release默认编辑器：新EXE SHA `5CDFFED9C2760BAD02F367D32D72DFC11A03DCC59059B019BD4595EA9F7C060A`，代次 `06ac7112d0f84ab286da83ae82d0e51b`；包校验和8帧DX11烟测通过，旧148文件备份已复核。这只覆盖本次授权部署，**F6仍0/304，未重试输入切换**。旧F5冻结绑定595CFEB4 EXE，后续必须建立新受检基线而非改写旧回执；证据 `user-publish-first/deployment-result.json`。AI候选未安装，模型未连接。
+
+最新F6首轮：F5完整复核通过，但输入切换的首次File.Replace因空备份参数异常停止；35目标未变、35备份正确，实际引擎测试0/304、全部not-run。失败证据在 `out/verification/m8-4/f-tests-first`。隔离合成诊断验证显式备份路径可修正参数问题，尚未实际重试。按失败不自动重试约束等待用户确认；获准后须新版本辅助脚本/新回执，保留原freeze与所有失败现场，不删除证据或采用强制覆盖。本状态优先于下方“下一步直接执行F6”表述。
+
+最新F5：已冻结9,088文件/75目录集合，双配置各152入口及原命令/属性/超时；12候选和2 ModuleClient完整清单再次核对。证据 `out/verification/m8-4/f-freeze-first/freeze.json`（SHA256 `0B5C363DA0268931C077801004CFDA668792D53476EF662C1FE35C6E198661E8`）。38个不同共享/配置目标单独登记，两配置各35项；目前未激活，`Activate.ps1`默认只预检，实际切换必须备份后逐文件原子替换，批次并非整体原子，失败停下保留证据。辅助脚本实际替换/恢复行为仍未测试，不把语法/预检当作通过。
+
+**F6顺序修正**：AIContracts会在运行目录生成workflow-evidence，严格完整目录编译回执随后失效。因此先执行依赖回执的10项搬移/产品宿主检查，再跑AIContracts；需要重跑宿主检查时重新准备回执，不删除输出或放宽验证。`execution-queue.json`逐配置逐名称列出全部152项，五组65/4/72/10/1，强制串行，不能只运行新AI入口。测试输出目录按确切夹具源码与运行输入分离，旧负例链接保留不遍历。详细交接 `f-freeze-first/F6-HANDOFF.md`；自动测试尚未执行，完整阶段不标通过。下方F0–F4状态保留为历史记录。
+
+最新补充：F4两配置各6种新候选已发布/烘焙并逐文件复核，源码676354AF与F3回执一致；两配置ModuleClient、程序化动作样例和各35项运行输入副本已准备。证据 `out/verification/m8-4/f-packages-first/delivery.json`。下方“AI候选索引不存在”为F0–F3历史状态。下一步F5；共享out/managed尚未激活，F6每配置开始前必须从对应staging清单备份切换并核对哈希，避免Debug/Release混用。worker仅核对版本元数据，实际worker/搬移/全152测试仍未执行。
+
+最新执行状态：F0基线、F1静态库存与入口文件核对、F2全66项目双配置0警告/0错误及原生全目标、F3当前来源编译回执已完成。两配置各152入口，未禁用，显式入口文件无缺失；**F1的完整动态依赖须结合F4准备再复核，尚未证明全量可运行**。源码676354AF，证据见 `out/verification/m8-4/f-prerequisites-first/readiness.json`。两配置AI候选索引仍不存在。下一步F4，随后F5–F8；本次未执行测试。此前HTTP专项33项通过不替代完整152项/配置验收。
+
+## 1 证据边界
+
+- E阶段只实现、编译、解析、静态点数与产物哈希核对；新增用例未运行。编译回执 `kind=compile-only`、`testsExecuted=false` 不可转述为测试通过。
+- 当前两配置静态库存各152项。执行前重读 `ctest -N` 与 `--show-only=json-v1`，以当次实际清单为准；缺依赖、禁用、跳过、超时、未执行均不能计为通过。
+- CMake的 `NcmaManagedAiVerification` 只重编译可选Editor/完整Services依赖图及AIContracts，分别保存日志/binlog。不是全解决方案构建，不运行用例、不publish/cook、不部署。
+- 编译回执绑定选定构建输入（CMake/managed/engine/scripts，不是全仓冻结）、配置、完整测试运行目录文件集合/大小/SHA。默认AIContracts、可选探针均须匹配。已有输出目录可能有历史文件；完整目录钉住不等于已证明每个文件都是当前编译产生，仍须按deps和加载记录验收。回执不是数字签名或恶意并发写防护。
+- 搬移探针拒绝旧源码/旧配置/变更依赖的回执。四个真实apphost入口与六个受检产品宿主API入口分别取证；后者不能冒充真人操作EXE或OS网络隔离。
+
+## 2 执行顺序
+
+| 顺序 | 操作与产物 | 进入下一步的条件 |
+| --- | --- | --- |
+| F0 | 记录工作树、正式 `out/bin/NcmaEngine.exe` SHA；确认无前次未解决的测试子进程；选择新的证据目录 | 不终止未知进程、不覆盖失败证据；本轮不部署 |
+| F1 | 分别配置Debug/Release，冻结当次152项或实际新清单；检查每个入口、参数指定的插件/worker/sample/索引前提 | 缺失明确登记；未解决前不能启动相应组或声称全量可运行 |
+| F2 | 全解决方案托管双配置0警告/0错误、原生全目标；不调用整条Build.ps1/Build.bat | 保存完整日志/binlog及实际项目清单；单库成功不替代全解决方案 |
+| F3 | 分配置构建 `NcmaManagedAiVerification`，读取并核对 `managed-inputs.json`；普通托管项目之后若覆盖AIContracts依赖目录，重新登记 | 构建前后选定输入SHA相等，两个运行目录全部哈希匹配；旧回执不能沿用 |
+| F4 | 分配置显式 `Package-M2_7.ps1 -IncludeAI`，传匹配NativePluginRoot与绝对cmake路径；另准备既有ModuleClient、动作Sample、原回归需要的资源/工具 | 实际publish/cook属于F执行，不属于静态准备；新generation、前后源码SHA、严格manifest通过；禁止把历史包重新登记为当前包 |
+| F5 | 核对候选索引源码SHA与编译回执SHA相同；冻结当次测试输入与入口文件哈希 | 输入变化必须重新准备，不修改既有失败日志为成功 |
+| F6 | 按独立组执行双配置全部登记测试，先纯合同/生成器/场景，再本机IPC与worker，再原生/GUI/DX11/搬移 | 每个harness跑完其case汇总失败；完整CTest清单逐项对账，不用正则遗漏旧项；GPU/窗口组串行 |
+| F7 | 对失败保留精确源码、日志、输入、命令/配置/退出码；修复后重新编译/指纹/包及受影响组，最后全量回归 | 不放宽断言/工作量/超时，不隐藏缺依赖；超时进程先核对身份并按授权处理 |
+| F8 | 生成自动验收报告，核对EXE SHA未变化，记录每项实跑/失败/跳过/未跑状态和已知限制 | 自动通过与真实模型/人工未验收分别报告；不自动提交/推送/安装 |
+
+F2不能直接把现有 `NcmaManaged` 当作所有工程已覆盖：按解决方案项目清单和CTest入口核对Player、Samples、SmokeTest、代码生成器/发布夹具等独立工程。F4也不能仅运行新的AI流程而忽略原ModuleClient、动作资源和既有测试所需的配置专属输入。原生shader编译是构建；需创建renderer/window的cook与Sample运行在F执行时留证。
+
+### 编译回执入口（只编译）
+
+在匹配配置的MSVC/CMake环境中，对 `out/build/windows-ninja-debug` 和 `out/build/windows-ninja-release` 分别调用 `cmake --build <构建树> --target NcmaManagedAiVerification`。内部调用 `Prepare-AiVerification.ps1`，明确传入CMake发现的绝对dotnet路径，使用 `--no-incremental`、正常NuGet恢复、warnings-as-errors。
+
+固定索引：`out/verification/m8-4/<Configuration>/managed-inputs.json`。每次编译在 `managed-inputs/<generation>/` 保留源码清单、日志/binlog、回执；替换索引时保留前一回执。源码或运行依赖有变化时校验失败，即使DLL路径没变也不能继续使用。
+
+### 原回归和本阶段新增组
+
+- 保留原所有CTest入口、资源门禁、worker测试和超时。旧M8.3通过记录不能替代当前源码运行结果。
+- 本阶段：AIContracts93组（含专项修复新增12组）、可选Presenter/凭据/生命周期/领域界面/离线宿主组；候选manifest17case；来源指纹15case、索引12case、PS5/7跨文化2case；编译回执10case；4个真实apphost和6个受检产品宿主入口。此列表不是整个引擎case总数。
+- 独立 `CrossShell` 需要Windows PowerShell5.1和PowerShell7；缺解释器直接失败，不跳过。输入/回执合成DLL为测试字节，不能用作真实候选或运行证据。
+- `NcmaEditorDeploymentTests` 必须继续使用其隔离夹具；先审计目标路径，不据名称推断可修改正式安装。任何正式安装修改需另获用户明确请求。
+
+## 3 真实模型与人工验收（独立，当前未获调用批准）
+
+用户已指定DeepSeek作为首个服务选择，但尚未确定实际模型、端点、凭据入口、外发数据和费用批准。没有批准时不得自动连接、探测、读取环境密钥、下载模型或启动本地模型服务。
+
+沿用主方案中固定8项队列与预算提案。调用前由用户确认模型/本地或远程端点、精确上下文、调用次数及费用边界；凭据由本机受支持入口输入，不贴入聊天/日志。真人核对完整外发审阅、独立diff确认、原事务提交/Undo，保留安全脱敏证据。未授权、不可用和未完成分别标记，不能因自动合同通过关闭整个M8.4。

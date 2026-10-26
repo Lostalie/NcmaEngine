@@ -20,8 +20,9 @@ public sealed class AnimationGraphWriteScope(Func<string, Guid, string?, string,
     internal AnimationGraphWriteScope Bind(Func<bool> current) => new((path, id, before, after) => current() && approved(path, id, before, after), id => current() && (proposalCurrent?.Invoke(id) ?? true),validateResources);
 }
 
-public sealed class AnimationGraphCommands : IEditCommandParticipant, IEditCommandProposal, IDisposable
+public sealed class AnimationGraphCommands : IEditCommandParticipant, IEditCommandProposal, IEditCommandReview, IDisposable
 {
+    public JsonElement DescribePrepared(ParticipantMemento prepared) => AssetCommandReview.Describe(prepared);
     public const string CapabilityName = "ncma.animgraph.transaction";
     private sealed record Proposal(string Path, byte[]? Before, byte[] After, ulong Revision);
     private readonly Dictionary<Guid, Proposal> _proposals = [];

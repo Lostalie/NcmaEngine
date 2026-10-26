@@ -170,7 +170,7 @@ internal static partial class Program
     private static string RelocatedClientProbe(string worker)
     {
         var installation = WorkerInstallation.Inspect(worker);
-        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 0);
+        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 1, null, Guid.Empty, 0);
         using var host = new LocalWorkerHost(installation, context, () => true);
         var timer = Stopwatch.StartNew();
         var review = host.ReviewStart(context); host.ApproveStart(review, review.Fingerprint, true, context);

@@ -22,7 +22,8 @@ except ImportError:
 
 MAX_WIRE = 131072
 MAX_PAYLOAD = 65536
-SERVICE = "ncma.modules.v1.Worker"
+VERSION = 2
+SERVICE = "ncma.modules.v2.Worker"
 OPERATION = {
     "moduleId": "cde08200-1001-4001-8001-000000000001",
     "moduleVersion": "1.0",
@@ -105,6 +106,28 @@ def integer(value, minimum=0, maximum=(1 << 63) - 1):
     return value
 
 
+def authoring_context(value):
+    # V2 has no runtime World/tick aliases or compatibility defaults. All eleven fields
+    # are required, including explicit null selection and the empty local-only endpoint.
+    closed(value, ("projectId", "hostSessionId", "editSessionId", "documentSessionId",
+                   "documentGeneration", "revision", "behaviourCatalogGeneration", "reviewEpoch",
+                   "selection", "endpointId", "audienceRevision"))
+    for field in ("projectId", "hostSessionId", "editSessionId", "documentSessionId"):
+        identity(value[field])
+    maximum = (1 << 64) - 1
+    integer(value["documentGeneration"], 1, maximum)
+    integer(value["revision"], 0, maximum)
+    integer(value["reviewEpoch"], 1, maximum)
+    integer(value["audienceRevision"], 0, maximum)
+    identity(value["behaviourCatalogGeneration"], empty=True)
+    identity(value["endpointId"], empty=True)
+    if value["selection"] is not None:
+        identity(value["selection"])
+    if uuid.UUID(value["endpointId"]).int == 0 and value["audienceRevision"] != 0:
+        raise ValueError("audience without endpoint")
+    return value
+
+
 def operation(value):
     closed(value, OPERATION)
     # Registered code/schema identities cannot be selected by arbitrary input.
@@ -120,7 +143,7 @@ def operation(value):
 class Worker:
     def __init__(self, bootstrap):
         closed(bootstrap, ("version", "instance", "secret", "keyPem", "certificatePem", "operation"))
-        integer(bootstrap["version"], 1, 1)
+        integer(bootstrap["version"], VERSION, VERSION)
         self.instance = identity(bootstrap["instance"])
         secret = bootstrap["secret"]
         if type(secret) is not str or len(secret) != 64 or secret != bytes.fromhex(secret).hex().upper():
@@ -186,13 +209,13 @@ class Worker:
         deadline = await self.deadline(context)
         try:
             value = closed(decode(raw), ("version", "instance", "nonce", "operation"))
-            integer(value["version"], 1, 1)
+            integer(value["version"], VERSION, VERSION)
             if identity(value["instance"]) != self.instance or operation(value["operation"]) != self.operation or self.ready:
                 raise ValueError("handshake identity")
             nonce = identity(value["nonce"])
             await self.check_deadline(context, deadline)
             self.ready = True
-            return encode({"version": 1, "instance": self.instance, "nonce": nonce,
+            return encode({"version": VERSION, "instance": self.instance, "nonce": nonce,
                            "processId": os.getpid(), "maxWireBytes": MAX_WIRE})
         except (ValueError, TypeError, KeyError, UnicodeError, RecursionError):
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "invalid module handshake")
@@ -204,7 +227,7 @@ class Worker:
             if not self.ready or self.stopping:
                 raise ValueError("handshake required")
             value = closed(decode(raw), ("version", "instance", "requestId", "sessionId", "epoch", "fingerprint", "operation", "context", "payload"))
-            integer(value["version"], 1, 1)
+            integer(value["version"], VERSION, VERSION)
             if identity(value["instance"]) != self.instance or operation(value["operation"]) != self.operation:
                 raise ValueError("worker identity")
             request = identity(value["requestId"])
@@ -215,15 +238,7 @@ class Worker:
             fingerprint = value["fingerprint"]
             if type(fingerprint) is not str or len(fingerprint) != 64 or fingerprint != bytes.fromhex(fingerprint).hex().upper():
                 raise ValueError("fingerprint")
-            observation = closed(value["context"], ("projectId", "hostSessionId", "documentId", "generation", "revision", "worldId", "observationTick"))
-            for field in ("projectId", "hostSessionId", "documentId"):
-                identity(observation[field])
-            integer(observation["generation"], 1)
-            integer(observation["revision"])
-            identity(observation["worldId"], empty=True)
-            tick = integer(observation["observationTick"])
-            if uuid.UUID(observation["worldId"]).int == 0 and tick != 0:
-                raise ValueError("observation tick")
+            authoring_context(value["context"])
             if type(value["payload"]) is not str or len(value["payload"]) > 87384:
                 raise ValueError("payload budget")
             payload = base64.b64decode(value["payload"], validate=True)
@@ -249,7 +264,7 @@ class Worker:
             except asyncio.CancelledError:
                 task.cancel()
                 raise
-            return encode({"version": 1, "instance": self.instance, "requestId": request,
+            return encode({"version": VERSION, "instance": self.instance, "requestId": request,
                            "sessionId": session, "epoch": epoch, "fingerprint": fingerprint,
                            "outputSchema": self.operation["outputSchema"], "status": 1,
                            "payload": base64.b64encode(result).decode("ascii")})
@@ -279,7 +294,7 @@ async def main():
         raise ValueError("loopback listener")
     try:
         await server.start()
-        print(encode({"version": 1, "instance": worker.instance, "port": port,
+        print(encode({"version": VERSION, "instance": worker.instance, "port": port,
                       "processId": os.getpid()}).decode("ascii"), flush=True)
         # The launcher owns this pipe. No command text is evaluated; EOF/one byte means stop.
         await asyncio.to_thread(sys.stdin.buffer.read, 1)

@@ -76,7 +76,7 @@ public sealed class ModuleSession
         return true;
     }
 
-    /// <summary>Call on document/World replacement, revision change or permission revocation.</summary>
+    /// <summary>Call on authoring-source replacement, revision change or permission revocation.</summary>
     public void Invalidate(ModuleContext current)
     {
         CheckOwner();

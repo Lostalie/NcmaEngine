@@ -25,15 +25,15 @@ class MalformedWorker(module.Worker):
         elif kind == "missing":
             del value["epoch"]
         elif kind == "duplicate":
-            return b'{"version":1,' + good[1:]
+            return b'{"version":2,' + good[1:]
         elif kind == "escaped-duplicate":
-            return b'{"ver\\u0073ion":1,' + good[1:]
+            return b'{"ver\\u0073ion":2,' + good[1:]
         elif kind == "utf8":
             return b"\xff\xfe"
         elif kind == "oversize":
             return b"x" * 131073
         elif kind == "version":
-            value["version"] = 2
+            value["version"] = 1  # Removed v1 must not be accepted by the v2 client.
         elif kind == "boolean":
             value["version"] = True
         elif kind == "instance":

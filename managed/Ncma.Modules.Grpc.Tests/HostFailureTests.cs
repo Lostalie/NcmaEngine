@@ -95,7 +95,7 @@ internal static partial class Program
         var bundle = PrepareOwnedBundle(repository);
         var script = Path.Combine(bundle, "ncma_module_worker.py");
         var original = File.ReadAllText(script);
-        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 0);
+        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 1, null, Guid.Empty, 0);
         void Fault(string program, Action<LocalWorkerHost> test)
         {
             File.WriteAllText(script, program, new UTF8Encoding(false));
@@ -115,7 +115,7 @@ internal static partial class Program
                 "Real silent startup expires through product deadline, not a test cancellation.");
             Check(host.Capture().ExitCode == 0 && !host.Capture().ResourcesRetained, "Deadline closes owned stdin and observes actual process exit.");
         });
-        Fault("import sys,json\nb=json.loads(sys.stdin.buffer.readline())\nprint(json.dumps({'version':1,'instance':b['instance'],'port':1,'processId':" +
+        Fault("import sys,json\nb=json.loads(sys.stdin.buffer.readline())\nprint(json.dumps({'version':2,'instance':b['instance'],'port':1,'processId':" +
             Environment.ProcessId + "}),flush=True)\nsys.stdin.buffer.read(1)\n", host =>
         {
             WaitHost(host, context, LocalWorkerState.Stopped);
@@ -167,7 +167,7 @@ internal static partial class Program
         {
             WaitHost(host, context, LocalWorkerState.Ready);
             var id = Guid.NewGuid(); Check(host.Submit(id, "{\"text\":\"stale\"}"u8, context) == ModuleAdmission.Accepted, "Context probe admitted.");
-            var replacement = context with { DocumentId = Guid.NewGuid(), Generation = 2 };
+            var replacement = context with { DocumentSessionId = Guid.NewGuid(), DocumentGeneration = 2 };
             WaitHost(host, replacement, LocalWorkerState.Stopped);
             Check(!host.TryTake(id, replacement, out _) && host.Capture().Code == "context_changed", "Document replacement revokes actual worker session.");
         });

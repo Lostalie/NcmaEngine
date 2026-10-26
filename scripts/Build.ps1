@@ -153,6 +153,8 @@ if (-not $SkipManaged) {
     if ($LASTEXITCODE -ne 0) { throw "Managed application service tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Modules.Tests\Ncma.Modules.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed module contract tests build failed with exit code $LASTEXITCODE." }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.AI.Tests\Ncma.AI.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "AI contract tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Modules.Grpc.Tests\Ncma.Modules.Grpc.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Optional module transport tests build failed with exit code $LASTEXITCODE." }
     & (Join-Path $PSScriptRoot 'Package-ModuleClient.ps1') -Configuration $Configuration

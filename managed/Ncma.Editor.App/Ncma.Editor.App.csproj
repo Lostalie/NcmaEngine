@@ -5,6 +5,17 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>../../engine/build/resources/NcmaEngine.ico</ApplicationIcon>
   </PropertyGroup>
+  <!-- Explicit build-time product variant; no runtime DLL discovery or default AI dependency. -->
+  <PropertyGroup Condition="'$(NcmaEnableAI)' == 'true'">
+    <DefineConstants>$(DefineConstants);NCMA_AI</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NcmaEnableAI)' == 'true'">
+    <ProjectReference Include="../Ncma.Editor.Modules/Ncma.Editor.Modules.csproj" />
+  </ItemGroup>
+  <Target Name="CheckOptionalAiProduct" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(NcmaEnableAI)' != '' and '$(NcmaEnableAI)' != 'false' and '$(NcmaEnableAI)' != 'true'" Text="NcmaEnableAI must be true or false." />
+    <Error Condition="'$(NcmaEnableAI)' == 'true' and '$(ArtifactsPath)' == ''" Text="AI product requires an explicit isolated ArtifactsPath; default deployment is not an AI package." />
+  </Target>
   <ItemGroup>
     <ProjectReference Include="../Ncma.Characters/Ncma.Characters.csproj" />
     <InternalsVisibleTo Include="Ncma.Editor.Services.Tests" />

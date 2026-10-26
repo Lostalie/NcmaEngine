@@ -183,6 +183,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     private EditorSessionOwner? _editor;
     private EditorAssetWorkflow? _assetWorkflow;
     private EditorPresenter? _presenter;
+#if NCMA_AI
+    private Ncma.Editor.Modules.AiAuthoringWorkspace? _aiAuthoring;
+#endif
     private EditorUiWorkspace? _uiWorkspace;
     private EditorUiPreview? _uiPreview;
     private Ncma.Ui.Rendering.RuntimeUiPackage? _sceneHudPackage;
@@ -212,6 +215,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     public void Start()
     {
         VerifyGraphicsOwner();
+        ObjectDisposedException.ThrowIf(_closed, this);
+        if (_graphicsShutdown) throw new InvalidOperationException("Editor shutdown cannot be restarted.");
         startup?.Begin(StartupCall.PresentationStart);
         bool startupCompleted=false;
         try {
@@ -278,6 +283,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             var workspace = new EditorWorkspace(_editor);
             workspace.Open(workspace.Stamp, project.StartupScenePath, true);
             _editor.Edit!.Resynchronize(); // Startup is the saved baseline, not a user Open command.
+            _editor.ConfigureDomainProposals(project.Configuration.ProjectId); // Passive preflight only; no adapter, inference or permission grant.
             if (Directory.Exists(Path.Combine(project.Root, "assets")))
             {
                 startup?.Phase(StartupStage.Authoring);
@@ -326,6 +332,12 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             else if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
             if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));
             if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
+#if NCMA_AI
+            if (_editor.DomainProposals is { } aiDomains) {
+                _aiAuthoring = CreateAiAuthoring(aiDomains); // unconfigured, no transport or probe
+                _presenter.AttachAiAuthoring(_aiAuthoring);
+            }
+#endif
             if(_uiPackagePreparation is not null&&_uiPublication is not null)_presenter.AttachUiPublication(_uiPackagePreparation,_uiPublication);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
         }
@@ -379,6 +391,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     public void PumpAgent(FrameContext frame) {
         RequireGraphicsReady();
         _editor!.RefreshAssets();_assetWorkflow?.Pump(); _editor.Endpoint?.Pump();
+        _editor.DomainProposals?.PumpModules();
         SynchronizeEnvironmentCatalog();
         if(_presenter?.ConsumeScrub() is { } scrub&&CurrentEditProjection is not null)_editScene?.Animation?.SetPreviewTime(scrub);
         if (_presenter?.ConsumeRenderAssetRefresh()==true) {
@@ -656,7 +669,14 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     {
         VerifyGraphicsOwner();
         if (_closed) return;
+        // Terminal close intent precedes AI drain. Retain resources, but never resume frames
+        // or graphics recovery while an uncooperative request is still owned by this host.
         _graphicsShutdown=true;_graphicsReview=null;
+#if NCMA_AI
+        // Preserve every downstream owner until ignored-cancellation work actually drains.
+        if (_aiAuthoring?.TryClose() == false) throw new InvalidOperationException("ai_shutdown_draining");
+        _aiAuthoring = null;
+#endif
         _windowSurface?.BeginShutdown();
         // Stop at the first failed close. Keep that owner and every downstream dependency
         // for an explicit retry; never unload plugins under a live GPU/solver resource.

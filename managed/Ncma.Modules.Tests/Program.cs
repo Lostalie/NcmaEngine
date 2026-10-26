@@ -6,7 +6,7 @@ using Ncma.Modules;
 
 static class Program
 {
-    private static readonly ModuleContext Context = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 0);
+    private static readonly ModuleContext Context = new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 1, null, Guid.Empty, 0);
     private static readonly ModuleOperation Operation = new(Guid.NewGuid(), "1.0", Guid.NewGuid(),
         "ncma.scene.propose", Guid.NewGuid(), Guid.NewGuid());
     private static int checks;
@@ -34,6 +34,7 @@ static class Program
         Run("owner thread and dependency boundary", Owner);
         Run("bounded lifetime replay protection", Lifetime);
         Run("all exact context fields and generation identity", ContextFields);
+        Run("v2 authoring-only identity shape and unsigned counters", AuthoringV2);
         Run("completed replies remain within outstanding budget", CompletedBudget);
         Run("unclaimed proposal expires before delivery", UnclaimedDeadline);
         Run("transport dispatch receives only remaining budget", DispatchBudget);
@@ -56,7 +57,7 @@ static class Program
         Check(session.Submit(id, Operation.Name, "{}"u8) == ModuleAdmission.Accepted);
         return id;
     }
-    private static ModuleReply Reply(ModuleRequest r) => new(1, r.RequestId, r.SessionId, r.Epoch,
+    private static ModuleReply Reply(ModuleRequest r) => new(2, r.RequestId, r.SessionId, r.Epoch,
         r.Fingerprint, r.Operation.OutputSchema, ModuleReplyStatus.Proposal, new("{\"proposal\":1}"u8));
     private static void Wait(Func<bool> ready)
     {
@@ -97,8 +98,8 @@ static class Program
         Reject<ArgumentException>(() => new ModuleCatalog([Operation with { InputSchema = Guid.Empty }]));
         Reject<ArgumentException>(() => new ModuleCatalog(Enumerable.Range(0, 65).Select(i => Operation with { Name = $"op{i}" })));
         var adapter = new Adapter(r => Task.FromResult(Reply(r)));
-        Reject<ArgumentException>(() => new ModuleSession(new([Operation]), adapter, Context with { Generation = 0 }));
-        Reject<ArgumentException>(() => new ModuleSession(new([Operation]), adapter, Context with { ObservationTick = 1 }));
+        Reject<ArgumentException>(() => new ModuleSession(new([Operation]), adapter, Context with { DocumentGeneration = 0 }));
+        Reject<ArgumentException>(() => new ModuleSession(new([Operation]), adapter, Context with { AudienceRevision = 1 }));
         var session = Session(adapter, operation: Operation with { MaximumInputBytes = 2 });
         Reject<ArgumentException>(() => session.Submit(Guid.NewGuid(), "ncma.shell", "{}"u8));
         Reject<ArgumentOutOfRangeException>(() => session.Submit(Guid.NewGuid(), Operation.Name, "{\"a\":1}"u8));
@@ -119,7 +120,7 @@ static class Program
         }));
         var id = Submit(session);
         var result = Take(session, id);
-        Check(observed is not null && observed.Context == Context && observed.Version == 1);
+        Check(observed is not null && observed.Context == Context && observed.Version == 2);
         Check(result.Status == ModuleOutcomeStatus.NeedsDomainValidation && result.Proposal is not null);
         Check(result.Fingerprint == observed!.Fingerprint);
         Check(!session.TryTake(id, Context, out _));
@@ -130,7 +131,7 @@ static class Program
     private static void InvalidReplies()
     {
         Func<ModuleReply, ModuleReply>[] changes =
-        [r => r with { Version = 2 }, r => r with { RequestId = Guid.NewGuid() },
+        [r => r with { Version = 1 }, r => r with { Version = 3 }, r => r with { RequestId = Guid.NewGuid() },
          r => r with { SessionId = Guid.NewGuid() }, r => r with { Epoch = 99 },
          r => r with { Fingerprint = "forged" }, r => r with { OutputSchema = Guid.NewGuid() },
          r => r with { Status = (ModuleReplyStatus)99 }, r => r with { Proposal = null },
@@ -239,7 +240,7 @@ static class Program
             adapter.Complete(next);
             Check(Take(session, next, Context with { Revision = 1 }).Status == ModuleOutcomeStatus.Stale);
             var third = Submit(session); session.Pump(Context with { Revision = 1 });
-            Check(Take(session, third, Context with { Generation = 2 }).Status == ModuleOutcomeStatus.Stale);
+            Check(Take(session, third, Context with { DocumentGeneration = 2 }).Status == ModuleOutcomeStatus.Stale);
         }
         finally { session.Stop(); adapter.ReleaseAll(); Close(session); }
     }
@@ -309,9 +310,11 @@ static class Program
     private static void ContextFields()
     {
         ModuleContext[] changes = [Context with { ProjectId = Guid.NewGuid() },
-            Context with { HostSessionId = Guid.NewGuid() }, Context with { DocumentId = Guid.NewGuid() },
-            Context with { Generation = 2 }, Context with { Revision = 1 },
-            Context with { WorldId = Guid.NewGuid() }, Context with { WorldId = Guid.NewGuid(), ObservationTick = 1 }];
+            Context with { HostSessionId = Guid.NewGuid() }, Context with { EditSessionId = Guid.NewGuid() },
+            Context with { DocumentSessionId = Guid.NewGuid() }, Context with { DocumentGeneration = 2 }, Context with { Revision = 1 },
+            Context with { BehaviourCatalogGeneration = Guid.NewGuid() }, Context with { ReviewEpoch = 2 },
+            Context with { Selection = Guid.NewGuid() }, Context with { EndpointId = Guid.NewGuid() },
+            Context with { EndpointId = Guid.NewGuid(), AudienceRevision = 1 }];
         foreach (var current in changes)
         {
             var session = Session(new Adapter(r => Task.FromResult(Reply(r))));
@@ -328,6 +331,40 @@ static class Program
         Check(requests.ToArray()[0].Epoch + 1 == requests.ToArray()[1].Epoch);
         Check(requests.ToArray()[0].SessionId == requests.ToArray()[1].SessionId);
         Close(bound);
+        var paired = Context with { EndpointId = Guid.NewGuid() };
+        var pairedSession = new ModuleSession(new([Operation]), new Adapter(r => Task.FromResult(Reply(r))), paired);
+        var pairedId = Submit(pairedSession);
+        Check(Take(pairedSession, pairedId, paired with { AudienceRevision = 1 }).Status == ModuleOutcomeStatus.Stale);
+        Close(pairedSession);
+    }
+
+    private static void AuthoringV2()
+    {
+        string[] fields = ["ProjectId", "HostSessionId", "EditSessionId", "DocumentSessionId", "DocumentGeneration",
+            "Revision", "BehaviourCatalogGeneration", "ReviewEpoch", "Selection", "EndpointId", "AudienceRevision"];
+        using var json = JsonDocument.Parse(JsonSerializer.SerializeToUtf8Bytes(Context));
+        Check(json.RootElement.EnumerateObject().Select(p => p.Name).Order().SequenceEqual(fields.Order()));
+        Check(json.RootElement.GetProperty("Selection").ValueKind == JsonValueKind.Null);
+        Check(ModuleRequest.ContractVersion == 2);
+        ModuleContext[] invalid = [Context with { ProjectId = Guid.Empty }, Context with { HostSessionId = Guid.Empty },
+            Context with { EditSessionId = Guid.Empty }, Context with { DocumentSessionId = Guid.Empty },
+            Context with { DocumentGeneration = 0 }, Context with { ReviewEpoch = 0 }, Context with { Selection = Guid.Empty },
+            Context with { EndpointId = Guid.Empty, AudienceRevision = 1 }];
+        foreach (var value in invalid) {
+            Reject<ArgumentException>(value.Validate);
+            Reject<ArgumentException>(() => new ModuleSession(new([Operation]), new Adapter(r => Task.FromResult(Reply(r))), value));
+        }
+        var extreme = Context with { DocumentGeneration = ulong.MaxValue, Revision = ulong.MaxValue, ReviewEpoch = ulong.MaxValue,
+            AudienceRevision = ulong.MaxValue, EndpointId = Guid.NewGuid(), Selection = Guid.NewGuid(), BehaviourCatalogGeneration = Guid.NewGuid() };
+        extreme.Validate();
+        ModuleRequest? observed = null;
+        var session = new ModuleSession(new([Operation]), new Adapter(r => { observed = r; return Task.FromResult(Reply(r)); }), extreme);
+        Check(Take(session, Submit(session), extreme).Status == ModuleOutcomeStatus.NeedsDomainValidation);
+        Check(observed!.Context == extreme);
+        using var roundtrip = JsonDocument.Parse(JsonSerializer.SerializeToUtf8Bytes(observed.Context));
+        foreach (string field in new[] { "DocumentGeneration", "Revision", "ReviewEpoch", "AudienceRevision" })
+            Check(roundtrip.RootElement.GetProperty(field).GetUInt64() == ulong.MaxValue);
+        Close(session);
     }
 
     private static void CompletedBudget()

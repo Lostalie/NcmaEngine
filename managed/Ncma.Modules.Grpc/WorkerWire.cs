@@ -16,7 +16,8 @@ public static class TextStatisticsModule
 internal static class WorkerWire
 {
     internal const int MaximumBytes = 131_072;
-    internal const string Service = "ncma.modules.v1.Worker";
+    internal const int Version = ModuleRequest.ContractVersion;
+    internal const string Service = "ncma.modules.v2.Worker";
 
     // Custom gRPC marshalling: the message body is strict UTF-8 JSON, NOT protobuf/ProtoJSON.
     // This avoids protobuf's merge/unknown-field semantics; it is still HTTP/2 gRPC framing.
@@ -80,14 +81,15 @@ internal static class WorkerWire
 
     internal static byte[] Request(Guid instance, ModuleRequest request) => Encode(new
     {
-        version = 1, instance, requestId = request.RequestId, sessionId = request.SessionId,
+        version = Version, instance, requestId = request.RequestId, sessionId = request.SessionId,
         epoch = request.Epoch, fingerprint = request.Fingerprint, operation = Describe(request.Operation),
         context = new
         {
             projectId = request.Context.ProjectId, hostSessionId = request.Context.HostSessionId,
-            documentId = request.Context.DocumentId, generation = request.Context.Generation,
-            revision = request.Context.Revision, worldId = request.Context.WorldId,
-            observationTick = request.Context.ObservationTick
+            editSessionId = request.Context.EditSessionId, documentSessionId = request.Context.DocumentSessionId,
+            documentGeneration = request.Context.DocumentGeneration, revision = request.Context.Revision,
+            behaviourCatalogGeneration = request.Context.BehaviourCatalogGeneration, reviewEpoch = request.Context.ReviewEpoch,
+            selection = request.Context.Selection, endpointId = request.Context.EndpointId, audienceRevision = request.Context.AudienceRevision
         },
         payload = Convert.ToBase64String(request.Observation.CopyBytes())
     });
@@ -96,7 +98,7 @@ internal static class WorkerWire
     {
         using var document = Parse(bytes, "version", "instance", "requestId", "sessionId", "epoch", "fingerprint", "outputSchema", "status", "payload");
         var root = document.RootElement;
-        if (Integer(root, "version", 1, 1) != 1 || Identity(root, "instance") != instance) throw Invalid();
+        if (Integer(root, "version", Version, Version) != Version || Identity(root, "instance") != instance) throw Invalid();
         var fingerprint = Text(root, "fingerprint", 64);
         if (fingerprint.Length != 64 || fingerprint.Any(c => !char.IsAsciiHexDigitUpper(c))) throw Invalid();
         var status = (ModuleReplyStatus)Integer(root, "status", 1, 3);
@@ -109,7 +111,7 @@ internal static class WorkerWire
             proposal = new ModulePayload(payload);
         }
         else if (encoded.Length != 0) throw Invalid();
-        return new(1, Identity(root, "requestId"), Identity(root, "sessionId"),
+        return new(Version, Identity(root, "requestId"), Identity(root, "sessionId"),
             Integer(root, "epoch", 1, long.MaxValue), fingerprint, Identity(root, "outputSchema"), status, proposal);
     }
 

@@ -16,6 +16,9 @@ public sealed class EditorSessionOwner : IDisposable
     private readonly RuntimeSessionOwner _runtime;
     private bool _disposed, _busy;
     private EditSession? _edit;
+    private readonly Guid _domainHostSession = Guid.NewGuid();
+    private Guid _domainProject;
+    private EditorDomainProposals? _domainProposals;
     private EditorWorkflows? _workflows;
     private readonly TimeProvider? _workflowTime;
     private EditorEndpoint? _endpoint;
@@ -37,7 +40,7 @@ public sealed class EditorSessionOwner : IDisposable
     public SceneAssetPolicy AssetPolicy { get; }
     private SceneBakeStamp? _playAuthoringSource;
     private EditorPlayDependencies? _playDependencies;
-    public EditorPlayDependencies? PlayDependencies { get { Verify(); return _playDependencies; } }
+    public EditorPlayDependencies? PlayDependencies { get { Verify(readOnly: true); return _playDependencies; } }
     private EditorRuntimeChanges? _runtimeChanges;
     private PlaySession? _play => _runtime.Play;
     public ScriptCatalogService Catalog => _runtime.Catalog;
@@ -63,27 +66,58 @@ public sealed class EditorSessionOwner : IDisposable
         _runtime = new(catalog);
         if (activateEditor) ActivateEditor();
     }
-    public SceneDocument Document { get { Verify(); return _document; } }
-    public EditSession? Edit { get { Verify(); return _edit; } }
-    public EditorWorkflows? Workflows { get { Verify(); return _workflows; } }
-    public EditorEndpoint? Endpoint { get { Verify(); return _endpoint; } }
-    public PlaySession? Play { get { Verify(); return _play; } }
+    public SceneDocument Document { get { Verify(readOnly: true); return _document; } }
+    public EditSession? Edit { get { Verify(readOnly: true); return _edit; } }
+    public EditorWorkflows? Workflows { get { Verify(readOnly: true); return _workflows; } }
+    public EditorDomainProposals? DomainProposals { get { Verify(readOnly: true); return _domainProposals; } }
+    public EditorEndpoint? Endpoint { get { Verify(readOnly: true); return _endpoint; } }
+    public PlaySession? Play { get { Verify(readOnly: true); return _play; } }
     // Origin of the currently isolated Play, never a write grant or a live document mirror.
-    public SceneBakeStamp? PlayAuthoringSource { get { Verify(); return _playAuthoringSource; } }
-    public EditorRuntimeChanges? RuntimeChanges { get { Verify(); return _runtimeChanges; } }
-    public AssetProjectAuthoring? Assets { get { Verify(); return _assets; } }
-    public AssetInspectionService? AssetInspections { get { Verify(); return _assetInspections; } }
-    public EditorEnvironmentWorkspace? Environments { get { Verify(); return _environments; } }
-    public EditorPostProcessWorkspace? PostProcessing { get { Verify(); return _postProcessing; } }
+    public SceneBakeStamp? PlayAuthoringSource { get { Verify(readOnly: true); return _playAuthoringSource; } }
+    public EditorRuntimeChanges? RuntimeChanges { get { Verify(readOnly: true); return _runtimeChanges; } }
+    public AssetProjectAuthoring? Assets { get { Verify(readOnly: true); return _assets; } }
+    public EditorMetadataContent CreateMetadataContentReview()
+    {
+        Verify();
+        if (_assetRoot is null || _assets is null || _domainProposals is null || _play is not null)
+            throw new InvalidOperationException("Metadata review requires a configured idle project.");
+        return new(this, _assetRoot, _workflowTime);
+    }
+    public AssetInspectionService? AssetInspections { get { Verify(readOnly: true); return _assetInspections; } }
+    public EditorEnvironmentWorkspace? Environments { get { Verify(readOnly: true); return _environments; } }
+    public EditorPostProcessWorkspace? PostProcessing { get { Verify(readOnly: true); return _postProcessing; } }
     public void ConfigureEnvironments(string root,Guid project,Func<Ncma.Assets.EnvironmentPresetLibrary> loadPreset,TimeProvider? time=null,Action<string>? fault=null)
     {
         Verify();if(_assets is null||_environments is not null||_play is not null||_renderAssetPackage is not null)throw new InvalidOperationException("Environment authoring requires fresh source-project startup.");
         if(Path.GetFullPath(root)!=_assetRoot||project!=_assetProject)throw new ArgumentException("Foreign environment authoring project.");
         _environments=new(new EditorWorkspace(this),root,project,loadPreset,time,fault);
     }
-    public ImportCoordinator? Imports { get { Verify(); return _imports; } }
-    public PreparedSceneAssetLease? RenderAssets { get { Verify(); return _renderAssets; } }
-    public PreparedSceneAssetLease? PlayRenderAssets { get { Verify(); return _playRenderAssets; } }
+    public ImportCoordinator? Imports { get { Verify(readOnly: true); return _imports; } }
+    public PreparedSceneAssetLease? RenderAssets { get { Verify(readOnly: true); return _renderAssets; } }
+    public PreparedSceneAssetLease? PlayRenderAssets { get { Verify(readOnly: true); return _playRenderAssets; } }
+    // Explicit project startup; projectless smoke/preview hosts remain without a proposal service.
+    // This creates a passive local preflight service, not a module adapter or an inference session.
+    public void ConfigureDomainProposals(Guid projectId)
+    {
+        Verify();
+        if (projectId == Guid.Empty || _edit is null || _domainProposals is not null || _play is not null)
+            throw new InvalidOperationException("Domain proposals require a fresh project Editor.");
+        if (_assetProject != Guid.Empty && _assetProject != projectId) throw new ArgumentException("Foreign proposal project.");
+        _domainProject = projectId;
+        _domainProposals = new(_edit, projectId, _domainHostSession, _workflowTime, CaptureDomainHostState);
+    }
+    private (Guid, ulong) CaptureDomainHostState()
+    {
+        // Invoked before/after original domain callbacks, including while preflight is busy.
+        // Never call Verify here: its proposal-reentry guard protects MUTATING owner entry points.
+        _document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_busy) throw new InvalidOperationException("Owner lifecycle transition in progress.");
+        return _endpoint is null ? (Guid.Empty, 0) : (_endpoint.View.InstanceId, _endpoint.AudienceRevision);
+    }
+    private void RequireDomainProject(Guid projectId)
+    {
+        if (_domainProject != Guid.Empty && _domainProject != projectId) throw new ArgumentException("Foreign proposal project.");
+    }
     public void ConfigureImportTools(ImportWorkerLaunch trustedLaunch, Func<string, bool> approvedSource)
     {
         Verify(); if (_assets is null || _imports is not null || _play is not null) throw new InvalidOperationException("Import tools require idle configured Editor assets.");
@@ -92,6 +126,7 @@ public sealed class EditorSessionOwner : IDisposable
     public void ConfigureAssets(string projectRoot, Guid projectId, ulong generation, AssetWriteScope? scope = null,UiWriteScope? uiScope=null,AnimationGraphWriteScope? graphScope=null)
     {
         Verify();
+        RequireDomainProject(projectId);
         if (_edit is null || _assets is not null || _play is not null) throw new InvalidOperationException("Asset startup requires a fresh Editor.");
         _assets = new(projectRoot, projectId, generation, _edit, scope ?? new([], [], [], () => true),uiScope:uiScope,graphScope:graphScope);
         _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;
@@ -106,6 +141,7 @@ public sealed class EditorSessionOwner : IDisposable
     public void PrepareRenderAssets(string projectRoot, Guid projectId,string? package=null)
     {
         Verify(); if (_play is not null) throw new InvalidOperationException("Initial render asset preparation requires idle Edit.");
+        RequireDomainProject(projectId);
         if (_assetRoot is not null && (_assetRoot != Path.GetFullPath(projectRoot) || _assetProject != projectId)) throw new ArgumentException("Foreign asset project.");
         var candidate = SceneAssetPreparation.Prepare(projectRoot, projectId, _document.CaptureSnapshot(), false,package,AssetPolicy);
         _renderAssets?.Dispose(); _renderAssets = candidate; _assetRoot = Path.GetFullPath(projectRoot); _assetProject = projectId;_renderAssetPackage=package;
@@ -126,10 +162,10 @@ public sealed class EditorSessionOwner : IDisposable
         }
         return changed;
     }
-    private void Verify()
+    private void Verify(bool readOnly = false)
     {
         _document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_busy) throw new InvalidOperationException("Session callback reentry is forbidden.");
+        if (_busy || !readOnly && _domainProposals?.ReviewInProgress == true) throw new InvalidOperationException("Session callback reentry is forbidden.");
     }
     public static BehaviourCatalog Describe(ScriptCatalogSnapshot catalog) => new(catalog.Generation,
         catalog.Types.Select(t => new BehaviourTypeDescriptor(t.TypeName,
@@ -144,11 +180,12 @@ public sealed class EditorSessionOwner : IDisposable
         _workflows = new(_edit, _workflowTime);
         if(_postModules is not null)_postProcessing=new(new EditorWorkspace(this),_postModules,_workflowTime);
     }
-    public void RefreshCatalog() { Verify(); _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); }
+    public void RefreshCatalog() { Verify(); _domainProposals?.HostInvalidate(); _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); }
     public void ConfigureEndpoint(bool enabled, string projectRoot)
     {
         Verify();
         if (_edit is null) throw new InvalidOperationException("Editor required.");
+        _domainProposals?.HostInvalidate();
         // Prepare the replacement first; failure preserves the previous endpoint.
         var candidate = enabled ? new EditorEndpoint(_edit, projectRoot) : null;
         if (candidate is not null) candidate.AttachRequestMonitor(_workflows!);
@@ -163,6 +200,7 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify();
         if (_play is not null) throw new InvalidOperationException("Stop Play before loading gameplay.");
+        _domainProposals?.HostInvalidate();
         int count;
         using (_document.ReadOnly()) count = _runtime.LoadGameplay(path, _document.CaptureSnapshot());
         RefreshCatalog(); return count;
@@ -171,6 +209,8 @@ public sealed class EditorSessionOwner : IDisposable
     {
         Verify();
         if (_play is not null) throw new InvalidOperationException("Stop current Play first.");
+        // Even a failed start attempt cannot revive an earlier confirmed source context.
+        _domainProposals?.HostInvalidate();
         PreparedSceneAssetLease? renderPins = null;
         IDisposable? pins = null;
         try
@@ -210,6 +250,7 @@ public sealed class EditorSessionOwner : IDisposable
     public int ReloadGameplay(string path)
     {
         Verify();
+        _domainProposals?.HostInvalidate();
         _busy = true;
         try { if(_play is not null)_beforePlayStop?.Invoke();
             using var read = _document.ReadOnly();
@@ -219,6 +260,7 @@ public sealed class EditorSessionOwner : IDisposable
     public void StopPlay()
     {
         Verify();
+        _domainProposals?.HostInvalidate();
         _busy = true;
         try { if(_runtime.Play is not null)_beforePlayStop?.Invoke(); _runtime.StopPlay(); }
         finally
@@ -232,6 +274,9 @@ public sealed class EditorSessionOwner : IDisposable
         _document.VerifyAccess();
         if (_disposed) return;
         Verify();
+        _domainProposals?.HostInvalidate(close: true);
+        if (_domainProposals?.TryCloseModules() == false)
+            throw new InvalidOperationException("Domain modules still draining; retry owner disposal after their work actually ends.");
         var errors = new List<Exception>();
         try { StopPlay(); } catch (Exception e) { errors.Add(e); }
         if (_play is not null) throw new AggregateException(errors);

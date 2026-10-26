@@ -10,7 +10,7 @@ public readonly record struct EditorUiStamp(EditorViewStamp Edit,Guid Document,u
 public readonly record struct UiResourceReference(Guid Id,UiResourceKind Kind);
 public sealed record UiFileReview(Guid Review,string Path,Guid Document,string Hash,bool Create,EditorViewStamp Edit,ulong AssetRevision,ulong Resources);
 // Sole command history remains Editor.Core. All file/resource authority originates in local UI.
-public sealed class EditorUiWorkspace : IDisposable
+public sealed partial class EditorUiWorkspace : IDisposable
 {
     private readonly EditorWorkspace _workspace; private readonly string _root; private readonly Guid _session;
     private readonly int _thread=Environment.CurrentManagedThreadId;
@@ -38,7 +38,13 @@ public sealed class EditorUiWorkspace : IDisposable
         _actions=new(registeredActions??["preview.test"],StringComparer.Ordinal);
         if(_actions.Count>128||_actions.Any(a=>a.Length is <1 or >128||a.Any(c=>!char.IsAsciiLetterOrDigit(c)&&c is not '.' and not '_' and not '-')))throw new ArgumentException("Trusted bounded semantic action registration required.");
         _workspace=workspace;_root=System.IO.Path.GetFullPath(root);_session=workspace.Stamp.SessionId;_editGeneration=workspace.Stamp.Generation;Resources=new(_root);
-        Scope=UiWriteScope.ForHost((path,id)=>_grants.GetValueOrDefault(path)==id,Resources.Contains,Current);
+        Scope=UiWriteScope.ForHost((path,id)=>_grants.GetValueOrDefault(path)==id,Resources.Contains,Current,ResourceProof);
+    }
+    private JsonElement ResourceProof(UiDefinition definition)
+    {
+        Verify();Resources.Require(definition);RequireActions(definition);
+        var used=definition.Elements.SelectMany(e=>new[]{e.Font,e.Image}).Where(id=>id!=Guid.Empty).ToHashSet();
+        return JsonSerializer.SerializeToElement(new{revision=Resources.Revision,resources=Resources.Rows.Where(r=>used.Contains(r.Id)).OrderBy(r=>r.Id).ThenBy(r=>r.Kind).ToArray()});
     }
     private bool Current()=>!_disposed&&_workspace.Stamp.SessionId==_session&&_workspace.Stamp.Generation==_editGeneration;
     private void Verify(){ObjectDisposedException.ThrowIf(_disposed,this);if(_thread!=Environment.CurrentManagedThreadId)throw new InvalidOperationException("UI workspace owner required.");}
@@ -105,6 +111,18 @@ public sealed class EditorUiWorkspace : IDisposable
         Verify();var draft=_draft??throw new EditRejectedException("ui_draft_missing");draft.Update(edits);var candidate=draft.Capture();Resources.Require(candidate);RequireActions(candidate);_ = new UiRuntime(new(candidate));_definition=candidate;Revision=checked(Revision+1);
     }
     private void RequireActions(UiDefinition d){if(d.Elements.Any(e=>e.Action.Length>0&&!_actions.Contains(e.Action)))throw new ArgumentException("Unregistered C# semantic UI Action.");}
+    // Trusted local module-result preparation: copied full candidate, same file identity/resources/
+    // registered C# actions as ordinary editing. Creates only an original proposal, never commits.
+    public JsonElement PrepareDomainProposal(EditorUiStamp expected,UiDefinition candidate)
+    {
+        Check(expected,true);if(HasDraft||_definition is null||_path is null)throw new EditRejectedException("ui_draft_busy");
+        ValidateFile();var owned=UiCodec.Copy(candidate);
+        if(owned.AssetId!=DocumentId)throw new EditRejectedException("ui_document_identity_changed");
+        Resources.Require(owned);RequireActions(owned);_ = new UiRuntime(new(owned));
+        Guid proposal=Assets.Ui.PrepareProposal(_path,owned,Assets.Clock.Revision);
+        return JsonSerializer.SerializeToElement(new{version=1,capability=UiCommands.CapabilityName,
+            input=new{proposalId=proposal,expectedAssetRevision=Assets.Clock.Revision}});
+    }
     public void Confirm()
     {
         Verify();var draft=_draft??throw new EditRejectedException("ui_draft_missing");

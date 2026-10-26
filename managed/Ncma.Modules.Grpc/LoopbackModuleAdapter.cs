@@ -94,11 +94,11 @@ public sealed class LoopbackModuleAdapter : IModuleAdapter
         try
         {
             var nonce = Guid.NewGuid();
-            var bytes = WorkerWire.Encode(new { version = 1, instance, nonce, operation = WorkerWire.Describe(operation) });
+            var bytes = WorkerWire.Encode(new { version = WorkerWire.Version, instance, nonce, operation = WorkerWire.Describe(operation) });
             var reply = await adapter.Call(HandshakeMethod, bytes, TimeSpan.FromSeconds(5), cancellation).ConfigureAwait(false);
             using var document = WorkerWire.Parse(reply, "version", "instance", "nonce", "processId", "maxWireBytes");
             var root = document.RootElement;
-            if (WorkerWire.Integer(root, "version", 1, 1) != 1 || WorkerWire.Identity(root, "instance") != instance ||
+            if (WorkerWire.Integer(root, "version", WorkerWire.Version, WorkerWire.Version) != WorkerWire.Version || WorkerWire.Identity(root, "instance") != instance ||
                 WorkerWire.Identity(root, "nonce") != nonce ||
                 WorkerWire.Integer(root, "processId", 1, int.MaxValue) != expectedProcessId ||
                 WorkerWire.Integer(root, "maxWireBytes", WorkerWire.MaximumBytes, WorkerWire.MaximumBytes) != WorkerWire.MaximumBytes)

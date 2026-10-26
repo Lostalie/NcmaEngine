@@ -48,7 +48,7 @@ internal sealed class WorkerAttempt(WorkerInstallation installation)
             secret = RandomNumberGenerator.GetBytes(32);
             bootstrap = WorkerWire.Encode(new
             {
-                version = 1, instance = Instance, secret = Convert.ToHexString(secret), keyPem = key.ExportPkcs8PrivateKeyPem(),
+                version = WorkerWire.Version, instance = Instance, secret = Convert.ToHexString(secret), keyPem = key.ExportPkcs8PrivateKeyPem(),
                 certificatePem = cert.ExportCertificatePem() + "\n" + ca.ExportCertificatePem(),
                 operation = WorkerWire.Describe(TextStatisticsModule.Operation)
             });
@@ -91,7 +91,7 @@ internal sealed class WorkerAttempt(WorkerInstallation installation)
             }
             using var document = WorkerWire.Parse(ready, "version", "instance", "port", "processId");
             var value = document.RootElement;
-            if (WorkerWire.Integer(value, "version", 1, 1) != 1 || WorkerWire.Identity(value, "instance") != Instance ||
+            if (WorkerWire.Integer(value, "version", WorkerWire.Version, WorkerWire.Version) != WorkerWire.Version || WorkerWire.Identity(value, "instance") != Instance ||
                 WorkerWire.Integer(value, "processId", 1, int.MaxValue) != process.Id || process.HasExited ||
                 !string.Equals(Path.GetFullPath(process.MainModule!.FileName), python, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Worker process identity mismatch.");

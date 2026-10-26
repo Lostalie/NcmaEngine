@@ -93,6 +93,28 @@ public sealed class EditorAnimationGraphWorkspace : IDisposable
         Verify(); if (_draft is null || _interaction?.IsActive != true) throw new EditRejectedException("graph_draft_missing");
         Guid id = Guid.NewGuid(); return PrepareCandidate(id, _draft, agent: false);
     }
+    // Trusted optional-domain composition; never registered as a new model/MCP approval tool.
+    public AnimationGraphEditorStamp RequireDomainSource(DomainProposalSource source)
+    {
+        Verify(); var stamp = Stamp;
+        if (source.ProjectId != _project || source.EditSessionId != stamp.Edit.SessionId ||
+            source.DocumentGeneration != stamp.Edit.Generation || source.Revision != stamp.Edit.Revision ||
+            source.DocumentSessionId != Edit.Document.SessionId || HasDraft || stamp.Graph == Guid.Empty)
+            throw new EditRejectedException("graph_domain_source_mismatch");
+        return stamp;
+    }
+    // The model supplies semantic operations only. Host generates the original proposal UUID;
+    // reuse Propose's original read/audience grant and complete graph validator. No resource IO
+    // or write approval here; explicit CaptureReview/Approve remain mandatory afterwards.
+    public Guid PrepareDomainProposal(AnimationGraphEditorStamp expected, JsonElement operations)
+    {
+        Check(expected); Guid id = Guid.NewGuid();
+        try {
+            _ = Propose(JsonSerializer.SerializeToElement(new { graphId = expected.Graph, proposalId = id, operations }));
+            return id;
+        }
+        catch { if (_candidates.ContainsKey(id)) CancelProposal(id); throw; }
+    }
     private static Guid[] Audience(EditorEndpoint endpoint) => endpoint.View.Connections.Where(c => c.Paired && c.Connected).Select(c => c.ConnectionId).Order().ToArray();
     private Guid PrepareCandidate(Guid id, AnimationGraphDefinition definition, bool agent)
     {

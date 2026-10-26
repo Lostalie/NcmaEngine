@@ -14,7 +14,7 @@ internal static partial class Program
         var session = Guid.NewGuid().ToString();
         byte[] Request(string text) => JsonSerializer.SerializeToUtf8Bytes(new
         {
-            version = 1, instance = worker.Instance, requestId = Guid.NewGuid(), sessionId = session,
+            version = 2, instance = worker.Instance, requestId = Guid.NewGuid(), sessionId = session,
             epoch = 1, fingerprint = new string('A', 64),
             operation = new
             {
@@ -23,8 +23,10 @@ internal static partial class Program
                 inputSchema = "cde08200-1001-4001-8001-000000000002", outputSchema = "cde08200-1001-4001-8001-000000000003",
                 maxInputBytes = 65536, maxOutputBytes = 65536, timeoutMilliseconds = 10000
             },
-            context = new { projectId = Guid.NewGuid(), hostSessionId = Guid.NewGuid(), documentId = Guid.NewGuid(),
-                generation = 1, revision = 0, worldId = Guid.Empty, observationTick = 0 },
+            context = new { projectId = Guid.NewGuid(), hostSessionId = Guid.NewGuid(), editSessionId = Guid.NewGuid(),
+                documentSessionId = Guid.NewGuid(), documentGeneration = 1, revision = 0,
+                behaviourCatalogGeneration = Guid.Empty, reviewEpoch = 1, selection = (Guid?)null,
+                endpointId = Guid.Empty, audienceRevision = 0 },
             payload = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new { text }))
         });
         JsonNode Probe(string operation = "status") => JsonNode.Parse(peer.Call("TestProbe", Encoding.ASCII.GetBytes(operation)))!;

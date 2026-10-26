@@ -71,7 +71,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public GuiFrame Frame => _frame;
     public string LastMessage => _messages.LastOrDefault() ?? "";
     public (float X, float Y, float Width, float Height) Viewport { get; private set; }
-    internal bool SceneHudInputAllowed => !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && !_showKeepPlay && _layoutBefore is null;
+    internal bool SceneHudInputAllowed => !AiAuthoringModal && !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && !_showKeepPlay && _layoutBefore is null;
     public SceneObjectData? Selected => _page?.Selected;
     public Guid SceneCamera { get; private set; }
     private bool _refreshRenderAssets;
@@ -258,7 +258,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 BuildActionPreview(animation, center, ref labelId);
             }
         }
-        if(workspaceStyle){End();if(_geometry.Ai.Width>0)Region(93,"AI 工具",_geometry.Ai,"未接入推理服务");else if(_activeMenu==4)Panel(93,"AI 工具",w-Math.Min(360,w),48,Math.Min(360,w),h-80,headerStatus:"未接入推理服务");}
+        if(workspaceStyle){End();if(_geometry.Ai.Width>0)Region(93,"AI 工具",_geometry.Ai,AiHeaderStatus);else if(_activeMenu==4)Panel(93,"AI 工具",w-Math.Min(360,w),48,Math.Min(360,w),h-80,headerStatus:AiHeaderStatus);}
         if(!workspaceStyle||_geometry.Ai.Width>0||_activeMenu==4){
         if(workspaceStyle){string[] tools=["场景检查","资源检查","脚本工具","性能检查"];for(int i=0;i<tools.Length;i++)Add(GuiItemKind.Button,24,60+(ulong)i,tools[i],enabled:false);}
         Add(GuiItemKind.Label, 3, labelId++, "MCP is off by default. Pairing and approval are human UI actions only.");
@@ -305,6 +305,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         if (_showSchedule) BuildSchedule(w,h,ref labelId);
         if (_showKeepPlay) BuildKeepPlayChanges(w,h,ref labelId);
         BuildWorkflows(w,h,ref labelId);
+        BuildDomains(w,h,ref labelId);
+        BuildAiAuthoring(w,h,ref labelId);
         if(workspaceStyle)WorkspaceSplitters();
         _frame = new() { StructSize = (uint)Marshal.SizeOf<GuiFrame>(), Frame = frameId, ViewGeneration = _generation,
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
@@ -338,7 +340,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     public bool Shortcut(uint key,bool control,bool shift,bool captured,bool focused)
     {
-        if (_showKeepPlay) return false; // Never operate a hidden scene behind the confirmation panel.
+        if (_showKeepPlay || AiAuthoringModal) return false; // Never operate a hidden scene behind the confirmation panel.
         if(_uiMode&&_ui is not null&&focused&&!captured){
             if(!control&&key==70){_uiController.Focus(Viewport.Width,Viewport.Height);BoundUiZoom();return true;}
             if(control&&key==83){try{if(_ui.HasDraft){_uiPreview?.Prepare(_ui,UiPreviewViewport);_ui.Confirm();}else _ui.ValidateFile();}catch(Exception e){CancelUi();Record(e.Message);}return true;}
@@ -375,6 +377,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 // The human review is modal at the shared dispatcher, including UI/graph canvases
                 // and events queued in the same native frame. Closing it requires its own action.
                 if (_showKeepPlay && !action.Kind.StartsWith("keep_play_", StringComparison.Ordinal)) continue;
+                if (AiAuthoringModal && !action.Kind.StartsWith("aiui_", StringComparison.Ordinal)) continue;
                 if (e.Phase is < 1 or > 3 || !double.IsFinite(e.Value) || e.TextOffset > output.Length || e.TextLength > output.Length - e.TextOffset)
                     throw new ArgumentException("Invalid GUI event.");
                 string text = new UTF8Encoding(false, true).GetString(output.Slice((int)e.TextOffset, (int)e.TextLength));
@@ -409,6 +412,8 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplySchedule(action))continue;
                 if(ApplyKeepPlayChanges(action,e.Value))continue;
                 if(ApplyWorkflow(action,e.Value))continue;
+                if(ApplyDomain(action,e.Value,text))continue;
+                if(ApplyAiAuthoring(action,e.Value,text))continue;
                 switch (action.Kind)
                 {
                     case "workspace_menu": int nextMenu=_activeMenu==action.Index?-1:action.Index;CancelInteraction();_activeMenu=nextMenu;break;

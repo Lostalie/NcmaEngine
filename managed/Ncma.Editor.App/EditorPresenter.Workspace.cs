@@ -108,15 +108,17 @@ internal sealed unsafe partial class EditorPresenter
         if(menu==2||all){Add(GuiItemKind.Button,24,41,"本机偏好",new("preferences_toggle"),enabled:preferences is not null);Add(GuiItemKind.Button,24,42,"动作动画实验室",new("animation_toggle"),enabled:animationPreview is not null);Add(GuiItemKind.Button,24,43,"角色调试",new("character_toggle"),enabled:_characters is not null);}
         if(menu==3||all){Button(16,"暂停","pause",_page!.Play?.State==PlayState.Running);Button(17,"继续","resume",_page.Play?.State==PlayState.Paused);Button(18,"固定步单步","step",_page.Play?.State==PlayState.Paused);Button(19,"重新运行","restart",_page.Play is not null);Button(20,"重载已配置 C# 逻辑","reload",gameplayAssembly is not null);Add(GuiItemKind.Button,14,1,"独立浏览相机",new("browser_camera"));Add(GuiItemKind.Button,14,2,"使用选中场景相机",new("scene_camera",_page.Selected?.Id??Guid.Empty),enabled:_page.Selected?.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.CameraData.TypeId)==true);if(projectRoot is not null)Add(GuiItemKind.Button,14,3,"刷新渲染资源",new("render_refresh"));BuildBrowserControls();}
         if(menu==4||menu==5||all)Add(GuiItemKind.Button,24,44,_showAiTools?"隐藏 AI 工具侧栏":"显示 AI 工具侧栏",new("workspace_ai"));
+        if(menu==4||all)AiMenuEntry();
         if(menu==2||menu==5||all)Add(GuiItemKind.Button,24,46,_uiMode?"场景工作区":"UI 创作工作区",new("ui_switch"),enabled:_ui is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,47,"动画图检查 / 只读 MCP 审批",new("graph_toggle"),enabled:_graphs is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,49,"动画图运行观察 / MCP 审批",new("animruntime_toggle"),enabled:_animationRuntime is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,70,"AI 工作流审批 / 回执",new("wf_toggle"),enabled:workspace.Owner.Workflows is not null);
+        if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,74,"AI 领域提案 / 精确观察 / 差异确认",new("domain_toggle"),enabled:workspace.Owner.DomainProposals is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,71,"运行对象检查 / 只读 MCP 审批",new("runtime_toggle"),enabled:_runtimeInspection is not null);
         if(menu==2||menu==3||all)Add(GuiItemKind.Button,24,72,"审阅并保留 Play 改动（本地）",new("keep_play_toggle"),enabled:workspace.Owner.RuntimeChanges is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,73,"任务调度 / 本地只读诊断",new("schedule_toggle"));
         if(menu==2||menu==5||all)Add(GuiItemKind.Button,24,48,"动画图创作工作区",new("anim_switch"),enabled:_graphAuthor is not null);
-        if(menu==6||all){Add(GuiItemKind.Label,3,labelId++,"NcmaEngine · C# runtime / native plugins");Add(GuiItemKind.Label,3,labelId++,"AI 推理服务与 Vulkan 绘制未实现。");}
+        if(menu==6||all){Add(GuiItemKind.Label,3,labelId++,"NcmaEngine · C# runtime / native plugins");Add(GuiItemKind.Label,3,labelId++,"AI："+AiHeaderStatus+"；Vulkan 绘制未实现。");}
         Add(GuiItemKind.Button,24,45,"关闭菜单",new("workspace_close_menu"));End();
         void Button(ulong id,string label,string action,bool enabled)=>Add(GuiItemKind.Button,25,id,label,new(action),enabled:enabled);
     }

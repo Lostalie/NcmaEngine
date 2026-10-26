@@ -30,6 +30,9 @@ internal static class AssetPolicyHostTests
             presentation.Start();
             object? Field(string name) => typeof(CandidatePresentation).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(presentation);
             var owner = (EditorSessionOwner)Field("_editor")!;
+            var proposals = owner.DomainProposals ?? throw new Exception("Actual Editor did not configure project proposal preflight.");
+            Check(proposals.CaptureSource().ProjectId == config.ProjectId);
+            Check(proposals.CaptureSource().DocumentSessionId == owner.Document.SessionId);
             Check(owner.AssetPolicy == SceneAssetPolicy.Simulation && Field("_renderer") is null);
             Check(owner.RenderAssets!.Assets.List().Count == 0);
             owner.StartPlay();

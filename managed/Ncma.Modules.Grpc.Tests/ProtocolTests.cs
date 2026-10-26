@@ -45,11 +45,12 @@ internal static partial class Program
             credentials = new Metadata { { "authorization", "Bearer " + Convert.ToHexString(secret) } };
         }
 
-        internal byte[] Call(string name, byte[] input, Metadata? headers = null, bool deadline = true)
+        internal byte[] Call(string name, byte[] input, Metadata? headers = null, bool deadline = true,
+            string service = "ncma.modules.v2.Worker")
         {
             // Even a deliberately absent RPC deadline has a bounded test cancellation owner.
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-            var method = new Method<byte[], byte[]>(MethodType.Unary, "ncma.modules.v1.Worker", name, Bytes, Bytes);
+            var method = new Method<byte[], byte[]>(MethodType.Unary, service, name, Bytes, Bytes);
             using var call = channel.CreateCallInvoker().AsyncUnaryCall(method, null,
                 new CallOptions(headers ?? credentials, deadline ? DateTime.UtcNow.AddSeconds(5) : null, timeout.Token), input);
             return call.ResponseAsync.GetAwaiter().GetResult();
@@ -57,7 +58,7 @@ internal static partial class Program
 
         internal AsyncUnaryCall<byte[]> Begin(string name, byte[] input, CancellationToken cancellation, TimeSpan? budget = null) =>
             channel.CreateCallInvoker().AsyncUnaryCall(new Method<byte[], byte[]>(MethodType.Unary,
-                "ncma.modules.v1.Worker", name, Bytes, Bytes), null,
+                "ncma.modules.v2.Worker", name, Bytes, Bytes), null,
                 new CallOptions(credentials, DateTime.UtcNow + (budget ?? TimeSpan.FromSeconds(5)), cancellation), input);
 
         public void Dispose() { channel.Dispose(); root.Dispose(); }
@@ -74,7 +75,7 @@ internal static partial class Program
              "inputSchema":"cde08200-1001-4001-8001-000000000002","outputSchema":"cde08200-1001-4001-8001-000000000003",
              "maxInputBytes":65536,"maxOutputBytes":65536,"timeoutMilliseconds":10000}
             """)!;
-        var handshake = new JsonObject { ["version"] = 1, ["instance"] = worker.Instance.ToString(),
+        var handshake = new JsonObject { ["version"] = 2, ["instance"] = worker.Instance.ToString(),
             ["nonce"] = Guid.NewGuid().ToString(), ["operation"] = operation.DeepClone() };
         static byte[] Encode(JsonNode node) => Encoding.UTF8.GetBytes(node.ToJsonString());
         static byte[] Utf8(string text) => Encoding.UTF8.GetBytes(text);
@@ -98,7 +99,10 @@ internal static partial class Program
             { "authorization", "Bearer " + Convert.ToHexString(worker.Secret) } };
         Reject("Handshake", Encode(handshake), "duplicate authentication", StatusCode.Unauthenticated, duplicateAuth);
         Reject("Handshake", Encode(handshake), "missing handshake deadline", deadline: false);
-        Mutate(handshake, "Handshake", "future handshake version", x => x["version"] = 2);
+        Mutate(handshake, "Handshake", "removed handshake version", x => x["version"] = 1);
+        Mutate(handshake, "Handshake", "future handshake version", x => x["version"] = 3);
+        try { peer.Call("Handshake", Encode(handshake), service: "ncma.modules.v1.Worker"); throw new Exception("Removed service routed."); }
+        catch (RpcException error) { Check(error.StatusCode == StatusCode.Unimplemented, "No v1 service alias."); }
         Mutate(handshake, "Handshake", "boolean version", x => x["version"] = true);
         Mutate(handshake, "Handshake", "unknown handshake field", x => x["extra"] = 1);
         Mutate(handshake, "Handshake", "wrong instance", x => x["instance"] = Guid.NewGuid().ToString());
@@ -108,12 +112,13 @@ internal static partial class Program
         var session = Guid.NewGuid().ToString();
         var request = new JsonObject
         {
-            ["version"] = 1, ["instance"] = worker.Instance.ToString(), ["requestId"] = Guid.NewGuid().ToString(),
+            ["version"] = 2, ["instance"] = worker.Instance.ToString(), ["requestId"] = Guid.NewGuid().ToString(),
             ["sessionId"] = session, ["epoch"] = 1, ["fingerprint"] = new string('A', 64),
             ["operation"] = operation.DeepClone(),
             ["context"] = new JsonObject { ["projectId"] = Guid.NewGuid().ToString(), ["hostSessionId"] = Guid.NewGuid().ToString(),
-                ["documentId"] = Guid.NewGuid().ToString(), ["generation"] = 1, ["revision"] = 0,
-                ["worldId"] = Guid.Empty.ToString(), ["observationTick"] = 0 },
+                ["editSessionId"] = Guid.NewGuid().ToString(), ["documentSessionId"] = Guid.NewGuid().ToString(),
+                ["documentGeneration"] = 1, ["revision"] = 0, ["behaviourCatalogGeneration"] = Guid.Empty.ToString(),
+                ["reviewEpoch"] = 1, ["selection"] = null, ["endpointId"] = Guid.Empty.ToString(), ["audienceRevision"] = 0 },
             ["payload"] = Convert.ToBase64String(Utf8("{\"text\":\"动作 🤖\"}"))
         };
         Reject("Invoke", Encode(request), "invoke before handshake");
@@ -122,7 +127,8 @@ internal static partial class Program
                 response.RootElement.GetProperty("nonce").GetString() == handshake["nonce"]!.GetValue<string>(), "Valid handshake after refusals.");
         Reject("Handshake", Encode(handshake), "second handshake");
         Reject("Invoke", Encode(request), "missing invocation deadline", deadline: false);
-        Mutate(request, "Invoke", "future invocation version", x => x["version"] = 2);
+        Mutate(request, "Invoke", "removed invocation version", x => x["version"] = 1);
+        Mutate(request, "Invoke", "future invocation version", x => x["version"] = 3);
         Mutate(request, "Invoke", "unknown root member", x => x["extra"] = 1);
         Mutate(request, "Invoke", "missing root member", x => x.AsObject().Remove("epoch"));
         Mutate(request, "Invoke", "wrong request instance", x => x["instance"] = Guid.NewGuid().ToString());
@@ -138,9 +144,25 @@ internal static partial class Program
         Mutate(request, "Invoke", "changed operation budget", x => x["operation"]!["maxInputBytes"] = 60000);
         Mutate(request, "Invoke", "unknown context field", x => x["context"]!["extra"] = 1);
         Mutate(request, "Invoke", "missing context field", x => x["context"]!.AsObject().Remove("revision"));
-        Mutate(request, "Invoke", "zero generation", x => x["context"]!["generation"] = 0);
+        Mutate(request, "Invoke", "zero generation", x => x["context"]!["documentGeneration"] = 0);
         Mutate(request, "Invoke", "negative revision", x => x["context"]!["revision"] = -1);
-        Mutate(request, "Invoke", "tick without world", x => x["context"]!["observationTick"] = 1);
+        foreach (string oldField in new[] { "documentId", "generation", "worldId", "observationTick" })
+            Mutate(request, "Invoke", "removed context field " + oldField, x => x["context"]![oldField] = 0);
+        foreach (string field in request["context"]!.AsObject().Select(p => p.Key).ToArray())
+            Mutate(request, "Invoke", "missing v2 field " + field, x => x["context"]!.AsObject().Remove(field));
+        foreach (string field in new[] { "projectId", "hostSessionId", "editSessionId", "documentSessionId" })
+            Mutate(request, "Invoke", "empty required identity " + field, x => x["context"]![field] = Guid.Empty.ToString());
+        foreach (string field in new[] { "documentGeneration", "revision", "reviewEpoch", "audienceRevision" }) {
+            Mutate(request, "Invoke", "boolean counter " + field, x => x["context"]![field] = true);
+            Mutate(request, "Invoke", "negative counter " + field, x => x["context"]![field] = -1);
+            Mutate(request, "Invoke", "floating counter " + field, x => x["context"]![field] = 1.5);
+            Mutate(request, "Invoke", "uint64 overflow " + field, x => x["context"]![field] = JsonNode.Parse("18446744073709551616"));
+        }
+        Mutate(request, "Invoke", "zero review epoch", x => x["context"]!["reviewEpoch"] = 0);
+        Mutate(request, "Invoke", "empty selection is not null", x => x["context"]!["selection"] = Guid.Empty.ToString());
+        Mutate(request, "Invoke", "noncanonical selection", x => x["context"]!["selection"] = "ABCDEF00-0000-4000-8000-000000000001");
+        Mutate(request, "Invoke", "catalog must be an identity", x => x["context"]!["behaviourCatalogGeneration"] = null);
+        Mutate(request, "Invoke", "audience without endpoint", x => x["context"]!["audienceRevision"] = 1);
         Mutate(request, "Invoke", "malformed base64", x => x["payload"] = "!invalid");
         Mutate(request, "Invoke", "whitespace base64", x => x["payload"] = request["payload"]!.GetValue<string>() + "\n");
         Mutate(request, "Invoke", "empty payload", x => x["payload"] = "");
@@ -150,9 +172,9 @@ internal static partial class Program
         Mutate(request, "Invoke", "payload invalid UTF8", x => x["payload"] = Convert.ToBase64String(new byte[] { 0xff, 0xfe }));
         Mutate(request, "Invoke", "decoded payload too large", x => x["payload"] = Convert.ToBase64String(new byte[65537]));
         var encoded = request.ToJsonString();
-        Reject("Invoke", Utf8(encoded.Insert(1, "\"version\":1,")), "duplicate root field");
-        Reject("Invoke", Utf8(encoded.Insert(1, "\"ver\\u0073ion\":1,")), "escaped duplicate root field");
-        Reject("Invoke", Utf8(encoded.Replace("\"generation\":1", "\"generation\":1,\"generation\":1", StringComparison.Ordinal)), "duplicate nested field");
+        Reject("Invoke", Utf8(encoded.Insert(1, "\"version\":2,")), "duplicate root field");
+        Reject("Invoke", Utf8(encoded.Insert(1, "\"ver\\u0073ion\":2,")), "escaped duplicate root field");
+        Reject("Invoke", Utf8(encoded.Replace("\"documentGeneration\":1", "\"documentGeneration\":1,\"documentGeneration\":1", StringComparison.Ordinal)), "duplicate nested field");
         Reject("Invoke", new byte[] { 0xff, 0xfe }, "wire invalid UTF8");
         Reject("Invoke", Utf8("[]"), "wire array root");
         Reject("Invoke", Utf8("{\"a\":[[[[[[[[[]]]]]]]]]}"), "wire excessive depth");
@@ -173,7 +195,11 @@ internal static partial class Program
         var next = request.DeepClone(); next["requestId"] = Guid.NewGuid().ToString();
         Mutate(next, "Invoke", "cross session", x => x["sessionId"] = Guid.NewGuid().ToString());
         next["epoch"] = 2;
-        Accept(next, "Same-session next epoch accepted.");
+        foreach (string field in new[] { "documentGeneration", "revision", "reviewEpoch", "audienceRevision" })
+            next["context"]![field] = ulong.MaxValue;
+        foreach (string field in new[] { "selection", "endpointId", "behaviourCatalogGeneration" })
+            next["context"]![field] = Guid.NewGuid().ToString();
+        Accept(next, "Same-session next epoch and exact uint64 authoring counters accepted.");
         next["requestId"] = Guid.NewGuid().ToString(); next["epoch"] = 1;
         Reject("Invoke", Encode(next), "stale epoch");
         next["epoch"] = 2;

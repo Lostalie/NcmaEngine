@@ -25,7 +25,7 @@ internal static partial class Program
         var copied = installation.CopyFiles(); var expectedFirst = copied[0];
         copied[0] = copied[0] with { Sha256 = new string('A', 64) };
         Check(installation.CopyFiles()[0] == expectedFirst, "Installation approval inventory is copied.");
-        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 0);
+        var context = new ModuleContext(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1, 0, Guid.Empty, 1, null, Guid.Empty, 0);
         var allowed = true; var clock = new ReviewClock();
         using (var host = new LocalWorkerHost(installation, context, () => allowed, clock))
         {
