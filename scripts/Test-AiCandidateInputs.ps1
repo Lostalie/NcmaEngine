@@ -99,8 +99,12 @@ if($Group -eq 'CrossShell'){
                 if(-not $child.WaitForExit(15000)){throw 'Vector child timeout; identity retained, no automatic kill'}
                 Require ($child.ExitCode -eq 0) 'Vector child failure'
                 Require ((Get-Item -LiteralPath $result).Length -le 4096) 'Vector output budget'
-                $rows=@(Get-Content -Raw -LiteralPath $result|ConvertFrom-Json)
+                # PS5 emits the JSON array as one pipeline object; expand the returned
+                # value explicitly instead of counting pipeline emissions.
+                $decoded=Get-Content -Raw -LiteralPath $result|ConvertFrom-Json
+                $rows=@($decoded)
                 Require ($rows.Count -eq 3) 'Culture count'
+                Require (($rows.culture -join '|') -ceq 'en-US|tr-TR|zh-CN') 'Exact culture coverage'
                 foreach($row in $rows){Require ($row.hash -ceq (IndependentHash)) ('Cross-shell wire mismatch '+$row.culture)}
             }finally{$child.Dispose()}
 '@.Replace('SHELL',$name)))

@@ -25,10 +25,11 @@ internal static class Program
     // One process-owned failed lifetime, not an orphan registry or forced unload.
     // Embedded hosts keep their ApplicationLifetime and explicitly retry close.
     private static ApplicationLifetime? _execution;
-    private static string ErrorText(Exception error,ApplicationLifetime? execution)=>
+    internal static string ErrorText(Exception error,ApplicationLifetime? execution)=>
+        EditorUserDataStartupException.Format(error) ?? (
         error is Ncma.Ui.Rendering.SceneUiRoutesRequiredException?Ncma.Ui.Rendering.SceneUiRoutesRequiredException.Diagnostic:
         error is ArgumentException&&error.Message==PluginLoader.InvalidRootDiagnostic?PluginLoader.InvalidRootDiagnostic:
-        execution?.Failure?.Code??error.Message;
+        execution?.Failure?.Code??error.Message);
     // Synchronous Main is the sole owner; no hostfxr, unmanaged Run or async continuation.
     [STAThread]
     public static int Main(string[] args)
@@ -210,6 +211,8 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     private byte[] _text = [];
     private bool _closed;
     private ApplicationLog? _log;
+    private string? _userDataRoot;
+    internal string VerificationUserDataRoot => _userDataRoot ?? throw new InvalidOperationException("Editor not started.");
     private readonly Guid _correlation = Guid.NewGuid();
     private string _lastPlatformDiagnostic = "";
     public void Start()
@@ -234,11 +237,12 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         if(project is not null&&!cpuOnly)Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(_shaderFiles,
             Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath)));
         startup?.Phase(StartupStage.LogAndPlugins);
-        _log = new(Path.Combine(project?.Root ?? AppContext.BaseDirectory, "out/user/logs/editor-candidate.jsonl"));
+        _userDataRoot = EditorUserDataPaths.ForHost(project?.Root, smoke || preview, _correlation);
+        _log = EditorUserDataStartupException.OpenLog(_userDataRoot);
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, frameRateLimit is null?0u:1u, []),
             new("ncma.renderer", ModuleKind.Renderer, "NcmaRenderer.dll", "NcmaRenderer.dll", 1, 2, ["ncma.platform"]),
-            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 7, ["ncma.platform", "ncma.renderer"]) ]);
+            new("ncma.gui", ModuleKind.Gui, "NcmaGui.dll", "NcmaGui.dll", 1, 8, ["ncma.platform", "ncma.renderer"]) ]);
         startup?.Phase(StartupStage.PacingAndPhysics);
         if(frameRateLimit is int fps) {
             FramePacer.ValidateRate(fps);
@@ -255,7 +259,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico"));
         startup?.Phase(StartupStage.Preferences);
         string font=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts),"msyh.ttc");
-        if(!smoke && !preview)_preferences=new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/preferences.json"),font);
+        if(!smoke && !preview)_preferences=new(Path.Combine(_userDataRoot,"editor/preferences.json"),font);
         startup?.Phase(StartupStage.GuiCreate);
         _gui = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Gui), _window, _preferences?.Current.FontPath??font,fontSize:_preferences?.Current.FontSize??18);
         startup?.Phase(StartupStage.Renderer);
@@ -330,13 +334,14 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             _presenter.AttachRuntimeInspection(runtimeInspection);
             if(_animationGraphs is not null)_presenter.AttachGraphAuthoring(_animationGraphs,_graphPreview);
             else if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
-            if(!smoke)_presenter.AttachLayout(new(Path.Combine(project?.Root??AppContext.BaseDirectory,"out/user/editor/workspace.json")));
+            if(!smoke)_presenter.AttachLayout(new(Path.Combine(_userDataRoot,"editor/workspace.json")));
             if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
 #if NCMA_AI
-            if (_editor.DomainProposals is { } aiDomains) {
-                _aiAuthoring = CreateAiAuthoring(aiDomains); // unconfigured, no transport or probe
-                _presenter.AttachAiAuthoring(_aiAuthoring);
-            }
+            // Always offer editor-session model configuration, even without a project.
+            // Only project-dependent authoring receives the optional domain services.
+            _aiAuthoring = CreateAiAuthoring(_editor.DomainProposals); // unconfigured, no transport or probe
+            _presenter.AttachAiAuthoring(_aiAuthoring);
+            _presenter.AttachAiSecretInput(frame => _gui.TakeSecret(frame,81,30), _gui.ClearSecret);
 #endif
             if(_uiPackagePreparation is not null&&_uiPublication is not null)_presenter.AttachUiPublication(_uiPackagePreparation,_uiPublication);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
@@ -674,6 +679,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _graphicsShutdown=true;_graphicsReview=null;
 #if NCMA_AI
         // Preserve every downstream owner until ignored-cancellation work actually drains.
+        _gui?.ClearSecret();
         if (_aiAuthoring?.TryClose() == false) throw new InvalidOperationException("ai_shutdown_draining");
         _aiAuthoring = null;
 #endif

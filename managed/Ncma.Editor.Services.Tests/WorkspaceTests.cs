@@ -87,7 +87,13 @@ internal static unsafe class WorkspaceTests
     private static void CheckAiHeader(EditorPresenter presenter)
     {
         var items=presenter.Items.ToArray();var header=items.Single(i=>i.Kind==(uint)GuiItemKind.PanelBegin&&i.WidgetLow==93);
-        Check(Encoding.UTF8.GetString(presenter.Text.Slice((int)header.TextOffset,(int)header.TextLength))=="未接入推理服务");
-        Check(!items.Any(i=>i.Kind==(uint)GuiItemKind.Label&&Encoding.UTF8.GetString(presenter.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))=="未接入推理服务"));
+        // This fixture does not attach a model controller. Product composition is explicit.
+#if NCMA_AI
+        const string expected="模型服务未初始化";
+#else
+        const string expected="未包含 AI 模块";
+#endif
+        Check(Encoding.UTF8.GetString(presenter.Text.Slice((int)header.TextOffset,(int)header.TextLength))==expected);
+        Check(!items.Any(i=>i.Kind==(uint)GuiItemKind.Label&&Encoding.UTF8.GetString(presenter.Text.Slice((int)i.LabelOffset,(int)i.LabelLength))==expected));
     }
 }

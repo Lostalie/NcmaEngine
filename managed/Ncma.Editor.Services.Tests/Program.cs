@@ -29,6 +29,32 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
 if(args.Length==2&&args[0]=="--ai-relocated-product-child") return AiRelocatedProductBootstrap.Run(args[1]);
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
+if(args.Length==3&&args[2]=="--editor-user-data-tests")
+    return CaseHarness.Run("Editor user-data isolation",EditorUserDataTests.Cases(output,args[1]));
+if(args.Length==3&&args[2]=="--f7-regression-tests") {
+    var focused=EditorUserDataTests.Cases(output,args[1])
+        .Append(("M5.7 exact workspace header and original interaction/GPU assertions",(Action)(()=>WorkspaceTests.Run(root,args[1],output))))
+        .Concat(AiAnimationWorkflowTests.Cases(output,root));
+#if NCMA_AI
+    focused=focused.Concat(AiDomainPresenterTests.Cases(output,root));
+#endif
+    return CaseHarness.Run("F7 original failures and user-data isolation",focused);
+}
+if(args.Length==3&&args[2] is "--ai-remote-config-tests" or "--ai-remote-config-host-tests") {
+#if NCMA_AI
+    return CaseHarness.Run("Remote AI configuration",args[2]=="--ai-remote-config-tests"?AiRemoteConfigTests.Cases():AiRemoteConfigTests.HostCases(args[1]));
+#else
+    Console.Error.WriteLine("Remote AI configuration requires the AI product; not skipped.");return 1;
+#endif
+}
+if(args.Length==3 && args[2] is "--ai-projectless-tests" or "--ai-projectless-host-tests") {
+#if NCMA_AI
+    return CaseHarness.Run("Project-independent AI", args[2] == "--ai-projectless-tests"
+        ? AiProjectIndependentTests.Cases() : AiProjectIndependentTests.HostCases(args[1]));
+#else
+    Console.Error.WriteLine("Project-independent AI cases require the optional AI product; not skipped."); return 1;
+#endif
+}
 if(args.Length==3&&args[2]=="--ai-offline-host-tests") {
 #if NCMA_AI
     return CaseHarness.Run("M8.4 offline actual host", AiOfflineHostTests.Cases(root,args[1],output));
@@ -900,6 +926,8 @@ cases = cases.Concat(AiPresenterTests.Cases()).ToArray();
 cases = cases.Concat(AiCredentialPromptTests.Cases()).Concat(AiHostLifetimeTests.Cases(root,args[1],output)).ToArray();
 cases = cases.Concat(AiDomainPresenterTests.Cases(output,root)).ToArray();
 cases = cases.Concat(AiOfflineHostTests.Cases(root,args[1],output)).ToArray();
+cases = cases.Concat(AiProjectIndependentTests.Cases()).Concat(AiProjectIndependentTests.HostCases(args[1])).ToArray();
+cases = cases.Concat(AiRemoteConfigTests.Cases()).Concat(AiRemoteConfigTests.HostCases(args[1])).ToArray();
 #endif
 if (args.Length == 3 && args[2] == "--post-authoring-tests") cases=cases.Where(c=>c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal)).ToArray();
 if (args.Length == 3 && args[2] == "--environment-inspector-tests") cases = cases.Where(c => c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal)).ToArray();
@@ -910,6 +938,7 @@ if (args.Length == 3 && args[2] == "--asset-owner-fixture-tests") cases = cases.
     c.Item1.StartsWith("M7.3-C3-B1",StringComparison.Ordinal) || c.Item1.StartsWith("M7.3-C3-B2",StringComparison.Ordinal) ||
     c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal) ||
     c.Item1 == "M3.6 asset UI plan/grant/import/history/flat placement/frozen/cancel/stale/restart").ToArray();
+cases=cases.Concat(EditorUserDataTests.Cases(output,args[1])).ToArray();
 return CaseHarness.Run("Editor services", cases);
 
 public readonly record struct EditorJsonLabel(string Value) : IComponent;

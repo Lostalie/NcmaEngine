@@ -20,7 +20,7 @@ internal sealed unsafe partial class EditorPresenter
 #endif
     private string AiHeaderStatus =>
 #if NCMA_AI
-        _aiAuthoring is null ? "打开项目后可配置" : _aiAuthoring.Status switch {
+        _aiAuthoring is null ? "模型服务未初始化" : _aiAuthoring.Status switch {
             "unconfigured" => "未配置", "configured-not-connected" or "idle" => "已配置 · 未验证连接",
             "send-review" => "待外发审批", "pending" => "请求进行中", "review" => "待差异审阅",
             "resource-review" => "待动画资源审阅",
@@ -43,7 +43,12 @@ internal sealed unsafe partial class EditorPresenter
     }
 #if NCMA_AI
     private AiAuthoringWorkspace? _aiAuthoring;
-    private readonly WindowsAiCredentialPrompt _aiCredentialPrompt = new();
+    private Func<GuiFrame,string?>? _takeAiSecret;
+    private Action? _clearAiSecret;
+    private ulong _aiSecretEpoch=1;
+    private bool _aiCustomSettings;
+    internal void AttachAiSecretInput(Func<GuiFrame,string?> take, Action clear) { _takeAiSecret=take;_clearAiSecret=clear; }
+    private void ClearAiSecret() { _clearAiSecret?.Invoke();_aiSecretEpoch=checked(_aiSecretEpoch+1); }
     private bool _aiRemote;
     private bool _showAiAuthoring, _aiReviewed, _aiBindings;
     private string _aiEndpoint = "http://127.0.0.1:8000/v1/chat/completions", _aiModel = "", _aiInstruction = "", _aiDelete = "";
@@ -73,32 +78,47 @@ internal sealed unsafe partial class EditorPresenter
     {
 #if NCMA_AI
         if (!_showAiAuthoring || _aiAuthoring is not { } ai) return;
-        Panel(415, "模型工作区 · 本机 / DeepSeek远程 · 显式审批", width * .05f, height * .06f, width * .9f, height * .88f, AiHeaderStatus);
+        Panel(415, "编辑器模型工作区 · 本机 / DeepSeek远程 · 显式审批", width * .05f, height * .06f, width * .9f, height * .88f, AiHeaderStatus);
         var overlay = _items[^1]; overlay.Value = 2; _items[^1] = overlay;
         Add(GuiItemKind.Label, 81, label++, "无自动启动/下载/连接探测；配置不等于已连接。元数据本地查看不构成外发授权；选用settings草稿后须独立审阅完整请求。动画仍要求原MCP图读授权，不自动配对。请勿把密钥输入普通文本框。");
-        Add(GuiItemKind.Button, 81, 19, _aiRemote ? "本机无凭据" : "> 本机无凭据", new("aiui_local")); Line();
-        Add(GuiItemKind.Button, 81, 20, _aiRemote ? "> DeepSeek远程" : "DeepSeek远程", new("aiui_remote"));
-        if (_aiRemote) Add(GuiItemKind.Label, 81, label++, $"固定接收方 {AiProvider.DeepSeek.RemoteEndpoint}\n配置按钮打开Windows凭据对话框：用户名填写deepseek，密码栏填写API密钥，不是Windows密码。仅内存会话、不保存；取消后保持断开。不是安全桌面，不能保证托管内存物理擦除。");
-        else Add(GuiItemKind.Text, 81, 1, "本机 literal-loopback 端点（无凭据）", new("aiui_endpoint"), _aiEndpoint);
-        Add(GuiItemKind.Text, 81, 2, "精确模型名称（由用户填写）", new("aiui_model"), _aiModel);
-        Add(GuiItemKind.Button, 81, 3, _aiRemote ? "输入会话密钥并配置（不联网）" : "应用配置（不联网；旧会话须排空）", new("aiui_configure"));
+        Add(GuiItemKind.Label, 81, label++, "连接配置属于当前编辑器会话，不写入项目；密钥仅在内存中保留，关闭编辑器后清除。");
+        if (!ai.ProjectAvailable) Add(GuiItemKind.Label, 81, label++, "未加载项目：可配置模型及显式诊断连接；场景、动画、UI 和资产操作需加载项目后使用。");
+        Add(GuiItemKind.Button, 81, 20, _aiRemote ? "> 第三方模型提供商" : "第三方模型提供商", new("aiui_remote")); Line();
+        Add(GuiItemKind.Button, 81, 19, _aiRemote ? "自定义模型 API（本机）" : "> 自定义模型 API（本机）", new("aiui_local"));
+        if (_aiRemote) {
+            Add(GuiItemKind.Label,81,label++,"选择已接入的提供商，输入 API 密钥后保存；不会自动验证连接。");
+            Add(GuiItemKind.Choice,81,32,"提供商",new("aiui_provider"),"deepseek",number:0);
+            Add(GuiItemKind.Label,81,label++,"API 密钥");
+            Add(GuiItemKind.SecretText,81,30,"##API key",value:ai.Profile?.Deployment==AiDeployment.RemoteHttps?"留空保留本次会话配置；修改模型需重新输入密钥":"输入 API 密钥（仅本次会话）",number:_aiSecretEpoch,enabled:_takeAiSecret is not null);
+            Add(GuiItemKind.Button,81,31,_aiCustomSettings?"v 自定义设置":"> 自定义设置",new("aiui_settings"));
+            if(_aiCustomSettings){
+                Add(GuiItemKind.Text,81,2,"模型",new("aiui_model"),_aiModel);
+                Add(GuiItemKind.Label,81,label++,$"API 地址（固定）：{AiProvider.DeepSeek.RemoteEndpoint}");
+            }
+            Add(GuiItemKind.Label,81,label++,"仅接入 DeepSeek；其他提供商暂不可选。密钥掩码显示，不写入日志/项目文件；不保证所有内存副本物理擦除。");
+            Add(GuiItemKind.Button,81,33,"取消",new("aiui_config_cancel"));Line();
+        } else {
+            Add(GuiItemKind.Text, 81, 1, "本机 literal-loopback 端点（无凭据）", new("aiui_endpoint"), _aiEndpoint);
+            Add(GuiItemKind.Text, 81, 2, "模型", new("aiui_model"), _aiModel);
+        }
+        Add(GuiItemKind.Button, 81, 3, _aiRemote ? "保存" : "应用配置（不联网；旧会话须排空）", new("aiui_configure"),enabled:!_aiRemote||_takeAiSecret is not null);
         Add(GuiItemKind.Button, 81, 4, "撤销凭据与批准 / 断开 / 重试回收", new("aiui_disconnect"));
         Add(GuiItemKind.Label, 81, label++, "断开立即撤销本机会话批准，但不能收回已发送内容，也不会吊销服务商账号中的API密钥；服务商密钥撤销需自行操作。");
         if (ai.Profile is { } profile) Add(GuiItemKind.Label, 81, label++, $"实际配置：{profile.Endpoint}\n模型 {profile.Model} · {profile.ConfigurationId:D}\n最多1次调用/4096以内输出预算，60秒上限，无自动重试。界面输入与实际配置分开，修改后须重新应用。");
-        Add(GuiItemKind.Button, 81, 5, _aiIntent == AiAuthoringIntent.Scene ? "> 场景所选对象" : "场景所选对象", new("aiui_scene")); Line();
+        Add(GuiItemKind.Button, 81, 5, _aiIntent == AiAuthoringIntent.Scene ? "> 场景所选对象" : "场景所选对象", new("aiui_scene"), enabled: ai.ProjectAvailable); Line();
         Add(GuiItemKind.Button, 81, 6, _aiIntent == AiAuthoringIntent.UiDocument ? "> 当前UI文档" : "当前UI文档", new("aiui_ui"), enabled: ai.UiAvailable);
         Add(GuiItemKind.Button, 81, 21, _aiIntent == AiAuthoringIntent.AnimationGraph ? "> 当前动画图" : "当前动画图", new("aiui_animation"), enabled: ai.AnimationAvailable);
         Add(GuiItemKind.Button, 81, 25, "查看所选资产完整元数据（仅本机）", new("aiui_metadata_local", _selectedAsset?.AssetId ?? Guid.Empty),
             enabled: ai.MetadataContentAvailable && _selectedAsset is not null);
         Add(GuiItemKind.Button, 81, 27, _aiIntent == AiAuthoringIntent.AssetMetadata ? "> 所选资产settings草稿" : "所选资产settings草稿", new("aiui_metadata"), enabled: ai.MetadataContentAvailable);
         Add(GuiItemKind.Label, 81, label++, "元数据只支持无generation/subassets/dependencies的根资产。按精确UUID重新读取，不使用浏览器缓存；外发审阅会包含完整record/相对路径/哈希，可能含业务数据，无源blob。选择不是批准，不授予MCP读取或文件写入权限；模型仅返回settings，最终写入仍需原资产授权。");
-        Guid target = _aiIntent switch { AiAuthoringIntent.Scene => _page!.State.Selection ?? Guid.Empty,
+        Guid target = !ai.ProjectAvailable ? Guid.Empty : _aiIntent switch { AiAuthoringIntent.Scene => _page!.State.Selection ?? Guid.Empty,
             AiAuthoringIntent.AnimationGraph => _graphAuthor?.Stamp.Graph ?? Guid.Empty,
             AiAuthoringIntent.AssetMetadata => _selectedAsset?.AssetId ?? Guid.Empty, _ => _ui?.DocumentId ?? Guid.Empty };
         if (_aiIntent == AiAuthoringIntent.AnimationGraph) Add(GuiItemKind.Label, 81, label++, "本入口仅发送当前图摘要，默认模板为重命名，不自动读取全图/骨骼/资源。请先在原动画面板完成配对读授权；本地未提交草稿须先处理。保存仍受原文件/资源授权控制；收到草稿后须显式准备/审阅精确资源，再单独确认最终差异。");
         Add(GuiItemKind.Label, 81, label++, $"精确目标：{target:D}。不自动选择其他对象或读取全项目。");
         Add(GuiItemKind.Text, 81, 7, "任务（界面≤1023 UTF-8字节）", new("aiui_instruction"), _aiInstruction);
-        bool writable = _page is { State.Frozen: false, State.EditBusy: false, State.HistoryInvalidated: false };
+        bool writable = ai.ProjectAvailable && _page is { State.Frozen: false, State.EditBusy: false, State.HistoryInvalidated: false };
         bool applied = ai.Profile is { } appliedProfile && appliedProfile.Model == _aiModel &&
             (_aiRemote ? appliedProfile.Deployment == AiDeployment.RemoteHttps : appliedProfile.Deployment == AiDeployment.LocalLoopback && appliedProfile.Endpoint == _aiEndpoint);
         Add(GuiItemKind.Button, 81, 28, "准备单次连接诊断审阅（不发送）", new("aiui_diagnostic_prepare"), enabled: applied);
@@ -154,21 +174,29 @@ internal sealed unsafe partial class EditorPresenter
         if (_aiAuthoring is not { } ai) return true;
         try {
             switch (action.Kind) {
-                case "aiui_toggle": ClearAiReview(true); _showAiAuthoring = !_showAiAuthoring; _showDomains = _showWorkflows = false; _activeMenu = -1; break;
-                case "aiui_close": ClearAiReview(true); _showAiAuthoring = false; break;
+                case "aiui_toggle": ClearAiSecret();ClearAiReview(true); _showAiAuthoring = !_showAiAuthoring; _showDomains = _showWorkflows = false; _activeMenu = -1; break;
+                case "aiui_close": ClearAiSecret();ClearAiReview(true); _showAiAuthoring = false; break;
+                case "aiui_settings":_aiCustomSettings=!_aiCustomSettings;break;
+                case "aiui_provider":if(value!=0)throw new ArgumentException();break;
+                case "aiui_config_cancel":
+                    ClearAiSecret();ClearAiReview(true);_aiCustomSettings=false;
+                    _aiModel=ai.Profile?.Model??"deepseek-flash";break;
                 case "aiui_endpoint": case "aiui_model": case "aiui_instruction":
                     if (Encoding.UTF8.GetByteCount(text) > 1023) throw new ArgumentException();
                     ClearAiReview(true);
                     if (action.Kind == "aiui_endpoint") _aiEndpoint = text; else if (action.Kind == "aiui_model") _aiModel = text; else _aiInstruction = text; break;
                 case "aiui_local": case "aiui_remote":
-                    ClearAiReview(true); _aiRemote = action.Kind == "aiui_remote";
-                    if (!ai.Disconnect()) Record("ai_draining_retry_explicitly"); break;
+                    ClearAiSecret();ClearAiReview(true); _aiRemote = action.Kind == "aiui_remote";
+                    if(_aiRemote&&_aiModel.Length==0)_aiModel="deepseek-flash";
+                    break;
                 case "aiui_configure":
                     ClearAiReview(true);
-                    bool configured = _aiRemote ? ai.ConfigureRemote(_aiModel, _aiCredentialPrompt.Acquire) : ai.ConfigureLocal(_aiEndpoint, _aiModel);
+                    bool configured;
+                    try { configured = _aiRemote ? ai.ConfigureRemoteInput(_aiModel,(_takeAiSecret??throw new InvalidOperationException())(_frame)) : ai.ConfigureLocal(_aiEndpoint, _aiModel); }
+                    finally { ClearAiSecret(); }
                     if (!configured) Record(ai.Status == "draining" ? "ai_draining_retry_explicitly" : "ai_configuration_cancelled");
                     else { if (!_aiRemote) _aiEndpoint = ai.Profile!.Endpoint; _aiModel = ai.Profile!.Model; } break;
-                case "aiui_disconnect": ClearAiReview(true); if (!ai.Disconnect()) Record("ai_draining_retry_explicitly"); break;
+                case "aiui_disconnect": ClearAiSecret();ClearAiReview(true); if (!ai.Disconnect()) Record("ai_draining_retry_explicitly"); break;
                 case "aiui_scene": case "aiui_ui": case "aiui_animation": case "aiui_metadata":
                     ClearAiReview(true); _aiIntent = action.Kind switch { "aiui_scene" => AiAuthoringIntent.Scene, "aiui_animation" => AiAuthoringIntent.AnimationGraph, "aiui_metadata" => AiAuthoringIntent.AssetMetadata, _ => AiAuthoringIntent.UiDocument }; break;
                 case "aiui_prepare":

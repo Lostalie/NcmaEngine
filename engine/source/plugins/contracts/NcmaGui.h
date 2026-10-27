@@ -15,7 +15,8 @@ typedef enum NcmaGuiItemKind { NCMA_GUI_PANEL_BEGIN = 1, NCMA_GUI_PANEL_END = 2,
     NCMA_GUI_TOOLBAR_BEGIN = 15, NCMA_GUI_TOOLBAR_BUTTON = 16, NCMA_GUI_TOOLBAR_BRAND = 17, NCMA_GUI_TOOLBAR_DIVIDER = 18, NCMA_GUI_TOOLBAR_END = 19,
     NCMA_GUI_MENU_BUTTON = 20, NCMA_GUI_MENU_BRAND = 21, NCMA_GUI_CACHED_IMAGE = 22,
     NCMA_GUI_OVERLAY_BEGIN = 23, NCMA_GUI_SPLITTER = 24, NCMA_GUI_SELECTION_BUTTON = 25,
-    NCMA_GUI_CANVAS_INPUT = 26, NCMA_GUI_CANVAS_TEXT = 27, NCMA_GUI_CANVAS_RECT = 28 } NcmaGuiItemKind;
+    NCMA_GUI_CANVAS_INPUT = 26, NCMA_GUI_CANVAS_TEXT = 27, NCMA_GUI_CANVAS_RECT = 28,
+    NCMA_GUI_SECRET_TEXT = 29, NCMA_GUI_CHOICE = 30 } NcmaGuiItemKind;
 /* ABI1.7 keeps the112-byte table. CanvasInput is an absolute logical bounded invisible
    pointer rectangle; emits the SAME normalized u/v/wheel and modifier syntax as1.6
    CachedImage, without a GPU token. CanvasText/Rect require an active canvas; rect is
@@ -98,6 +99,14 @@ typedef uint32_t (NCMA_CALL *NcmaConfigureToolbarIconV1)(uint64_t,uint64_t,const
    Requires no active/retained frame; current1.4 accepts setup before first Draw only.
    Decoded pixels/SRV belong to GUI and release before renderer borrow/module shutdown. */
 typedef struct NcmaGuiApiV1_4 { NcmaGuiApiV1 base; NcmaConfigureToolbarIconV1 configure_toolbar_icon; } NcmaGuiApiV1_4;
+/* ABI1.8: one GUI-owned masked secret draft (<=4096 ASCII token bytes), never in
+   ordinary events/output text. item.text is placeholder ONLY; value is an explicit
+   positive integer draft epoch. Take requires the exact completed frame and widget;
+   it copies once into the trusted caller buffer and clears native owned draft state.
+   Clear, disappearance, epoch change, cancellation, overflow and destruction clear it.
+   Choice text is newline-separated labels (<=32); value is selected index. */
+typedef uint32_t (NCMA_CALL *NcmaTakeGuiSecretV1)(uint64_t,uint64_t,const NcmaGuiFrameV1*,uint64_t,uint64_t,uint8_t*,uint32_t,uint32_t*,NcmaErrorV1*);
+typedef struct NcmaGuiApiV1_8 { NcmaGuiApiV1_4 base; NcmaTakeGuiSecretV1 take_secret; NcmaDestroyGuiV1 clear_secret; } NcmaGuiApiV1_8;
 /* Copied semantic view. IDs are panel/object/field-derived, never list indices. No command execution
    or callbacks into CLR. Events apply at the NEXT owner safe boundary with generation/revision checks.
    Draw creates CPU draw data only until a versioned native renderer service is attached.
@@ -113,5 +122,6 @@ static_assert(sizeof(NcmaGuiCaptureV1) == 16);
 static_assert(sizeof(NcmaGuiStatsV1) == 32);
 static_assert(sizeof(NcmaGuiApiV1) == 104);
 static_assert(sizeof(NcmaGuiApiV1_4) == 112);
+static_assert(sizeof(NcmaGuiApiV1_8) == 128);
 #endif
 #endif

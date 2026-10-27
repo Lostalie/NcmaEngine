@@ -188,7 +188,7 @@ internal static class AiDomainPresenterTests
         internal void Prepare(bool expectSuccess = true) { Click(8); Check(Has(14) == expectSuccess); }
         internal void Send() {
             Check(!Enabled(14)); Click(14); Unchanged(); Outbound = ReadAll(); Click(13, 1); Click(14);
-            Until(() => { Domains.PumpModules(); return Controller.Status != "pending"; }); Build();
+            Until(() => { if (Graph is not null) Graph.PumpModules(); else Domains.PumpModules(); return Controller.Status != "pending"; }); Build();
             Check(Controller.Status == (domain == Domain.Animation ? "resource-review" : "review"));
             const string marker = "完整HTTP JSON正文（不含认证头）\n";
             int start = Outbound.IndexOf(marker, StringComparison.Ordinal), end = Outbound.IndexOf("\n正文SHA256 ", StringComparison.Ordinal);

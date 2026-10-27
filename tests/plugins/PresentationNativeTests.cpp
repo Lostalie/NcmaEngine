@@ -33,12 +33,18 @@ bool RecordedButton(const char* label) {
 bool RecordedInputText(const char* label, char* text, size_t length) {
     bool changed = InputText(label, text, length); recordedButtonMin = GetItemRectMin(); recordedButtonMax = GetItemRectMax(); return changed;
 }
+bool RecordedInputTextWithHint(const char* label,const char* hint,char* text,size_t length,ImGuiInputTextFlags flags,ImGuiInputTextCallback callback) {
+    bool changed=InputTextWithHint(label,hint,text,length,flags,callback);
+    recordedButtonMin=GetItemRectMin();recordedButtonMax=GetItemRectMax();return changed;
+}
 }
 #define Button RecordedButton
 #define InputText RecordedInputText
+#define InputTextWithHint RecordedInputTextWithHint
 #include "../../engine/source/plugins/gui/GuiPlugin.cpp"
 #undef Button
 #undef InputText
+#undef InputTextWithHint
 #define GLFW_INCLUDE_NONE
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -51,6 +57,7 @@ bool RecordedInputText(const char* label, char* text, size_t length) {
 #include <iostream>
 #include "PlatformPrecisionWaitTests.inl"
 #include "GuiDevicePreparationTests.inl"
+#include "GuiSecretInputTests.inl"
 int main(int argc, char** argv)
 {
     try {
@@ -71,7 +78,10 @@ int main(int argc, char** argv)
     assert(ncma_plugin_get_api(1,5,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==5);
     assert(ncma_plugin_get_api(1,6,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==6);
     assert(ncma_plugin_get_api(1,7,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_OK&&toolbarApi.base.module.minor==7);
-    assert(ncma_plugin_get_api(1,8,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_ABI_MISMATCH);
+    assert(ncma_plugin_get_api(1,8,&toolbarApi,sizeof(toolbarApi),&error)==NCMA_BUFFER_TOO_SMALL);
+    NcmaGuiApiV1_8 secretApi{};
+    assert(ncma_plugin_get_api(1,8,&secretApi,sizeof(secretApi),&error)==NCMA_OK&&secretApi.base.base.module.minor==8&&secretApi.take_secret&&secretApi.clear_secret);
+    assert(ncma_plugin_get_api(1,9,&secretApi,sizeof(secretApi),&error)==NCMA_ABI_MISMATCH);
     assert(getPlatform(1, 0, &api, sizeof(api), &error) == NCMA_OK);
     uint64_t platform = 0, w = 0;
     assert(api.module.initialize(nullptr, 0, &platform, &error) == NCMA_OK);
@@ -228,6 +238,7 @@ int main(int argc, char** argv)
     frame.frame++;assert(Begin(gm,g,&state,1.0/60,&capture,&error)==NCMA_OK);canvas[3].kind=NCMA_GUI_CANVAS_INPUT;canvas[3].rect[0]=10;canvas[3].rect[1]=10;canvas[3].rect[2]=100;canvas[3].rect[3]=100;canvas[3].enabled=0;
     assert(Draw(gm,g,&frame,canvas.data(),reinterpret_cast<const uint8_t*>(payload.data()),guiEvents.data(),256,&count,outputText.data(),65536,&stats,&error)==NCMA_OK&&count==0);
     std::cout<<"PASS GUI1.7 copied text/rect/pointer presentation;1.0..1.6 queries retained\n";
+    TestGuiSecretInput(gm,g,state,frame.frame+1);
     assert(Destroy(gm, g, &error) == NCMA_OK);
     TestGuiDevicePreparation(api, platform, w, gm, state);
     assert(Shutdown(gm, &error) == NCMA_OK);

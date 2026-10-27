@@ -4,7 +4,7 @@ using Ncma.Interop;
 using Ncma.Platform;
 using Ncma.Rendering;
 namespace Ncma.Gui;
-public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton, ToolbarBegin, ToolbarButton, ToolbarBrand, ToolbarDivider, ToolbarEnd, MenuButton, MenuBrand, CachedImage, OverlayBegin, Splitter, SelectionButton, CanvasInput, CanvasText, CanvasRect }
+public enum GuiItemKind : uint { PanelBegin = 1, PanelEnd, Label, Button, Number, Checkbox, Text, SameLine, CanvasBegin, CanvasLines, CanvasEnd, Theme, Image, AssetButton, ToolbarBegin, ToolbarButton, ToolbarBrand, ToolbarDivider, ToolbarEnd, MenuButton, MenuBrand, CachedImage, OverlayBegin, Splitter, SelectionButton, CanvasInput, CanvasText, CanvasRect, SecretText, Choice }
 [StructLayout(LayoutKind.Sequential)]
 public struct GuiFrame { public uint StructSize, ItemCount, TextBytes, Reserved; public ulong Frame, ViewGeneration, DocumentGeneration, Revision; }
 [StructLayout(LayoutKind.Sequential)]
@@ -58,6 +58,8 @@ internal unsafe delegate uint DestroyGui(ulong context, ulong handle, PluginErro
 internal unsafe delegate uint AttachRenderer(ulong context, ulong gui, ulong rendererModule, ulong renderer, PluginError* error);
 [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 internal unsafe delegate uint ConfigureToolbarIcon(ulong context, ulong gui, byte* bytes, uint count, PluginError* error);
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+internal unsafe delegate uint TakeGuiSecret(ulong context, ulong gui, GuiFrame* frame, ulong high, ulong low, byte* bytes, uint capacity, uint* count, PluginError* error);
 public sealed unsafe class GuiSession : IDisposable
 {
     private readonly PluginLease _lease;
@@ -73,6 +75,26 @@ public sealed unsafe class GuiSession : IDisposable
     private readonly DestroyGui _renderGpu;
     private bool _disposed;
     public bool SupportsToolbar => Module.AbiMinor >= 4;
+    public bool SupportsSecretInput => Module.AbiMinor >= 8;
+    // Trusted local composition only. Never returned in Events/OutputText or ordinary drafts.
+    // The unavoidable managed credential string cannot promise physical memory erasure.
+    public string? TakeSecret(GuiFrame frame, ulong high, ulong low)
+    {
+        Verify(); if (!SupportsSecretInput) throw new NotSupportedException("Secret input requires GUI ABI1.8.");
+        Span<byte> buffer = stackalloc byte[4097]; buffer.Clear();
+        try {
+            var take = Module.ReadFunction<TakeGuiSecret>(112); PluginError error = default; uint count = 0;
+            fixed (byte* bytes = buffer) PluginModule.Check(Module.Id,"take_gui_secret",take(Module.Context,_handle,&frame,high,low,bytes,4097,&count,&error),error);
+            if (count > 4096) throw new InvalidOperationException("Invalid secret length.");
+            return count == 0 ? null : new UTF8Encoding(false,true).GetString(buffer[..(int)count]);
+        } finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(buffer); }
+    }
+    public void ClearSecret()
+    {
+        Verify(); if (!SupportsSecretInput) return;
+        var clear = Module.ReadFunction<DestroyGui>(120); PluginError error = default;
+        PluginModule.Check(Module.Id,"clear_gui_secret",clear(Module.Context,_handle,&error),error);
+    }
     public void SetToolbarIcon(ReadOnlySpan<byte> ico)
     {
         Verify(); if (!SupportsToolbar) throw new NotSupportedException("Toolbar requires GUI ABI1.4.");
@@ -138,6 +160,7 @@ public sealed unsafe class GuiSession : IDisposable
         if(Module.AbiMinor<5)foreach(var item in items)if(item.Kind>19||item.Kind==(uint)GuiItemKind.Theme&&item.Value==3)throw new NotSupportedException("Workspace menu/theme requires ABI1.5.");
         if(Module.AbiMinor<6)foreach(var item in items)if(item.Kind>21)throw new NotSupportedException("Cached UI image requires ABI1.6.");
         if(Module.AbiMinor<7)foreach(var item in items)if(item.Kind>25)throw new NotSupportedException("Graph canvas requires ABI1.7.");
+        if(Module.AbiMinor<8)foreach(var item in items)if(item.Kind>28)throw new NotSupportedException("Secret/choice controls require ABI1.8.");
         if (frame.ItemCount != items.Length || frame.TextBytes != text.Length) throw new ArgumentException("GUI view length mismatch.");
         PluginError error = default; GuiStats stats = default; uint count = 0;
         fixed (GuiItem* input = items) fixed (byte* source = text) fixed (GuiEvent* events = _events) fixed (byte* outputText = _text)

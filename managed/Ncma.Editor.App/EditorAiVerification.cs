@@ -7,8 +7,8 @@ namespace Ncma.Editor.App;
 internal sealed unsafe partial class CandidatePresentation
 {
     // Internal trusted harness seam, configured before Start; no CLI/IPC/tool surface.
-    internal Func<EditorDomainProposals, AiAuthoringWorkspace>? AiFactoryForVerification { private get; init; }
-    private AiAuthoringWorkspace CreateAiAuthoring(EditorDomainProposals domains) =>
+    internal Func<EditorDomainProposals?, AiAuthoringWorkspace>? AiFactoryForVerification { private get; init; }
+    private AiAuthoringWorkspace CreateAiAuthoring(EditorDomainProposals? domains) =>
         AiFactoryForVerification is { } factory ? factory(domains) : new(domains, _uiWorkspace, _animationGraphs,
             _editor!.Assets is null ? null : _editor.CreateMetadataContentReview());
     internal AiAuthoringWorkspace VerificationAi { get { VerifyGraphicsOwner(); return _aiAuthoring ?? throw new InvalidOperationException("AI owner absent."); } }

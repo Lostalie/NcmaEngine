@@ -13,7 +13,9 @@ namespace Ncma.Editor.Modules;
 public sealed class AiAuthoringWorkspace
 {
     private readonly int owner = Environment.CurrentManagedThreadId;
-    private readonly EditorDomainProposals domains;
+    // Connection configuration belongs to the editor session, not a project. A missing
+    // project leaves diagnostics available but grants no authoring observation/write scope.
+    private readonly EditorDomainProposals? domains;
     private readonly EditorUiWorkspace? ui;
     private readonly EditorAnimationGraphWorkspace? animation;
     private readonly EditorMetadataContent? metadata;
@@ -26,10 +28,14 @@ public sealed class AiAuthoringWorkspace
     private readonly Func<AiConnectionSnapshot, ModuleOperation, AiSessionCredential?, DeepSeekChatAdapter>? testFactory;
     private readonly Func<AiConnectionSnapshot, AiSessionCredential?, AiConnectionDiagnosticSession>? diagnosticFactory;
     private bool draining, closed, configuring, releasing;
-    public AiAuthoringWorkspace(EditorDomainProposals domains, EditorUiWorkspace? ui = null, EditorAnimationGraphWorkspace? animation = null,
+    public AiAuthoringWorkspace(EditorDomainProposals? domains = null, EditorUiWorkspace? ui = null, EditorAnimationGraphWorkspace? animation = null,
         EditorMetadataContent? metadata = null)
-    { this.domains = domains ?? throw new ArgumentNullException(nameof(domains)); this.ui = ui; this.animation = animation; this.metadata = metadata; }
-    internal AiAuthoringWorkspace(EditorDomainProposals domains,
+    {
+        if (domains is null && (ui is not null || animation is not null || metadata is not null))
+            throw new ArgumentException("ai_project_services_require_domains");
+        this.domains = domains; this.ui = ui; this.animation = animation; this.metadata = metadata;
+    }
+    internal AiAuthoringWorkspace(EditorDomainProposals? domains,
         Func<AiConnectionSnapshot, ModuleOperation, AiSessionCredential?, DeepSeekChatAdapter> testFactory,
         EditorAnimationGraphWorkspace? animation = null, EditorMetadataContent? metadata = null,
         Func<AiConnectionSnapshot, AiSessionCredential?, AiConnectionDiagnosticSession>? diagnosticFactory = null,
@@ -43,6 +49,7 @@ public sealed class AiAuthoringWorkspace
     public string Status { get { Verify(); return closed ? "closed" : draining ? "draining" : connectionDiagnostic?.Status ?? workflow?.Status ?? (profile is null ? "unconfigured" : "configured-not-connected"); } }
     public AiCallDiagnostic? Diagnostic { get { Verify(); return connectionDiagnostic?.LastDiagnostic ?? workflow?.LastDiagnostic; } }
     public AiConnectionProfile? Profile { get { Verify(); return profile; } }
+    public bool ProjectAvailable { get { Verify(); return domains is not null; } }
     public bool UiAvailable { get { Verify(); return ui is not null; } }
     public bool AnimationAvailable { get { Verify(); return animation is not null; } }
     public bool MetadataContentAvailable { get { Verify(); return metadata is not null; } }
@@ -85,6 +92,18 @@ public sealed class AiAuthoringWorkspace
             return true;
         }
         finally { acquired?.Dispose(); configuring = false; }
+    }
+    // Empty input preserves only the exact existing session profile, never a disk credential
+    // or a key rebound silently to a different model/provider/endpoint.
+    public bool ConfigureRemoteInput(string model, string? token)
+    {
+        Active();
+        if (string.IsNullOrEmpty(token)) {
+            if (profile is { Deployment: AiDeployment.RemoteHttps } current && current.ProviderId == AiProvider.DeepSeek.Id &&
+                current.Endpoint == AiProvider.DeepSeek.RemoteEndpoint && current.Model == model && credential is not null && !draining) return true;
+            throw new EditRejectedException("ai_key_required_for_new_or_changed_configuration");
+        }
+        return ConfigureRemote(model, _ => token);
     }
     private void RevokeConnection()
     {
@@ -131,6 +150,7 @@ public sealed class AiAuthoringWorkspace
     private AiDomainRequestReview PrepareCore(AiAuthoringIntent intent, Guid exactTarget, string instruction, AssetKind? metadataKind)
     {
         Active();
+        if (domains is null) throw new EditRejectedException("ai_project_required_for_authoring");
         if (profile is null) throw new EditRejectedException("ai_not_configured");
         if (intent is not (AiAuthoringIntent.Scene or AiAuthoringIntent.UiDocument or AiAuthoringIntent.AnimationGraph or AiAuthoringIntent.AssetMetadata) || exactTarget == Guid.Empty ||
             intent == AiAuthoringIntent.AssetMetadata && (metadata is null || metadataKind is null) ||

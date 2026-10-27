@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'EditorPackageDependencies.ps1')
 
 function Get-DeploymentHash([string]$Path) {
     $stream = [IO.File]::OpenRead($Path)
@@ -52,7 +53,10 @@ function Assert-DeploymentContents([string]$Workspace, [string]$Directory, [swit
         return $actual
     }
     $manifest = Read-DeploymentManifest $Directory
-    if ($manifest.schemaVersion -ne 1 -or $manifest.rid -ne 'win-x64' -or $manifest.tfm -ne 'net8.0' -or $manifest.configuration -notin @('Debug','Release') -or $manifest.product -notin @('NcmaEngine-editor-candidate','NcmaEngine-editor')) { throw 'Unsupported editor package.' }
+    if ($manifest.schemaVersion -ne 1 -or $manifest.rid -ne 'win-x64' -or $manifest.tfm -ne 'net8.0' -or $manifest.configuration -notin @('Debug','Release') -or $manifest.product -notin @('NcmaEngine-editor-candidate','NcmaEngine-editor','NcmaEngine-ai-editor-candidate','NcmaEngine-ai-editor')) { throw 'Unsupported editor package.' }
+    $isAi = $manifest.product -in @('NcmaEngine-ai-editor-candidate','NcmaEngine-ai-editor')
+    $aiFlag = $manifest.PSObject.Properties['aiEnabled']
+    if (($isAi -and $null -eq $aiFlag) -or ($null -ne $aiFlag -and ($aiFlag.Value -isnot [bool] -or $aiFlag.Value -ne $isAi))) { throw 'Editor variant/AI flag mismatch.' }
     $seen = @{}
     foreach ($file in $manifest.files) {
         $relative = [string]$file.path
@@ -65,6 +69,7 @@ function Assert-DeploymentContents([string]$Workspace, [string]$Directory, [swit
         if ($seen.ContainsKey($file.path) -or $file.path -eq 'deployment-manifest.json') { continue }
         if ($file.path -notin @('out/user/logs/editor-candidate.jsonl','out/user/logs/editor-candidate.jsonl.1','out/user/editor/preferences.json','out/user/editor/workspace.json','sample/out/user/logs/editor-candidate.jsonl','sample/out/user/logs/editor-candidate.jsonl.1','sample/out/user/editor/preferences.json','sample/out/user/editor/workspace.json') -or $file.size -gt 1048576 -or ($file.path.EndsWith('/workspace.json') -and $file.size -gt 4096)) { throw "Unknown install file: $($file.path)" }
     }
+    Assert-AiCandidateDependencies $Workspace $Directory $isAi
     return $actual
 }
 
@@ -141,7 +146,7 @@ function Invoke-DeploymentHost([string]$Executable, [string]$Arguments, [string]
 }
 
 function Invoke-EditorDeployment {
-    param([string]$Workspace, [string]$Package, [string]$Destination, [scriptblock]$AfterBackup)
+    param([string]$Workspace, [string]$Package, [string]$Destination, [scriptblock]$AfterBackup, [switch]$EnableAI)
     $Workspace = [IO.Path]::GetFullPath($Workspace)
     $Destination = Assert-DeploymentPath $Workspace $Destination
     $testPrefix = Join-Path $Workspace 'out\verification\deployment-tests\'
@@ -149,6 +154,9 @@ function Invoke-EditorDeployment {
     $Package = Assert-DeploymentPath $Workspace $Package
     if (-not $Package.StartsWith((Join-Path $Workspace 'out\package\') , [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsupported package root.' }
     $packageFiles = @(Assert-DeploymentContents $Workspace $Package)
+    $candidate = Read-DeploymentManifest $Package
+    $expectedProduct = if ($EnableAI) { 'NcmaEngine-ai-editor-candidate' } else { 'NcmaEngine-editor-candidate' }
+    if ($candidate.product -cne $expectedProduct -or $candidate.production -isnot [bool] -or $candidate.production) { throw 'Candidate variant mismatch; AI deployment requires explicit EnableAI.' }
     $deployRoot = Assert-DeploymentPath $Workspace $(if ($Destination -eq (Join-Path $Workspace 'out\bin')) { Join-Path $Workspace 'out\deployment' } else { Join-Path (Split-Path $Destination) 'deployment' })
     New-Item -ItemType Directory -Path $deployRoot -Force | Out-Null
     $journalPath = Join-Path $deployRoot 'editor-journal.json'
@@ -192,7 +200,7 @@ function Invoke-EditorDeployment {
     }
     $manifest = Read-DeploymentManifest $stage
     $manifest.production = $true
-    $manifest.product = 'NcmaEngine-editor'
+    $manifest.product = if ($EnableAI) { 'NcmaEngine-ai-editor' } else { 'NcmaEngine-editor' }
     [IO.File]::WriteAllText((Join-Path $stage 'deployment-manifest.json'), ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
     $null = Assert-DeploymentContents $Workspace $stage
     Write-Host '[Ncma] Validating staged apphost.'

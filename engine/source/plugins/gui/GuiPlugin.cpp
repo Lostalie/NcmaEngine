@@ -48,8 +48,28 @@ struct Gui {
     std::unordered_map<Id, std::array<char, 1024>, Hash> textDrafts;
     std::unordered_map<Id, double, Hash> numberDrafts;
     std::unordered_set<Id, Hash> textPending;
+    std::array<char,4097> secret{};
+    Id secretWidget{};
+    uint64_t secretEpoch=0;
+    ImGuiID secretInputId=0;
 };
 std::unique_ptr<Gui> gui;
+void ClearSecretDraft(Gui& g) {
+    SecureZeroMemory(g.secret.data(),g.secret.size());
+    auto& state=g.context->InputTextState;
+    auto wipe=[](ImVector<char>& v){if(v.Data)SecureZeroMemory(v.Data,static_cast<size_t>(v.Capacity));v.clear();};
+    if(g.secretInputId&&state.ID==g.secretInputId){
+        if(ImGui::GetActiveID()==g.secretInputId)ImGui::ClearActiveID();
+        wipe(state.TextA);wipe(state.TextToRevertTo);wipe(state.CallbackTextBackup);state.TextLen=0;state.ID=0;
+    }
+    auto& deactivated=g.context->InputTextDeactivatedState;
+    if(g.secretInputId&&deactivated.ID==g.secretInputId){wipe(deactivated.TextA);deactivated.ID=0;}
+    g.secretInputId=0;g.secretEpoch=0;g.secretWidget={};
+}
+int SecretCharacter(ImGuiInputTextCallbackData* data) {
+    const unsigned c=data->EventChar;
+    return ((c>='A'&&c<='Z')||(c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-'||c=='_'||c=='.'||c=='~'||c=='+'||c=='/'||c=='=')?0:1;
+}
 uint32_t Validate(uint64_t context, NcmaErrorV1* error)
 {
     if (std::this_thread::get_id() != loadingThread) return NcmaPlugin::Error(error, NCMA_WRONG_THREAD);
@@ -223,7 +243,7 @@ uint32_t NCMA_CALL Begin(uint64_t context, uint64_t handle, const NcmaWindowStat
             io.FontGlobalScale = 1 / scale; gui->rasterScale = scale;
         }
         gui->cancel = !state->focused || state->overflow || state->input_reset;
-        if (gui->cancel) { ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); }
+        if (gui->cancel) { ClearSecretDraft(*gui); ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); }
         valid = PrepareDeviceObjects(*gui, error); if (valid) return valid;
         if (gui->rendererHandle) ImGui_ImplDX11_NewFrame(); // Already prepared; no unchecked lazy creation.
         ImGui_ImplGlfw_NewFrame();
@@ -234,7 +254,7 @@ uint32_t NCMA_CALL Begin(uint64_t context, uint64_t handle, const NcmaWindowStat
         io.DeltaTime = static_cast<float>(std::clamp(delta, 0.000001, 1.0));
         ImGui::NewFrame(); gui->frameActive = true;
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-            gui->cancel = true; ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear();
+            gui->cancel = true; ClearSecretDraft(*gui); ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear();
         }
         // Bootstrap frame captures all gameplay input; subsequent frames use NewFrame's current input.
         *output = {sizeof(*output), (io.WantCaptureKeyboard || !gui->frames) ? 1u : 0u,
@@ -274,12 +294,20 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
             const auto& item = items[i]; std::string label, value;
             expandedText += static_cast<uint64_t>(item.label_length) + item.text_length;
             if (expandedText + frame->item_count * sizeof(NcmaGuiItemV1) > NCMA_GUI_MAX_TEXT_BYTES) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
-            if (item.kind < NCMA_GUI_PANEL_BEGIN || item.kind > NCMA_GUI_CANVAS_RECT || item.enabled > 1 ||
+            if (item.kind < NCMA_GUI_PANEL_BEGIN || item.kind > NCMA_GUI_CHOICE || item.enabled > 1 ||
                 (item.kind!=NCMA_GUI_IMAGE&&item.kind!=NCMA_GUI_CACHED_IMAGE&&(item.reserved[0] || item.reserved[1] || item.reserved[2] || item.reserved[3])) ||
                 !std::isfinite(item.value) || !std::isfinite(item.minimum) || !std::isfinite(item.maximum) || item.minimum > item.maximum ||
                 !Text(text, frame->text_bytes, item.label_offset, item.label_length, label, 4096) ||
                 !Text(text, frame->text_bytes, item.text_offset, item.text_length, value, 1023))
                 return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
+            if(item.kind==NCMA_GUI_SECRET_TEXT){
+                if(item.value<1||item.value>9007199254740991.0||std::floor(item.value)!=item.value)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+                for(uint32_t j=0;j<i;j++)if(items[j].kind==NCMA_GUI_SECRET_TEXT)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+            }
+            if(item.kind==NCMA_GUI_CHOICE){
+                const auto choiceCount=1+std::count(value.begin(),value.end(),'\n');
+                if(value.empty()||value.front()=='\n'||value.back()=='\n'||value.find("\n\n")!=std::string::npos||choiceCount>32||item.value<0||item.value>=choiceCount||std::floor(item.value)!=item.value)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+            }
             for (float number : item.rect) if (!std::isfinite(number)) return NcmaPlugin::Error(error, NCMA_INVALID_ARGUMENT);
             if(item.kind==NCMA_GUI_CANVAS_INPUT&&(item.rect[2]<=0||item.rect[3]<=0||item.rect[2]>16384||item.rect[3]>16384))return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
             if(item.kind==NCMA_GUI_CANVAS_TEXT||item.kind==NCMA_GUI_CANVAS_RECT){
@@ -353,7 +381,7 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
             gui->cachedImages[gui->imageCount]=cached;gui->images[gui->imageCount++]=ImageToken(items[i]);
         }
         if (gui->generation != frame->document_generation || gui->viewGeneration != frame->view_generation) {
-            ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); gui->cancel = true;
+            ClearSecretDraft(*gui); ImGui::ClearActiveID(); gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); gui->cancel = true;
         }
         gui->generation = frame->document_generation; gui->revision = frame->revision; gui->viewGeneration = frame->view_generation;
         uint32_t written = 0, textWritten = 0; bool overflow = false, panelVisible = false;
@@ -554,6 +582,24 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
                 case NCMA_GUI_CHECKBOX: {
                     bool flag = value != 0; changed = ImGui::Checkbox(label.c_str(), &flag); value = flag ? 1 : 0; break;
                 }
+                case NCMA_GUI_SECRET_TEXT: {
+                    const auto epoch=static_cast<uint64_t>(item.value);
+                    if(gui->secretWidget!=widget||gui->secretEpoch!=epoch){ClearSecretDraft(*gui);gui->secretWidget=widget;gui->secretEpoch=epoch;}
+                    gui->secretInputId=ImGui::GetID(label.c_str());
+                    ImGui::SetNextItemWidth(-1);
+                    ImGui::InputTextWithHint(label.c_str(),values[i].c_str(),gui->secret.data(),gui->secret.size(),
+                        ImGuiInputTextFlags_Password|ImGuiInputTextFlags_NoUndoRedo|ImGuiInputTextFlags_CallbackCharFilter,SecretCharacter);
+                    break; // Deliberately NO generic GUI text/event output.
+                }
+                case NCMA_GUI_CHOICE: {
+                    std::vector<std::string> choices;size_t start=0;
+                    for(size_t end=0;end<=values[i].size();end++)if(end==values[i].size()||values[i][end]=='\n'){choices.push_back(values[i].substr(start,end-start));start=end+1;}
+                    if(ImGui::BeginCombo(label.c_str(),choices[static_cast<size_t>(item.value)].c_str())){
+                        for(size_t n=0;n<choices.size();n++)if(ImGui::Selectable(choices[n].c_str(),n==static_cast<size_t>(item.value)))emit(item,3,static_cast<double>(n));
+                        ImGui::EndCombo();
+                    }
+                    break;
+                }
                 case NCMA_GUI_TEXT: {
                     auto [position, inserted] = gui->textDrafts.try_emplace(widget);
                     auto& draft = position->second;
@@ -577,11 +623,13 @@ uint32_t NCMA_CALL Draw(uint64_t context, uint64_t handle, const NcmaGuiFrameV1*
         std::erase_if(gui->textPending, [&](const auto& key) { return !ids.contains(key); });
         std::erase_if(gui->numberDrafts, [&](const auto& pair) { return !ids.contains(pair.first); });
         std::erase_if(gui->textDrafts, [&](const auto& pair) { return !ids.contains(pair.first); });
+        bool hasSecret=false;for(uint32_t i=0;i<frame->item_count;i++)if(items[i].kind==NCMA_GUI_SECRET_TEXT&&items[i].enabled)hasSecret=true;
+        if(!hasSecret)ClearSecretDraft(*gui);
         ImGui::Render(); gui->frameActive = false; gui->gpuDrawReady = true; gui->frames++; gui->lastFrame = frame->frame;
         auto* data = ImGui::GetDrawData();
         *stats = {sizeof(*stats), static_cast<uint32_t>(data->TotalVtxCount), static_cast<uint32_t>(data->TotalIdxCount),
             static_cast<uint32_t>(data->CmdListsCount), overflow ? 1u : 0u, overflow ? 0u : textWritten, frame->frame};
-        if (overflow) { written = 0; gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); ImGui::ClearActiveID(); }
+        if (overflow) { written = 0; ClearSecretDraft(*gui);gui->textDrafts.clear(); gui->numberDrafts.clear(); gui->textPending.clear(); ImGui::ClearActiveID(); }
         *count = written; return NCMA_OK;
     });
 }
@@ -660,6 +708,7 @@ uint32_t NCMA_CALL Destroy(uint64_t context, uint64_t handle, NcmaErrorV1* error
     return NcmaPlugin::Guard(error, [&]() -> uint32_t {
         auto valid = ValidateGui(context, handle, error); if (valid) return valid;
         BusyScope scope;
+        ClearSecretDraft(*gui);
         if (gui->frameActive) ImGui::EndFrame();
         if (gui->rendererHandle) {
             valid=ReleaseImages(*gui,error);if(valid)return valid;
@@ -675,6 +724,19 @@ uint32_t NCMA_CALL Destroy(uint64_t context, uint64_t handle, NcmaErrorV1* error
         gui.reset(); return released ? NcmaPlugin::Error(error, released, "Window borrow release failed.") : NCMA_OK;
     });
 }
+uint32_t NCMA_CALL TakeSecret(uint64_t context,uint64_t handle,const NcmaGuiFrameV1* frame,uint64_t high,uint64_t low,uint8_t* output,uint32_t capacity,uint32_t* count,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {
+        auto valid=ValidateGui(context,handle,error);if(valid)return valid;
+        if(!frame||frame->struct_size!=sizeof(NcmaGuiFrameV1)||!output||!count||capacity!=4097||gui->frameActive||
+           frame->frame!=gui->lastFrame||frame->view_generation!=gui->viewGeneration||frame->document_generation!=gui->generation||frame->revision!=gui->revision||
+           gui->secretWidget!=Id{high,low}||!gui->secretEpoch)return NcmaPlugin::Error(error,NCMA_INVALID_ARGUMENT);
+        *count=static_cast<uint32_t>(std::char_traits<char>::length(gui->secret.data()));
+        std::memcpy(output,gui->secret.data(),*count);output[*count]=0;ClearSecretDraft(*gui);return NCMA_OK;
+    });
+}
+uint32_t NCMA_CALL ClearSecret(uint64_t context,uint64_t handle,NcmaErrorV1* error) noexcept {
+    return NcmaPlugin::Guard(error,[&]() -> uint32_t {auto valid=ValidateGui(context,handle,error);if(valid)return valid;ClearSecretDraft(*gui);return NCMA_OK;});
+}
 }
 extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major, uint32_t minor, void* output, uint32_t capacity, NcmaErrorV1* error) noexcept
 {
@@ -682,6 +744,8 @@ extern "C" NCMA_EXPORT uint32_t NCMA_CALL ncma_plugin_get_api(uint32_t major, ui
         Create, Begin, Draw, Destroy, AttachRenderer, RenderGpu};
     if(minor<=3)return NcmaPlugin::CopyApi(major, minor, output, capacity, error, api, 3);
     NcmaGuiApiV1_4 toolbar{api,ConfigureToolbarIcon};toolbar.base.module.struct_size=sizeof(toolbar);toolbar.base.module.minor=4;
-    if(minor>=5)toolbar.base.module.minor=minor;
-    return NcmaPlugin::CopyApi(major,minor,output,capacity,error,toolbar,7);
+    if(minor>=5)toolbar.base.module.minor=std::min(minor,7u);
+    if(minor<=7)return NcmaPlugin::CopyApi(major,minor,output,capacity,error,toolbar,7);
+    NcmaGuiApiV1_8 secret{toolbar,TakeSecret,ClearSecret};secret.base.base.module.struct_size=sizeof(secret);secret.base.base.module.minor=8;
+    return NcmaPlugin::CopyApi(major,minor,output,capacity,error,secret,8);
 }

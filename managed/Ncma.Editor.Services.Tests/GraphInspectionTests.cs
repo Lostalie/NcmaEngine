@@ -32,6 +32,19 @@ internal static class GraphInspectionTests
         private readonly Task<string> _errors;
         private ulong _frame;
         private int _id;
+        private readonly Stopwatch _moduleTime = new();
+        private long _moduleMilliseconds;
+        // The fixture clock otherwise stays frozen for explicit grant-expiry tests.
+        // Host-driven async workflows must advance it at real speed so the original
+        // 100ms module pump cadence runs without artificially expiring 60s grants.
+        internal void PumpModules()
+        {
+            if (!_moduleTime.IsRunning) _moduleTime.Start();
+            long elapsed = _moduleTime.ElapsedMilliseconds;
+            Time.Now = checked(Time.Now + elapsed - _moduleMilliseconds);
+            _moduleMilliseconds = elapsed;
+            Owner.DomainProposals!.PumpModules();
+        }
         internal Fixture(string output, string repository, bool authoring=false)
         {
             Owner = new("Graph inspection", workflowTime: Time);

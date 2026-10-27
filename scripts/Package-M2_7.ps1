@@ -193,7 +193,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot identify package source state.' }
 $packageDirty = $packageChanges.Count -gt 0
 $platformModule = @{ id = 'ncma.platform'; abiMajor = 1; abiMinor = 0; capabilities = 0 }
 $rendererModule = @{ id = 'ncma.renderer'; abiMajor = 1; abiMinor = 1; capabilities = 15 }
-Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 7; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
+Manifest $editor 'NcmaEngine-editor-candidate' @($platformModule, $rendererModule, @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 8; capabilities = 0 }, @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
 Manifest $playerNull 'NcmaPlayer-null-candidate' @()
 Manifest $playerDx11 'NcmaPlayer-dx11-candidate' @($platformModule, $rendererModule)
 $physicsModule = @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 2; capabilities = 255 }
@@ -210,7 +210,7 @@ if ($IncludeAI) {
         }
     }
     Manifest $editorAi 'NcmaEngine-ai-editor-candidate' @($platformModule, $rendererModule,
-        @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 7; capabilities = 0 },
+        @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 8; capabilities = 0 },
         @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
     $afterInputs = @(Get-AiCandidateSourceInputs $packageWorkspace)
     if ((Get-AiCandidateInputHash $afterInputs) -cne $packageInputHash) { throw 'Build inputs changed during candidate preparation; retain generation without publishing index.' }

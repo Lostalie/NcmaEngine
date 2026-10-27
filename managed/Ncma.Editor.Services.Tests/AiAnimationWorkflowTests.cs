@@ -78,7 +78,7 @@ internal static class AiAnimationWorkflowTests
         internal AiDomainRequestReview Prepare() => Ui.Prepare(AiAuthoringIntent.AnimationGraph, Fixture.Graph, "Rename this graph");
         internal void Complete() {
             var r = Prepare(); Ui.Send(r, r.Observation.Fingerprint, true);
-            Until(() => { Domains.PumpModules(); return Ui.Status != "pending"; });
+            Until(() => { Fixture.PumpModules(); return Ui.Status != "pending"; });
         }
         public void Dispose() => Until(Ui.TryClose);
     }
