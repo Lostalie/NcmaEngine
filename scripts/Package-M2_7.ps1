@@ -3,18 +3,29 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('Debug', 'Release')][string]$Configuration,
     [Parameter(Mandatory = $true)][string]$NativePluginRoot,
     [switch]$IncludeAI,
+    [switch]$IncludeExtensions,
+    [string]$CapturedBuildRoot,
     [string]$CMakeExecutable
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'AiCandidatePackage.ps1')
+. (Join-Path $PSScriptRoot 'CapturedBuild.ps1')
 $packageWorkspace = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$capture=$null;$compileWorkspace=$packageWorkspace;$captureArgs=@()
+if($IncludeExtensions -or $CapturedBuildRoot){
+    if(-not $CapturedBuildRoot){$CapturedBuildRoot=New-CapturedBuild $packageWorkspace $null $null}
+    $capture=Open-CapturedBuild $packageWorkspace $CapturedBuildRoot
+    $compileWorkspace=$capture.Source;$captureArgs=@($capture.Arguments)
+}
+try {
 $packageAllowedRoot = Join-Path $packageWorkspace 'out'
 $packageBase = Join-Path $packageWorkspace "out\package\m2-7\$Configuration\$([Guid]::NewGuid().ToString('N'))"
 if (-not $packageBase.StartsWith($packageAllowedRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe package target.' }
 $NativePluginRoot = [IO.Path]::GetFullPath($NativePluginRoot)
 $expectedPlugins = Join-Path $packageWorkspace "out\build\windows-ninja-$($Configuration.ToLowerInvariant())\m2\plugins"
 if ($NativePluginRoot -ne $expectedPlugins) { throw 'Plugin/configuration root mismatch.' }
+if($null -ne $capture){$NativePluginRoot=Join-Path $capture.Root "native-$Configuration/m2/plugins"}
 function Assert-PlainPath([string]$path) {
     for ($part = [IO.DirectoryInfo]::new([IO.Path]::GetFullPath($path)); $null -ne $part; $part = $part.Parent) {
         if ($part.Exists -and ($part.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Reparse package path.' }
@@ -27,27 +38,33 @@ for ($packageParent = Get-Item -LiteralPath $packageWorkspace; $null -ne $packag
 }
 New-Item -ItemType Directory -Path $packageBase | Out-Null
 $packageInputs = @(); $packageInputHash = $null
-if ($IncludeAI) {
+$pinnedProducts = $IncludeAI -or $IncludeExtensions -or ($null -ne $capture)
+if ($pinnedProducts) {
     if ([string]::IsNullOrWhiteSpace($CMakeExecutable) -or -not [IO.Path]::IsPathRooted($CMakeExecutable) -or
         !(Test-Path -LiteralPath $CMakeExecutable -PathType Leaf) -or [IO.Path]::GetFileName($CMakeExecutable) -ine 'cmake.exe') { throw 'Explicit CMake executable required for fresh native candidates.' }
-    $packageInputs = @(Get-AiCandidateSourceInputs $packageWorkspace)
+    $packageInputs = @(if($null -ne $capture){$capture.Manifest.files}else{Get-AiCandidateSourceInputs $packageWorkspace})
     $packageInputHash = Get-AiCandidateInputHash $packageInputs
     [IO.File]::WriteAllText((Join-Path $packageBase 'build-inputs.json'), (ConvertTo-Json -InputObject $packageInputs -Depth 4), [Text.UTF8Encoding]::new($false))
     # Normal native build refreshes dependency-tracked outputs; no test/deploy targets.
     $nativeBuild = Split-Path -Parent (Split-Path -Parent $NativePluginRoot)
+    if($null -ne $capture){
+        & $CMakeExecutable -S $compileWorkspace -B $nativeBuild -G Ninja "-DCMAKE_BUILD_TYPE=$Configuration" -DNCMA_BUILD_TESTS=OFF -DNCMA_BUILD_MANAGED=OFF *> (Join-Path $packageBase 'native-configure.log')
+        if($LASTEXITCODE -ne 0){throw 'Captured native configure failed'}
+    }
     & $CMakeExecutable --build $nativeBuild --config $Configuration --parallel 4 *> (Join-Path $packageBase 'native-build.log')
     if ($LASTEXITCODE -ne 0) { throw 'AI candidate native build failed; evidence retained.' }
-    & dotnet build (Join-Path $packageWorkspace 'managed/Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj') --configuration $Configuration --nologo `
+    & dotnet build (Join-Path $compileWorkspace 'managed/Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj') @captureArgs --configuration $Configuration --nologo `
         "-p:ArtifactsPath=$packageBase/build/default" -p:NcmaEnableAI=false
     if ($LASTEXITCODE -ne 0) { throw 'AI candidate sample build failed.' }
 }
-function Publish-Candidate([string]$project, [string]$destination, [bool]$ai = $false) {
+function Publish-Candidate([string]$project, [string]$destination, [bool]$ai = $false, [bool]$extensions = $false) {
     $variantArgs = @()
-    if ($IncludeAI) {
+    if ($pinnedProducts) {
         $variant = if ($ai) { 'ai' } else { 'default' }
-        $variantArgs = @("-p:ArtifactsPath=$packageBase/build/$variant", "-p:NcmaEnableAI=$($ai.ToString().ToLowerInvariant())")
+        if ($extensions) { $variant += '-extensions' }
+        $variantArgs = @("-p:ArtifactsPath=$packageBase/build/$variant", "-p:NcmaEnableAI=$($ai.ToString().ToLowerInvariant())", "-p:NcmaEnableExtensions=$($extensions.ToString().ToLowerInvariant())")
     }
-    & dotnet publish (Join-Path $packageWorkspace $project) --configuration $Configuration --runtime win-x64 --self-contained false `
+    & dotnet publish (Join-Path $compileWorkspace $project) @captureArgs --configuration $Configuration --runtime win-x64 --self-contained false `
         --output $destination --nologo -p:UseAppHost=true -p:PublishTrimmed=false -p:PublishAot=false -p:PublishSingleFile=false @variantArgs
     if ($LASTEXITCODE -ne 0) { throw "Candidate publish failed ($project): $LASTEXITCODE" }
 }
@@ -63,14 +80,14 @@ function Copy-Exact([string]$source, [string]$destination) {
 }
 function Add-Sample([string]$destination) {
     foreach ($file in @('sample.ncmaproject', 'start.ncmascene')) {
-        Copy-Exact (Join-Path $packageWorkspace "engine\assets\examples\player\$file") (Join-Path $destination "sample\$file")
+        Copy-Exact (Join-Path $compileWorkspace "engine\assets\examples\player\$file") (Join-Path $destination "sample\$file")
     }
     foreach ($file in @('Ncma.Gameplay.Sample.dll', 'Ncma.Gameplay.Sample.deps.json', 'Ncma.Gameplay.Sample.pdb')) {
-        $sampleDirectory = if ($IncludeAI) { "$packageBase/build/default/bin/Ncma.Gameplay.Sample/$($Configuration.ToLowerInvariant())" } else { "$packageWorkspace/managed/Ncma.Gameplay.Sample/bin/$Configuration/net8.0" }
+        $sampleDirectory = if ($pinnedProducts) { "$packageBase/build/default/bin/Ncma.Gameplay.Sample/$($Configuration.ToLowerInvariant())" } else { "$packageWorkspace/managed/Ncma.Gameplay.Sample/bin/$Configuration/net8.0" }
         Copy-Exact (Join-Path $sampleDirectory $file) (Join-Path $destination "sample\$file")
     }
 }
-function Manifest([string]$destination, [string]$product, [object[]]$modules) {
+function Manifest([string]$destination, [string]$product, [object[]]$modules, [bool]$extensions = $false) {
     # Existing bounded walker checks directories BEFORE descending into them.
     $files = @(Get-DeploymentFiles $packageWorkspace $destination | Sort-Object path)
     $requirements = @('compatible .NET runtime', 'Windows x64')
@@ -81,6 +98,8 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
         publishMode = 'framework-dependent'; production = $false; modules = $modules; files = $files;
         sourceRevision = $packageRevision; sourceDirty = $packageDirty; environment = $requirements;
         selfContainedVerified = $false; manualAcceptance = $false;
+        capturedBuildRoot = $(if($null -ne $capture){$capture.Root}else{$null});
+        captureManifestSha256 = $(if($null -ne $capture){$capture.ManifestSha256}else{$null});
         # Keep zero/one/many kernels a JSON array; $() unwraps the single Player entry.
         resourceKernels = @(if ($product -in @('NcmaEngine-editor-candidate','NcmaEngine-ai-editor-candidate')) {
             @{ id = 'ncma.character'; abiVersion = 2; path = 'plugins/NcmaNative.dll'; lazy = $true }
@@ -91,10 +110,11 @@ function Manifest([string]$destination, [string]$product, [object[]]$modules) {
             @{ id = 'ncma.pose'; abiVersion = 1; path = 'plugins/NcmaAnimationKernel.dll'; lazy = $true }
             @{ id = 'ncma.text'; abiVersion = 1; path = 'plugins/NcmaText.dll'; lazy = $true }
         }) }
-    if ($IncludeAI) {
+    if ($pinnedProducts) {
         $manifest.sourceInputsSha256 = $packageInputHash
         $manifest.aiEnabled = $product -eq 'NcmaEngine-ai-editor-candidate'
-        Assert-AiCandidateDependencies $packageWorkspace $destination $manifest.aiEnabled
+        $manifest.extensionsEnabled = $extensions
+        Assert-AiCandidateDependencies $packageWorkspace $destination $manifest.aiEnabled $extensions
     }
     [IO.File]::WriteAllText((Join-Path $destination 'deployment-manifest.json'), ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 }
@@ -104,11 +124,11 @@ $playerDx11 = Join-Path $packageBase 'player-dx11'
 $playerNullPhysics = Join-Path $packageBase 'player-null-physics'
 $playerDx11Physics = Join-Path $packageBase 'player-dx11-physics'
 $cookArgs = @()
-if ($IncludeAI) { $cookArgs = @("-p:ArtifactsPath=$packageBase/build/default", '-p:NcmaEnableAI=false') }
-& dotnet build (Join-Path $packageWorkspace 'managed\Ncma.Shader.Cook\Ncma.Shader.Cook.csproj') --configuration $Configuration --nologo @cookArgs
+if ($pinnedProducts) { $cookArgs = @("-p:ArtifactsPath=$packageBase/build/default", '-p:NcmaEnableAI=false', '-p:NcmaEnableExtensions=false') }
+& dotnet build (Join-Path $compileWorkspace 'managed\Ncma.Shader.Cook\Ncma.Shader.Cook.csproj') @captureArgs --configuration $Configuration --nologo @cookArgs
 if ($LASTEXITCODE -ne 0) { throw 'Shader cooker build failed.' }
 $shaderCooker = Join-Path $packageWorkspace "managed\Ncma.Shader.Cook\bin\$Configuration\net8.0\Ncma.Shader.Cook.dll"
-if ($IncludeAI) { $shaderCooker = "$packageBase/build/default/bin/Ncma.Shader.Cook/$($Configuration.ToLowerInvariant())/Ncma.Shader.Cook.dll" }
+if ($pinnedProducts) { $shaderCooker = "$packageBase/build/default/bin/Ncma.Shader.Cook/$($Configuration.ToLowerInvariant())/Ncma.Shader.Cook.dll" }
 function Add-Shaders([string]$destination,[string]$profile) {
     $cooked = Join-Path $packageBase ("shaders-" + $profile)
     & dotnet $shaderCooker $NativePluginRoot $cooked $profile
@@ -155,13 +175,13 @@ foreach ($target in @($editor, $playerDx11)) {
 # Physics stays optional; original lightweight Players remain unchanged. Python/legacy bridges are absent.
 foreach ($target in @($editor, $playerDx11)) {
     foreach ($name in @('glfw', 'spdlog', 'eigen')) {
-        $licenseCandidates = @(Get-ChildItem -LiteralPath (Join-Path $packageWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
+        $licenseCandidates = @(Get-ChildItem -LiteralPath (Join-Path $compileWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
         if ($licenseCandidates.Count -eq 0) { throw "Missing license: $name" }
         foreach ($license in $licenseCandidates) { Copy-Exact $license.FullName (Join-Path $target "licenses\$name-$($license.Name).txt") }
     }
 }
 foreach ($name in @('imgui', 'box2d', 'JoltPhysics', 'ufbx')) {
-    $licenses = @(Get-ChildItem -LiteralPath (Join-Path $packageWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
+    $licenses = @(Get-ChildItem -LiteralPath (Join-Path $compileWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
     if ($licenses.Count -eq 0) { throw "Missing license: $name" }
     foreach ($license in $licenses) { Copy-Exact $license.FullName (Join-Path $editor "licenses\$name-$($license.Name).txt") }
 }
@@ -180,7 +200,7 @@ foreach ($pair in @(@($playerNull, $playerNullPhysics), @($playerDx11, $playerDx
     }
     Copy-Exact (Join-Path $NativePluginRoot 'NcmaPhysics.dll') (Join-Path $variantTarget 'plugins\NcmaPhysics.dll')
     foreach ($name in @('box2d', 'JoltPhysics') + $(if ($variantTarget -eq $playerNullPhysics) { @('eigen', 'spdlog') } else { @() })) {
-        $licenses = @(Get-ChildItem -LiteralPath (Join-Path $packageWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
+        $licenses = @(Get-ChildItem -LiteralPath (Join-Path $compileWorkspace "engine\sdk\$name") -File | Where-Object { $_.Name -match '^(LICENSE|COPYING)' })
         if ($licenses.Count -eq 0) { throw "Missing physics variant license: $name" }
         foreach ($license in $licenses) { Copy-Exact $license.FullName (Join-Path $variantTarget "licenses\$name-$($license.Name).txt") }
     }
@@ -212,7 +232,7 @@ if ($IncludeAI) {
     Manifest $editorAi 'NcmaEngine-ai-editor-candidate' @($platformModule, $rendererModule,
         @{ id = 'ncma.gui'; abiMajor = 1; abiMinor = 8; capabilities = 0 },
         @{ id = 'ncma.physics'; abiMajor = 1; abiMinor = 1; capabilities = 63 })
-    $afterInputs = @(Get-AiCandidateSourceInputs $packageWorkspace)
+    $afterInputs = @(if($null -ne $capture){$capture.Manifest.files}else{Get-AiCandidateSourceInputs $packageWorkspace})
     if ((Get-AiCandidateInputHash $afterInputs) -cne $packageInputHash) { throw 'Build inputs changed during candidate preparation; retain generation without publishing index.' }
     foreach ($pair in @(@($editor,$false),@($editorAi,$true))) {
         Assert-AiCandidateManifest $packageWorkspace $pair[0] $Configuration $pair[1] $packageInputHash (Get-DeploymentHash (Join-Path $pair[0] 'deployment-manifest.json'))
@@ -230,10 +250,45 @@ if ($IncludeAI) {
     if (Test-Path -LiteralPath $aiIndex) { [IO.File]::Replace($aiPending,$aiIndex,(Join-Path $packageBase 'previous-ai-packages.json')) }
     else { [IO.File]::Move($aiPending,$aiIndex) }
 }
+if ($IncludeExtensions) {
+    $extensionProducts = @{}
+    $specs = @(@('editorExtensions',$editor,'managed/Ncma.Editor.App/Ncma.Editor.App.csproj',$false),
+        @('playerNullExtensions',$playerNull,'managed/Ncma.Player.App/Ncma.Player.App.csproj',$false),
+        @('playerDx11Extensions',$playerDx11,'managed/Ncma.Player.App/Ncma.Player.App.csproj',$false),
+        @('playerNullPhysicsExtensions',$playerNullPhysics,'managed/Ncma.Player.App/Ncma.Player.App.csproj',$false),
+        @('playerDx11PhysicsExtensions',$playerDx11Physics,'managed/Ncma.Player.App/Ncma.Player.App.csproj',$false))
+    if ($IncludeAI) {
+        $specs += ,@('editorAiExtensions',$editorAi,'managed/Ncma.Editor.App/Ncma.Editor.App.csproj',$true)
+        # Player has no AI dependency; this same-build-context peer verifies the
+        # exact shared component binary used by the combined Editor product.
+        $specs += ,@('playerNullAiExtensions',$playerNull,'managed/Ncma.Player.App/Ncma.Player.App.csproj',$true)
+    }
+    foreach ($spec in $specs) {
+        $destination = Join-Path $packageBase $spec[0]
+        Publish-Candidate $spec[2] $destination $spec[3] $true
+        # Only known shared non-managed subdirectories from THIS generation.
+        foreach ($directory in @('plugins','assets','sample','tools','licenses')) {
+            $shared = Join-Path $spec[1] $directory
+            if (Test-Path -LiteralPath $shared -PathType Container) {
+                foreach ($file in @(Get-DeploymentFiles $packageWorkspace $shared)) { Copy-Exact (Join-Path $shared $file.path) (Join-Path $destination "$directory/$($file.path)") }
+            }
+        }
+        $baseManifest = Read-DeploymentManifest $spec[1]
+        Manifest $destination $baseManifest.product @($baseManifest.modules) $true
+        $extensionProducts[$spec[0]] = @{path=$destination;manifestSha256=(Get-DeploymentHash (Join-Path $destination 'deployment-manifest.json'))}
+    }
+    $afterInputs = @($capture.Manifest.files)
+    if ((Get-AiCandidateInputHash $afterInputs) -cne $packageInputHash) { throw 'Extension build inputs changed; no index published.' }
+    $extensionIndex = Join-Path $packageBase 'extensions-packages.json'
+    [IO.File]::WriteAllText($extensionIndex,(@{schemaVersion=1;configuration=$Configuration;sourceInputsSha256=$packageInputHash;capturedBuildRoot=$capture.Root;captureManifestSha256=$capture.ManifestSha256;reviewBundleSha256=$capture.Manifest.reviewBundleSha256;
+        sourceInputsFile=(Join-Path $packageBase 'build-inputs.json');products=$extensionProducts;tested=$false;production=$false}|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
+    Write-Host "[Ncma] Unaccepted extension candidates: $extensionIndex"
+}
 $packageIndex = Join-Path $packageWorkspace "out\verification\m2-7\$Configuration\packages.json"
 Assert-PlainPath $packageIndex
 New-Item -ItemType Directory -Path (Split-Path -Parent $packageIndex) -Force | Out-Null
-if ($IncludeAI -and (Test-Path -LiteralPath $packageIndex)) { Copy-Exact $packageIndex (Join-Path $packageBase 'previous-default-packages.json') }
+if ($pinnedProducts -and (Test-Path -LiteralPath $packageIndex)) { Copy-Exact $packageIndex (Join-Path $packageBase 'previous-default-packages.json') }
 $indexJson = [ordered]@{ schemaVersion = 1; editor = $editor; playerNull = $playerNull; playerDx11 = $playerDx11; playerNullPhysics = $playerNullPhysics; playerDx11Physics = $playerDx11Physics } | ConvertTo-Json
 [IO.File]::WriteAllText($packageIndex, $indexJson, [Text.UTF8Encoding]::new($false))
 Write-Host "[Ncma] Framework-dependent candidates staged at $packageBase; production entry untouched."
+} finally { if($null -ne $capture){$capture.Pins.Dispose()} }

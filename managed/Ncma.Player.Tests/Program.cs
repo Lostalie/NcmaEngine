@@ -429,6 +429,17 @@ var cases = new (string Name, Action Run)[] {
 };
 var passed = new List<string>();
 var harness = new CaseHarness("Player");
+if(args.Length==4&&args[3]=="--extension-player-tests") {
+#if NCMA_EXTENSIONS
+    harness.Case("M8.5 optional generated component actual Player startup",()=>ExtensionPlayerTests.Run(output,assemblyPath));
+#else
+    harness.Case("M8.5 default Player excludes optional component module",()=>Check(!CompositionRegistry.Build(global::NcmaPlayer.Generated.ComponentModule.Module).Describe().Any(d=>d.TypeId.StartsWith("ncma.extensions.",StringComparison.Ordinal))));
+#endif
+    return harness.Finish();
+}
+#if NCMA_EXTENSIONS
+harness.Case("M8.5 optional generated component actual Player startup",()=>ExtensionPlayerTests.Run(output,assemblyPath));
+#endif
 foreach (var test in cases) harness.Case(test.Name, () => { test.Run(); passed.Add(test.Name); });
 if (args.Length > 2) {
     harness.Case("Simulation composition", () => {SimulationCompositionChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("Simulation composition 0/1/8/32, default-off/state oracle/reload/native identity");});

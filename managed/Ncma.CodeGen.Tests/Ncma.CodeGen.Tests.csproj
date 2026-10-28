@@ -12,6 +12,7 @@
     <ProjectReference Include="../Ncma.Runtime/Ncma.Runtime.csproj" />
     <ProjectReference Include="../Ncma.Characters/Ncma.Characters.csproj" />
     <ProjectReference Include="../Ncma.Rendering/Ncma.Rendering.csproj" />
+    <ProjectReference Include="../Ncma.Extensions.Hosting/Ncma.Extensions.Hosting.csproj" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
     <PackageReference Include="System.Text.Json" Version="8.0.6" PrivateAssets="all" />
   </ItemGroup>

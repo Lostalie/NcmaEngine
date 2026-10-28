@@ -6,6 +6,16 @@
     <ApplicationIcon>../../engine/build/resources/NcmaEngine.ico</ApplicationIcon>
   </PropertyGroup>
   <!-- Explicit build-time product variant; no runtime DLL discovery or default AI dependency. -->
+  <PropertyGroup Condition="'$(NcmaEnableExtensions)' == 'true'">
+    <DefineConstants>$(DefineConstants);NCMA_EXTENSIONS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NcmaEnableExtensions)' == 'true'">
+    <ProjectReference Include="../Ncma.Extensions.Hosting/Ncma.Extensions.Hosting.csproj" />
+  </ItemGroup>
+  <Target Name="CheckOptionalExtensionProduct" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(NcmaEnableExtensions)' != '' and '$(NcmaEnableExtensions)' != 'false' and '$(NcmaEnableExtensions)' != 'true'" Text="NcmaEnableExtensions must be true or false." />
+    <Error Condition="'$(NcmaEnableExtensions)' == 'true' and '$(ArtifactsPath)' == ''" Text="Extension product requires an explicit isolated ArtifactsPath; default deployment is not an extension package." />
+  </Target>
   <PropertyGroup Condition="'$(NcmaEnableAI)' == 'true'">
     <DefineConstants>$(DefineConstants);NCMA_AI</DefineConstants>
   </PropertyGroup>

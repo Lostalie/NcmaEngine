@@ -100,7 +100,7 @@ Copy-Item -LiteralPath (Join-Path $buildDirectory 'NcmaAnimationKernel.dll') -De
 
 if (-not $SkipTests) {
     Write-Host '[Ncma] Running native architecture tests...'
-    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaCodeGenTests|NcmaModuleTests|NcmaUiSampleSmoke|NcmaUiTests|NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
+    & $ctest --test-dir $buildDirectory --output-on-failure -E 'NcmaExtensionTests|NcmaCodeGenTests|NcmaModuleTests|NcmaUiSampleSmoke|NcmaUiTests|NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
     if ($LASTEXITCODE -ne 0) {
         throw "Native tests failed with exit code $LASTEXITCODE."
     }
@@ -151,6 +151,9 @@ if (-not $SkipManaged) {
     if ($LASTEXITCODE -ne 0) { throw "Interop test build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Application.Tests\Ncma.Application.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed application service tests build failed with exit code $LASTEXITCODE." }
+    & dotnet build (Join-Path $projectRoot 'managed\Ncma.Extensions.Tests\Ncma.Extensions.Tests.csproj') --configuration $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Managed extension contract tests build failed with exit code $LASTEXITCODE." }
+    & (Join-Path $PSScriptRoot 'Prepare-ExtensionVerification.ps1') -Configuration $Configuration
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Modules.Tests\Ncma.Modules.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed module contract tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.AI.Tests\Ncma.AI.Tests.csproj') --configuration $Configuration --nologo
@@ -204,7 +207,7 @@ if (-not $SkipManaged) {
             throw "Managed/native smoke test failed with exit code $LASTEXITCODE."
         }
         Write-Host '[Ncma] Running managed headless commands and managed application tests...'
-        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaCodeGenTests|NcmaModuleTests|NcmaUiSampleSmoke|NcmaUiTests|NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
+        & $ctest --test-dir $buildDirectory --output-on-failure -R 'NcmaExtensionTests|NcmaCodeGenTests|NcmaModuleTests|NcmaUiSampleSmoke|NcmaUiTests|NcmaPoseManagedTests|NcmaAssetImportTests|NcmaAssetTests|NcmaPhysicsTests|NcmaRenderingTests|NcmaKernelReferenceCapture|NcmaCandidateGraphicsSmoke|NcmaPresentationTests|NcmaCandidatePresentationSmoke|NcmaInteropTests|NcmaApplicationServiceTests|NcmaEditorServiceTests|NcmaPlayerTests|NcmaEditorDeploymentTests|NcmaManagedHeadlessTests|NcmaSceneDocumentTests|NcmaSceneRenderingTests|NcmaEditorCoreTests|NcmaGameplayTests|NcmaEditorTransportTests'
         if ($LASTEXITCODE -ne 0) {
             throw "Managed application regression failed with exit code $LASTEXITCODE."
         }

@@ -109,6 +109,7 @@ internal sealed unsafe partial class EditorPresenter
         if(menu==3||all){Button(16,"暂停","pause",_page!.Play?.State==PlayState.Running);Button(17,"继续","resume",_page.Play?.State==PlayState.Paused);Button(18,"固定步单步","step",_page.Play?.State==PlayState.Paused);Button(19,"重新运行","restart",_page.Play is not null);Button(20,"重载已配置 C# 逻辑","reload",gameplayAssembly is not null);Add(GuiItemKind.Button,14,1,"独立浏览相机",new("browser_camera"));Add(GuiItemKind.Button,14,2,"使用选中场景相机",new("scene_camera",_page.Selected?.Id??Guid.Empty),enabled:_page.Selected?.Components.Any(c=>c.TypeId==Ncma.Scene.Rendering.CameraData.TypeId)==true);if(projectRoot is not null)Add(GuiItemKind.Button,14,3,"刷新渲染资源",new("render_refresh"));BuildBrowserControls();}
         if(menu==4||menu==5||all)Add(GuiItemKind.Button,24,44,_showAiTools?"隐藏 AI 工具侧栏":"显示 AI 工具侧栏",new("workspace_ai"));
         if(menu==4||all)AiMenuEntry();
+        if(menu==2||all)ExtensionMenuEntry();
         if(menu==2||menu==5||all)Add(GuiItemKind.Button,24,46,_uiMode?"场景工作区":"UI 创作工作区",new("ui_switch"),enabled:_ui is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,47,"动画图检查 / 只读 MCP 审批",new("graph_toggle"),enabled:_graphs is not null);
         if(menu==2||menu==4||all)Add(GuiItemKind.Button,24,49,"动画图运行观察 / MCP 审批",new("animruntime_toggle"),enabled:_animationRuntime is not null);

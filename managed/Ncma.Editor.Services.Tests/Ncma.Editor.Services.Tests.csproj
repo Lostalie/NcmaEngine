@@ -6,5 +6,8 @@
   <PropertyGroup Condition="'$(NcmaEnableAI)' == 'true'">
     <DefineConstants>$(DefineConstants);NCMA_AI</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(NcmaEnableExtensions)' == 'true'">
+    <DefineConstants>$(DefineConstants);NCMA_EXTENSIONS</DefineConstants>
+  </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Ncma.Editor.App/Ncma.Editor.App.csproj" /><ProjectReference Include="../Ncma.Samples/Ncma.Samples.csproj" /><ProjectReference Include="../Ncma.Editor.Modules/Ncma.Editor.Modules.csproj" /></ItemGroup>
 </Project>

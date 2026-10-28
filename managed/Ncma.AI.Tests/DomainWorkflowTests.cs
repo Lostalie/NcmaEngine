@@ -144,7 +144,9 @@ internal static class DomainWorkflowTests
         });
         yield return ("C1 metadata original scope revoke, exact file creation and original Undo", () => {
             foreach (bool revoke in new[] { true, false }) {
-                string root = Path.Combine(AppContext.BaseDirectory, "workflow-evidence", Guid.NewGuid().ToString("N"));
+                // Build artifacts are an immutable, hash-checked verification input.
+                // Synthetic assets are test output, not files beside the executable.
+                string root = Path.Combine(Path.GetTempPath(), "ncma-ai-workflow-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(Path.Combine(root, "assets")); byte[] source = [1, 2, 3];
                 File.WriteAllBytes(Path.Combine(root, "assets/source.bin"), source);
                 Guid asset = Guid.NewGuid(); bool granted = true;

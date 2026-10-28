@@ -126,6 +126,7 @@ internal sealed unsafe partial class EditorPresenter
         WorkspaceMenu(ref label,!author.HasDraft&&!_page!.State.Frozen);BuildGraphReads(_geometry.Status.Width,_geometry.Status.Y+28,ref label);BuildAnimSequences(_geometry.Status.Width,_geometry.Status.Y+28,ref label);BuildAnimBones(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         BuildWorkflows(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         BuildAiAuthoring(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
+        BuildExtensions(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         if (_showKeepPlay) BuildKeepPlayChanges(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         if (_showSchedule) BuildSchedule(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         _frame=new(){StructSize=(uint)Marshal.SizeOf<GuiFrame>(),Frame=frameId,ViewGeneration=_generation,DocumentGeneration=_page!.Stamp.Generation,Revision=_page.Stamp.Revision,ItemCount=(uint)_items.Count,TextBytes=(uint)_text.Count};return _frame;

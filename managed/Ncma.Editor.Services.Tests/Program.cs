@@ -29,6 +29,13 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
 if(args.Length==2&&args[0]=="--ai-relocated-product-child") return AiRelocatedProductBootstrap.Run(args[1]);
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
+if(args.Length==3&&args[2]=="--extension-editor-tests")
+    return CaseHarness.Run("M8.5-C trusted editor extensions",ExtensionEditorTests.Cases()
+#if NCMA_EXTENSIONS
+        .Concat(ExtensionCommandTests.Cases())
+        .Concat(ExtensionSourceEditorTests.Cases(output))
+#endif
+    );
 if(args.Length==3&&args[2]=="--editor-user-data-tests")
     return CaseHarness.Run("Editor user-data isolation",EditorUserDataTests.Cases(output,args[1]));
 if(args.Length==3&&args[2]=="--f7-regression-tests") {
@@ -939,6 +946,11 @@ if (args.Length == 3 && args[2] == "--asset-owner-fixture-tests") cases = cases.
     c.Item1.StartsWith("M7.4-C3",StringComparison.Ordinal) ||
     c.Item1 == "M3.6 asset UI plan/grant/import/history/flat placement/frozen/cancel/stale/restart").ToArray();
 cases=cases.Concat(EditorUserDataTests.Cases(output,args[1])).ToArray();
+cases=cases.Concat(ExtensionEditorTests.Cases()).ToArray();
+#if NCMA_EXTENSIONS
+cases=cases.Concat(ExtensionCommandTests.Cases()).ToArray();
+cases=cases.Concat(ExtensionSourceEditorTests.Cases(output)).ToArray();
+#endif
 return CaseHarness.Run("Editor services", cases);
 
 public readonly record struct EditorJsonLabel(string Value) : IComponent;

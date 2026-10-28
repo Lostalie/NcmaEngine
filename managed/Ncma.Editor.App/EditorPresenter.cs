@@ -71,7 +71,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public GuiFrame Frame => _frame;
     public string LastMessage => _messages.LastOrDefault() ?? "";
     public (float X, float Y, float Width, float Height) Viewport { get; private set; }
-    internal bool SceneHudInputAllowed => !AiAuthoringModal && !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && !_showKeepPlay && _layoutBefore is null;
+    internal bool SceneHudInputAllowed => !_showExtensions && !AiAuthoringModal && !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && !_showKeepPlay && _layoutBefore is null;
     public SceneObjectData? Selected => _page?.Selected;
     public Guid SceneCamera { get; private set; }
     private bool _refreshRenderAssets;
@@ -307,6 +307,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         BuildWorkflows(w,h,ref labelId);
         BuildDomains(w,h,ref labelId);
         BuildAiAuthoring(w,h,ref labelId);
+        BuildExtensions(w,h,ref labelId);
         if(workspaceStyle)WorkspaceSplitters();
         _frame = new() { StructSize = (uint)Marshal.SizeOf<GuiFrame>(), Frame = frameId, ViewGeneration = _generation,
             DocumentGeneration = _page.Stamp.Generation, Revision = _page.Stamp.Revision, ItemCount = (uint)_items.Count, TextBytes = (uint)_text.Count };
@@ -340,7 +341,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     public bool Shortcut(uint key,bool control,bool shift,bool captured,bool focused)
     {
-        if (_showKeepPlay || AiAuthoringModal) return false; // Never operate a hidden scene behind the confirmation panel.
+        if (_showKeepPlay || AiAuthoringModal || _showExtensions) return false; // Never operate a hidden scene behind the confirmation panel.
         if(_uiMode&&_ui is not null&&focused&&!captured){
             if(!control&&key==70){_uiController.Focus(Viewport.Width,Viewport.Height);BoundUiZoom();return true;}
             if(control&&key==83){try{if(_ui.HasDraft){_uiPreview?.Prepare(_ui,UiPreviewViewport);_ui.Confirm();}else _ui.ValidateFile();}catch(Exception e){CancelUi();Record(e.Message);}return true;}
@@ -378,6 +379,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 // and events queued in the same native frame. Closing it requires its own action.
                 if (_showKeepPlay && !action.Kind.StartsWith("keep_play_", StringComparison.Ordinal)) continue;
                 if (AiAuthoringModal && !action.Kind.StartsWith("aiui_", StringComparison.Ordinal)) continue;
+                if (_showExtensions && !action.Kind.StartsWith("extensions_", StringComparison.Ordinal)) continue;
                 if (e.Phase is < 1 or > 3 || !double.IsFinite(e.Value) || e.TextOffset > output.Length || e.TextLength > output.Length - e.TextOffset)
                     throw new ArgumentException("Invalid GUI event.");
                 string text = new UTF8Encoding(false, true).GetString(output.Slice((int)e.TextOffset, (int)e.TextLength));
@@ -414,6 +416,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyWorkflow(action,e.Value))continue;
                 if(ApplyDomain(action,e.Value,text))continue;
                 if(ApplyAiAuthoring(action,e.Value,text))continue;
+                if(ApplyExtensions(action,e.Value,text))continue;
                 switch (action.Kind)
                 {
                     case "workspace_menu": int nextMenu=_activeMenu==action.Index?-1:action.Index;CancelInteraction();_activeMenu=nextMenu;break;

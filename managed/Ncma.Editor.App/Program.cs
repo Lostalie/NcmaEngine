@@ -274,7 +274,11 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _log.Write("info", cpuOnly ? "presentation.cpu_only" : ReferencePreview ? "presentation.dx11_reference" : "presentation.dx11_scene", "Managed candidate presentation initialized.", _correlation);
         startup?.Phase(StartupStage.EditorOwner);
         _editor = new(project?.Configuration.Name ?? "Presentation smoke",
+#if NCMA_EXTENSIONS
+            components: EditorTrustedExtensions.BuildComponents(),
+#else
             components: global::Ncma.Runtime.CompositionRegistry.Build(global::NcmaEngine.Generated.ComponentModule.Module),
+#endif
             validateComposition: RequireComposition,
             composePreparedPlay:ComposePreparedPlay,postProcessModules:_postModules,
             assetPolicy:cpuOnly ? SceneAssetPolicy.Simulation : SceneAssetPolicy.PresentationAndSimulation,
@@ -345,6 +349,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
 #endif
             if(_uiPackagePreparation is not null&&_uiPublication is not null)_presenter.AttachUiPublication(_uiPackagePreparation,_uiPublication);
             _presenter.SelectStartupCamera(project?.Configuration.SceneCamera);
+#if NCMA_EXTENSIONS
+            StartTrustedExtensions();
+#endif
         }
         startup?.Phase(StartupStage.SceneSynchronization);
         if (_renderer is not null) {
@@ -677,6 +684,11 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         // Terminal close intent precedes AI drain. Retain resources, but never resume frames
         // or graphics recovery while an uncooperative request is still owned by this host.
         _graphicsShutdown=true;_graphicsReview=null;
+#if NCMA_EXTENSIONS
+        // Revoke extension access before any underlying editor dependency or AI drain.
+        // Failed close retains the group and all downstream owners for explicit recovery.
+        _extensions?.Dispose(); _extensions = null;
+#endif
 #if NCMA_AI
         // Preserve every downstream owner until ignored-cancellation work actually drains.
         _gui?.ClearSecret();

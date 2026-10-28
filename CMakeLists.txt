@@ -417,6 +417,9 @@ if(NCMA_BUILD_MANAGED)
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Application.Tests/Ncma.Application.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
+                    "${CMAKE_SOURCE_DIR}/managed/Ncma.Extensions.Tests/Ncma.Extensions.Tests.csproj"
+                    --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
+            COMMAND "${DOTNET_EXECUTABLE}" build
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Interop.Tests/Ncma.Interop.Tests.csproj"
                     --configuration $<IF:$<CONFIG:Debug>,Debug,Release> --nologo
             COMMAND "${DOTNET_EXECUTABLE}" build
@@ -808,6 +811,28 @@ if(NCMA_BUILD_TESTS)
         add_test(NAME NcmaApplicationServiceTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Application.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Application.Tests.dll" "${CMAKE_SOURCE_DIR}")
         set_tests_properties(NcmaApplicationServiceTests PROPERTIES TIMEOUT 30)
+        add_test(NAME NcmaExtensionTests COMMAND "${DOTNET_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/managed/Ncma.Extensions.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Extensions.Tests.dll")
+        set_tests_properties(NcmaExtensionTests PROPERTIES TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+        if(WIN32)
+            foreach(_ncma_extension_variant IN ITEMS extensions ai-extensions)
+                set(_ncma_extension_root "${CMAKE_BINARY_DIR}/m8-5-${_ncma_extension_variant}/bin")
+                add_test(NAME "NcmaExtensionTests.Editor.${_ncma_extension_variant}" COMMAND "${DOTNET_EXECUTABLE}"
+                    "${_ncma_extension_root}/Ncma.Editor.Services.Tests/$<IF:$<CONFIG:Debug>,debug,release>/Ncma.Editor.Services.Tests.dll"
+                    "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --extension-editor-tests)
+                add_test(NAME "NcmaExtensionTests.Player.${_ncma_extension_variant}" COMMAND "${DOTNET_EXECUTABLE}"
+                    "${_ncma_extension_root}/Ncma.Player.Tests/$<IF:$<CONFIG:Debug>,debug,release>/Ncma.Player.Tests.dll"
+                    "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins" --extension-player-tests)
+                set_tests_properties("NcmaExtensionTests.Editor.${_ncma_extension_variant}" "NcmaExtensionTests.Player.${_ncma_extension_variant}"
+                    PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.5;optional-extensions" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+            endforeach()
+            add_test(NAME NcmaExtensionTests.PackageContracts COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-ExtensionPackage.ps1")
+            set_tests_properties(NcmaExtensionTests.PackageContracts PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.5;package")
+            add_test(NAME NcmaExtensionTests.CapturedBuild COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-CapturedBuild.ps1")
+            set_tests_properties(NcmaExtensionTests.CapturedBuild PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.5;captured-build")
+        endif()
         add_test(NAME NcmaPoseManagedTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Animation.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Animation.Tests.dll" "$<TARGET_FILE:NcmaAnimationKernel>" "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>")
         set_tests_properties(NcmaPoseManagedTests PROPERTIES TIMEOUT 60)

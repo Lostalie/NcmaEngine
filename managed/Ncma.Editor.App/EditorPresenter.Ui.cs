@@ -147,6 +147,7 @@ internal sealed unsafe partial class EditorPresenter
         Region(94,"状态",_geometry.Status);Add(GuiItemKind.Label,30,label++,$"UI | {(ui.HasDraft?"草稿未提交":ui.Writable?"精确文件可写":"只读")} | {(_uiTest?"隔离测试":"编辑")} | 缩放 {_uiController.Zoom:P0} | Play {_page!.Play?.State.ToString()??"未运行"}");End();WorkspaceMenu(ref label,!_page.State.Frozen&&!_page.State.EditBusy);
         BuildWorkflows(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         BuildAiAuthoring(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
+        BuildExtensions(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         if (_showKeepPlay) BuildKeepPlayChanges(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         if (_showSchedule) BuildSchedule(_geometry.Status.Width,_geometry.Status.Y+28,ref label);
         if(!_uiFocusCanvas)WorkspaceSplitters();_frame=new(){StructSize=(uint)Marshal.SizeOf<GuiFrame>(),Frame=frameId,ViewGeneration=_generation,DocumentGeneration=_page.Stamp.Generation,Revision=_page.Stamp.Revision,ItemCount=(uint)_items.Count,TextBytes=(uint)_text.Count};return _frame;
@@ -258,7 +259,7 @@ internal sealed unsafe partial class EditorPresenter
     }
     private static UiColor ParseColor(string text){var parts=text.Split(' ',StringSplitOptions.RemoveEmptyEntries).Select(s=>float.Parse(s,CultureInfo.InvariantCulture)).ToArray();if(parts.Length!=4)throw new ArgumentException("Four RGBA channels required.");return new(parts[0],parts[1],parts[2],parts[3]);}
     public bool UiKeyboard(uint key,string text,bool reverse,bool captured){
-        if(_showKeepPlay||AiAuthoringModal)return true; // Consume before Program can route input to another workspace.
+        if(_showKeepPlay||AiAuthoringModal||_showExtensions)return true; // Consume before Program can route input to another workspace.
         if(!_uiMode||!_uiTest||captured||_uiPreview?.Prepared!=true||_uiPreview.Runtime is not {} runtime)return false;
         UiInputKind? kind=text.Length>0?UiInputKind.Text:key switch{258=>UiInputKind.Tab,257 or 32=>UiInputKind.Activate,259=>UiInputKind.Backspace,263=>UiInputKind.Left,262=>UiInputKind.Right,_=>null};
         if(kind is null)return false;runtime.Input(runtime.Stamp,[new(kind.Value,++_uiSequence,default,text,reverse)]);Span<UiAction> actions=new UiAction[128];int count=runtime.Drain(runtime.Stamp,actions);for(int i=0;i<count;i++){_uiObservations.Enqueue(actions[i].Action+" / "+actions[i].Kind);while(_uiObservations.Count>8)_uiObservations.Dequeue();}return true;

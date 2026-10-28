@@ -37,6 +37,9 @@ internal static class FieldContractTests
         }
         Visit(typeof(Ncma.Characters.CharacterData).Assembly);
         Visit(typeof(TransformData).Assembly);
+        // Optional production components must obey the same differential contract.
+        // This is test enrollment only; default product composition stays unchanged.
+        Visit(typeof(Ncma.Extensions.Hosting.ExtensionSampleTag).Assembly);
         var actual = assemblies.Values.SelectMany(a => a.GetTypes()).Where(t => t.IsDefined(typeof(GenerateComponentAttribute), false))
             .ToDictionary(t => t.Assembly.GetName().Name + ":" + t.FullName, StringComparer.Ordinal);
         Check(actual.Count != 0, "No generated components discovered.");

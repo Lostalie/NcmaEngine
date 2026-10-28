@@ -69,7 +69,10 @@ function Assert-DeploymentContents([string]$Workspace, [string]$Directory, [swit
         if ($seen.ContainsKey($file.path) -or $file.path -eq 'deployment-manifest.json') { continue }
         if ($file.path -notin @('out/user/logs/editor-candidate.jsonl','out/user/logs/editor-candidate.jsonl.1','out/user/editor/preferences.json','out/user/editor/workspace.json','sample/out/user/logs/editor-candidate.jsonl','sample/out/user/logs/editor-candidate.jsonl.1','sample/out/user/editor/preferences.json','sample/out/user/editor/workspace.json') -or $file.size -gt 1048576 -or ($file.path.EndsWith('/workspace.json') -and $file.size -gt 4096)) { throw "Unknown install file: $($file.path)" }
     }
-    Assert-AiCandidateDependencies $Workspace $Directory $isAi
+    $extensionFlag = $manifest.PSObject.Properties['extensionsEnabled']
+    if ($null -ne $extensionFlag -and $extensionFlag.Value -isnot [bool]) { throw 'Invalid extension flag.' }
+    $isExtensions = $null -ne $extensionFlag -and $extensionFlag.Value -eq $true
+    Assert-AiCandidateDependencies $Workspace $Directory $isAi $isExtensions
     return $actual
 }
 
@@ -146,7 +149,8 @@ function Invoke-DeploymentHost([string]$Executable, [string]$Arguments, [string]
 }
 
 function Invoke-EditorDeployment {
-    param([string]$Workspace, [string]$Package, [string]$Destination, [scriptblock]$AfterBackup, [switch]$EnableAI)
+    param([string]$Workspace, [string]$Package, [string]$Destination, [scriptblock]$AfterBackup, [switch]$EnableAI, [switch]$EnableExtensions,
+        [string]$ExpectedCandidateManifestSha256, [string]$ExpectedInstalledManifestSha256)
     $Workspace = [IO.Path]::GetFullPath($Workspace)
     $Destination = Assert-DeploymentPath $Workspace $Destination
     $testPrefix = Join-Path $Workspace 'out\verification\deployment-tests\'
@@ -155,8 +159,13 @@ function Invoke-EditorDeployment {
     if (-not $Package.StartsWith((Join-Path $Workspace 'out\package\') , [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsupported package root.' }
     $packageFiles = @(Assert-DeploymentContents $Workspace $Package)
     $candidate = Read-DeploymentManifest $Package
+    if ($ExpectedCandidateManifestSha256 -and ($ExpectedCandidateManifestSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+        (Get-DeploymentHash (Join-Path $Package 'deployment-manifest.json')) -cne $ExpectedCandidateManifestSha256)) { throw 'Approved candidate manifest changed.' }
     $expectedProduct = if ($EnableAI) { 'NcmaEngine-ai-editor-candidate' } else { 'NcmaEngine-editor-candidate' }
     if ($candidate.product -cne $expectedProduct -or $candidate.production -isnot [bool] -or $candidate.production) { throw 'Candidate variant mismatch; AI deployment requires explicit EnableAI.' }
+    $extensionFlag = $candidate.PSObject.Properties['extensionsEnabled']
+    $isExtensions = $null -ne $extensionFlag -and $extensionFlag.Value -eq $true
+    if ($isExtensions -ne [bool]$EnableExtensions) { throw 'Candidate variant mismatch; extension deployment requires explicit EnableExtensions.' }
     $deployRoot = Assert-DeploymentPath $Workspace $(if ($Destination -eq (Join-Path $Workspace 'out\bin')) { Join-Path $Workspace 'out\deployment' } else { Join-Path (Split-Path $Destination) 'deployment' })
     New-Item -ItemType Directory -Path $deployRoot -Force | Out-Null
     $journalPath = Join-Path $deployRoot 'editor-journal.json'
@@ -172,6 +181,8 @@ function Invoke-EditorDeployment {
     }
     $oldFiles = @()
     if (Test-Path -LiteralPath $Destination) {
+        if ($ExpectedInstalledManifestSha256 -and ($ExpectedInstalledManifestSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+            (Get-DeploymentHash (Join-Path $Destination 'deployment-manifest.json')) -cne $ExpectedInstalledManifestSha256)) { throw 'Approved installed manifest changed.' }
         $legacy = -not (Test-Path -LiteralPath (Join-Path $Destination 'deployment-manifest.json'))
         $oldFiles = @(Assert-DeploymentContents $Workspace $Destination -Legacy:$legacy)
         foreach ($file in $oldFiles) {
@@ -199,6 +210,7 @@ function Invoke-EditorDeployment {
         Copy-Item -LiteralPath (Join-Path $Destination $file.path) -Destination $target
     }
     $manifest = Read-DeploymentManifest $stage
+    if ($ExpectedCandidateManifestSha256 -and (Get-DeploymentHash (Join-Path $stage 'deployment-manifest.json')) -cne $ExpectedCandidateManifestSha256) { throw 'Staged candidate differs from approved manifest.' }
     $manifest.production = $true
     $manifest.product = if ($EnableAI) { 'NcmaEngine-ai-editor' } else { 'NcmaEngine-editor' }
     [IO.File]::WriteAllText((Join-Path $stage 'deployment-manifest.json'), ($manifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
@@ -209,6 +221,7 @@ function Invoke-EditorDeployment {
     Write-DeploymentJournal $journalPath $journal
     $moved = $false
     try {
+        if ($ExpectedInstalledManifestSha256 -and (Get-DeploymentHash (Join-Path $Destination 'deployment-manifest.json')) -cne $ExpectedInstalledManifestSha256) { throw 'Installed manifest changed before replacement.' }
         if (Test-Path -LiteralPath $Destination) { Move-Item -LiteralPath $Destination -Destination $backup; $moved = $true }
         $journal.phase = 'BackedUp'; Write-DeploymentJournal $journalPath $journal
         if ($AfterBackup) { & $AfterBackup }

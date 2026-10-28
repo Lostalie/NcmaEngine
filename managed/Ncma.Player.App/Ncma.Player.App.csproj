@@ -5,6 +5,14 @@
     <ApplicationIcon>../../engine/build/resources/NcmaEngine.ico</ApplicationIcon>
     <PublishTrimmed>false</PublishTrimmed><PublishAot>false</PublishAot><PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
+  <!-- Same generated component module as optional Editor; never loads editor tools. -->
+  <ItemGroup Condition="'$(NcmaEnableExtensions)' == 'true'">
+    <ProjectReference Include="../Ncma.Extensions.Hosting/Ncma.Extensions.Hosting.csproj" />
+  </ItemGroup>
+  <Target Name="CheckOptionalExtensionPlayer" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(NcmaEnableExtensions)' != '' and '$(NcmaEnableExtensions)' != 'false' and '$(NcmaEnableExtensions)' != 'true'" Text="NcmaEnableExtensions must be true or false." />
+    <Error Condition="'$(NcmaEnableExtensions)' == 'true' and '$(ArtifactsPath)' == ''" Text="Extension Player requires an explicit isolated ArtifactsPath." />
+  </Target>
   <ItemGroup>
     <InternalsVisibleTo Include="Ncma.Rendering.Tests" />
     <ProjectReference Include="../Ncma.Application.Runtime/Ncma.Application.Runtime.csproj" />
