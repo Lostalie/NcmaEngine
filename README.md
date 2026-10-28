@@ -1,5 +1,40 @@
 # NcmaEngine
 
+面向模型与动画驱动动作游戏的 C# 主引擎：**ECS 运行时 + 组合式 GameObject 门面 + C++ 性能插件 + 可选 AI／Python 专长模块**。编辑器、Player、领域工具和 AI 提案共享受检服务边界，不以模型权限替代人工审批。
+
+## 当前状态（2026-10-28）
+
+- **开发主线：M8.6-C2b-2。** 固定构建参数、审批许可、输出所有权、离线还原输入检查与只读工具链观测已实现并编译；真实构建租约、实际启动与还原/输出路径映射仍待接通，随后 C3 回执、D 编辑器串联、E 整体测试。当前 M8.6 不是已验收功能。
+- **架构基础：E6 和 M8.3 已有本机双配置自动验收。** E6 清单各 131/131；M8.3 各 131/131，不能替代用户素材、人工、其他 SDK/VS 宿主和目标机性能证据。
+- **AI：** DeepSeek 本地兼容端点／远程 HTTPS 适配、用户级连接配置和正式 AI 工作区已实现；M8.4 F6/F7 的整体复验和真实模型人工闭环仍有开放项。M8.5 扩展新增组双配置各 8/8 是专项结论，不等于整引擎验收。
+- **工作区：** 唯一源码／构建／测试／部署目录 `F:\NcmaEngineRelease\source`；旧 `F:\NcmaEngine` 只读归档，不回写或复用其产物。
+- **已安装版本：** 新工作区 `out/bin/NcmaEngine.exe` 为 Release AI 版、扩展关闭；151 文件安装集和 DX11 8 帧烟测已核验。最新 M8.6 开发代码尚未部署，不能把源码能力等同于当前 EXE。
+
+[技术框架](#技术框架) · [功能边界](#当前能力与边界) · [路线图](docs/ROADMAP.md) · [M8.6 当前方案](docs/M8_6_IMPLEMENTATION_PLAN.md)
+
+<details>
+<summary>历史开发与部署记录（保留原结果；其中“下一步／最新”仅指当时状态）</summary>
+
+最新开发（2026-10-28）：**M8.6-C2b-2 固定构建命令与输出所有权已实现并编译，未测试**。原审批绑定命令指纹，单次启动许可后独占创建输出，日志限额与显式排空关闭；新增 8 组用例未运行。完整 Services.Tests＋Editor Debug 0 警告/0 错误。实际 SDK／离线依赖核验和真实构建适配仍未接通，C2b-2 尚未完成；下一步补齐这些前提，不能把参数生成当成构建成功。正式 EXE 未变，无部署/提交推送。[详细方案](docs/M8_6_IMPLEMENTATION_PLAN.md)。以下为此前记录。
+
+最新开发（2026-10-28）：**M8.6-C2b-1 真实准备进程与持锁桥接已实现、编译，尚未运行验证**。原 C1 在独立准备进程中核验捕获，宿主复制并保留原锁句柄；固定脚本集合、私有管道身份和进程排空检查已接入代码。最终 Services.Tests＋Editor Debug 零警告错误，两份 PowerShell 文件双宿主语法解析通过；新增 6 组用例未运行。下一步 C2b-2 实际构建及审批队列接线；当前不能启动游戏代码构建，C2/C 未完成。EXE 未变，无部署/提交推送。[详细方案](docs/M8_6_IMPLEMENTATION_PLAN.md)。以下为此前记录。
+
+最新开发（2026-10-28）：**M8.6-C2a 内部审批与作业生命周期基础已实现、编译，未测试**。单次/60 秒审批、有界队列、取消/超时与排空、关闭失败保留；未接真实构建进程或人工 UI。12 组合成租约用例已登记；最终 Services.Tests＋Editor Debug 编译零警告错误。下一步 C2b 真实进程适配，C2/C 整体仍未完成；测试统一阶段末，正式 EXE 未变，无部署/提交推送。[详细方案](docs/M8_6_IMPLEMENTATION_PLAN.md)。以下为此前记录。
+
+最新开发（2026-10-28）：**M8.6-C1 捕获输入准备已实现，尚未运行验证**。复用原捕获文件锁，固定项目与作业路径；准备不启动进程、不授予执行许可。两份脚本语法解析通过，既有完整 Services.Tests+Editor Debug 编译零警告错误；7 组新文件用例留至阶段末测试。下一步 C2 人工审批/异步构建，C 阶段尚未完成；未部署、提交或推送。[方案](docs/M8_6_IMPLEMENTATION_PLAN.md)。以下为此前记录。
+
+最新开发（2026-10-28）：**M8.6-B 构建/验证证据合同已实现并编译，未测试**。精确绑定任务、捕获输入、配方、配置及工具；编译成功与测试通过分开，缺失/跳过/部分成功不能冒充通过。新增 7 组用例，完整 Services.Tests+Editor Debug 零警告错误。下一步 C 受控作业与真实文件核验，测试统一阶段末；本轮未部署或提交推送。[详细方案](docs/M8_6_IMPLEMENTATION_PLAN.md)。以下为此前记录。
+
+当前开发（2026-10-28）：**M8.6-A 可审计工作流已实现并编译，未测试**。计划修订、精确审批、请求与结果、停止原因均记录到原账本，保留原工具独立权限；新增 4 组用例，完整 Services.Tests+Editor Debug 编译零警告错误。下一步 B 构建/验证证据合同，测试统一 M8.6 末执行。本轮未更新 EXE、提交或推送。[详细方案](docs/M8_6_IMPLEMENTATION_PLAN.md)。
+
+## 当前唯一工作区（2026-10-28）
+
+**新目录正式部署已完成**：Release AI 版、151 个安装文件，包校验与真实 DX11 8 帧烟测通过，journal 为 `Complete`（代次 `69274b950c50443aba1427724484cf03`）。EXE SHA256：`379AA113435A8E7F44CC02120BDE9DF95AA5129E1DD154005712694A1E9B1C3F`。旧安装 154 文件、默认版备份和旧 journal 核对未变；这是新目录首次安装，没有新代次旧版备份。未提交推送，也未把烟测等同于整体验收。
+
+源码、构建、测试和部署统一使用 `F:\NcmaEngineRelease\source`；正式程序入口为该目录下的 `out\bin\NcmaEngine.exe`。请在 IDE 中打开新目录，并从该目录执行命令。旧 `F:\NcmaEngine` 仅作只读证据归档，不再编辑、构建、测试、部署或运行；不回写、不清理旧安装及备份。本次只读约束不代表已修改 Windows ACL。
+
+新树基于 `6e7a68d` 独立克隆，Git origin 指向 GitHub，不再指向旧树。历史相对证据路径默认属于旧归档，不代表测试已在新树重跑。新候选已完成捕获副本构建、真实 EXE 包校验与 DX11 8 帧烟测，并非完整回归、人工或目标机性能验收。切换证据保存在新树 `out/verification/workspace-cutover-2026-10-28`，正式安装状态以新树 `out/deployment/editor-journal.json` 为准。下方为历史记录。
+
 2026-10-28：M8.5-D 已按明确清单拆分归因，仅 `extension-new` 给测试结论，Debug/Release 各 **8/8 通过**；141 项 legacy 引用 M8.4 F6/F7，10 项环境阻塞记本轮“未执行（环境）”。历史 158 项结果完整保留，新增捕获构建入口后库存为 159。**不是全引擎或发布安装验收通过，正式 EXE 未更新。** [逐项清单与本轮证据](docs/M8_5_D_ATTRIBUTION.md)。下方为历史进度。
 
 2026-10-27 构建输入修正：M8.5 扩展改为**捕获副本编译**。人工审阅包绑定完整源码副本、编译清单及包回执，构建不回读原源码；无捕获绑定的旧索引不能安装。专项构建 5/5、合同双配置各 51/51、实际 Editor 15/15；真实托管图和单个 C++ 插件已从副本编译通过。**未重跑当前完整解决方案/整库存/全部发布，M8.5 尚未整体验收。** [捕获构建链路与证据](docs/M8_5_IMPLEMENTATION_PLAN.md#13-捕获副本成为唯一源码输入2026-10-27)。下方为此前记录。
@@ -218,26 +253,47 @@ E5-A自动功能与基线证据已完成：同一955源码，Debug/Release各89/
 
 M8.2 交付的是可选本机工具模块，不是模型推理服务；worker 开发环境须单独准备，不随默认 Editor/Player 部署。范围、测试与剩余门禁见 [M8.2 交付记录](docs/M8_2_DELIVERY_REPORT.md)。ECS 的实施边界、分片与验收见 [详细合同](docs/ECS_IMPLEMENTATION_PLAN.md) 和 [E0 基线记录](docs/ECS_E0_BASELINE.md)。
 
-## 架构
+</details>
+
+## 技术框架
 
 ```text
-C# Editor.App                         C# Player.App / Headless
-  Editor.Services / Editor.Core         Application.Runtime
-       唯一 EditSession / Undo          Gameplay / Scripting
-                    Scene / Runtime
-           World + 扁平 GameObject + Component + Systems
-                  /                         \
- C# 渲染/物理/动画/UI 高层服务          可选 Modules 异步契约
-       版本化批量 C ABI                  Modules.Grpc → Python worker
- C++ 渲染/物理/数值内核/ImGui             有界复制结果，不直接修改 World
+C# Editor.App → Editor.Services / Editor.Core → EditSession / Undo
+                         │                       │
+                 受检 AI 提案／人工差异确认     SceneDocument（编辑记录、UUID）
+                         │                       │ 显式 BakeRuntime
+可选 AI / Modules ← 有界观察与结果       RuntimeSceneImage → RuntimeSceneInstance
+ DeepSeek HTTP / gRPC Python worker                      │
+                                           C# World / Entity / 组件池
+                                     GameObject 门面、Behaviour、Systems
+                                    CodeGen 元数据／声明依赖 ScheduleGraph
+                                                       │
+                         Editor / Player 共用 Application.Runtime 与领域服务
+                                                       │
+                              C# 渲染／物理／动画／UI 策略与资源生命周期
+                                                       │ 版本化批量 C ABI
+                              C++ DX11、Box2D/Jolt、数值内核、GLFW/ImGui
 ```
 
-- C# 拥有对象与组件存储、游戏规则、调度、场景/资产元数据、序列化、编辑器业务、权限和事务。
-- 场景是扁平对象列表，GameObject 是空容器，Transform 可选；没有场景父子树或变换继承。骨骼、动画图和 UI 文档内部层级独立。
+- C#／.NET 8 承担游戏逻辑和大部分引擎功能。运行时以 `World + Entity + 强类型组件池` 为唯一权威；`Ncma.GameObject` 是同一 Entity 的高级门面，不复制第二份组件状态。场景是扁平对象列表、空容器加行为组件、Transform 可选；骨骼、动画图、UI 的内部层级不变成场景父子树。
+- **编辑与运行分离：** `SceneDocument` 只持有规范化编辑记录和 UUID 索引，不拥有 World/Entity 槽或模拟时钟。显式烘焙产生运行镜像，Play／Player 加载独立运行实例；运行改动必须经差异审阅、人工确认和原 EditSession 事务回写，不自动同步或新增 Undo。
+- **代码生成：** `Ncma.CodeGen` 为 netstandard2.0 Roslyn 分析器，使用 4.x 包；`Ncma.CodeGen.Shared` 共享字段/schema 规则，编译符号与运行反射为适配层。每程序集聚合模块通过唯一 `CompositionRegistry.Build()` 注册；生成访问仍走原 World／调度权限，不为整个仓库锁死某一 SDK。
+- **调度：** `ScheduleGraph` 声明组件和资源读写，默认确定性串行、显式受限 worker 执行；暂存结果后统一受检提交。未声明的旧 System／Behaviour 不自动获得并行安全。跨阶段传值使用显式资源／输出通道，不把每帧初始组件快照当成上一阶段最新写入。
 - C++ 执行性能关键工作；保留原生 Dear ImGui 表现插件，不恢复 C++ World、旧 Editor 主入口或 hostfxr 游戏桥。
-- Python 只用于独立工具、AI 或其他专长模块，不是 Behaviour 语言。默认 Editor/Player 不依赖 Python、Modules 或 gRPC 客户端。
+- Python 只用于独立工具、AI 或其他专长模块，不是 Behaviour 语言。可选 gRPC worker 已实现工具链路；pythonnet／ZeroMQ 未实现。默认产品不要求 Python 解释器或推理服务；AI、扩展是独立显式构建变体。
 - AI 与人工编辑共用经授权、可撤销的领域命令。模型返回提案，不能自行批准、写 live World/GPU 或在 tick 内同步等待。
 - 游戏网络是独立可选服务，不向组件加入 RPC、复制标记或网络所有权；Python 模块通信不是游戏联网系统。
+
+| 技术层 | 当前选型及边界 |
+| --- | --- |
+| 托管核心 | C#／.NET 8；场景、ECS、生命周期、资产、动画策略、编辑业务与授权 |
+| 原生与构建 | C++20／CMake，VS C++ 工具链；MSBuild／dotnet 构建托管工程，版本化 C ABI 连接插件 |
+| 窗口与编辑器表现 | GLFW、原生 Dear ImGui；C# 生成业务状态/交互，非第二套 C++ 编辑器逻辑 |
+| 数学、日志、物理 | `engine/sdk` 的 Eigen、spdlog、Box2D、JoltPhysics；各由对应原生边界消费 |
+| 资产与动画 | FBX／ufbx 导入、UUID／资源代次、运行包及 GPU 蒙皮；C# 动画图/状态/混合与原生数值内核分工 |
+| 渲染 | 当前交付 DX11；共享框架、独立轻量 2D 与可定制 3D，Vulkan/OpenGL 只保留扩展方向 |
+| AI 与工具 | 可选 DeepSeek HTTP 适配、传输中立 Modules、gRPC Python worker、独立 MCP 授权工具；连接配置属于用户而非项目，密钥不进仓库 |
+| 扩展与验证 | 可信 C# 启动注册；人工审阅捕获源码，从副本编译；构建、测试、安装分别审批，M8.6 自动作业仍在实施 |
 
 [架构合同及历史增量](docs/ARCHITECTURE.md) · [路线图与阶段记录](docs/ROADMAP.md)
 
@@ -247,14 +303,15 @@ C# Editor.App                         C# Player.App / Headless
 
 | 模块 | 当前能力 | 仍需完成 |
 | --- | --- | --- |
-| Runtime / C# 游戏逻辑 | 扁平 World、UUID、组件、固定步 Systems、Behaviour、输入/信号/运行命令、隔离 Play、暂停/单步/重载 | 大规模场景与低分配性能验证；不承诺任意私有脚本状态迁移 |
+| Runtime / C# 游戏逻辑 | ECS 强类型池、Entity 代次、GameObject 门面、受检查询/结构批次、增量固定步；编辑/运行分离、生成元数据及声明依赖调度 | E5-D 目标机性能未验收；不承诺任意私有脚本迁移、全帧 0B 或所有逻辑自动并行 |
 | 场景与编辑器 | C# 主入口；唯一场景事务/Undo；场景、资产、动画、UI 工作区；原生 ImGui 呈现 | 真实输入法/DPI/窗口与第三方 MCP 人工验收、部分制作闭环 |
 | 资产与角色 | 持久异步 FBX 导入、UUID/代次、受检 NCA、重导入/引用、DX11 场景 GPU 蒙皮；Player 使用运行包而非解析 FBX | 完整 Prefab 保存/实例/覆盖/恢复、缩略图与材质浏览、冷启动 cook、用户 DCC/素材覆盖 |
 | 动作与动画 | 托管图与节点制作、执行/混合/动作序列等已交付切片，角色运动/碰撞约束根运动与战斗候选 | 完整动作游戏人工试玩、真实素材/性能验收；不声称 UE5 全功能等价 |
 | 渲染 | 当前只实现 DX11；场景 PBR、GPU 蒙皮、阴影、IBL、Tone/Bloom、公开 C# 管线定制及图像/资源/恢复测试切片 | 真实设备故障、用户素材、完整性能/长稳验收；Vulkan/OpenGL 绘制留后续版本 |
 | 2D / UI / HUD | 独立 UI 文档、布局/控件、字体与 2D 绘制、作者工作区、受检 HUD 包、Editor/Player 交互和可撤销选择发布 | 完整 IME/复杂文字与通用 2D 应用覆盖、人工操作及目标性能验收 |
 | 物理 | Box2D/Jolt 薄插件，C# 高层服务、固定步运动权威与角色接线 | 通用游戏碰撞事件/武器连续 hitbox 等制作需求和联合验收；不默认启用所有物理功能 |
-| AI / 特殊模块 | 已有 scoped MCP、提案/权限/事务工具；M8.1 有界异步契约；M8.2 本机 gRPC/Python 工具 worker、搬移与完整回归通过自动候选门禁 | 正式宿主模块入口、真实模型推理、领域提案整合和自动化工作流；pythonnet/ZeroMQ 未实现 |
+| AI / 特殊模块 | M8.3 正式领域提案→差异→人工确认→原事务；M8.4 DeepSeek 适配与用户级连接工作区；独立 scoped MCP 和 gRPC 工具 worker | M8.4 整体复验、真实模型人工闭环、M8.6 作业接线及 M8.7 联合验收；pythonnet/ZeroMQ 未实现 |
+| 托管扩展 | 版本/依赖/生命周期、可选启动注册、受检源码审阅与捕获副本编译；新增组专项双配置 8/8 | 任意 DLL 热加载未实现且不作为默认方向；人工完整制作/安装与历史门禁保留 |
 | 发布 | 受检 Editor/Player 包、清单/hash、搬移与恢复测试基础 | M9 正式 Windows 游戏导出/发布闭环；微信小游戏、Android、iOS 后续版本 |
 | 网络 | 独立服务边界已确定 | 正式游戏网络服务未实现 |
 
@@ -277,7 +334,8 @@ LaunchEditor.cmd
 - Skip 参数仅用于开发检查，**不部署正式 EXE**。最新部署配置替换上一配置；备份和日志保留在 `out/deployment`。
 - 部署中断用 `scripts/Recover-Editor.bat` 显式恢复，不删除日志或强制覆盖绕过检查。
 - M8.2 完整开发回归需要预先准备锁定依赖的 `out/modules/python312` 环境；不会自动安装 Python、pip 包或模型。可选 .NET gRPC 客户端使用锁定 NuGet 依赖，首次还原需要可用包源/缓存。
-- 普通已发布 Editor/Player 不需要上述 worker 环境；可选模块客户端另行打包，尚未接入正式 AI 面板。
+- 普通默认产品不需要上述 worker 环境；AI 版正式工作区和可选模块宿主已有接线，具体能力以产品清单和人工授权为准。连接/密钥配置不随项目或仓库提交。
+- **当前 M8.6 实施期不要把上述完整 Build 入口当成“无部署编译”。** 当前仅做隔离捕获编译，阶段末才统一测试；正式更新必须另行按受检部署流程执行。
 
 [完整构建说明](docs/BUILDING.md) · [独立模块边界](docs/PYTHON_MODULES.md) · [M8 分阶段计划](docs/M8_IMPLEMENTATION_PLAN.md)
 
@@ -285,13 +343,15 @@ LaunchEditor.cmd
 
 | 路径 | 职责 |
 | --- | --- |
-| `managed/Ncma.Runtime`、`Ncma.Scene`、`Ncma.Gameplay` | 权威 World、场景文档、游戏生命周期 |
+| `managed/Ncma.Runtime`、`Ncma.Scene`、`Ncma.Gameplay` | 权威 ECS、独立编辑/运行模型、游戏生命周期 |
+| `managed/Ncma.CodeGen`、`Ncma.CodeGen.Shared` | Roslyn 生成器、编译/运行共用规则；Shared 为链接源码而非独立运行时项目 |
 | `managed/Ncma.Editor.Core`、`Ncma.Editor.Services`、`Ncma.Editor.App` | 编辑命令/历史、业务组装、正式入口 |
 | `managed/Ncma.Application.Runtime`、`Ncma.Player.App` | Editor/Player 共用运行服务和独立 Player |
 | `managed/Ncma.Assets*`、`Ncma.Asset.Import*` | 资产身份、作者流程、异步导入与运行资产 |
 | `managed/Ncma.Animation*`、`Ncma.Movement`、`Ncma.Characters` | 动画、运动与动作角色 |
 | `managed/Ncma.Rendering*`、`Ncma.Scene.Rendering`、`Ncma.Ui*` | 托管渲染组合、场景呈现、UI |
-| `managed/Ncma.Modules*`、`python/worker` | 可选异步模块与真实工具 worker，不是游戏脚本 |
+| `managed/Ncma.AI`、`Ncma.Editor.Modules`、`Ncma.Modules*`、`python/worker` | 可选模型/领域桥、异步模块及工具 worker，不是 Python 游戏脚本 |
+| `managed/Ncma.Extensions*` | 可选可信托管扩展与宿主生命周期 |
 | `engine/source`、`engine/sdk` | 原生插件/内核及 Eigen、GLFW、ImGui、spdlog、Box2D、Jolt、ufbx |
 | `scripts`、`python/src/ncma_tools`、`docs` | 构建/验证/部署工具与合同/交付证据 |
 
