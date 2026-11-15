@@ -45,7 +45,8 @@ internal static class GraphInspectionTests
             _moduleMilliseconds = elapsed;
             Owner.DomainProposals!.PumpModules();
         }
-        internal Fixture(string output, string repository, bool authoring=false)
+        internal Fixture(string output, string repository, bool authoring=false, string? mcpAssembly=null, string? dotnetExecutable=null,
+            Action<EditorWorkspace,string>? configureProject=null)
         {
             Owner = new("Graph inspection", workflowTime: Time);
             Guid project=Guid.NewGuid();
@@ -57,9 +58,10 @@ internal static class GraphInspectionTests
             System.IO.File.WriteAllBytes(File, AnimationGraphCodec.Encode(d)); Workspace = new(Owner);
             if(authoring){Writer=new(Workspace,Root,project,Time);Owner.ConfigureAssets(Root,project,1,graphScope:Writer.Scope);Graphs=Writer.Reads;}else Graphs = new(Workspace, Root, Time);
             View = new(Workspace, null, Root, filePicker: kind => kind == Ncma.Platform.LocalFileKind.OpenAnimationGraph ? File : null, workspaceStyle: true);if(Writer is not null)View.AttachGraphAuthoring(Writer);else View.AttachGraphReads(Graphs);
+            configureProject?.Invoke(Workspace,Root); // test-only composition BEFORE real endpoint metadata/pairing
             Owner.ConfigureEndpoint(true, Root);
-            var launch = new ProcessStartInfo("dotnet") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
-            launch.ArgumentList.Add(Path.Combine(repository, "out/managed/editor-mcp/Ncma.Editor.Mcp.dll")); launch.ArgumentList.Add("--descriptor"); launch.ArgumentList.Add(Owner.Endpoint!.DescriptorPath);
+            var launch = new ProcessStartInfo(dotnetExecutable ?? "dotnet") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            launch.ArgumentList.Add(mcpAssembly ?? Path.Combine(repository, "out/managed/editor-mcp/Ncma.Editor.Mcp.dll")); launch.ArgumentList.Add("--descriptor"); launch.ArgumentList.Add(Owner.Endpoint!.DescriptorPath);
             Client = Process.Start(launch)!; _errors = Client.StandardError.ReadToEndAsync();
             Send(new { jsonrpc = "2.0", id = ++_id, method = "initialize", @params = new { protocolVersion = "2025-11-25" } });
             Client.StandardInput.WriteLine("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"); Client.StandardInput.Flush();

@@ -72,8 +72,8 @@ internal static partial class Program
             try
             {
                 // Source installation and original dependency code cannot be reopened by the child.
-                using var originalSource = File.Open(Path.Combine(repository, "python/worker/ncma_module_worker.py"), FileMode.Open, FileAccess.Read, FileShare.None);
-                using var originalGrpc = File.Open(Path.Combine(repository, "out/modules/python312/Lib/site-packages/grpc/__init__.py"), FileMode.Open, FileAccess.Read, FileShare.None);
+                using var originalSource = File.Open(PythonWorkerFile(repository, "ncma_module_worker.py"), FileMode.Open, FileAccess.Read, FileShare.None);
+                using var originalGrpc = File.Open(PythonEnvironmentFile(repository, "Lib/site-packages/grpc/__init__.py"), FileMode.Open, FileAccess.Read, FileShare.None);
                 Start();
                 var first = host.Capture();
                 Check(first.ProcessId > 0 && first.ProcessId != Environment.ProcessId && first.ResourcesRetained, "Actual owned direct Python process.");
@@ -159,7 +159,7 @@ internal static partial class Program
         }
         // Generated standalone fixture only: bounded malformed readiness must not leave a pipe
         // stalled or an untracked child. No product switch introduces this behavior.
-        var actualScript = File.ReadAllText(Path.Combine(repository, "python/worker/ncma_module_worker.py"));
+        var actualScript = File.ReadAllText(PythonWorkerFile(repository, "ncma_module_worker.py"));
         File.WriteAllText(script, "import sys\nsys.stdout.write('x' * 5000 + '\\n')\nsys.stdout.flush()\n" + actualScript, new UTF8Encoding(false));
         using (var noisy = new LocalWorkerHost(WorkerInstallation.Inspect(bundle), context, () => true))
         {
@@ -191,7 +191,7 @@ internal static partial class Program
     private static string PrepareOwnedBundle(string repository)
     {
         // Generated test distribution, not an installed shipping product or redistribution claim.
-        var sourcePython = File.ReadLines(Path.Combine(repository, "out/modules/python312/pyvenv.cfg"))
+        var sourcePython = File.ReadLines(PythonEnvironmentFile(repository, "pyvenv.cfg"))
             .Single(line => line.StartsWith("executable = ", StringComparison.Ordinal))[13..];
         var pythonRoot = Path.GetDirectoryName(sourcePython)!;
         var destination = Path.GetFullPath(Path.Combine(repository, "out/verification/m8-2/owned-worker", Guid.NewGuid().ToString("N"), "独立 worker"));
@@ -219,11 +219,11 @@ internal static partial class Program
                 }
             }
         }
-        var site = Path.Combine(repository, "out/modules/python312/Lib/site-packages");
+        var site = PythonEnvironmentFile(repository, "Lib/site-packages");
         foreach (var name in new[] { "grpc", "grpcio-1.84.0.dist-info", "typing_extensions-4.16.0.dist-info" })
             CopyTree(Path.Combine(site, name), Path.Combine(destination, "site-packages", name));
         File.Copy(Path.Combine(site, "typing_extensions.py"), Path.Combine(destination, "site-packages/typing_extensions.py"), false);
-        File.Copy(Path.Combine(repository, "python/worker/ncma_module_worker.py"), Path.Combine(destination, "ncma_module_worker.py"), false);
+        File.Copy(PythonWorkerFile(repository, "ncma_module_worker.py"), Path.Combine(destination, "ncma_module_worker.py"), false);
         File.WriteAllText(Path.Combine(destination, "python312._pth"), WorkerInstallation.PythonPathFile, new UTF8Encoding(false));
         return destination;
     }

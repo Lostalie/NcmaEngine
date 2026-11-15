@@ -26,12 +26,12 @@ internal static class PackageChecks
         if (!process.WaitForExit(25000)) { process.Kill(true); throw new Exception("Package watchdog"); }
         string diagnostics = stdout.Result + stderr.Result; Console.WriteLine(diagnostics.Trim()); return process.ExitCode;
     }
-    public static string[] Run(string root, string configuration, string output, string plugins)
+    public static string[] Run(string root, string configuration, string output, string plugins, string verificationWorkspace)
     {
 
         using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
         using var playerRunOwner1 = new Ncma.Player.App.PlayerRunner();
-        string indexPath = Path.Combine(root, "out/verification/m2-7", configuration, "packages.json");
+        string indexPath = Path.Combine(verificationWorkspace, "out/verification/m2-7", configuration, "packages.json");
         using var index = JsonDocument.Parse(File.ReadAllText(indexPath));
         PhysicsPackageChecks.Run(index.RootElement,output);
         string sourceNull = index.RootElement.GetProperty("playerNull").GetString()!;

@@ -27,6 +27,32 @@ public sealed class DeepSeekChatAdapter : IModuleAdapter, IDisposable
     private bool active, disposed;
     private AiCallDiagnostic? diagnostic;
     public AiCallDiagnostic? LastDiagnostic { get { lock (gate) return diagnostic; } }
+    private readonly int observationOwner = Environment.CurrentManagedThreadId;
+    private AiTransportObservations? observations;
+    private bool observationStarted, invoked;
+
+    // Explicit local diagnostic only, once before ANY invocation (including refused calls).
+    // Neither method sends/cancels/stops requests or changes admission and credential policy.
+    public void BeginObservation(ObservationIdentity identity, int capacity = 4096)
+    {
+        ArgumentNullException.ThrowIfNull(identity); VerifyObservationOwner();
+        lock (gate) {
+            if (disposed || invoked || observationStarted) throw new InvalidOperationException("ai_transport_observation_boundary");
+            observations = new(identity, capacity); observationStarted = true;
+        }
+    }
+    public AiTransportObservationReport SealObservation()
+    {
+        VerifyObservationOwner();
+        lock (gate) {
+            var capture = observations ?? throw new InvalidOperationException("ai_transport_observation_absent");
+            var report = capture.Seal(); observations = null; return report;
+        }
+    }
+    private void VerifyObservationOwner()
+    {
+        if (Environment.CurrentManagedThreadId != observationOwner) throw new InvalidOperationException("ai_transport_observation_owner");
+    }
 
     public DeepSeekChatAdapter(AiConnectionSnapshot connection, ModuleOperation operation, AiSessionCredential? credential = null)
         : this(connection, operation, credential, null) { }
@@ -54,11 +80,14 @@ public sealed class DeepSeekChatAdapter : IModuleAdapter, IDisposable
         ArgumentNullException.ThrowIfNull(request);
         long started = Stopwatch.GetTimestamp();
         bool ownsActive = false;
+        AiTransportObservations? observation = null; long invocation = 0;
         byte[]? buffer = null;
         int requestBytes = 0, responseBytes = 0; int? status = null;
         string code = "adapter_failed"; string? exceptionType = null; AiTokenUsage? usage = null;
         try {
             lock (gate) {
+                invoked = true; observation = observations;
+                if (observation is not null) invocation = observation.Begin();
                 // Every admission refusal publishes its own diagnostic through finally.
                 // Preserve admission precedence; refused calls never own the active slot.
                 if (disposed) { code = "adapter_disposed"; return Reply(request, ModuleReplyStatus.Rejected); }
@@ -145,6 +174,7 @@ public sealed class DeepSeekChatAdapter : IModuleAdapter, IDisposable
                     Stopwatch.GetElapsedTime(started).TotalMilliseconds, usage) { ExceptionType = exceptionType };
                 // A busy/disposed/duplicate/budget rejection must not release another call.
                 if (ownsActive) active = false; // Only after actual IO/decoding/disposal exits, not merely cancellation requested.
+                observation?.Complete(invocation, request, started, Stopwatch.GetTimestamp(), ownsActive, diagnostic);
             }
         }
     }

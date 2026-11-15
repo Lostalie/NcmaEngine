@@ -1,11 +1,15 @@
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][ValidateSet('Debug','Release')][string]$Configuration,
     [Parameter(Mandatory=$true)][ValidateSet('DefaultCpu','DefaultDx11','AiCpu','AiDx11','AiConfiguredCpu','AiConfiguredDx11')][string]$Case,
-    [switch]$HostProbe, [string]$ProbeDll, [string]$DotnetExecutable)
+    [switch]$HostProbe, [string]$ProbeDll, [string]$DotnetExecutable,
+    [string]$VerificationWorkspace,[string]$CapturedBuildRoot,[string]$ExpectedCaptureManifestSha256)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'AiVerificationInputs.ps1')
-$workspace=[IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+. (Join-Path $PSScriptRoot 'PackageVerificationContext.ps1')
+$verificationContext=Open-PackageVerificationContext $PSScriptRoot $VerificationWorkspace $CapturedBuildRoot $ExpectedCaptureManifestSha256
+try {
+$workspace=$verificationContext.Workspace
 $output=Join-Path $workspace ('out/verification/m8-4/relocated-editor/'+$Configuration+'/'+[Guid]::NewGuid().ToString('N'))
 $null=Assert-DeploymentPath $workspace $output
 if(Test-Path -LiteralPath $output){throw 'Fresh evidence directory required'}
@@ -32,11 +36,13 @@ Write-Host "BEGIN relocated Editor / $Case"
 try {
     $ai=$Case.StartsWith('Ai',[StringComparison]::Ordinal);$cpu=$Case.EndsWith('Cpu',[StringComparison]::Ordinal)
     $indexPath=Join-Path $workspace "out/verification/m8-4/$Configuration/packages.json"
-    $sourceHash=Get-AiCandidateInputHash @(Get-AiCandidateSourceInputs $workspace)
+    $sourceHash=if($null -ne $verificationContext.Capture){$verificationContext.SourceInputsSha256}else{Get-AiCandidateInputHash @(Get-AiCandidateSourceInputs $workspace)}
     $entry=Get-AiCandidateIndexedProduct $workspace $indexPath $Configuration $ai $sourceHash
+    Assert-PackageVerificationCapture $verificationContext $entry.index
     $source=$entry.path
     Assert-AiCandidateManifest $workspace $source $Configuration $ai $sourceHash $entry.manifestSha256
     $manifest=Read-DeploymentManifest $source
+    Assert-PackageVerificationCapture $verificationContext $manifest
     $moved=Join-Path $output ('relocated '+[char]0x5019+[char]0x9009+' '+$Case)
     $null=Assert-DeploymentPath $workspace $moved
     New-Item -ItemType Directory -Path $moved|Out-Null
@@ -62,6 +68,7 @@ try {
     if($cpu){$start.Arguments+=' --cpu-only'}
     if($HostProbe){
         $verification=Assert-AiVerificationReceipt $workspace $Configuration $sourceHash
+        Assert-PackageVerificationCapture $verificationContext $verification
         $expectedProbe=[IO.Path]::GetFullPath((Join-Path $workspace ("out/build/windows-ninja-"+$Configuration.ToLowerInvariant()+"/m8-4-ai/bin/Ncma.Editor.Services.Tests/"+$Configuration.ToLowerInvariant()+"/Ncma.Editor.Services.Tests.dll")))
         if(-not [IO.Path]::IsPathRooted($ProbeDll) -or [IO.Path]::GetFullPath($ProbeDll) -cne $expectedProbe -or -not (Test-Path -LiteralPath $ProbeDll -PathType Leaf)){throw 'Exact current-configuration probe required'}
         if(-not [IO.Path]::IsPathRooted($DotnetExecutable) -or -not (Test-Path -LiteralPath $DotnetExecutable -PathType Leaf)){throw 'Explicit dotnet prerequisite required'}
@@ -99,6 +106,7 @@ try {
         if((Get-DeploymentHash $path) -cne $file.sha256){throw 'Published payload changed during apphost execution'}
     }
     [ordered]@{case=$Case;configuration=$Configuration;sourceInputsSha256=$sourceHash;manifestSha256=$entry.manifestSha256;
+        verificationWorkspace=$workspace;capturedBuildRoot=$CapturedBuildRoot;captureManifestSha256=$ExpectedCaptureManifestSha256;
         actualRelocatedApphost=(-not $HostProbe);actualRelocatedProductHost=[bool]$HostProbe;sourceFilesLocked=$files.Count;minimalEnvironment=$true;noInferenceRequested=$true;
         osNetworkIsolationProven=$false;humanUiAcceptance=$false;relocatedEditPlayProven=[bool]$HostProbe;exitCode=$child.ExitCode}|
         ConvertTo-Json|Set-Content -LiteralPath "$output/result.json" -Encoding utf8
@@ -112,3 +120,4 @@ try {
 }
 Write-Host "SUMMARY relocated Editor: total=1, failed=$([int]$failed); evidence=$output"
 if($failed){exit 1};exit 0
+} finally { if($null -ne $verificationContext.Capture){$verificationContext.Capture.Pins.Dispose()} }

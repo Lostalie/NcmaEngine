@@ -31,10 +31,10 @@ internal static partial class Program
             // No dependency loading from default ALC/test output/NuGet is permitted by CheckedClientContext.
             foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
                 pins.Add(File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None));
-            foreach (var path in new[] { "python/worker/ncma_module_worker.py", "out/modules/python312/Lib/site-packages/grpc/__init__.py",
-                         "out/modules/python312/Scripts/python.exe" })
-                pins.Add(File.Open(Path.Combine(repository, path), FileMode.Open, FileAccess.Read, FileShare.None));
-            var basePython = File.ReadLines(Path.Combine(repository, "out/modules/python312/pyvenv.cfg"))
+            foreach (var path in new[] { PythonWorkerFile(repository, "ncma_module_worker.py"), PythonEnvironmentFile(repository, "Lib/site-packages/grpc/__init__.py"),
+                         PythonEnvironmentFile(repository, "Scripts/python.exe") })
+                pins.Add(File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None));
+            var basePython = File.ReadLines(PythonEnvironmentFile(repository, "pyvenv.cfg"))
                 .Single(line => line.StartsWith("executable = ", StringComparison.Ordinal))[13..];
             pins.Add(File.Open(basePython, FileMode.Open, FileAccess.Read, FileShare.None));
             foreach (var name in ClientAssemblies)

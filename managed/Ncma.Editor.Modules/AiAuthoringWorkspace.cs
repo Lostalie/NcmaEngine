@@ -10,7 +10,7 @@ namespace Ncma.Editor.Modules;
 
 // Optional product-owned UI controller. Construction opens no transport; configuration does
 // not probe a server. Remote credentials come only from an explicit trusted local prompt.
-public sealed class AiAuthoringWorkspace
+public sealed partial class AiAuthoringWorkspace
 {
     private readonly int owner = Environment.CurrentManagedThreadId;
     // Connection configuration belongs to the editor session, not a project. A missing
@@ -125,6 +125,7 @@ public sealed class AiAuthoringWorkspace
         if (workflow is null) { draining = false; return true; }
         draining = true;
         if (!workflow.TryUnregister()) return false;
+        observations?.Retire(workflow);
         workflow = null; draining = false; return true;
         }
         finally { releasing = false; }
@@ -139,6 +140,7 @@ public sealed class AiAuthoringWorkspace
     public void BeginConnectionDiagnostic(AiConnectionDiagnosticReview review, string fingerprint, bool humanReviewed)
     {
         Active(); if (connectionDiagnostic is null || draining) throw new EditRejectedException("diagnostic_review_required");
+        ChargeMeasurementAttempt();
         configuring = true;
         try { connectionDiagnostic.Begin(review, fingerprint, humanReviewed); }
         finally { configuring = false; }
@@ -163,6 +165,8 @@ public sealed class AiAuthoringWorkspace
             animationWorkspace: intent == AiAuthoringIntent.AnimationGraph ? animation : null,
             uiWorkspace: intent == AiAuthoringIntent.UiDocument ? ui : null,
             metadataWorkspace: intent == AiAuthoringIntent.AssetMetadata ? metadata : null);
+        authoringStarted = true;
+        observations?.Attach(workflow);
         try {
             if (intent == AiAuthoringIntent.AssetMetadata)
                 return workflow.PrepareMetadata(exactTarget, metadataKind!.Value, instruction, "metadata-settings-draft", "1", MetadataTemplate);
@@ -179,7 +183,7 @@ public sealed class AiAuthoringWorkspace
         catch { workflow.Cancel(); throw; }
     }
     public void Send(AiDomainRequestReview displayed, string fingerprint, bool humanReviewed)
-    { Active(); Required().ApproveAndBegin(displayed, fingerprint, humanReviewed); }
+    { Active(); var current = Required(); ChargeMeasurementAttempt(); current.ApproveAndBegin(displayed, fingerprint, humanReviewed); }
     // Explicit refresh only. Never read a complete observation/diff during frame drawing.
     public DomainProposalReview? RefreshReview() { Active(); return Required().Review; }
     // Explicit action only: original checked resource preparation may perform local IO.

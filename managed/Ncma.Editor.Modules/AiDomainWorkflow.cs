@@ -28,6 +28,23 @@ public sealed class AiDomainWorkflow : IDomainModuleController
     private AiDomainRequestReview? outbound;
     private bool closing, disposed, unregistered;
     private ulong requestEpoch;
+    private AiWorkflowObservations? observations;
+    private bool observationStarted, requestBegan;
+    // Trusted host only, no presenter/MCP path. Explicit once, before first attempted bridge Begin.
+    public void BeginObservation(ObservationIdentity identity, int requestCapacity = 256, int eventCapacity = 4096, int transportCapacity = 4096)
+    {
+        RequireActive();
+        if (observationStarted || requestBegan) throw new InvalidOperationException("ai_workflow_observation_boundary");
+        var capture = new AiWorkflowObservations(identity, Intent, requestCapacity, eventCapacity);
+        adapter.BeginObservation(identity, transportCapacity);
+        bridge.ObserveWith(capture); observations = capture; observationStarted = true;
+    }
+    public AiWorkflowObservationReport SealObservation()
+    {
+        Verify();
+        var capture = observations ?? throw new InvalidOperationException("ai_workflow_observation_absent");
+        var report = capture.Seal(adapter.SealObservation()); observations = null; return report;
+    }
     public AiAuthoringIntent Intent { get; }
     public DomainModuleTarget Target => bridge.Target;
     public string Status { get { Verify(); return disposed ? "closed" : closing ? "draining" :
@@ -136,7 +153,7 @@ public sealed class AiDomainWorkflow : IDomainModuleController
         if (outbound is null || request.RequestId != outbound.Observation.RequestId ||
             request.Target != Target || !outbound.ConfigurationCurrent)
             throw new EditRejectedException("ai_send_review_foreign_or_stale");
-        bridge.Begin(request);
+        requestBegan = true; bridge.Begin(request);
     }
     public void Pump()
     {
@@ -155,7 +172,12 @@ public sealed class AiDomainWorkflow : IDomainModuleController
     {
         RequireActive();
         if (!ReferenceEquals(displayed, Review)) throw new EditRejectedException("ai_result_review_foreign_or_stale");
-        return domains.Confirm(displayed, fingerprint, humanReviewed, confirmedDelete, bindingsReviewed);
+        long started = observations is null ? 0 : System.Diagnostics.Stopwatch.GetTimestamp();
+        CapabilityResult result;
+        try { result = domains.Confirm(displayed, fingerprint, humanReviewed, confirmedDelete, bindingsReviewed); }
+        catch { observations?.Confirm(displayed, started, null, domains); throw; }
+        observations?.Confirm(displayed, started, result, domains);
+        return result;
     }
     public AnimationGraphDefinition CaptureAnimationCandidate() {
         RequireActive(); return (animation ?? throw new InvalidOperationException("ai_animation_intent_required")).CaptureCandidate();
@@ -164,7 +186,9 @@ public sealed class AiDomainWorkflow : IDomainModuleController
         RequireActive(); return (animation ?? throw new InvalidOperationException("ai_animation_intent_required")).CaptureResources();
     }
     public DomainProposalReview ApproveAnimationResources(AnimationGraphWriteReview displayed, string fingerprint, Guid exactGraph, bool humanReviewed) {
-        RequireActive(); return (animation ?? throw new InvalidOperationException("ai_animation_intent_required")).ApproveResources(displayed, fingerprint, exactGraph, humanReviewed);
+        RequireActive();
+        var review = (animation ?? throw new InvalidOperationException("ai_animation_intent_required")).ApproveResources(displayed, fingerprint, exactGraph, humanReviewed);
+        observations?.Review(review.ProposalId, review); return review;
     }
     public void Cancel() {
         Verify(); requestEpoch = checked(requestEpoch + 1);

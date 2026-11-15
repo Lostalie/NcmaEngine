@@ -1,8 +1,12 @@
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][ValidateSet('Compile','Inventory','Tests')][string]$Mode,
- [Parameter(Mandatory=$true)][ValidateSet('Debug','Release')][string]$Configuration,[string]$CapturedBuildRoot)
+ [Parameter(Mandatory=$true)][ValidateSet('Debug','Release')][string]$Configuration,[string]$CapturedBuildRoot,
+ [string]$DependenciesRoot,[string]$ExpectedDependenciesSha256,[string]$DotnetExecutable)
 # No root Build script, publish, deployment, model connection or credential access.
 $ErrorActionPreference='Stop';Set-StrictMode -Version Latest
+if($Mode -eq 'Compile' -and (-not $CapturedBuildRoot -or -not $DependenciesRoot -or -not $ExpectedDependenciesSha256 -or -not $DotnetExecutable)){
+ throw 'Compile requires an explicit capture and separate -Scope verification dependency preparation with exact receipt SHA and tool; prepare before invoking this stage'
+}
 . (Join-Path $PSScriptRoot 'ExtensionPackage.ps1')
 . (Join-Path $PSScriptRoot 'M8_5-TestAttribution.ps1')
 $workspace=[IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot));Set-Location -LiteralPath $workspace
@@ -42,8 +46,8 @@ try{
    Save 'build-report.json' @{sourceInputsSha256=$sourceHash;capturedBuildRoot=$capture.Root;captureManifestSha256=$capture.ManifestSha256;configuration=$Configuration;projects=$projects;exitCode=$exit;warnings=$(if($zero){0}else{-1});errors=$(if($zero){0}else{-1})}
    Get-Content "$evidence/build.log" -Tail 10
    if($exit -ne 0 -or -not $zero){throw 'Full managed compile did not pass 0/0 gate'}
-   & (Join-Path $PSScriptRoot 'Prepare-ExtensionVerification.ps1') -Configuration $Configuration -CapturedBuildRoot $capture.Root
-   & (Join-Path $PSScriptRoot 'Prepare-AiVerification.ps1') -Configuration $Configuration -DotnetExecutable (Get-Command dotnet.exe).Source -CapturedBuildRoot $capture.Root
+   & (Join-Path $PSScriptRoot 'Prepare-ExtensionVerification.ps1') -Configuration $Configuration -CapturedBuildRoot $capture.Root -DotnetExecutable $DotnetExecutable -DependenciesRoot $DependenciesRoot -ExpectedDependenciesSha256 $ExpectedDependenciesSha256
+   & (Join-Path $PSScriptRoot 'Prepare-AiVerification.ps1') -Configuration $Configuration -DotnetExecutable $DotnetExecutable -CapturedBuildRoot $capture.Root -DependenciesRoot $DependenciesRoot -ExpectedDependenciesSha256 $ExpectedDependenciesSha256
   }
   Inventory {
    & $env:ComSpec /d /s /c ('call "{0}" >nul && "{1}" -S "{2}" -B "{3}" && "{1}" --build "{3}" --parallel 4' -f $vcvars,$cmake,$workspace,$build) *> "$evidence/native.log"

@@ -10,4 +10,10 @@
     <DefineConstants>$(DefineConstants);NCMA_EXTENSIONS</DefineConstants>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Ncma.Editor.App/Ncma.Editor.App.csproj" /><ProjectReference Include="../Ncma.Samples/Ncma.Samples.csproj" /><ProjectReference Include="../Ncma.Editor.Modules/Ncma.Editor.Modules.csproj" /></ItemGroup>
+  <!-- Host fixtures launch MCP and copy Gameplay. Build both from the SAME
+       captured graph; they are not references of the production Editor. -->
+  <ItemGroup>
+    <ProjectReference Include="../Ncma.Editor.Mcp/Ncma.Editor.Mcp.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
 </Project>

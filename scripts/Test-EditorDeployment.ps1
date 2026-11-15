@@ -1,9 +1,18 @@
-param([ValidateSet('Debug','Release')][string]$Configuration)
+param([ValidateSet('Debug','Release')][string]$Configuration,
+    [string]$VerificationWorkspace,[string]$CapturedBuildRoot,[string]$ExpectedCaptureManifestSha256)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'EditorDeployment.ps1')
-$deploymentTestWorkspace = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot))
+. (Join-Path $PSScriptRoot 'PackageVerificationContext.ps1')
+$verificationContext=Open-PackageVerificationContext $PSScriptRoot $VerificationWorkspace $CapturedBuildRoot $ExpectedCaptureManifestSha256
+try {
+$deploymentTestWorkspace = $verificationContext.Workspace
 $deploymentTestIndex = Get-Content -Raw -LiteralPath (Join-Path $deploymentTestWorkspace "out\verification\m2-7\$Configuration\packages.json") | ConvertFrom-Json
+Assert-PackageVerificationCapture $verificationContext $deploymentTestIndex
+foreach($product in @('editor','playerNull','playerDx11','playerNullPhysics','playerDx11Physics')){
+    $candidate=Assert-DeploymentPath $deploymentTestWorkspace $deploymentTestIndex.$product
+    Assert-PackageVerificationCapture $verificationContext (Read-DeploymentManifest $candidate)
+}
 $deploymentTestRoot = Assert-DeploymentPath $deploymentTestWorkspace (Join-Path $deploymentTestWorkspace ('out\verification\deployment-tests\' + [Guid]::NewGuid().ToString('N')))
 New-Item -ItemType Directory -Path $deploymentTestRoot | Out-Null
 function New-OldInstall([string]$Name) {
@@ -70,3 +79,4 @@ foreach ($player in @($deploymentTestIndex.playerNull, $deploymentTestIndex.play
 }
 Write-Host 'PASS Editor-only hashed import tools; all four Players exclude authoring/parser'
 Write-Host '[Ncma] Deployment regression: 8/8 passed.'
+} finally { if($null -ne $verificationContext.Capture){$verificationContext.Capture.Pins.Dispose()} }

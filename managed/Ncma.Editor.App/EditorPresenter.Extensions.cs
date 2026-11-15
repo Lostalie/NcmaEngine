@@ -123,7 +123,7 @@ internal sealed unsafe partial class EditorPresenter
 #else
         Add(GuiItemKind.Label,3,label++,"默认产品未包含扩展模块。需显式 NcmaEnableExtensions=true 的隔离构建。");
 #endif
-        Add(GuiItemKind.Label,3,label++,"示例只沿原组件聚合与事务入口；源码审阅不是写入/构建/安装授权；完整工程闭包、自定义组件发布、安装重启尚未实现。");
+        Add(GuiItemKind.Label,3,label++,"示例只沿原组件聚合与事务入口；源码审阅/工作流交接不是写入、构建或安装授权。完整捕获与发布沿原受检工具执行，安装与重启仍须独立人工批准；不支持热加载。");
         End();
     }
 }

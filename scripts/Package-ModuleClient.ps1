@@ -1,8 +1,19 @@
 [CmdletBinding()]
-param([Parameter(Mandatory = $true)][ValidateSet('Debug', 'Release')][string]$Configuration)
+param([Parameter(Mandatory = $true)][ValidateSet('Debug', 'Release')][string]$Configuration,
+ [string]$CapturedBuildRoot,[string]$DependenciesRoot,[string]$ExpectedDependenciesSha256,[string]$DotnetExecutable)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'OfflinePackageDependencies.ps1')
 $moduleWorkspace = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$moduleCapture=$null;$moduleDependencies=$null;$moduleSource=$moduleWorkspace;$modulePackages=Join-Path $moduleWorkspace 'out/modules/nuget'
+if(($CapturedBuildRoot -or $DependenciesRoot -or $ExpectedDependenciesSha256 -or $DotnetExecutable) -and
+ (-not $CapturedBuildRoot -or -not $DependenciesRoot -or -not $ExpectedDependenciesSha256 -or -not $DotnetExecutable)){throw 'Captured module publish requires explicit capture/tool and separate -Scope modules preparation with exact receipt SHA'}
+try {
+if($CapturedBuildRoot){
+ $moduleCapture=Open-CapturedBuild $moduleWorkspace $CapturedBuildRoot
+ $moduleDependencies=Open-OfflinePackageDependencies $moduleWorkspace $moduleCapture $DependenciesRoot $ExpectedDependenciesSha256 $Configuration $false $false $DotnetExecutable 'modules'
+ $moduleSource=$moduleCapture.Source;$modulePackages=Join-Path $moduleDependencies.Root 'packages'
+}
 $moduleGeneration = [Guid]::NewGuid().ToString('N')
 $moduleRoot = Join-Path $moduleWorkspace "out\package\modules\$Configuration\$moduleGeneration\client"
 $moduleIndexRoot = Join-Path $moduleWorkspace "out\verification\m8-2\$Configuration"
@@ -24,18 +35,25 @@ Assert-ModulePath $moduleIndexRoot
 if (Test-Path -LiteralPath $moduleRoot) { throw 'New module generation already exists.' }
 New-Item -ItemType Directory -Path $moduleRoot | Out-Null
 # Publish the actual optional library, never a test executable. No interpreter/model is installed.
+if($null -ne $moduleDependencies){
+ $job=@($moduleDependencies.Jobs|Where-Object id -ceq 'module-transport/Ncma.Modules.Grpc')
+ if($job.Count -ne 1 -or $job[0].operation -cne 'publish-library'){throw 'Prepared module publish job missing'}
+ $moduleArguments=@(Get-OfflinePackageArguments $moduleCapture $moduleDependencies.Root $Configuration $job[0])
+ & $DotnetExecutable publish (Join-Path $moduleSource $job[0].project) @moduleArguments --no-restore --output $moduleRoot
+}else{
 & dotnet publish (Join-Path $moduleWorkspace 'managed\Ncma.Modules.Grpc\Ncma.Modules.Grpc.csproj') `
     --configuration $Configuration --no-restore --output $moduleRoot --nologo `
     -p:PublishTrimmed=false -p:PublishAot=false -p:PublishSingleFile=false
+}
 if ($LASTEXITCODE -ne 0) { throw 'Optional client library publish failed.' }
 $moduleExpected = @('Ncma.Modules.dll', 'Ncma.Modules.Grpc.dll', 'Grpc.Core.Api.dll', 'Grpc.Net.Client.dll', 'Grpc.Net.Common.dll',
     'Microsoft.Extensions.DependencyInjection.Abstractions.dll', 'Microsoft.Extensions.Logging.Abstractions.dll') | Sort-Object
 $moduleActual = @(Get-ChildItem -LiteralPath $moduleRoot -File -Filter '*.dll' | Select-Object -ExpandProperty Name | Sort-Object)
 if (@(Compare-Object $moduleExpected $moduleActual).Count) { throw 'Unexpected optional client runtime closure.' }
-$moduleLockPath = Join-Path $moduleWorkspace 'managed\Ncma.Modules.Grpc\packages.lock.json'
+$moduleLockPath = Join-Path $moduleSource 'managed\Ncma.Modules.Grpc\packages.lock.json'
 Copy-Item -LiteralPath $moduleLockPath -Destination (Join-Path $moduleRoot 'packages.lock.json')
 $moduleLock = Get-Content -Raw -LiteralPath $moduleLockPath | ConvertFrom-Json
-$moduleArchiveLockPath = Join-Path $moduleWorkspace 'managed\Ncma.Modules.Grpc\package-archives.lock.json'
+$moduleArchiveLockPath = Join-Path $moduleSource 'managed\Ncma.Modules.Grpc\package-archives.lock.json'
 $moduleArchives = Get-Content -Raw -LiteralPath $moduleArchiveLockPath | ConvertFrom-Json
 Copy-Item -LiteralPath $moduleArchiveLockPath -Destination (Join-Path $moduleRoot 'package-archives.lock.json')
 if ($moduleArchives.Count -ne @($moduleLock.dependencies.'net8.0'.PSObject.Properties | Where-Object { $_.Value.type -ne 'Project' }).Count) { throw 'Archive lock closure mismatch.' }
@@ -48,7 +66,7 @@ foreach ($dependency in $moduleLock.dependencies.'net8.0'.PSObject.Properties) {
     if ($dependency.Value.type -eq 'Project') { continue }
     $name = $dependency.Name.ToLowerInvariant()
     $version = $dependency.Value.resolved
-    $source = Join-Path $moduleWorkspace "out\modules\nuget\$name\$version"
+    $source = Join-Path $modulePackages "$name\$version"
     Assert-ModulePath $source
     $archiveIdentity = @($moduleArchives | Where-Object { $_.id -ceq $dependency.Name -and $_.version -ceq $version })
     if ($archiveIdentity.Count -ne 1 -or $archiveIdentity[0].contentHash -cne $dependency.Value.contentHash -or
@@ -98,11 +116,21 @@ $moduleManifest = [ordered]@{ schemaVersion = 1; product = 'Ncma.Modules.Grpc'; 
     generation = $moduleGeneration; tfm = 'net8.0'; executionPlatform = 'Windows x64'; mode = 'optional-library';
     requirements = @('compatible .NET 8 runtime', 'separately approved isolated CPython 3.12 worker installation');
     editorIntegrated = $false; inferenceImplemented = $false; selfContainedVerified = $false; files = $moduleFiles }
+if($null -ne $moduleCapture){
+ $moduleManifest.capturedBuildRoot=$moduleCapture.Root;$moduleManifest.captureManifestSha256=$moduleCapture.ManifestSha256
+ $moduleManifest.sourceInputsSha256=$moduleCapture.Manifest.sourceInputsSha256
+ $moduleManifest.offlineDependenciesRoot=$moduleDependencies.Root;$moduleManifest.offlineDependenciesSha256=$moduleDependencies.ReceiptSha256
+}
 $moduleManifestPath = Join-Path $moduleRoot 'module-client-manifest.json'
 [IO.File]::WriteAllText($moduleManifestPath, ($moduleManifest | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 New-Item -ItemType Directory -Path $moduleIndexRoot -Force | Out-Null
 $moduleIndex = [ordered]@{ schemaVersion = 1; generation = $moduleGeneration; client = $moduleRoot;
     manifestSha256 = (Get-ModuleSha256 $moduleManifestPath) }
+if($null -ne $moduleCapture){
+ $moduleIndex.capturedBuildRoot=$moduleCapture.Root;$moduleIndex.captureManifestSha256=$moduleCapture.ManifestSha256
+ $moduleIndex.sourceInputsSha256=$moduleCapture.Manifest.sourceInputsSha256
+ $moduleIndex.offlineDependenciesRoot=$moduleDependencies.Root;$moduleIndex.offlineDependenciesSha256=$moduleDependencies.ReceiptSha256
+}
 $modulePending = Join-Path $moduleIndexRoot "client-$moduleGeneration.pending.json"
 [IO.File]::WriteAllText($modulePending, ($moduleIndex | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 $moduleIndexPath = Join-Path $moduleIndexRoot 'client-package.json'
@@ -111,3 +139,7 @@ if (Test-Path -LiteralPath $moduleIndexPath) {
     [IO.File]::Replace($modulePending, $moduleIndexPath, (Join-Path $moduleIndexRoot "client-$moduleGeneration.previous.json"))
 } else { [IO.File]::Move($modulePending, $moduleIndexPath) }
 Write-Host "[Ncma] Optional client library staged (no default deployment): $moduleRoot"
+}finally{
+ if($null -ne $moduleDependencies){$moduleDependencies.Pins.Dispose()}
+ if($null -ne $moduleCapture){$moduleCapture.Pins.Dispose()}
+}

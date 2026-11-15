@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "kind": "ncma.m87.manual-record-template-not-executable",
+  "purpose": "Blank manual evidence template; not authority, runtime input, a test report or completed sign-off.",
+  "preparedOn": "2026-11-12",
+  "runId": null,
+  "operator": null,
+  "startedAt": null,
+  "endedAt": null,
+  "candidate": {"configuration": null, "variant": null, "exeSha256": null, "manifestSha256": null, "fileSetRecordSha256": null, "captureId": null, "sourceInputsSha256": null, "recipeSha256": null, "dependencyReceiptSha256": null},
+  "environment": {"windows": null, "gpuDriver": null, "resolution": null, "dpi": null, "testProjectId": null},
+  "modelExecutionConsent": {"humanReference": null, "providerAndModel": null, "approvedContentScope": null, "maximumCalls": null, "costOrLocalResourceLimit": null, "stopConditions": null},
+  "rules": {"containsCredentials": false, "modelCallsAuthorizedByTemplate": false, "installAuthorizedByTemplate": false, "unknownMeasurementsAreNull": true, "ps51AfterFMainTerminalReport": true, "automaticEvidenceDoesNotSignHumanChecks": true},
+  "recordFields": ["operator", "time", "candidateIdentity", "expected", "actual", "requestSourceReviewReceiptRefs", "beforeAfterHashes", "evidencePathsAndSha256", "blockingReason", "originalFailureRef", "humanDecision"],
+  "allowedStatuses": ["not-executed", "passed", "failed", "blocked"],
+  "checks": [
+    {"id": "C3-01", "scope": "actual-apphost-desktop", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-02", "scope": "model-configuration-connection", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-03", "scope": "scene", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-04", "scope": "animation", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-05", "scope": "ui", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-06", "scope": "assets", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-07", "scope": "extensions-sdk", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null},
+    {"id": "C3-08", "scope": "cancellation-close-retention", "status": "not-executed", "actual": null, "evidence": [], "humanDecision": null}
+  ],
+  "testsExecuted": 0,
+  "humanAccepted": false,
+  "stageAccepted": false
+}

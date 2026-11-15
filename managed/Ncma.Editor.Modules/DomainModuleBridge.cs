@@ -18,6 +18,8 @@ public sealed class DomainModuleBridge : IDomainModuleController
     private ModuleSession? session;
     private ApprovedDomainRequest? request;
     private ModuleContext? context;
+    private AiWorkflowObservations? observations;
+    internal void ObserveWith(AiWorkflowObservations capture) { Verify(); observations = capture; }
     public DomainProposalReview? Review { get; private set; }
     public string Status { get; private set; } = "idle";
     public DomainModuleBridge(EditorDomainProposals domains, ModuleOperation operation, IModuleAdapter adapter)
@@ -49,6 +51,7 @@ public sealed class DomainModuleBridge : IDomainModuleController
         request = approved; Review = null;
         try {
             session = new(new([operation]), adapter, context);
+            observations?.Attach(session, approved);
             if (session.Submit(approved.RequestId, operation.Name, observation) != ModuleAdmission.Accepted)
                 throw new EditRejectedException("module_admission_failed");
             Status = "pending";
@@ -72,6 +75,7 @@ public sealed class DomainModuleBridge : IDomainModuleController
                         throw new EditRejectedException("ai_intent_domain_mismatch");
                 }
                 Review = stageResult is null ? domains.ReceiveModuleResult(request, bytes) : stageResult(request, bytes);
+                observations?.Review(request.RequestId, Review);
                 Status = Review is null ? "resource-review" : "review";
             }
             else { domains.CancelRequest(request); Status = outcome.Status.ToString(); }
@@ -99,6 +103,7 @@ public sealed class DomainModuleBridge : IDomainModuleController
         Verify(); if (session is null) return true;
         if (Status == "pending") throw new InvalidOperationException("Cancel or consume before closing.");
         if (!session.TryClose()) return false;
+        observations?.Detach(session);
         session = null; request = null; context = null; return true;
     }
 }

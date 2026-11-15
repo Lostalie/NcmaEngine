@@ -9,7 +9,7 @@ using Ncma.Editor.Core;
 using Ncma.Editor.Modules;
 using Ncma.Editor.Services;
 
-internal static class DomainWorkflowTests
+internal static partial class DomainWorkflowTests
 {
     private static void Check(bool condition) { if (!condition) throw new Exception("AI domain workflow assertion"); }
     private static void Reject(Action call) {
@@ -72,6 +72,10 @@ internal static class DomainWorkflowTests
     }
     internal static IEnumerable<(string, Action)> All()
     {
+        foreach (var test in ObservationCases()) yield return test;
+        foreach (var test in EvidenceCases()) yield return test;
+        foreach (var test in JointSceneCases()) yield return test;
+        foreach (var test in LateReplyReplacementCases()) yield return test;
         yield return ("C1 actual HTTP codec + mailbox + original scene review, separate commit and Undo/Redo", () => {
             using var f = new Fixture(); Check(f.Transport.Calls == 0);
             var send = f.Start(); Check(f.Transport.Calls == 0); f.Complete();

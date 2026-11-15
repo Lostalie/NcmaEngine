@@ -9,8 +9,7 @@ using Ncma.Assets.Authoring;
 using Ncma.Editor.Core;
 using Ncma.Scene;
 
-string suiteRoot = Path.Combine(AppContext.BaseDirectory, "asset-test-work", Guid.NewGuid().ToString("N"));
-Directory.CreateDirectory(suiteRoot); // Generated test inputs stay under ignored bin/. Kept for failure diagnosis.
+string suiteRoot = RetainedFixtureDirectory.Create("assets");
 int serial = 0;
 string TestRoot()
 {
@@ -58,6 +57,7 @@ JsonElement FileCommand(AssetRevisionClock clock, Guid? copy = null, ulong gener
 
 var tests = new (string Name, Action Run)[]
 {
+    ("Fixture directories are exclusive and outside immutable inputs", RetainedFixtureDirectory.VerifyIsolation),
     ("M7.2 bounded material roles, packed channels, defaults and diagnostics", () => {
         var material=MaterialDefinition.Default(Guid.NewGuid());Guid color=Guid.NewGuid(),normal=Guid.NewGuid(),data=Guid.NewGuid();
         Check(material.Metallic==0&&material.Roughness==.5f&&material.BaseColor==new LinearColor(1,1,1,1));

@@ -13,7 +13,7 @@ internal static class RuntimePackageChecks
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
     // Input is the trusted, completed import fixture. Output is a fresh test-owned runtime package,
     // not a merge into an installation and not a release/public distribution of private user assets.
-    internal static void Run(string repository, string source, string output, string configuration, ProjectConfiguration config, SceneDocumentSnapshot scene)
+    internal static void Run(string repository, string source, string output, string configuration, ProjectConfiguration config, SceneDocumentSnapshot scene, string verificationWorkspace)
     {
 
         using var playerRunOwner0 = new Ncma.Player.App.PlayerRunner();
@@ -22,9 +22,9 @@ internal static class RuntimePackageChecks
         using var playerRunOwner3 = new Ncma.Player.App.PlayerRunner();
         byte[] bytes = SceneAssetPreparation.CreateRuntimePackage(source, config.ProjectId, scene, []);
         Check(bytes.SequenceEqual(SceneAssetPreparation.CreateRuntimePackage(source, config.ProjectId, scene, [])), "Repeated package changed bytes");
-        string package = Path.Combine(repository, "out/package/m3-9", configuration, Guid.NewGuid().ToString("N"));
+        string package = Path.Combine(verificationWorkspace, "out/package/m3-9", configuration, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(package, "sample/assets"));
-        string referenceIndex = Path.Combine(repository, "out/verification/m2-7", configuration, "packages.json");
+        string referenceIndex = Path.Combine(verificationWorkspace, "out/verification/m2-7", configuration, "packages.json");
         using var baseline = JsonDocument.Parse(File.ReadAllBytes(referenceIndex)); string template = baseline.RootElement.GetProperty("playerDx11").GetString()!;
         DeploymentManifest.Validate(template);
         using(var shaderFiles=Ncma.Rendering.RuntimeShaderFileSet.Load(template)) {
@@ -43,7 +43,7 @@ internal static class RuntimePackageChecks
             File.Copy(Path.Combine(template, "plugins", name), Path.Combine(package, "plugins", name));
         File.WriteAllBytes(Path.Combine(package, "sample/assets/game.ncpak"), bytes);
         File.Copy(Path.Combine(source, "start.ncmascene"), Path.Combine(package, "sample/start.ncmascene"));
-        foreach (string name in new[] { "Ncma.Gameplay.Sample.dll", "Ncma.Gameplay.Sample.deps.json" }) File.Copy(Path.Combine(repository, "out/managed", name), Path.Combine(package, "sample", name));
+        foreach (string name in new[] { "Ncma.Gameplay.Sample.dll", "Ncma.Gameplay.Sample.deps.json" }) File.Copy(Path.Combine(verificationWorkspace, "out/managed", name), Path.Combine(package, "sample", name));
         config = config with { GameplayAssembly = "Ncma.Gameplay.Sample.dll", AssetPackage = "assets/game.ncpak" };
         var json = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
         string project = Path.Combine(package, "sample/game.ncmaproject"); File.WriteAllBytes(project, JsonSerializer.SerializeToUtf8Bytes(config, json));

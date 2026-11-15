@@ -11,7 +11,7 @@ using Ncma.Rendering;
 using Ncma.Assets.Authoring;
 using Ncma.Scene.Rendering;
 namespace Ncma.Editor.App;
-internal static class Program
+internal static partial class Program
 {
     internal static bool StartupCostsRequested(string[] args)
     {
@@ -34,6 +34,10 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (AiSceneMeasurementRetained) { Console.Error.WriteLine("measurement_shutdown_retained"); return 4; }
+        if (args.Length > 0 && args[0] == "--measure-ai-scene") return RunAiSceneMeasurement(args);
+        if (_idleInputs is not null || _idleDriver is not null) { Console.Error.WriteLine("measurement_shutdown_retained"); return 4; }
+        if (args.Length > 0 && args[0] == "--measure-cpu-idle") return RunCpuMeasurement(args);
         ApplicationLifetime? execution=null;
         LoopCostCapture? loopCosts=null;
         LoopCostStream? loopStream=null;
@@ -218,6 +222,9 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
     public void Start()
     {
         VerifyGraphicsOwner();
+#if NCMA_AI
+        _aiMeasurementStartup = true;
+#endif
         ObjectDisposedException.ThrowIf(_closed, this);
         if (_graphicsShutdown) throw new InvalidOperationException("Editor shutdown cannot be restarted.");
         startup?.Begin(StartupCall.PresentationStart);
@@ -237,7 +244,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         if(project is not null&&!cpuOnly)Ncma.Rendering.Scene.SceneEnvironmentPreflight.RequireShaderClosure(_shaderFiles,
             Ncma.Scene.SceneDocumentCodec.Decode(File.ReadAllBytes(project.StartupScenePath)));
         startup?.Phase(StartupStage.LogAndPlugins);
-        _userDataRoot = EditorUserDataPaths.ForHost(project?.Root, smoke || preview, _correlation);
+        _userDataRoot = EditorUserDataPaths.ForHost(project?.Root, smoke || preview || SceneMeasurementMode, _correlation);
         _log = EditorUserDataStartupException.OpenLog(_userDataRoot);
         _loader.Load(plugins, [
             new("ncma.platform", ModuleKind.Platform, "NcmaPlatform.dll", "NcmaPlatform.dll", 1, frameRateLimit is null?0u:1u, []),
@@ -259,7 +266,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         _window.SetIcon(Path.Combine(AppContext.BaseDirectory,"NcmaEngine.ico"));
         startup?.Phase(StartupStage.Preferences);
         string font=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts),"msyh.ttc");
-        if(!smoke && !preview)_preferences=new(Path.Combine(_userDataRoot,"editor/preferences.json"),font);
+        if(!smoke && !preview && !SceneMeasurementMode)_preferences=new(Path.Combine(_userDataRoot,"editor/preferences.json"),font);
         startup?.Phase(StartupStage.GuiCreate);
         _gui = new(_loader.Modules.Single(m => m.Kind == ModuleKind.Gui), _window, _preferences?.Current.FontPath??font,fontSize:_preferences?.Current.FontSize??18);
         startup?.Phase(StartupStage.Renderer);
@@ -279,10 +286,11 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
 #else
             components: global::Ncma.Runtime.CompositionRegistry.Build(global::NcmaEngine.Generated.ComponentModule.Module),
 #endif
-            validateComposition: RequireComposition,
+            validateComposition: RequireHostComposition,
             composePreparedPlay:ComposePreparedPlay,postProcessModules:_postModules,
             assetPolicy:cpuOnly ? SceneAssetPolicy.Simulation : SceneAssetPolicy.PresentationAndSimulation,
             beforePlayStop:()=>{VerifyGraphicsOwner();SuspendSceneHudInput();_pendingScene?.Dispose();_pendingScene=null;_pendingEditProjection=null;_playScene?.Dispose();_playScene=null;_retainedPlayAnimation?.Dispose();_retainedPlayAnimation=null;_playSession=_playAssets=Guid.Empty;});
+        InitializeAiSceneMeasurement();
         var characters=new CharacterInspectionService(_editor,()=>_characterRuntime);characters.Register();
         var graphRuntime=new AnimationRuntimeInspectionService(_editor,()=>_sceneRuntime,()=>_playScene);graphRuntime.Register();
         var runtimeInspection=new RuntimeInspectionService(_editor);runtimeInspection.Register();
@@ -332,18 +340,19 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
             _fbxPreview = new(Path.Combine(plugins, "NcmaNative.dll")); // lazy immutable kernel loading on trusted local import only
             _animationPreview = new(Path.Combine(plugins,"NcmaNative.dll"));
             _filePicker=new();
-            _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,_filePicker.Choose,_log,_assetWorkflow,workspaceStyle:true,projectName:project?.Configuration.Name);
+            _presenter = new(new EditorWorkspace(_editor), project?.GameplayAssemblyPath, project?.Root, _fbxPreview, _animationPreview,_preferences,SceneMeasurementMode ? null : _filePicker.Choose,_log,_assetWorkflow,workspaceStyle:true,projectName:project?.Configuration.Name,transientSceneMeasurement:SceneMeasurementMode);
             _presenter.AttachCharacters(characters);
             _presenter.AttachAnimationRuntime(graphRuntime);
             _presenter.AttachRuntimeInspection(runtimeInspection);
             if(_animationGraphs is not null)_presenter.AttachGraphAuthoring(_animationGraphs,_graphPreview);
             else if(project is not null)_presenter.AttachGraphReads(new AnimationGraphInspections(new EditorWorkspace(_editor),project.Root));
-            if(!smoke)_presenter.AttachLayout(new(Path.Combine(_userDataRoot,"editor/workspace.json")));
+            if(!smoke && !SceneMeasurementMode)_presenter.AttachLayout(new(Path.Combine(_userDataRoot,"editor/workspace.json")));
             if(_uiWorkspace is not null)_presenter.AttachUi(_uiWorkspace,_uiPreview);
 #if NCMA_AI
             // Always offer editor-session model configuration, even without a project.
             // Only project-dependent authoring receives the optional domain services.
             _aiAuthoring = CreateAiAuthoring(_editor.DomainProposals); // unconfigured, no transport or probe
+            AttachAiMeasurement();
             _presenter.AttachAiAuthoring(_aiAuthoring);
             _presenter.AttachAiSecretInput(frame => _gui.TakeSecret(frame,81,30), _gui.ClearSecret);
 #endif
@@ -693,6 +702,7 @@ internal sealed unsafe partial class CandidatePresentation(string plugins, Proje
         // Preserve every downstream owner until ignored-cancellation work actually drains.
         _gui?.ClearSecret();
         if (_aiAuthoring?.TryClose() == false) throw new InvalidOperationException("ai_shutdown_draining");
+        CompleteAiMeasurement();
         _aiAuthoring = null;
 #endif
         _windowSurface?.BeginShutdown();

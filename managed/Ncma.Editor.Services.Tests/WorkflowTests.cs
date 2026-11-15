@@ -16,7 +16,7 @@ using Ncma.Rendering;
 using Ncma.Ui;
 using Ncma.Ui.Rendering;
 
-internal static class WorkflowTests
+internal static partial class WorkflowTests
 {
     private sealed class FaultObserver(EditSession edit) : IEditorRequestMonitor
     {
@@ -53,7 +53,8 @@ internal static class WorkflowTests
     }
     internal static IEnumerable<(string, Action)> Cases(string output, string repository, string plugins)
     {
-        yield return ("M6.9 post-commit observer fault preserves original receipt and fail-stops subsequent execution", () => {
+        foreach (var item in AuditCases(output, repository)) yield return item;
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 4), () => {
             var document = new Ncma.Scene.SceneDocument("Monitor fault"); var edit = new EditSession(document);
             using var endpoint = new EditorEndpoint(edit, repository); var observer = new FaultObserver(edit); endpoint.AttachRequestMonitor(observer);
             var descriptor = Wire.Decode<EndpointDescriptor>(File.ReadAllBytes(endpoint.DescriptorPath));
@@ -74,7 +75,7 @@ internal static class WorkflowTests
             Check(Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))).Code == "request_monitor_faulted");
             Check(document.ObjectCount == 1 && edit.State.UndoCount == 1);
         });
-        yield return ("M6.9 real stdio default deny/exact tickets/two approvals/revision receipts/no automatic Undo", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 5), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); var service = f.Owner.Workflows!; Guid obj = Guid.NewGuid();
             object[] steps = [Step("ncma.scene.transaction", new { operations = new[] { new { op = "create", objectId = obj, name = "Reviewed" } } }), Step("ncma.scene.validate", new { }, "valid")];
             Check(f.Call(EditorWorkflows.Capability, new { op = "propose", plan = Plan(Guid.NewGuid(), steps) }, Guid.NewGuid()).GetProperty("isError").GetBoolean());
@@ -92,7 +93,7 @@ internal static class WorkflowTests
             byte[] before = f.Owner.Document.CaptureBytes(); int undo = f.Owner.Edit.State.UndoCount; service.Cancel(id); service.Revoke();
             Check(before.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Edit.State.UndoCount == undo && service.Capture().Single().Receipts.Length == 2 && f.Owner.Play is null);
         });
-        yield return ("M6.9 failed actual isolated assertion blocks successor/repair cannot alter assertion policy", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 6), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository, true); Registry(f); f.ApproveUi(); f.Writer!.Sequences.PrepareTrusted();
             Guid test = Guid.NewGuid(); var sequence = new AnimationSequenceCase(.1, 1, [], [new(1, AnimationSequenceAssertionKind.RootX, Guid.Empty, 999)]);
             Guid id = Propose(f, [Step(AnimationSequenceSchemas.Propose, new { graphId = f.Graph, caseId = test, test = AnimationSequenceCodec.Encode(sequence) }),
@@ -104,7 +105,7 @@ internal static class WorkflowTests
                 input = new { graphId = f.Graph, caseId = test, section = "timeline", offset = 0, limit = 1 } }, Guid.NewGuid()).GetProperty("isError").GetBoolean());
             var after = f.Owner.Workflows.Capture().Single(); Check(before.Hash == after.Hash && after.RepairCount == 0 && after.Index == 1 && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Play is null);
         });
-        yield return ("M6.9 two active plans/foreign owner/registry tamper and stale review rejection", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 7), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); var service = f.Owner.Workflows!;
             var registry = service.CaptureRegistry(); Reject(() => service.ApproveRegistry(registry with { Audience = [] }, registry.Fingerprint, true)); Registry(f);
             Guid a = Propose(f, [Step("ncma.scene.inspect", new { })]), b = Propose(f, [Step("ncma.scene.inspect", new { })]), c = Propose(f, [Step("ncma.scene.inspect", new { })]);
@@ -114,7 +115,7 @@ internal static class WorkflowTests
             Reject(() => service.Approve(review, review.Fingerprint, true)); Check(Execute(f, ticket).GetProperty("isError").GetBoolean());
             Check(service.Capture().All(p => p.Receipts.Length == 0));
         });
-        yield return ("M6.9 actual NCA graph propose/approved transaction/validation/isolated assertion workflow", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 8), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository, true); var writer = f.Writer!; Registry(f); f.ApproveUi();
             Guid proposal = Guid.NewGuid(), test = Guid.NewGuid(); ulong assets = f.Owner.Assets!.Clock.Revision;
             var sequence = new AnimationSequenceCase(.1, 3, [], [new(1, AnimationSequenceAssertionKind.EventCount, Guid.Empty, 0)]);
@@ -134,7 +135,7 @@ internal static class WorkflowTests
             Data(Execute(f, run)); var final = f.Owner.Workflows!.Capture().Single(); Check(final.Status == "completed" && final.Receipts.Length == 6 && final.Receipts.All(x => x.AssertionPassed));
             Check(AnimationGraphCodec.Decode(File.ReadAllBytes(f.File)).Name == "Workflow verified" && f.Owner.Edit!.State.UndoCount == 1 && scene.SequenceEqual(f.Owner.Document.CaptureBytes()) && f.Owner.Play is null);
         });
-        yield return ("M6.9 cancel queued approved mutation retains tombstone and commits nothing", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 9), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); Registry(f);
             Guid id = Propose(f, [Step("ncma.scene.transaction", new { operations = new[] { new { op = "create", objectId = Guid.NewGuid(), name = "Never committed" } } })]);
             Approve(f, id); var t = Next(f, id); Check(Execute(f, t).GetProperty("isError").GetBoolean()); ApproveTool(f);
@@ -146,7 +147,7 @@ internal static class WorkflowTests
             using var result = JsonDocument.Parse(pending.Result!); Check(result.RootElement.GetProperty("result").GetProperty("isError").GetBoolean());
             Check(Execute(f, t).GetProperty("isError").GetBoolean()); Check(f.Owner.Document.ObjectCount == 0 && f.Owner.Edit!.State.UndoCount == 0 && f.Owner.Workflows.Capture().Single().Receipts.Length == 0);
         });
-        yield return ("M6.9 deadline/TTL/revoke-repair/audience/edit/endpoint/foreign ticket fences", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 10), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); Registry(f);
             Guid id = Propose(f, [Step("ncma.scene.validate", new { }, "valid")], 1); Approve(f, id); var ticket = Next(f, id); f.Time.Now = 1000;
             Check(Execute(f, ticket).GetProperty("isError").GetBoolean() && f.Owner.Workflows!.Capture().Single().Status == "expired");
@@ -163,7 +164,7 @@ internal static class WorkflowTests
             Check(Execute(f, ticket).GetProperty("isError").GetBoolean()); Registry(f); Guid last = Propose(f, [Step("ncma.scene.validate", new { })]); Approve(f, last); ticket = Next(f, last); f.Owner.Workflows!.Revoke();
             Check(Execute(f, ticket).GetProperty("isError").GetBoolean()); f.Owner.ConfigureEndpoint(false, f.Root); Check(f.Owner.Workflows.Capture().All(p => p.Receipts.Length == 0));
         });
-        yield return ("M6.9 finite repair/fresh complete approval/original receipts/copied data and closed budgets", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 11), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); Registry(f);
             Guid id = Propose(f, [Step("ncma.scene.inspect", new { }), Step("ncma.scene.object.inspect", new { objectId = Guid.NewGuid(), section = "summary" })]); Approve(f, id);
             Data(Execute(f, Next(f, id))); Check(Execute(f, Next(f, id)).GetProperty("isError").GetBoolean()); var service = f.Owner.Workflows!; Check(service.Capture().Single().Status == "failed");
@@ -179,7 +180,7 @@ internal static class WorkflowTests
             Check(f.Call(EditorWorkflows.Capability, new { op = "propose", plan = Plan(Guid.NewGuid(), [Step("ncma.scene.inspect", new { })]) }, Guid.NewGuid()).GetProperty("isError").GetBoolean());
             Check(service.Capture().Length == EditorWorkflows.MaxPlans);
         });
-        yield return ("M6.9 full UI-page guard/same MCP ledger and actual foreground ImGui", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 12), () => {
             using var f = new GraphInspectionTests.Fixture(output, repository); Click(f, 40, 8); Click(f, 24, 12); Click(f, 24, 70); Click(f, 61, 1);
             Check(f.View.Items.ToArray().Single(i => i.WidgetHigh == 61 && i.WidgetLow == 7).Enabled == 0); Click(f, 61, 8); ReviewUi(f);
             Guid id = Propose(f, Enumerable.Range(0,12).Select(_ => Step("ncma.scene.validate", new { }, "valid")).ToArray()); f.Build(); Click(f, 61, 1000); Click(f, 61, 3);
@@ -202,7 +203,7 @@ internal static class WorkflowTests
             renderer.WaitIdle(); Check(renderer.Stats.ValidationErrors == 0 && renderer.Stats.ValidationWarnings == 0 && renderer.UiStats.PureUi == 1 && renderer.Stats.LiveGroups == 0);
             Check(scene.SequenceEqual(f.Owner.Document.CaptureBytes()) && state == f.Owner.Edit.State && f.Owner.Play is null);
         });
-        yield return ("M6.9 owner/monitor observation forbids live writes/nested invocation and preserves editor-only registration", () => {
+        yield return (WorkflowTestInventory.Name("workflow-host-v1", 13), () => {
             using var owner = new EditorSessionOwner("Observe"); var edit = owner.Edit!; ulong revision = edit.Revision;
             Reject(() => edit.ObserveReadOnly(() => owner.Document.CreateObject("Forbidden")));
             var nested = edit.ObserveReadOnly(() => edit.Invoke(new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, "ncma.scene.inspect", JsonSerializer.SerializeToElement(new { }))));

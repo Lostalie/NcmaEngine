@@ -27,6 +27,7 @@ internal static class PrefabTests
     private static PrefabDocument Extract(Fixture f)=>PrefabTemplates.Extract(f.Scene,f.Ids,f.Scope,f.Policy,Guid.NewGuid(),"Template",new(1,2,3),f.Scene.Revision,f.Scene.SessionId);
     public static IEnumerable<(string,Action)> Cases()
     {
+        yield return("Fixture directories are exclusive and outside immutable inputs", RetainedFixtureDirectory.VerifyIsolation);
         yield return("M3.7-A exact read-only extraction and declared references",()=> {
             var f=Make();byte[] before=f.Scene.CaptureBytes();ulong rev=f.Scene.Revision;Guid world=f.Scene.SessionId;
             var prefab=Extract(f);Check(prefab.Objects.Length==3&&prefab.Objects.All(o=>!f.Ids.Contains(o.Id)));Check(prefab.ObjectReferences.Length==1&&prefab.Dependencies.Single()==new PrefabDependency(f.Asset,"StaticMesh"));
@@ -89,7 +90,7 @@ internal static class PrefabTests
             Check(encoded.SequenceEqual(PrefabDocumentCodec.Encode(decoded,f.Policy)));
             var preview=PrefabTemplates.PreviewExpansion(prefab,f.Policy,new(0,0,0),[]);preview.Objects[0].Behaviours[0].Exports[0]=new("Tampered",ExportKind.Boolean,1);
             prefab.Objects[0].Behaviours[0].Exports[0]=new("Changed",ExportKind.Boolean,1);Check(decoded.Objects[0].Behaviours[0].Exports[0].Name=="Speed");
-            string directory=Path.Combine(AppContext.BaseDirectory,"prefab-codec-work",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);string file=Path.Combine(directory,"Hero.ncprefab");
+            string directory=RetainedFixtureDirectory.Create("prefab");string file=Path.Combine(directory,"Hero.ncprefab");
             File.WriteAllBytes(file,encoded);var restarted=PrefabDocumentCodec.Decode(File.ReadAllBytes(file),f.Policy);Check(encoded.SequenceEqual(PrefabDocumentCodec.Encode(restarted,f.Policy))); // Test fixture IO only, not a public save entry.
         });
         yield return("M3.7-A policy registration is explicit, immutable and rejects array/nested paths",()=> {

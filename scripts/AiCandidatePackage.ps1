@@ -13,9 +13,16 @@ function Get-AiCandidateOrderedPaths([string[]]$Paths) {
 
 function Get-AiCandidateSourceInputs([string]$Workspace) {
     $Workspace = [IO.Path]::GetFullPath($Workspace).TrimEnd('\')
+    # Discovery belongs to the real author checkout, never a subdirectory/capture
+    # accidentally resolved by Git against an ancestor repository.
+    $checkout = @(& git -C $Workspace rev-parse --show-toplevel)
+    if ($LASTEXITCODE -ne 0 -or $checkout.Count -ne 1 -or
+        [IO.Path]::GetFullPath([string]$checkout[0]).TrimEnd('\') -ine $Workspace) { throw 'ai_package_source_workspace' }
     # Includes tracked and non-ignored new implementation files, not just the Git commit.
-    # This is an explicit build-input selection, NOT a freeze of the whole repository.
-    $paths = @(& git -C $Workspace -c core.quotepath=false ls-files --cached --others --exclude-standard -- CMakeLists.txt CMakePresets.json managed engine scripts)
+    # Sole selection rule shared by capture, packaging and live-source verification.
+    # Native test/tool sources and root MSBuild inputs are build inputs too.
+    # Still an explicit selection, NOT a freeze of the whole repository.
+    $paths = @(& git -C $Workspace -c core.quotepath=false ls-files --cached --others --exclude-standard -- CMakeLists.txt CMakePresets.json managed engine scripts tools tests Directory.Build.props Directory.Build.targets Directory.Packages.props .editorconfig)
     if ($LASTEXITCODE -ne 0 -or $paths.Count -eq 0 -or $paths.Count -gt 65536) { throw 'ai_package_source_inventory' }
     foreach ($relative in @(Get-AiCandidateOrderedPaths $paths)) {
         if ($relative -match '(?i)(^|/)(bin|obj|\.vs|\.git)/|\.user$') { continue }
@@ -93,7 +100,7 @@ function Get-AiCandidateIndexedProduct([string]$Workspace, [string]$IndexPath, [
         $generation = $current
         $null = Assert-DeploymentPath $Workspace $source
         if (($EnableAI -and $pair[0] -eq 'editorAi') -or (-not $EnableAI -and $pair[0] -eq 'editor')) {
-            $selected = [pscustomobject]@{path=$source;manifestSha256=$entry.manifestSha256;generation=$generation}
+            $selected = [pscustomobject]@{path=$source;manifestSha256=$entry.manifestSha256;generation=$generation;index=$index}
         }
     }
     return $selected

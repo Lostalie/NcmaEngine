@@ -8,7 +8,7 @@ using Ncma.Editor.Modules;
 using Ncma.Editor.Services;
 using Ncma.Ui;
 
-internal static class UiWorkflowTests
+internal static partial class UiWorkflowTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("AI UI workflow assertion"); }
     private static void Reject(Action action) {
@@ -53,11 +53,15 @@ internal static class UiWorkflowTests
         internal readonly int UndoBefore;
         internal EditorDomainProposals Domains => Owner.DomainProposals!;
         internal string FilePath => System.IO.Path.Combine(Root, "assets/hud.ncmaui");
-        internal Fixture(bool writable = true) {
+        internal Fixture(bool writable = true, bool withRectangle = false) {
             Directory.CreateDirectory(System.IO.Path.Combine(Root, "assets"));
             Workspace = new(Owner); Ui = new(Workspace, Root); var project = Guid.NewGuid();
             Owner.ConfigureAssets(Root, project, 1, uiScope: Ui.Scope); Owner.ConfigureDomainProposals(project);
             var file = Ui.ReviewFile(Workspace.Stamp, "assets/hud.ncmaui", true); Ui.ConfirmFile(file.Review, file.Document, true);
+            if (withRectangle) {
+                var rectangle = UiElement.Create(Guid.NewGuid(), "Existing panel", UiKind.Rectangle, Ui.Capture()!.Root);
+                Ui.Edit(Ui.Stamp, [new(UiEditKind.Add, rectangle.Id, rectangle)]);
+            }
             if (!writable) { file = Ui.ReviewFile(Workspace.Stamp, "assets/hud.ncmaui", false); Ui.ConfirmFile(file.Review, file.Document, false); }
             Configuration.Configure(Profile);
             Workflow = new(Domains, Configuration, AiAuthoringIntent.UiDocument, null,
@@ -81,6 +85,7 @@ internal static class UiWorkflowTests
     }
     internal static IEnumerable<(string, Action)> All()
     {
+        foreach (var test in JointLayoutCases()) yield return test;
         yield return ("D1 passive identity polling does not read a changed UI file; full delivery guard rejects", () => {
             using var f = new Fixture(); var review = f.Prepare();
             var approved = review.Approve(review.Observation.Fingerprint, true);

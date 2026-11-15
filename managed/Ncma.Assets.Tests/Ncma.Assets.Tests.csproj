@@ -7,6 +7,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../TestSupport/RetainedFixtureDirectory.cs" Link="TestSupport/RetainedFixtureDirectory.cs" />
     <ProjectReference Include="../Ncma.Assets/Ncma.Assets.csproj" />
     <ProjectReference Include="../Ncma.Assets.Authoring/Ncma.Assets.Authoring.csproj" />
   </ItemGroup>

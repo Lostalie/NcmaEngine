@@ -17,7 +17,7 @@ namespace Ncma.Editor.App;
 
 // Only this presentation layer knows GuiItem. Business routing and the document stay managed.
 internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, string? gameplayAssembly, string? projectRoot = null, FbxPreviewSession? fbxPreview = null, ActionPreviewSession? animationPreview = null,
-    EditorPreferencesStore? preferences = null, Func<LocalFileKind,string?>? filePicker = null, ApplicationLog? log = null, EditorAssetWorkflow? assetWorkflow=null, bool toolbarStyle=false, bool workspaceStyle=false, string? projectName=null)
+    EditorPreferencesStore? preferences = null, Func<LocalFileKind,string?>? filePicker = null, ApplicationLog? log = null, EditorAssetWorkflow? assetWorkflow=null, bool toolbarStyle=false, bool workspaceStyle=false, string? projectName=null, bool transientSceneMeasurement=false)
 {
     private static readonly JsonSerializerOptions DataJson = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, IncludeFields = true, IgnoreReadOnlyProperties = true };
     private readonly Dictionary<Guid, ulong> _rowIds = [];
@@ -71,7 +71,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     public GuiFrame Frame => _frame;
     public string LastMessage => _messages.LastOrDefault() ?? "";
     public (float X, float Y, float Width, float Height) Viewport { get; private set; }
-    internal bool SceneHudInputAllowed => !_showExtensions && !AiAuthoringModal && !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && !_showKeepPlay && _layoutBefore is null;
+    internal bool SceneHudInputAllowed => !_showWorkflows && !_showExtensions && !AiAuthoringModal && !UiWorkspaceActive && !GraphWorkspaceActive && _activeMenu < 0 && !_showPreferences && !_showSceneFiles && !_showKeepPlay && _layoutBefore is null;
     public SceneObjectData? Selected => _page?.Selected;
     public Guid SceneCamera { get; private set; }
     private bool _refreshRenderAssets;
@@ -100,6 +100,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         string value = "", double number = 0, double min = 0, double max = 0, bool enabled = true)
     {
         if(workspaceStyle)label=WorkspaceLabel(label);
+        if (action is not null && !MeasurementActionAllowed(action.Kind)) enabled = false;
         int labelLength = Encoding.UTF8.GetByteCount(label), valueLength = Encoding.UTF8.GetByteCount(value);
         if (labelLength > 4096 || valueLength > 1023 || _items.Count >= 8192 || _text.Count + labelLength + valueLength + (_items.Count+1)*96 > 2*1024*1024)
             throw new ArgumentException("Editor view budget exceeded.");
@@ -143,6 +144,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         Add(GuiItemKind.Button, 2, id, label, new(action, target, Operation: operation), enabled: enabled);
     public GuiFrame Build(ulong frameId, uint width, uint height)
     {
+        workspace.Owner.WorkflowJobs?.Pump(); // independent of panel visibility; no automatic launch/close
         if (!_preferencesLoaded) {
             _pendingPreferences=preferences?.Current;
             if(_pendingPreferences is not null) {_path=_pendingPreferences.LastScenePath;_fbxPath=_pendingPreferences.LastFbxPath;}
@@ -223,6 +225,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
         BuildBrowserControls();
         }
         Add(GuiItemKind.Label,3,labelId++,SceneCamera==Guid.Empty?"Independent browser camera / scene static PBR":"Scene camera: "+SceneCamera.ToString("D"));
+        if (transientSceneMeasurement) Add(GuiItemKind.Label,3,labelId++,"AI 场景诊断：仅内存编辑；不保存、不运行游戏；关闭后丢弃编辑。模型外发仍需逐次批准。");
         foreach(string diagnostic in _renderDiagnostics) Add(GuiItemKind.Label,3,labelId++,diagnostic);
         if (_page.Play is { } play)
         {
@@ -341,6 +344,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
     }
     public bool Shortcut(uint key,bool control,bool shift,bool captured,bool focused)
     {
+        if (transientSceneMeasurement && key is not (90 or 89)) return false;
         if (_showKeepPlay || AiAuthoringModal || _showExtensions) return false; // Never operate a hidden scene behind the confirmation panel.
         if(_uiMode&&_ui is not null&&focused&&!captured){
             if(!control&&key==70){_uiController.Focus(Viewport.Width,Viewport.Height);BoundUiZoom();return true;}
@@ -375,6 +379,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if (_page is null || e.Frame != _frame.Frame || e.ViewGeneration != _generation || e.ViewGeneration != _frame.ViewGeneration || e.DocumentGeneration != _frame.DocumentGeneration ||
                     e.Revision != _frame.Revision || workspace.Stamp != _page.Stamp || !_actions.TryGetValue((e.WidgetHigh, e.WidgetLow), out var action)) continue;
                 if (!_items.Any(item => item.WidgetHigh == e.WidgetHigh && item.WidgetLow == e.WidgetLow && item.Enabled != 0 && item.Kind == e.Kind)) continue;
+                if (!MeasurementActionAllowed(action.Kind)) continue;
                 // The human review is modal at the shared dispatcher, including UI/graph canvases
                 // and events queued in the same native frame. Closing it requires its own action.
                 if (_showKeepPlay && !action.Kind.StartsWith("keep_play_", StringComparison.Ordinal)) continue;
@@ -413,6 +418,7 @@ internal sealed unsafe partial class EditorPresenter(EditorWorkspace workspace, 
                 if(ApplyRuntimeInspection(action,e.Value))continue;
                 if(ApplySchedule(action))continue;
                 if(ApplyKeepPlayChanges(action,e.Value))continue;
+                if(ApplyWorkflowJob(action,e.Value,text))continue;
                 if(ApplyWorkflow(action,e.Value))continue;
                 if(ApplyDomain(action,e.Value,text))continue;
                 if(ApplyAiAuthoring(action,e.Value,text))continue;

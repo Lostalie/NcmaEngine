@@ -141,7 +141,9 @@ internal static class DomainIntegrationTests
             envelope = ui.PrepareDomainProposal(ui.Stamp, candidate); review = domains.Review(Guid.NewGuid(), domains.CaptureSource(), Encoding.UTF8.GetBytes(envelope.GetRawText()));
             // External file changes keep edit revision unchanged: the new original memento must not replace the reviewed one.
             File.WriteAllBytes(Path.Combine(root, "assets/hud.ncmaui"), UiCodec.Encode(candidate with { Name = "External" }));
-            result = domains.Confirm(review, review.Fingerprint, true); Check(result.Status != "ok" && result.Code == "participant_review_changed", result.Code);
+            byte[] external = File.ReadAllBytes(Path.Combine(root, "assets/hud.ncmaui")); var history = owner.Edit!.State;
+            result = domains.Confirm(review, review.Fingerprint, true); Check(result.Status != "ok" && result.Code == "ui_document_conflict", result.Code);
+            Check(external.SequenceEqual(File.ReadAllBytes(Path.Combine(root, "assets/hud.ncmaui"))) && history == owner.Edit.State && scene.SequenceEqual(owner.Document.CaptureBytes()), "Rejected proposal preserves external bytes and original history.");
             Reject(() => domains.Confirm(review, review.Fingerprint, true));
         });
         yield return ("M8.3 asset metadata uses original exact source hash and independent file scope", () => {

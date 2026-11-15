@@ -15,8 +15,9 @@ using Ncma.Characters;
 
 internal static class SkinnedHostChecks
 {
-    internal static string[] Run(string repository, string output, string plugins)
+    internal static string[] Run(string repository, string output, string plugins, string configuration, string verificationWorkspace)
     {
+        if (configuration is not ("Debug" or "Release")) throw new ArgumentException("Configuration required.");
         static void Check(bool value, string message) { if (!value) throw new Exception(message); }
         string native = Directory.GetParent(Directory.GetParent(plugins)!.FullName)!.FullName;
         foreach (string fixture in new[] { "blender_279_sausage_6100_ascii.fbx", "blender_279_sausage_7400_binary.fbx" })
@@ -59,7 +60,7 @@ internal static class SkinnedHostChecks
                 using var unlocked = new FileStream(generation, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
             }
             Check(!File.Exists(Path.Combine(root, "assets/model.fbx")), "Player accidentally deployed/reparsed FBX source");
-            RuntimePackageChecks.Run(repository, root, output, plugins.Contains("windows-ninja-release", StringComparison.OrdinalIgnoreCase) ? "Release" : "Debug", config, document.CaptureSnapshot());
+            RuntimePackageChecks.Run(repository, root, output, configuration, config, document.CaptureSnapshot(), verificationWorkspace);
             var coupled = new SceneDocument("FBX coupled character", global::Ncma.Runtime.CompositionRegistry.Build(global::Ncma.Characters.Generated.ComponentModule.Module), CharacterComponents.RequireComposition);
             coupled.RestoreBytes(document.CaptureBytes());
             Guid actor = coupled.GetObjectIds().First(o => coupled.HasComponent<SkinnedMeshData>(o)); coupled.SetComponent(actor, CharacterData.Default with { FootOffsetY = 0 });

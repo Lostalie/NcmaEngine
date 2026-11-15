@@ -43,6 +43,7 @@ var cases = new List<(string Name, Action Run)> {
     }),
 };
 cases.AddRange(CopyCostTests.Cases());
+cases.AddRange(TestProjects.Cases());
 cases.AddRange(AuthoringTests.Cases());
 cases.AddRange(LayoutTests.Cases());
 cases.AddRange(GraphicsTests.Cases(args));

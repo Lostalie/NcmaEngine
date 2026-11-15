@@ -4,6 +4,7 @@
     <Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../TestSupport/RetainedFixtureDirectory.cs" Link="TestSupport/RetainedFixtureDirectory.cs" />
     <ProjectReference Include="../Ncma.Assets.Authoring/Ncma.Assets.Authoring.csproj" />
     <ProjectReference Include="../Ncma.Asset.ImportWorker/Ncma.Asset.ImportWorker.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../Ncma.Managed/Ncma.Managed.csproj" />

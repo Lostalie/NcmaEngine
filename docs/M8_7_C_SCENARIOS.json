@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "kind": "ncma.m8.7.acceptance-scenario-plan",
+  "purpose": "Acceptance planning only; not a runtime registry, command executor, approval or test result.",
+  "executionOrder": ["C-E preparation", "F main execution and result report", "original PowerShell 5.1 group", "complete gate summary"],
+  "ps51": {
+    "perConfiguration": 24,
+    "startAfter": "F main runs are terminal and their results are recorded; do not require an all-pass result before starting this separately reported group.",
+    "originalHostAndPolicyRequired": true,
+    "onBlocked": "Record not-executed(environment) and request a supported user-managed environment; no policy bypass or host substitution.",
+    "consolePlayStation5InScope": false
+  },
+  "modelCallsAuthorized": false,
+  "installAuthorized": false,
+  "newCTestEntries": 0,
+  "c3ManualPreparation": {
+    "status": "checklist-prepared-not-executed",
+    "checklist": "docs/M8_7_C3_MANUAL_ACCEPTANCE.md",
+    "blankRecordTemplate": "docs/M8_7_C3_RECORD_TEMPLATE.json",
+    "checkIds": ["C3-01", "C3-02", "C3-03", "C3-04", "C3-05", "C3-06", "C3-07", "C3-08"],
+    "modelConsentRequiredAtExecution": true,
+    "templateGrantsAuthority": false,
+    "next": "D fault/lifecycle and E measurement preparation; matching whole inputs before F, then original PS5.1 group after F main terminal report"
+  },
+  "c2PreparedCases": {
+    "status": "implemented-not-executed",
+    "entry": "NcmaModuleTests.AIContracts",
+    "executionWindow": "F-main",
+    "count": 8,
+    "cases": [
+      {"source": "managed/Ncma.AI.Tests/DomainWorkflowTests.Joint.cs", "case": "M8.7-C2 scene Transform proposal binds original receipt and exact Undo Redo"},
+      {"source": "managed/Ncma.AI.Tests/DomainWorkflowTests.Joint.cs", "case": "M8.7-C2 scene Transform cancel rejects without commit receipt"},
+      {"source": "managed/Ncma.AI.Tests/DomainWorkflowTests.Joint.cs", "case": "M8.7-C2 scene Transform selection rejects without commit receipt"},
+      {"source": "managed/Ncma.AI.Tests/DomainWorkflowTests.Joint.cs", "case": "M8.7-C2 scene Transform authoring-change rejects without commit receipt"},
+      {"source": "managed/Ncma.AI.Tests/UiWorkflowTests.Joint.cs", "case": "M8.7-C2 UI layout style persists with original receipt viewport geometry and Undo Redo"},
+      {"source": "managed/Ncma.AI.Tests/UiWorkflowTests.Joint.cs", "case": "M8.7-C2 UI layout style cancel rejects without commit receipt"},
+      {"source": "managed/Ncma.AI.Tests/UiWorkflowTests.Joint.cs", "case": "M8.7-C2 UI layout style revoke rejects without commit receipt"},
+      {"source": "managed/Ncma.AI.Tests/UiWorkflowTests.Joint.cs", "case": "M8.7-C2 UI layout style external-file rejects without commit receipt"}
+    ],
+    "evidence": "M87-JOINT structured harness output: actual request/source/review identities, original receipt, diff/wire/before/after hashes; no raw content or credentials. CaseHarness PASS/FAIL remains authoritative for the entire case including cleanup.",
+    "visualLimit": "UI uses original CPU layout at scale 1 and 2, not GPU pixels or human visual approval.",
+    "remaining": ["execute prepared scene/UI/animation/asset cases at F", "execute strengthened extension SDK receipt association after F under original PS5.1", "C3 actual editor/manual/model review instructions and D/E preparation", "independent product/module closure and installation gates"]
+  },
+  "c2AnimationPreparedCases": {
+    "status": "implemented-not-executed",
+    "entry": "NcmaEditorServiceTests",
+    "executionWindow": "F-main",
+    "count": 8,
+    "cases": [
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation speed binding approvals receipt pinned playback and Undo Redo"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation speed binding cancel keeps original playback"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation speed binding read-revoke keeps original playback"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation speed binding external-file keeps original playback"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation port rejected by original graph validator"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation type rejected by original graph validator"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.Joint.cs", "case": "M8.7-C2 animation cycle rejected by original graph validator"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.JointGpu.cs", "case": "M8.7-C2 approved AI speed binding drives original DX11 graph preview"}
+    ],
+    "enrollment": "Seven non-GPU cases through original AiAnimationWorkflowTests.Cases; one GPU case only in the existing full EditorService entry with explicit plugin path. No new CTest entry or timeout change.",
+    "evidence": "Actual request/source/review and independent resource proposal/fingerprint; resource closure and canonical graph hashes; original receipt; immutable old program, accepted parameter-driven clock, abort, Undo/Redo; DX11 case uses original EditorAnimationGraphPreview plus pinned PoseKernel and 16 captured frames with released-resource assertions.",
+    "limits": "Deterministic transport, real pinned procedural asset payloads; tests not yet executed. Independent preview is not World Play/gameplay, representative game performance, actual editor-panel compositing, real model quality or human sign-off. Existing GPU canvas-compositing case remains separate."
+  },
+  "c2ExtensionReceiptPreparation": {
+    "status": "implemented-not-executed",
+    "entry": "NcmaWorkflowTests.SdkChain",
+    "executionWindow": "after-F-PS5.1",
+    "source": "managed/Ncma.Editor.Services.Tests/WorkflowSdkChainTests.cs",
+    "case": "M8.6-D real reviewed source offline SDK build native and original host chain",
+    "strengthenedExistingCases": 1,
+    "newCases": 0,
+    "receiptKinds": ["CompileSucceeded", "TestsPassed (contracts)", "NativeInputsPrepared", "TestsPassed (hosts)"],
+    "joins": ["source review bundle and actual captured manifest/recipe", "approved job/session/workflow/source/assets/configuration/variant", "exact observed input set and sealed original receipt", "original audit task/receipt fingerprints, recipe, conclusion and completeness"],
+    "negativeControlsPerReceipt": 19,
+    "evidence": "Original SDK case additionally writes joint-receipts.json with minimal identities/hashes and checks repeated receipt viewing leaves the original audit byte-identical. Existing reviewed-marker, history isolation and reverse-close assertions retained.",
+    "limits": "Compile-only preparation is not SDK execution, package/module closure, install/restart or human acceptance. No new executor, approval path, CTest entry, timeout, product ledger or model call. Original SDK dependency on PowerShell 5.1 remains."
+  },
+  "c2AssetPreparedCases": {
+    "status": "implemented-not-executed",
+    "entry": "NcmaEditorServiceTests",
+    "executionWindow": "F-main",
+    "count": 3,
+    "cases": [
+      {"source": "managed/Ncma.Editor.Services.Tests/AiMetadataWorkflowTests.Joint.cs", "case": "M8.7-C2 AI settings separate FBX import closure package and original Undo Redo"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiMetadataWorkflowTests.Joint.cs", "case": "M8.7-C2 approved AI settings cannot grant source import"},
+      {"source": "managed/Ncma.Editor.Services.Tests/AiMetadataWorkflowTests.Joint.cs", "case": "M8.7-C2 changed FBX source rejects import after approved AI settings"}
+    ],
+    "enrollment": "Existing full EditorService entry with explicit repository/plugins, not short metadata-only entry. Original worker path convention and original 180s entry timeout unchanged; missing inputs fail, never skip.",
+    "evidence": "M87-JOINT-ASSET-SETTINGS/REJECT/CLOSURE join exact request/source and original proposal receipt to separate trusted source grant, actual FBX job/candidate/ticket/original import request/result, settings/metadata/generation/package hashes and typed closure. CaseHarness final outcome including disposal remains authoritative.",
+    "checks": ["AI settings do not authorize import", "real original FBX worker plus original import command", "exact prepared generation and model manifest settings/source", "runtime package closure and roundtrip", "cold load without FBX or reimport", "two original history entries with byte-exact Undo/Redo and retained immutable runtime generation", "source_changed rejection", "six controls: missing generation, corrupted generation, missing external dependency, corrupted package, foreign project, wrong required type"],
+    "limits": "Deterministic HTTP only. Runtime data package is not Player deployment package, installed apphost, actual game rendering, target performance, model quality or human acceptance. Worker/native runtime inputs must be freshly prepared from the matching capture before F; this slice only compiles the managed harness graph. No model-chosen paths/downloads or automatic import grant."
+  },
+  "scenarios": [
+    {
+      "id": "M87-C-SCENE",
+      "domain": "scene",
+      "target": "Selected Entity/GameObject; exact object, session, document generation and revision.",
+      "approvalStages": ["original observation/read scope", "exact outbound bytes and recipient", "complete original command diff and final human confirmation"],
+      "cases": [
+        {"source": "managed/Ncma.AI.Tests/DomainWorkflowTests.cs", "case": "C1 actual HTTP codec + mailbox + original scene review, separate commit and Undo/Redo", "entries": ["NcmaModuleTests.AIContracts"], "executionWindow": "F-main"},
+        {"source": "managed/Ncma.AI.Tests/DomainWorkflowTests.cs", "case": "C1 superseded observation and document change invalidate returned proposal", "entries": ["NcmaModuleTests.AIContracts"], "executionWindow": "F-main"}
+      ],
+      "requiredEvidence": ["request/source identity", "observation and review fingerprints", "before/after authoring byte hashes", "original receipt and execution revision", "single history increment; exact Undo and Redo", "cancel/stale result leaves bytes and history unchanged"],
+      "remaining": ["Transform edit and three rejection cases are implemented in C2 but not executed; original rename cases remain intact.", "Actual editor visual/manual confirmation is separate from injected transport coverage."]
+    },
+    {
+      "id": "M87-C-ANIMATION",
+      "domain": "animation",
+      "target": "Existing graph UUID, typed ports, selected resource generation and playback context.",
+      "approvalStages": ["graph read permission", "exact outbound request", "exact graph resource review", "independent final original graph commit"],
+      "cases": [
+        {"source": "managed/Ncma.Editor.Services.Tests/AiAnimationWorkflowTests.cs", "case": "M8.4-D3 actual workspace graph read grant, resource approval, independent Commit and Undo", "entries": ["NcmaEditorServiceTests"], "executionWindow": "F-main"},
+        {"source": "managed/Ncma.Editor.Services.Tests/GraphAuthoringTests.cs", "case": "M6.4 actual editor stamped canvas gestures + independent GPU preview + resource release", "entries": ["NcmaEditorServiceTests"], "executionWindow": "F-main"}
+      ],
+      "requiredEvidence": ["graph UUID and request/source identity", "resource review fingerprint and exact resource generation", "original diff and receipt", "authoring bytes/history before and after", "typed-port/cycle rejection", "playback and cancellation outcomes"],
+      "remaining": ["C2 now prepares a Float-parameter/Clip-speed connection transaction, CPU playback with actual pinned resources, independent DX11 preview, Undo/Redo and six rejection cases; all await F execution.", "Independent preview is not full World Play or human visual approval. Original editor-panel GPU compositing test remains a separate gate."]
+    },
+    {
+      "id": "M87-C-UI",
+      "domain": "ui",
+      "target": "Exact canvas document and selected elements, actions and referenced images.",
+      "approvalStages": ["original UI read/file-write scope", "exact outbound request", "full original UI diff and final confirmation"],
+      "cases": [
+        {"source": "managed/Ncma.AI.Tests/UiWorkflowTests.cs", "case": "C3 UI no-MCP exact send review, original commit and durable Undo/Redo", "entries": ["NcmaModuleTests.AIContracts"], "executionWindow": "F-main"},
+        {"source": "managed/Ncma.Editor.Services.Tests/WorkflowDomainSourceTests.cs", "case": "M8.6-D real UI workflow needs independent permission and keeps one original Undo", "entries": ["NcmaWorkflowTests.DomainSourceHost"], "executionWindow": "F-main"}
+      ],
+      "requiredEvidence": ["canvas document/source identity", "independent file authority", "full diff and exact persisted bytes", "one original Undo entry and Redo", "unchanged scene bytes", "stale file or revoked scope rejection"],
+      "remaining": ["C2 adds existing-panel layout/style, persisted bytes, original history and CPU viewport geometry at scales 1/2 plus three rejection cases; not yet executed, and not GPU/human visual acceptance.", "Do not restore the removed Figma reference or infer arbitrary filesystem access."]
+    },
+    {
+      "id": "M87-C-ASSET",
+      "domain": "asset",
+      "target": "Selected asset UUID and metadata revision, source content and dependency generation.",
+      "approvalStages": ["selected metadata read scope", "exact outbound bytes", "original settings-only write scope and final confirmation"],
+      "cases": [
+        {"source": "managed/Ncma.Editor.Services.Tests/AiMetadataWorkflowTests.cs", "case": "M8.4-D metadata exact outbound bytes second confirmation original Commit Undo Redo", "entries": ["NcmaEditorServiceTests"], "executionWindow": "F-main"},
+        {"source": "managed/Ncma.Editor.Services.Tests/AiMetadataWorkflowTests.cs", "case": "M8.4-D metadata external file change before Send or final Commit rejects", "entries": ["NcmaEditorServiceTests"], "executionWindow": "F-main"}
+      ],
+      "requiredEvidence": ["asset UUID, exact metadata content hash and source generation", "settings-only original diff", "commit receipt and execution revision", "byte-preserving Undo/Redo", "missing or changed source/dependency rejection"],
+      "remaining": ["C2 now prepares three cases for AI settings then separately authorized FBX import, runtime closure/package, original Undo/Redo and rejection; not executed until F.", "Runtime asset package is not full Player package/deployment or visual acceptance; keep those independent original gates.", "No model-chosen paths, downloads or automatic reimport authority."]
+    },
+    {
+      "id": "M87-C-EXTENSION",
+      "domain": "managed-extension",
+      "target": "Exact reviewed source bundle, capture, recipe, configuration and Editor/Player module identity.",
+      "approvalStages": ["full human source review", "original offline dependency preparation", "original build/test approval", "separate install/restart approval outside this plan"],
+      "cases": [
+        {"source": "managed/Ncma.Editor.Services.Tests/ExtensionSourceEditorTests.cs", "case": "M8.5 captured build export uses reviewed bytes after candidate disk changes", "entries": ["NcmaExtensionTests.Editor.extensions", "NcmaExtensionTests.Editor.ai-extensions"], "executionWindow": "F-main"},
+        {"source": "managed/Ncma.Editor.Services.Tests/WorkflowSourceHandoffTests.cs", "case": "M8.6-D review handoff binds bytes owner plan and revision without executable authority", "entries": ["NcmaWorkflowTests.ContinuationHost"], "executionWindow": "F-main"},
+        {"source": "managed/Ncma.Editor.Services.Tests/WorkflowSdkChainTests.cs", "case": "M8.6-D real reviewed source offline SDK build native and original host chain", "entries": ["NcmaWorkflowTests.SdkChain"], "executionWindow": "after-F-PS5.1"}
+      ],
+      "requiredEvidence": ["review bundle hash and exact captured bytes", "workflow/source/job/capture identity", "original offline/build/test receipts with configuration and variant", "Editor/Player module and product file sets", "explicit reverse close and retained-resource status"],
+      "remaining": ["C2 strengthens the existing SDK chain with exact four-receipt/audit joins and 19 mismatch controls per receipt; all remain unexecuted.", "Full SDK chain has an indirect PS5.1 dependency and runs only after F main under the original host.", "Source export or synthetic handoff is not build, test, package, installation or restart acceptance; Editor/Player package-module closure remains an independent gate."]
+    }
+  ],
+  "receiptRules": {
+    "domain": "Join DomainObservationReview.RequestId/Source to the actual returned DomainProposalReview and its ProposalId/Fingerprint, then to DomainProposalReceipt. Confirm the actual request/result association; do not correlate by display names or assume all prepared-domain IDs are equal.",
+    "domainReceiptFields": ["ProposalId", "Fingerprint", "Status", "Code", "Changed", "ExecutionRevision", "RecoveryRequired"],
+    "workflow": "Keep original WorkflowId/plan hash/StepId/RequestId plus ExpectedSource/ObservedSource, ApprovalFingerprint, ScopeFingerprint and the original receipt. Verification uses the existing JobId/CaptureId/task/receipt fingerprints.",
+    "noInventedRecords": "Approval rejection or cancellation before original commit may produce no DomainProposalReceipt. Record the actual absence and unchanged state; never manufacture a successful receipt.",
+    "retention": "DomainProposalReceipt is a bounded 64-entry queue, not a durable complete audit. Preserve necessary local acceptance evidence promptly without adding another product ledger.",
+    "privacy": "Do not persist keys, local connection configuration, raw model responses or unauthorized observation bytes. Use identities, hashes and minimal result codes; hashes are evidence, not signatures or approval authority.",
+    "syntheticVsHuman": "Injected deterministic transport can verify API contracts; it cannot sign off real model quality, user approval, target-machine performance or actual apphost startup."
+  },
+  "status": "planned-not-executed",
+  "stageAccepted": false
+}

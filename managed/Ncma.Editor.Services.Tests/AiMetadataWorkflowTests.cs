@@ -11,7 +11,7 @@ using Ncma.Editor.Modules;
 using Ncma.Editor.Services;
 
 // Registered only; real file transactions and substitute HTTP run at whole-stage validation.
-internal static class AiMetadataWorkflowTests
+internal static partial class AiMetadataWorkflowTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("AI metadata assertion"); }
     private static void Reject(Action action) {

@@ -6,5 +6,7 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-  <ItemGroup><ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../Ncma.Scene/Ncma.Scene.csproj" />
+    <Compile Include="../TestSupport/RetainedFixtureDirectory.cs" Link="TestSupport/RetainedFixtureDirectory.cs" />
+  </ItemGroup>
 </Project>

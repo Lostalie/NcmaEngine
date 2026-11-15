@@ -20,6 +20,7 @@ public sealed class EditorSessionOwner : IDisposable
     private Guid _domainProject;
     private EditorDomainProposals? _domainProposals;
     private EditorWorkflows? _workflows;
+    private EditorWorkflowJobs? _workflowJobs;
     private readonly TimeProvider? _workflowTime;
     private EditorEndpoint? _endpoint;
     private AssetProjectAuthoring? _assets;
@@ -69,6 +70,7 @@ public sealed class EditorSessionOwner : IDisposable
     public SceneDocument Document { get { Verify(readOnly: true); return _document; } }
     public EditSession? Edit { get { Verify(readOnly: true); return _edit; } }
     public EditorWorkflows? Workflows { get { Verify(readOnly: true); return _workflows; } }
+    public EditorWorkflowJobs? WorkflowJobs { get { Verify(readOnly: true); return _workflowJobs; } }
     public EditorDomainProposals? DomainProposals { get { Verify(readOnly: true); return _domainProposals; } }
     public EditorEndpoint? Endpoint { get { Verify(readOnly: true); return _endpoint; } }
     public PlaySession? Play { get { Verify(readOnly: true); return _play; } }
@@ -113,6 +115,13 @@ public sealed class EditorSessionOwner : IDisposable
         _document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
         if (_busy) throw new InvalidOperationException("Owner lifecycle transition in progress.");
         return _endpoint is null ? (Guid.Empty, 0) : (_endpoint.View.InstanceId, _endpoint.AudienceRevision);
+    }
+    private WorkflowAssetSource CaptureWorkflowAssetSource()
+    {
+        // Original monitor also observes successful commands while Edit is busy.
+        // Read the already-owned clock only: no refresh, disk IO or new authority.
+        _document.VerifyAccess(); ObjectDisposedException.ThrowIf(_disposed, this);
+        return _assets is { } assets ? new(assets.ProjectId, assets.Generation, assets.Clock.Revision) : default;
     }
     private void RequireDomainProject(Guid projectId)
     {
@@ -177,7 +186,8 @@ public sealed class EditorSessionOwner : IDisposable
         if (_edit is not null) throw new InvalidOperationException("Editor is already activated.");
         _edit = new(_document); RefreshCatalog();
         _runtimeChanges = new(this);
-        _workflows = new(_edit, _workflowTime);
+        _workflows = new(_edit, _workflowTime, CaptureWorkflowAssetSource);
+        _workflowJobs = new(this, _workflowTime);
         if(_postModules is not null)_postProcessing=new(new EditorWorkspace(this),_postModules,_workflowTime);
     }
     public void RefreshCatalog() { Verify(); _domainProposals?.HostInvalidate(); _edit?.SetBehaviourCatalog(Describe(Catalog.Snapshot)); }
@@ -275,6 +285,8 @@ public sealed class EditorSessionOwner : IDisposable
         if (_disposed) return;
         Verify();
         _domainProposals?.HostInvalidate(close: true);
+        if (_workflowJobs?.TryCloseAll() == false)
+            throw new InvalidOperationException("Workflow jobs retain resources; wait for drain and explicitly retry close before releasing the session.");
         if (_domainProposals?.TryCloseModules() == false)
             throw new InvalidOperationException("Domain modules still draining; retry owner disposal after their work actually ends.");
         var errors = new List<Exception>();

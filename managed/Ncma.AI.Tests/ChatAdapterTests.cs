@@ -8,7 +8,7 @@ using Ncma.Editor.Modules;
 using Ncma.Editor.Services;
 using Ncma.Modules;
 
-internal static class ChatAdapterTests
+internal static partial class ChatAdapterTests
 {
     private static void Check(bool condition) { if (!condition) throw new Exception("HTTP adapter assertion"); }
     private static void Reject(Action call)
@@ -34,6 +34,7 @@ internal static class ChatAdapterTests
     }
     internal static IEnumerable<(string, Action)> All()
     {
+        foreach (var test in TransportObservationCases()) yield return test;
         foreach (var test in AdmissionDiagnostics()) yield return test;
         foreach (var test in ResponsePooling()) yield return test;
         yield return ("B bounded pool preserves production transport security policy", () => {

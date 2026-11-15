@@ -8,8 +8,14 @@ namespace Ncma.Editor.Services;
 
 public sealed record WorkflowRegistryReview(Guid Session, ulong Generation, Guid Catalog, Guid Endpoint,
     ulong AudienceEpoch, Guid[] Audience, string Registry, string Fingerprint);
+// Authoring clock, not a file hash/scan or a resource/file permission grant.
+public readonly record struct WorkflowAssetSource(Guid ProjectId, ulong Generation, ulong Revision);
 public sealed record WorkflowReview(Guid WorkflowId, EditorViewStamp Stamp, Guid Connection, string Plan,
-    string Hash, string Fingerprint);
+    string Hash, string Fingerprint)
+{
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public WorkflowAssetSource? Assets { get; init; }
+}
 public sealed record WorkflowReceipt(Guid StepId, Guid RequestId, string Capability, string Status, string Code,
     bool Changed, ulong ExecutionRevision, string ResultHash, bool AssertionPassed);
 public sealed record WorkflowView(Guid WorkflowId, string Status, int Index, int StepCount, int RepairCount,
@@ -17,7 +23,7 @@ public sealed record WorkflowView(Guid WorkflowId, string Status, int Index, int
 
 // A ledger and exact request fence, NOT a nested tool executor or an approval authority.
 // Only the original endpoint/capability may execute a ticket, with its original independent grants.
-public sealed class EditorWorkflows : IEditorRequestMonitor
+public sealed partial class EditorWorkflows : IEditorRequestMonitor
 {
     public const string Capability = "ncma.workflow";
     public const int MaxSteps = 12, MaxPlans = 16, MaxActive = 2, MaxPlanBytes = 48 * 1024, MaxStepBytes = 16 * 1024;
@@ -28,17 +34,21 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
         internal Step[] Steps = steps;
         internal readonly int Deadline = deadline, Budget = budget;
         internal EditorViewStamp Stamp = stamp;
+        internal WorkflowAssetSource? Assets;
         internal string Text = text, Hash = Digest(text), Status = "proposed";
         internal int Index, Repairs;
         internal long Started, Approved;
         internal WorkflowRegistryReview? Scope;
         internal CapabilityRequest? Ticket;
         internal readonly List<WorkflowReceipt> Receipts = [];
+        internal readonly List<WorkflowPlanRevision> PlanRevisions = new(3);
+        internal readonly List<WorkflowAuditEntry> Audit = new(MaxAuditEvents);
     }
     // Ticket tombstones are retained for the bounded lifetime of this editor, not evicted.
     private sealed record TicketOwner(Plan Plan, string Fingerprint);
     private readonly EditSession _edit;
     private readonly TimeProvider _time;
+    private readonly Func<WorkflowAssetSource>? _assetSource;
     private EditorEndpoint? _endpoint;
     private Guid _caller;
     private readonly Dictionary<Guid, Plan> _plans = [];
@@ -51,11 +61,16 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
         "ncma.assets.list", "ncma.assets.inspect", "ncma.assets.validate", "ncma.ui.document.commit",
         "ncma.animgraph.inspect", "ncma.animgraph.validate", "ncma.animgraph.bones", "ncma.animgraph.propose",
         "ncma.animgraph.transaction", "ncma.animgraph.sequence.propose", "ncma.animgraph.sequence.run" };
-    public EditorWorkflows(EditSession edit, TimeProvider? time = null)
+    public EditorWorkflows(EditSession edit, TimeProvider? time = null) : this(edit, time, null) { }
+    internal EditorWorkflows(EditSession edit, TimeProvider? time, Func<WorkflowAssetSource>? assetSource)
     {
-        _edit = edit; _time = time ?? TimeProvider.System;
+        _edit = edit; _time = time ?? TimeProvider.System; _assetSource = assetSource;
         edit.RegisterInspection(WorkflowSchemas.Descriptor(), Invoke);
     }
+    private static bool UsesAssets(Step[] steps) => steps.Any(s => s.Capability.StartsWith("ncma.assets.", StringComparison.Ordinal) ||
+        s.Capability.StartsWith("ncma.animgraph.", StringComparison.Ordinal) || s.Capability == "ncma.ui.document.commit");
+    private WorkflowAssetSource ReadAssets() => _assetSource?.Invoke() ?? default;
+    private bool AssetsCurrent(Plan plan) => plan.Assets is not { } expected || expected == ReadAssets();
     public void Bind(EditorEndpoint? endpoint)
     {
         Verify(); Revoke(); _caller = Guid.Empty; _endpoint = endpoint;
@@ -93,7 +108,7 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
     public void Revoke()
     {
         Verify(); _visibility = null;
-        foreach (var p in _plans.Values) if (p.Status is "approved" or "proposed" or "failed") p.Status = "revoked";
+        foreach (var p in _plans.Values) if (p.Status is "approved" or "proposed" or "failed") Stop(p, "revoked");
         foreach (var p in _plans.Values) p.Scope = null;
     }
     private bool ScopeCurrent(WorkflowRegistryReview? scope) => scope is not null && scope.Fingerprint == Registry().Fingerprint;
@@ -114,7 +129,7 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
         Idle(); var p = Find(id); Refresh(p);
         if (p.Status != "proposed" || p.Stamp != Stamp) throw new EditRejectedException("workflow_review_unavailable");
         var scope = Registry(); if (!scope.Audience.Contains(p.Connection)) throw new EditRejectedException("workflow_connection_revoked");
-        var r = new WorkflowReview(id, p.Stamp, p.Connection, p.Text, p.Hash, "");
+        var r = new WorkflowReview(id, p.Stamp, p.Connection, p.Text, p.Hash, "") { Assets = p.Assets };
         return r with { Fingerprint = Fingerprint(new { review = r, scope = scope.Fingerprint }) };
     }
     public void Approve(WorkflowReview review, string fingerprint, bool reviewed)
@@ -124,21 +139,42 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
         var p = Find(review.WorkflowId); Visible(p.Connection);
         foreach (var other in _plans.Values) Refresh(other);
         if (_plans.Values.Count(x => x.Status == "approved") >= MaxActive) throw new EditRejectedException("workflow_active_budget");
+        AuditCapacity(p);
         p.Scope = Registry(); p.Approved = _time.GetTimestamp(); if (p.Repairs == 0) p.Started = p.Approved;
         p.Status = "approved";
+        Record(p, WorkflowAuditKind.Approved, approval: current.Fingerprint);
     }
     public void Cancel(Guid id)
     {
-        Verify(); var p = Find(id); if (p.Status != "completed") p.Status = "cancelled";
+        Verify(); var p = Find(id); if (p.Status != "completed") Stop(p, "cancelled");
         // Retain exact tickets and receipts. Cancellation never performs Undo or file/native rollback.
     }
     private Plan Find(Guid id) => _plans.GetValueOrDefault(id) ?? throw new EditRejectedException("workflow_not_found");
+    // Local continuation guard, NOT a capability/approval. Completion preserves
+    // receipts, but never makes an unrelated later edit a source for this plan.
+    internal bool IsVerificationSourceCurrent(WorkflowVerificationBinding binding)
+    {
+        Verify(); return binding.WorkspaceSession == _edit.SessionId && IsVerificationSourceCurrent(binding.WorkflowId, binding.PlanHash, binding.Source) &&
+            binding.Assets == Find(binding.WorkflowId).Assets;
+    }
+    internal WorkflowAssetSource? VerificationAssetSource(Guid workflowId) { Verify(); return Find(workflowId).Assets; }
+    internal bool IsVerificationSourceCurrent(Guid workflowId, string planHash, EditorViewStamp source)
+    {
+        Verify(); var state = _edit.State;
+        if (state.Frozen || state.HistoryInvalidated || state.EditBusy || source != Stamp || !_plans.TryGetValue(workflowId, out var plan)) return false;
+        Refresh(plan);
+        return plan.Hash == planHash && plan.Stamp == Stamp && AssetsCurrent(plan) && plan.Status is "proposed" or "approved" or "completed";
+    }
     private void Refresh(Plan p)
     {
-        if (p.Scope is null || p.Status is "cancelled" or "revoked" or "expired" or "conflict") return;
-        if (!ScopeCurrent(p.Scope)) p.Status = "revoked";
-        else if (!Fresh(p.Started, p.Deadline) || !Fresh(p.Approved, 60)) p.Status = "expired";
-        else if (p.Stamp != Stamp) p.Status = "conflict";
+        if (p.Status is "completed" or "cancelled" or "revoked" or "expired" or "conflict") return;
+        // A project refresh can advance this clock WITHOUT changing Edit.Revision.
+        // Latch conflict even before approval; never adopt an unrelated new source.
+        if (!AssetsCurrent(p)) { Stop(p, "conflict"); return; }
+        if (p.Scope is null) return;
+        if (!ScopeCurrent(p.Scope)) Stop(p, "revoked");
+        else if (!Fresh(p.Started, p.Deadline) || !Fresh(p.Approved, 60)) Stop(p, "expired");
+        else if (p.Stamp != Stamp) Stop(p, "conflict");
     }
     private void Executable(Plan p, Guid connection)
     {
@@ -151,9 +187,11 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
     {
         Executable(p, connection);
         if (p.Ticket is null) {
+            AuditCapacity(p);
             var step = p.Steps[p.Index];
             var request = new CapabilityRequest(2, Guid.NewGuid(), _edit.SessionId, p.Stamp.Revision, step.Capability, step.Input.Clone());
             _tickets.Add(request.RequestId, new(p, Fingerprint(request))); p.Ticket = request;
+            Record(p, WorkflowAuditKind.TicketIssued, step.Id, request.RequestId, Fingerprint(request));
         }
         return View(p);
     }
@@ -168,6 +206,7 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
             var p = ticket.Plan; Executable(p, connection);
             if (ticket.Fingerprint != Fingerprint(request)) return "workflow_ticket_mismatch";
             if (p.Ticket?.RequestId != request.RequestId) return "workflow_step_recorded";
+            AuditCapacity(p); // Reserve the bounded receipt slot before original execution.
             return null;
         }
         catch (EditRejectedException e) { return e.Code; }
@@ -181,6 +220,9 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
         // Missing independent human approvals are wait states, never repair attempts or implicit grants.
         if (result.Code is "permission_denied" or "graph_scope_denied" or "ui_scope_denied" ||
             result.Code.EndsWith("not_visible", StringComparison.Ordinal) || result.Code.EndsWith("not_approved", StringComparison.Ordinal)) return;
+        AuditCapacity(p);
+        var expectedSource = p.Stamp;
+        var expectedAssets = p.Assets;
         var step = p.Steps[p.Index]; bool assertion = result.Status == "ok" && Meets(step.Expectation, result.Data);
         p.Receipts.Add(new(step.Id, request.RequestId, step.Capability, result.Status, result.Code, result.Changed,
             result.ExecutionRevision, Digest(result.Data.GetRawText()), assertion));
@@ -188,9 +230,12 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
         if (result.Status == "ok") {
             // Only this exact successfully observed operation can advance the expected revision.
             p.Stamp = Stamp;
+            if (p.Assets is not null) p.Assets = ReadAssets();
             if (assertion) { p.Index++; p.Status = p.Index == p.Steps.Length ? "completed" : "approved"; }
             else p.Status = "failed";
         } else p.Status = "failed";
+        Record(p, WorkflowAuditKind.Receipt, step.Id, request.RequestId, ticket.Fingerprint,
+            receipt: p.Receipts[^1], expected: expectedSource, expectedAssets: expectedAssets);
     }
     private static bool Meets(string expectation, JsonElement data) => expectation switch {
         "success" => true,
@@ -207,7 +252,9 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
             Closed(input, "op", "plan"); Visible(caller);
             if (_plans.Count >= MaxPlans) throw new EditRejectedException("workflow_plan_budget");
             var plan = input.GetProperty("plan"); var parsed = Parse(plan); if (_plans.ContainsKey(parsed.Id)) throw new EditRejectedException("workflow_id_reused");
-            var p = new Plan(parsed.Id, caller, parsed.Steps, parsed.Deadline, parsed.Budget, Stamp, plan.GetRawText());
+            var p = new Plan(parsed.Id, caller, parsed.Steps, parsed.Deadline, parsed.Budget, Stamp, plan.GetRawText()) {
+                Assets = UsesAssets(parsed.Steps) ? ReadAssets() : null };
+            RecordPlan(p, WorkflowAuditKind.Proposed);
             _plans.Add(p.Id, p); return View(p);
         }
         if (op == "repair") Closed(input, "op", "workflowId", "input"); else Closed(input, "op", "workflowId");
@@ -222,13 +269,15 @@ public sealed class EditorWorkflows : IEditorRequestMonitor
                 if (existing.Status != "failed" || existing.Repairs >= existing.Budget || existing.Stamp != Stamp)
                     throw new EditRejectedException("workflow_repair_unavailable");
                 var repaired = input.GetProperty("input"); ValidateInput(repaired);
+                AuditCapacity(existing);
                 var steps = existing.Steps.ToArray(); steps[existing.Index] = steps[existing.Index] with { Input = repaired.Clone() };
                 var previous = existing.Steps; existing.Steps = steps;
                 string candidate = Encode(existing);
                 try { _ = Parse(JsonSerializer.Deserialize<JsonElement>(candidate)); }
                 catch { existing.Steps = previous; throw; }
                 existing.Text = candidate; existing.Hash = Digest(existing.Text);
-                existing.Repairs++; existing.Status = "proposed"; return View(existing);
+                existing.Repairs++; existing.Status = "proposed";
+                RecordPlan(existing, WorkflowAuditKind.Repaired); return View(existing);
             default: throw new EditRejectedException("workflow_operation_invalid");
         }
     }

@@ -21,6 +21,10 @@ public sealed class ModuleSession
     private long epoch = 1;
     private bool stopped;
     private bool pumping;
+    private ModuleObservationCapture? observation;
+    private Guid observationRun;
+    private long observationSequence;
+    private bool observationStarted, observationFailed;
 
     private sealed class Entry(ModuleRequest request, long started)
     {
@@ -31,6 +35,7 @@ public sealed class ModuleSession
         internal Task? CancellationWork;
         internal ModuleOutcome? Outcome;
         internal bool Delivered;
+        internal bool ObservationCancelled;
     }
 
     public ModuleSession(ModuleCatalog catalog, IModuleAdapter adapter, ModuleContext context,
@@ -51,20 +56,71 @@ public sealed class ModuleSession
     public int RetainedCount { get { CheckOwner(); return entries.Count; } }
     public int ActiveCount { get { CheckOwner(); return entries.Values.Count(e => e.Work is not null); } }
 
+    // Explicit trusted local diagnostics, before FIRST request only; never dispatches or grants anything.
+    public void BeginObservation(ObservationIdentity identity, int eventCapacity = 4096)
+    {
+        CheckOwner(); ArgumentNullException.ThrowIfNull(identity);
+        if (observationStarted || stopped || issued.Count != 0 || entries.Count != 0 || identity.TimestampFrequency != time.TimestampFrequency)
+            throw new InvalidOperationException("session_observation_boundary");
+        var capture = new ModuleObservationCapture(identity, time.GetTimestamp(), eventCapacity, MaximumLifetimeRequests, ObservationScope.ModuleSession);
+        observation = capture; observationRun = identity.RunId; observationStarted = true;
+    }
+    public ModuleObservationReport SealObservation()
+    {
+        CheckOwner();
+        var capture = observation ?? throw new InvalidOperationException("session_observation_absent");
+        var report = capture.Seal(time.GetTimestamp()); observation = null;
+        return report; // may contain pending/undrained requests; sealing does NOT close the session
+    }
+    private void Observe(Guid requestId, ObservationKind kind, ObservationOutcome outcome = ObservationOutcome.Pending)
+    {
+        if (observation is null || observationFailed) return;
+        bool recording = false;
+        try {
+            long timestamp = time.GetTimestamp(); recording = true;
+            if (observation.Record(new(observationRun, observationSequence + 1, new(sessionId, requestId), timestamp, kind, outcome))) observationSequence++;
+        }
+        catch (Exception error) when (error is not OutOfMemoryException) {
+            // Diagnostic failure cannot change original admission/result/cleanup semantics.
+            if (!recording) observation.MarkIncomplete();
+            observationFailed = true;
+        }
+    }
+    private ModuleAdmission Refuse(Guid id, ModuleAdmission result)
+    {
+        if (id != Guid.Empty) Observe(id, ObservationKind.AdmissionRejected);
+        else if (observation is not null && !observationFailed) observation.MarkIncomplete();
+        return result; // Preserve original stopped+empty-ID admission while declaring the unidentifiable gap.
+    }
+    private void ObserveTerminal(Entry entry)
+    {
+        if (observation is null || observationFailed) return;
+        var result = entry.Outcome!.Status switch {
+            ModuleOutcomeStatus.NeedsDomainValidation => ObservationOutcome.Proposal,
+            ModuleOutcomeStatus.Rejected => ObservationOutcome.Rejected,
+            ModuleOutcomeStatus.Cancelled => ObservationOutcome.Cancelled,
+            ModuleOutcomeStatus.TimedOut => ObservationOutcome.TimedOut,
+            ModuleOutcomeStatus.Stale => ObservationOutcome.Stale,
+            _ => ObservationOutcome.Failed
+        };
+        Observe(entry.Request.RequestId, ObservationKind.Terminal, result);
+    }
+
     public ModuleAdmission Submit(Guid requestId, string operationName, ReadOnlySpan<byte> observation)
     {
         CheckOwner();
-        if (stopped) return ModuleAdmission.Stopped;
+        if (stopped) return Refuse(requestId, ModuleAdmission.Stopped);
         if (requestId == Guid.Empty) throw new ArgumentException("Empty request identity.", nameof(requestId));
-        if (issued.Contains(requestId)) return ModuleAdmission.Duplicate;
-        if (issued.Count == MaximumLifetimeRequests) return ModuleAdmission.SessionBudget;
-        if (entries.Count == MaximumOutstanding) return ModuleAdmission.Backpressure;
+        if (issued.Contains(requestId)) return Refuse(requestId, ModuleAdmission.Duplicate);
+        if (issued.Count == MaximumLifetimeRequests) return Refuse(requestId, ModuleAdmission.SessionBudget);
+        if (entries.Count == MaximumOutstanding) return Refuse(requestId, ModuleAdmission.Backpressure);
         var operation = catalog.Get(operationName);
         if (observation.Length > operation.MaximumInputBytes) throw new ArgumentOutOfRangeException(nameof(observation));
         var payload = new ModulePayload(observation);
         var request = new ModuleRequest(requestId, sessionId, epoch, context, operation, payload);
         entries.Add(requestId, new Entry(request, time.GetTimestamp()));
         issued.Add(requestId);
+        Observe(requestId, ObservationKind.Admitted);
         return ModuleAdmission.Accepted;
     }
 
@@ -129,7 +185,7 @@ public sealed class ModuleSession
                 }
             }
             foreach (var id in entries.Where(p => p.Value.Delivered && p.Value.Work is null)
-                .Select(p => p.Key).ToArray()) entries.Remove(id);
+                .Select(p => p.Key).ToArray()) { Observe(id, ObservationKind.Drained); entries.Remove(id); }
             var active = entries.Values.Count(e => e.Work is not null);
             foreach (var entry in entries.Values)
             {
@@ -148,6 +204,8 @@ public sealed class ModuleSession
                     token.ThrowIfCancellationRequested();
                     return await adapter.InvokeAsync(entry.Request, remaining, token).ConfigureAwait(false);
                 });
+                // Owner handoff to ThreadPool, NOT the adapter's actual execution start.
+                Observe(entry.Request.RequestId, ObservationKind.Dispatched);
                 active++;
             }
         }
@@ -161,7 +219,8 @@ public sealed class ModuleSession
         if (!entries.TryGetValue(requestId, out var entry) || entry.Delivered || entry.Outcome is null) return false;
         entry.Delivered = true;
         outcome = entry.Outcome;
-        if (entry.Work is null) entries.Remove(requestId);
+        ObserveTerminal(entry);
+        if (entry.Work is null) { Observe(requestId, ObservationKind.Drained); entries.Remove(requestId); }
         return true;
     }
 
@@ -171,13 +230,16 @@ public sealed class ModuleSession
         CheckOwner();
         if (!stopped) throw new InvalidOperationException("Stop the module session before closing.");
         Pump(context);
-        foreach (var entry in entries.Values) entry.Delivered = true;
+        foreach (var entry in entries.Values) { if (!entry.Delivered) ObserveTerminal(entry); entry.Delivered = true; }
         Pump(context);
         return entries.Count == 0;
     }
 
     private void SetTerminal(Entry entry, ModuleOutcomeStatus status)
     {
+        if (observation is not null && !entry.Delivered && !entry.ObservationCancelled) {
+            Observe(entry.Request.RequestId, ObservationKind.CancelRequested); entry.ObservationCancelled = true;
+        }
         if (!entry.Delivered) entry.Outcome = Outcome(entry, status);
         if (entry.Work is not null && entry.CancellationWork is null)
         {

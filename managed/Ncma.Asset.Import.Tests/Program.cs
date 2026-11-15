@@ -34,13 +34,14 @@ if (args.Length == 2 && args[0].EndsWith(".worker-fixture", StringComparison.Ord
     }
     return 19;
 }
+string verificationWorkspace = VerificationWorkspace.Extract(ref args);
 if (args.Length != 3) { Console.Error.WriteLine("Expected repository, native build and configuration."); return 2; }
 string repository = Path.GetFullPath(args[0]), native = Path.GetFullPath(args[1]), configuration = args[2];
 string kernelPath = Path.Combine(native, "NcmaImportKernel.dll");
 string workerAssembly = Path.Combine(repository, "managed", "Ncma.Asset.ImportWorker", "bin", configuration, "net8.0", "Ncma.Asset.ImportWorker.dll");
 string dotnet = Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "..", "..", "..", "dotnet.exe");
 dotnet = Path.GetFullPath(dotnet);
-string suiteRoot = Path.Combine(AppContext.BaseDirectory, "import-work", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(suiteRoot);
+string suiteRoot = RetainedFixtureDirectory.Create("import");
 string ascii = Path.Combine(repository, "tests", "assets", "fbx", "blender_279_sausage_6100_ascii.fbx");
 string binary = Path.Combine(repository, "tests", "assets", "fbx", "blender_279_sausage_7400_binary.fbx");
 string staticFixture = Path.Combine(repository, "tests", "assets", "fbx", "ncma_static_asymmetric_7400_ascii.fbx");
@@ -96,6 +97,7 @@ Guid Prepare(AssetProjectAuthoring project, ImportCoordinator c, AssetRecord rec
 }
 var tests = new (string Name, Action Run)[]
 {
+    ("Fixture directories are exclusive and outside immutable inputs", RetainedFixtureDirectory.VerifyIsolation),
     ("Derived generation long prepared paths publish/reopen without process MAX_PATH opt-in", () => {
         string longRoot = Path.Combine(repository, "out/verification/m3-8/long-file", Guid.NewGuid().ToString("N"), new string('p', 48));
         Directory.CreateDirectory(Path.Combine(longRoot, "assets"));
@@ -300,7 +302,7 @@ var tests = new (string Name, Action Run)[]
         Reject(() => collector.Collect([info.Record.Generation!.RelativePath], _ => false, new AssetCatalog([])));
     }),
     ("Validated Editor package launches hashed tool dependencies; Players and tampering are rejected", () => {
-        using var index = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(repository, $"out/verification/m2-7/{configuration}/packages.json")));
+        using var index = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(verificationWorkspace, $"out/verification/m2-7/{configuration}/packages.json")));
         string editor = index.RootElement.GetProperty("editor").GetString()!;
         Ncma.Application.DeploymentManifest.Validate(editor); var launch = ImportToolDeployment.FromValidatedEditorPackage(editor);
         Check(launch.Dependencies is { Length: > 4 }); string root = Root(staticFixture);

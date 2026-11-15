@@ -7,7 +7,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 
-internal static class AuthoringWorkspaceTests
+internal static partial class AuthoringWorkspaceTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("AI authoring workspace assertion"); }
     private static void Reject(Action action) {
@@ -61,6 +61,9 @@ internal static class AuthoringWorkspaceTests
     }
     internal static IEnumerable<(string, Action)> All()
     {
+        foreach (var test in ObservationCases()) yield return test;
+        foreach (var test in JointEvidenceCases()) yield return test;
+        foreach (var test in MeasurementBudgetCases()) yield return test;
         yield return ("D1 optional UI controller startup/configure performs no registration or service probe", () => {
             using var f = new Fixture(); Check(f.Ui.Status == "unconfigured" && f.Ui.Diagnostic is null && f.Domains.RegisteredModules.Length == 0);
             f.Configure(); Check(f.Ui.Status == "configured-not-connected" && f.Ui.Diagnostic is null && f.Domains.RegisteredModules.Length == 0);

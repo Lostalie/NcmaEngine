@@ -3,6 +3,7 @@ using System.Text;
 using Ncma.Extensions;
 using Ncma.Extensions.Hosting;
 using Ncma.Gui;
+using Ncma.Editor.Services;
 
 namespace Ncma.Editor.App;
 
@@ -62,6 +63,17 @@ internal sealed unsafe partial class EditorPresenter
                 if(!_extensionSourceChecked || _extensionSourceReview is not {} captured)throw new ExtensionRejectedException("source_review_incomplete");
                 _extensionBundleHash="";
                 _extensionBundleHash=captured.Capture.ExportBuildBundle(_extensionBundleDestination);break;
+            case "extensions_source_handoff":
+                if (!_extensionSourceChecked || _extensionBundleHash.Length == 0 || _extensionSourceReview is not { } source ||
+                    action.Object != _workflowSelected) throw new ExtensionRejectedException("source_review_incomplete");
+                byte[] bundle = source.Capture.CopyBuildBundle();
+                if (Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bundle)) != _extensionBundleHash)
+                    throw new ExtensionRejectedException("source_bundle_mismatch");
+                var jobs = workspace.Owner.WorkflowJobs ?? throw new ExtensionRejectedException("source_workflow_missing");
+                var handoff = jobs.BindReviewedSource(action.Object, source.Capture.SourceRoot, bundle);
+                ClearWorkflowSourceReview(); _jobSourceReview = handoff;
+                _jobWorkspace = handoff.Workspace; _jobCapture = ""; _jobVariant = "extensions"; _jobSourceBundle = _extensionBundleDestination;
+                _showExtensions = false; _showWorkflows = true; ClearExtensionSources(); break;
             default:throw new ExtensionRejectedException("source_ui_intent_invalid");
         }
         _generation=checked(_generation+1);return true;
@@ -97,6 +109,9 @@ internal sealed unsafe partial class EditorPresenter
         Add(GuiItemKind.Text,84,30,"捕获副本输出绝对路径（新 .nccapture 文件）",new("extensions_source_bundle_path",Operation:review),_extensionBundleDestination,enabled:_extensionSourceChecked);
         Add(GuiItemKind.Button,84,31,"导出已审阅副本（不构建、不安装）",new("extensions_source_export",Operation:review),enabled:_extensionSourceChecked&&_extensionBundleDestination.Length>0);
         if(_extensionBundleHash.Length>0)Add(GuiItemKind.Label,3,label++,"捕获包 SHA256 "+_extensionBundleHash+"；构建只使用此副本，不回读原源码。");
+        Add(GuiItemKind.Button,84,32,"交接到当前工作流（不捕获、不构建、不批准）",new("extensions_source_handoff",_workflowSelected,Operation:review),
+            enabled:_extensionSourceChecked&&_extensionBundleHash.Length>0&&_workflowSelected!=Guid.Empty&&workspace.Owner.WorkflowJobs?.CanPrepare(_workflowSelected)==true);
+        Add(GuiItemKind.Label,3,label++,"先在工作流面板选择目标计划；原源码目录须为完整构建工作区根。交接后可显式启动只复制的完整捕获助手；其结果再进入独立离线依赖审批。交接本身不启动助手。");
         if(_extensionSourceChecked)Add(GuiItemKind.Label,3,label++,"本次人工审阅已记录，核对时来源一致。随后磁盘仍可能变化；没有写入/编译/安装授权，关闭即清除本地记录。");
     }
 }

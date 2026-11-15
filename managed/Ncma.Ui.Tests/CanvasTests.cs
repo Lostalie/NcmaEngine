@@ -31,7 +31,7 @@ internal static class CanvasTests
             var button = UiElement.Create(Guid.NewGuid(), "Attack", UiKind.Button, d.Root) with { Order = 1, Font = fontId, Text = "攻击", Action = "attack", Layout = UiLayout.Fixed(8, 44, 88, 32), Style = UiStyle.Default with { Fill = new(.05f, .3f, .7f, 1), CornerRadius = 5 } };
             var input = UiElement.Create(Guid.NewGuid(), "Name", UiKind.TextInput, d.Root) with { Order = 2, Font = fontId, Text = "角色", Action = "name.changed", Layout = UiLayout.Fixed(112, 44, 120, 32), Style = UiStyle.Default with { Fill = new(.1f, .14f, .2f, 1) } };
             d = d with { Elements = [root, label, button, input] };
-            string project = Path.Combine(AppContext.BaseDirectory, "ui-canvas-work", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(project, "assets"));
+            string project = TestProjects.Create("canvas");
             var scope = new UiWriteScope(new Dictionary<string, Guid> { ["assets/Hud.ncmaui"] = d.AssetId }, (id, kind) => id == fontId && kind == UiResourceKind.Font, () => true);
             var clock = new AssetRevisionClock(); using var commands = new UiCommands(new(project), scope, clock);
             var edit = new EditSession(new SceneDocument()); edit.RegisterCommandParticipant(UiCommands.Descriptor, commands);

@@ -9,13 +9,21 @@ param(
 
     [switch]$CleanNative,
 
-    [switch]$GameplayOnly
+    [switch]$GameplayOnly,
+    [string]$VerificationCapturedBuildRoot,
+    [string]$VerificationDependenciesRoot,
+    [string]$VerificationDependenciesSha256,
+    [string]$VerificationDotnetExecutable
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
+if(-not $GameplayOnly -and -not $SkipManaged -and
+   (-not $VerificationCapturedBuildRoot -or -not $VerificationDependenciesRoot -or -not $VerificationDependenciesSha256 -or -not $VerificationDotnetExecutable)){
+    throw 'Managed verification requires separate Prepare-PackageDependencies -Scope verification. Supply VerificationCapturedBuildRoot/DependenciesRoot/DependenciesSha256/DotnetExecutable before running the whole build; no automatic offline approval.'
+}
 
 # Keep tool working directories rooted in the repository; no SDK version is pinned here.
 Push-Location -LiteralPath $projectRoot
@@ -153,7 +161,8 @@ if (-not $SkipManaged) {
     if ($LASTEXITCODE -ne 0) { throw "Managed application service tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Extensions.Tests\Ncma.Extensions.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed extension contract tests build failed with exit code $LASTEXITCODE." }
-    & (Join-Path $PSScriptRoot 'Prepare-ExtensionVerification.ps1') -Configuration $Configuration
+    & (Join-Path $PSScriptRoot 'Prepare-ExtensionVerification.ps1') -Configuration $Configuration -CapturedBuildRoot $VerificationCapturedBuildRoot `
+        -DependenciesRoot $VerificationDependenciesRoot -ExpectedDependenciesSha256 $VerificationDependenciesSha256 -DotnetExecutable $VerificationDotnetExecutable
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.Modules.Tests\Ncma.Modules.Tests.csproj') --configuration $Configuration --nologo
     if ($LASTEXITCODE -ne 0) { throw "Managed module contract tests build failed with exit code $LASTEXITCODE." }
     & dotnet build (Join-Path $projectRoot 'managed\Ncma.AI.Tests\Ncma.AI.Tests.csproj') --configuration $Configuration --nologo

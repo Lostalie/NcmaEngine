@@ -7,10 +7,15 @@ using Ncma.Application;
 using Ncma.Editor.App;
 using Ncma.Editor.Modules;
 using Ncma.Scene;
+#if NCMA_EXTENSIONS
+using System.Text;
+using Ncma.Extensions.Hosting;
+using Ncma.Gui;
+#endif
 
 // Starts the real CandidatePresentation and native owners when run at stage-end.
 // Only outbound HTTP is substituted; missing native/sample/font inputs fail, never skip.
-internal static class AiHostLifetimeTests
+internal static partial class AiHostLifetimeTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("AI host lifetime assertion"); }
     private static void Reject(Action action, string? message = null) {
@@ -35,8 +40,24 @@ internal static class AiHostLifetimeTests
         }
         protected override void Dispose(bool disposing) { if (disposing) Interlocked.Increment(ref Disposals); base.Dispose(disposing); }
     }
+#if NCMA_EXTENSIONS
+    private static void OpenExtensions(EditorPresenter view)
+    {
+        static GuiEvent Click(EditorPresenter v, ulong low) {
+            var item = v.Items.ToArray().Single(i => i.WidgetHigh == 24 && i.WidgetLow == low);
+            return new() { Kind = item.Kind, WidgetHigh = 24, WidgetLow = low, Phase = 3,
+                Frame = v.Frame.Frame, ViewGeneration = v.Frame.ViewGeneration,
+                DocumentGeneration = v.Frame.DocumentGeneration, Revision = v.Frame.Revision };
+        }
+        view.Build(1, 1280, 720); view.Apply([Click(view, 12)], []);
+        view.Build(2, 1280, 720); view.Apply([Click(view, 76)], []);
+        view.Build(3, 1280, 720);
+    }
+#endif
     internal static IEnumerable<(string, Action)> Cases(string repository, string plugins, string output)
     {
+        foreach (var test in SceneMeasurementCases(plugins, output)) yield return test;
+        foreach (var test in MeasurementCases(repository, plugins, output)) yield return test;
         foreach (bool cpu in new[] { true, false }) {
             bool cpuOnly = cpu;
             yield return ($"M8.4-D actual {(cpuOnly ? "CPU GUI" : "DX11")} host close retains all owners until AI drain and forbids resumed frames", () => {
@@ -56,17 +77,42 @@ internal static class AiHostLifetimeTests
                 try {
                     host.Start(); Check(ai is not null && ReferenceEquals(host.VerificationAi, ai));
                     var before = host.VerificationAiLifetime; var owner = host.VerificationEditor; byte[] scene = owner.Document.CaptureBytes();
+#if NCMA_EXTENSIONS
+                    // M8.7-D2 actual combined host: retain this SAME group's observation after host detaches it.
+                    var extensions = host.VerificationAiExtensions ?? throw new Exception("Combined extension owner missing");
+                    var extensionBefore = extensions.Status; var summary = extensions.Capture();
+                    var history = owner.Edit!.State; var view = host.VerificationPresenter;
+                    Check(extensionBefore.State == ExtensionGroupState.Running && !extensionBefore.OuterRetained && extensions.IsCurrent(summary));
+                    OpenExtensions(view);
+                    Check(Encoding.UTF8.GetString(view.Text).Contains("外层持有：否", StringComparison.Ordinal));
+#endif
                     Check(!before.Closed && !before.Closing && before.Editor is not null && before.Gui is not null && before.Window is not null &&
                         before.Physics is not null && before.Modules == 3 && (before.Renderer is null) == cpuOnly);
                     Check(ai!.ConfigureLocal("http://127.0.0.1:8000/v1/chat/completions", "fixture-model"));
                     var review = ai.PrepareConnectionDiagnostic(); ai.BeginConnectionDiagnostic(review, review.Fingerprint, true); Until(() => handler.Calls == 1);
                     // Non-owner close must not revoke or change any lifetime state.
                     Task.Run(() => Reject(host.Dispose)).GetAwaiter().GetResult(); Check(ai.Profile is not null && host.VerificationAiLifetime == before);
+#if NCMA_EXTENSIONS
+                    Check(extensions.Status == extensionBefore && extensions.IsCurrent(summary) && host.VerificationAiExtensions == extensions);
+#endif
                     for (int attempt = 0; attempt < 3; attempt++) {
                         Reject(host.Dispose, "ai_shutdown_draining"); var retained = host.VerificationAiLifetime;
                         Check(retained.Closing && !retained.Closed && retained.Editor == before.Editor && retained.Gui == before.Gui && retained.Renderer == before.Renderer &&
                             retained.Window == before.Window && retained.Physics == before.Physics && retained.Modules == before.Modules);
                         Check(ai.Profile is null && handler.Disposals == 0 && scene.SequenceEqual(owner.Document.CaptureBytes()));
+#if NCMA_EXTENSIONS
+                        var status = extensions.Status;
+                        Check(host.VerificationAiExtensions is null && status.State == ExtensionGroupState.Closed &&
+                            status.RetainedServices == 0 && !status.CloseRetryRequired && status.OuterRetained);
+                        Check(!extensions.IsCurrent(summary)); Reject(() => extensions.Capture());
+                        // Passive presenter projection only, NOT a resumed host frame or shutdown retry.
+                        view.Build((ulong)(4 + attempt), 1280, 720);
+                        string labels = Encoding.UTF8.GetString(view.Text);
+                        Check(labels.Contains("扩展持有 0", StringComparison.Ordinal) && labels.Contains("外层持有：是", StringComparison.Ordinal));
+                        Check(extensions.Status == status && host.VerificationAiLifetime == retained &&
+                            handler.Disposals == 0 && owner.Edit.State == history && scene.SequenceEqual(owner.Document.CaptureBytes()));
+                        Console.WriteLine($"M87-FAULT D11 variant=ai-extensions mode={(cpuOnly ? "cpu" : "dx11")} attempt={attempt} code=ai_shutdown_draining inner=0 outer=true");
+#endif
                     }
                     var frame = new FrameContext(1, 0);
                     Reject(() => host.PumpPlatform()); Reject(() => host.ApplyEditorIntents(frame)); Reject(() => host.PumpAgent(frame));
@@ -77,6 +123,14 @@ internal static class AiHostLifetimeTests
                     var closed = host.VerificationAiLifetime;
                     Check(closed.Closed && closed.Closing && closed.Editor is null && closed.Gui is null && closed.Renderer is null && closed.Window is null && closed.Physics is null && closed.Modules == 0);
                     Check(handler.Disposals == 1 && ai.Status == "closed");
+#if NCMA_EXTENSIONS
+                    var released = extensions.Status;
+                    Check(host.VerificationAiExtensions is null && released.State == ExtensionGroupState.Closed &&
+                        released.RetainedServices == 0 && !released.CloseRetryRequired && !released.OuterRetained);
+                    Check(!extensions.IsCurrent(summary)); Reject(() => extensions.Capture());
+                    // Do not build the presenter after its Editor owner has been disposed.
+                    Console.WriteLine($"M87-FAULT D11 variant=ai-extensions mode={(cpuOnly ? "cpu" : "dx11")} code=closed inner=0 outer=false transportDisposals={handler.Disposals}");
+#endif
                 }
                 finally {
                     handler.Release.TrySetResult();

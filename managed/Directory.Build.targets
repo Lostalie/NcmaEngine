@@ -1,6 +1,7 @@
 <Project>
   <ItemGroup Condition="$([System.String]::Copy('$(MSBuildProjectName)').EndsWith('.Tests'))">
     <Compile Include="$(MSBuildThisFileDirectory)TestSupport/CaseHarness.cs" Link="TestSupport/CaseHarness.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)TestSupport/VerificationWorkspace.cs" Link="TestSupport/VerificationWorkspace.cs" />
   </ItemGroup>
   <!-- SDK compiler host is an explicit build dependency, not a product dependency.
        Apply to composition-only projects too: analyzer references are not transitive. -->

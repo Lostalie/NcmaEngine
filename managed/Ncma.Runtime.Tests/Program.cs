@@ -144,6 +144,7 @@ cases = cases.Concat(ScheduleCompletionTests.Cases()).ToArray();
 cases = cases.Concat(ScheduleBufferTests.Cases()).ToArray();
 cases = cases.Concat(ScheduleBudgetTests.Cases()).ToArray();
 cases = cases.Concat(ScheduleMetricsTests.Cases()).ToArray();
+cases = cases.Concat(ScheduleFindAllocationScopeTests.Cases()).ToArray();
 int failures = 0;
 foreach (var test in cases)
 {

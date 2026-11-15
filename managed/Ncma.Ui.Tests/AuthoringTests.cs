@@ -8,12 +8,40 @@ internal static class AuthoringTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("UI authoring assertion failed."); }
     private static void Reject(Action action) { try { action(); } catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException) { return; } throw new Exception("UI authoring accepted invalid input."); }
-    private static string Root() { string path = Path.Combine(AppContext.BaseDirectory, "ui-authoring-tests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(Path.Combine(path, "assets")); return path; }
+    private static string Root() => TestProjects.Create("authoring");
     private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value);
     private static CapabilityRequest Request(EditSession edit, string cap, JsonElement input) => new(2, Guid.NewGuid(), edit.SessionId, edit.Revision, cap, input);
     private static CapabilityPermissions Permissions => new([UiCommands.CapabilityName, "ncma.history.undo", "ncma.history.redo", "ncma.scene.transaction"]);
     public static IEnumerable<(string Name, Action Run)> Cases()
     {
+        yield return ("UI endpoint impact review performs no file IO or implicit file grant", () => {
+            string root = Root(), path = Path.Combine(root, "assets/Hud.ncmaui");
+            var original = UiDefinition.Create(Guid.NewGuid(), "Original"); byte[] bytes = UiCodec.Encode(original);
+            File.WriteAllBytes(path, bytes); var clock = new AssetRevisionClock(); bool granted = true;
+            var scope = new UiWriteScope(new Dictionary<string, Guid> { ["assets/Hud.ncmaui"] = original.AssetId }, (_, _) => false, () => granted);
+            using var commands = new UiCommands(new(root), scope, clock);
+            var edit = new EditSession(new SceneDocument()); edit.RegisterCommandParticipant(UiCommands.Descriptor, commands);
+            Guid proposal = commands.PrepareProposal("assets/Hud.ncmaui", original with { Name = "Candidate" }, clock.Revision);
+            var input = Json(new { proposalId = proposal, expectedAssetRevision = clock.Revision });
+            var request = Request(edit, UiCommands.CapabilityName, input); var history = edit.State;
+            granted = false;
+            using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None)) {
+                var impact = edit.DescribeRequestImpact(request);
+                Check(impact.OriginalCapability == UiCommands.CapabilityName && impact.DestructiveTarget is null &&
+                    impact.Impact.Objects.Length == 0 && impact.Impact.CreatedObjects.Length == 0 &&
+                    impact.Impact.ComponentTypes.Length == 0 && impact.Impact.Bindings.Length == 0 && !impact.Impact.DocumentReplacement);
+                commands.ValidateProposal(input);
+            }
+            Check(edit.Invoke(request).Code == "permission_denied");
+            Check(edit.Invoke(request, Permissions).Code == "ui_scope_denied");
+            Check(bytes.SequenceEqual(File.ReadAllBytes(path)) && edit.State == history);
+            Reject(() => commands.ValidateProposal(Json(new { proposalId = Guid.NewGuid(), expectedAssetRevision = clock.Revision })));
+            Reject(() => commands.ValidateProposal(Json(new { proposalId = proposal, expectedAssetRevision = clock.Revision + 1 })));
+            Reject(() => commands.ValidateProposal(Json(new { proposalId = proposal, expectedAssetRevision = clock.Revision, extra = true })));
+            using var duplicate = JsonDocument.Parse($$"""{"proposalId":"{{proposal}}","proposalId":"{{proposal}}","expectedAssetRevision":{{clock.Revision}}}""");
+            Reject(() => commands.ValidateProposal(duplicate.RootElement));
+            commands.CancelProposal(proposal); Reject(() => commands.ValidateProposal(input));
+        });
         yield return ("UI file commit, shared scene/asset Undo/Redo, draft cancel and restart", () => {
             string root = Root(); var d = UiDefinition.Create(Guid.NewGuid(), "HUD"); var clock = new AssetRevisionClock();
             var scope = new UiWriteScope(new Dictionary<string, Guid> { ["assets/Hud.ncmaui"] = d.AssetId }, (_, _) => false, () => true);

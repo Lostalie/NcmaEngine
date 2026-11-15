@@ -28,8 +28,9 @@ static RuntimeSceneInstance RuntimeFixture(int fail = 0, bool updateFails = fals
     var source = Fixture(fail, updateFails, createFails, closeFails);
     return source.BakeRuntime(source.Revision).Image.Instantiate(source.Components);
 }
+string verificationWorkspace = VerificationWorkspace.Extract(ref args);
 string root = Path.GetFullPath(args[0]);
-string output = Path.Combine(root, "out/verification/m2-7", args[1], "tests-" + Guid.NewGuid().ToString("N"));
+string output = Path.Combine(verificationWorkspace, "out/verification/m2-7", args[1], "tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(output);
 string projectRoot = Path.Combine(output, "中文 Player Project"); Directory.CreateDirectory(projectRoot);
 string assemblyPath = Assembly.GetExecutingAssembly().Location;
@@ -60,7 +61,7 @@ if(args.Length==4 && args[3]=="--action-only") {
     catch(Exception e){Console.Error.WriteLine("FAIL Actions: "+e);return 1;}
 }
 if(args.Length==4 && args[3]=="--action-joint-only") {
-    try {foreach(string test in ActionJointChecks.Run(root,output,Path.GetFullPath(args[2])))Console.WriteLine("PASS "+test);return 0;}
+    try {foreach(string test in ActionJointChecks.Run(verificationWorkspace,output,Path.GetFullPath(args[2])))Console.WriteLine("PASS "+test);return 0;}
     catch(Exception e){Console.Error.WriteLine("FAIL Joint actions: "+e);return 1;}
 }
 var cases = new (string Name, Action Run)[] {
@@ -442,15 +443,15 @@ harness.Case("M8.5 optional generated component actual Player startup",()=>Exten
 #endif
 foreach (var test in cases) harness.Case(test.Name, () => { test.Run(); passed.Add(test.Name); });
 if (args.Length > 2) {
-    harness.Case("Simulation composition", () => {SimulationCompositionChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("Simulation composition 0/1/8/32, default-off/state oracle/reload/native identity");});
-    harness.Case("Action sample", () => {ActionSampleChecks.Run(root,output,Path.GetFullPath(args[2]));passed.Add("K6 generated procedural sample: 0/1 actor packed Headless/DX11, disabled unused physics/GPU and authoring preserved");});
-    harness.Case("Joint actions", () => passed.AddRange(ActionJointChecks.Run(root,output,Path.GetFullPath(args[2]))));
+    harness.Case("Simulation composition", () => {SimulationCompositionChecks.Run(verificationWorkspace,output,Path.GetFullPath(args[2]));passed.Add("Simulation composition 0/1/8/32, default-off/state oracle/reload/native identity");});
+    harness.Case("Action sample", () => {ActionSampleChecks.Run(verificationWorkspace,output,Path.GetFullPath(args[2]));passed.Add("K6 generated procedural sample: 0/1 actor packed Headless/DX11, disabled unused physics/GPU and authoring preserved");});
+    harness.Case("Joint actions", () => passed.AddRange(ActionJointChecks.Run(verificationWorkspace,output,Path.GetFullPath(args[2]))));
     harness.Case("Actions", () => passed.AddRange(ActionCombatChecks.Run(output,Path.GetFullPath(args[2]))));
     harness.Case("Root motion", () => passed.AddRange(RootMotionChecks.Run(root,output,Path.GetFullPath(args[2]))));
     harness.Case("Character host", () => passed.AddRange(CharacterHostChecks.Run(output,Path.GetFullPath(args[2]))));
-    harness.Case("Package", () => passed.AddRange(PackageChecks.Run(root,args[1],output,Path.GetFullPath(args[2]))));
+    harness.Case("Package", () => passed.AddRange(PackageChecks.Run(root,args[1],output,Path.GetFullPath(args[2]),verificationWorkspace)));
     harness.Case("Scene Player", () => passed.AddRange(SceneHostChecks.Run(output,Path.GetFullPath(args[2]))));
-    harness.Case("FBX Player", () => passed.AddRange(SkinnedHostChecks.Run(root,output,Path.GetFullPath(args[2]))));
+    harness.Case("FBX Player", () => passed.AddRange(SkinnedHostChecks.Run(root,output,Path.GetFullPath(args[2]),args[1],verificationWorkspace)));
 }
 int exitCode = harness.Finish();
 File.WriteAllBytes(Path.Combine(output, "results.json"), JsonSerializer.SerializeToUtf8Bytes(new { passed = passed.Count, tests = passed,

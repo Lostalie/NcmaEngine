@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "kind": "ncma.m87.fault-plan-not-executable",
+  "status": "prepared-not-executed",
+  "executionWindow": "F-main unless original inventory explicitly defers entry to after-F-PS5.1",
+  "newCTestEntries": 0,
+  "modelCallsAuthorized": false,
+  "stageAccepted": false,
+  "groups": [
+    {"id": "D01", "fault": "HTTP error, authentication, rate limiting, malformed response", "entry": "NcmaModuleTests.AIContracts", "source": "managed/Ncma.AI.Tests/ChatAdapterTests.cs", "anchor": "B 3xx authentication rate limit server failures never retry or read raw errors", "evidenceClass": "injected-HTTP", "required": "one call; distinct sanitized failure; no raw body or implicit retry; no mutation"},
+    {"id": "D02", "fault": "timeout and uncooperative cancellation", "entry": "NcmaModuleTests.AIContracts", "source": "managed/Ncma.AI.Tests/ConnectionDiagnosticTests.cs", "anchor": "D diagnostic timeout and ignored cancellation retain transport until actual completion", "evidenceClass": "controlled-transport", "required": "deadline not renewed; retained until actual completion; one disposal"},
+    {"id": "D03", "fault": "busy admission and active slot retention", "entry": "NcmaModuleTests.AIContracts", "source": "managed/Ncma.AI.Tests/ChatAdapterTests.cs", "anchor": "B busy diagnostic does not release or consume another request active slot", "evidenceClass": "controlled-transport", "required": "rejected request cannot release another owner slot or consume retry identity"},
+    {"id": "D04", "fault": "bounded queue, duplicate IDs, stale mailbox result", "entry": "NcmaModuleTests", "source": "managed/Ncma.Modules.Tests/Program.cs", "anchor": "revision/replacement/revocation and late results", "evidenceClass": "mailbox-contract", "required": "retain original queue/lifetime budgets, exact context, one delivery and owner guards"},
+    {"id": "D05", "fault": "late valid response across explicit workflow replacement", "entry": "NcmaModuleTests.AIContracts", "source": "managed/Ncma.AI.Tests/DomainWorkflowTests.Lifecycle.cs", "anchor": "M8.7-D late reply after {mode} cannot enter replacement workflow", "variants": ["cancel", "configuration-revoke"], "newCases": 2, "evidenceClass": "original-workflow-injected-HTTP", "required": "old retained then drained without receipt; fresh exact send approval; one new receipt/history; old/new identity and byte hashes; final disposal"},
+    {"id": "D06", "fault": "actual native owner close while AI ignores cancellation", "entry": "NcmaAiEditorTests.HostLifetime", "source": "managed/Ncma.Editor.Services.Tests/AiHostLifetimeTests.cs", "anchor": "host close retains all owners until AI drain and forbids resumed frames", "variants": ["CPU GUI", "DX11"], "evidenceClass": "in-process-real-host-injected-diagnostic", "required": "same Editor/GUI/renderer/window/physics retained, no resumed frame/recovery, one final close; not independent apphost acceptance"},
+    {"id": "D07", "fault": "extension close failure dependency retention", "entry": "NcmaExtensionTests", "source": "managed/Ncma.Extensions.Tests/ExtensionLifecycleTests.cs", "anchor": "normal close failure retains dependencies until explicit retry", "evidenceClass": "original-lifetime-with-fake-extension", "required": "revoke before cleanup; no implicit retry; explicit retry releases in reverse order"},
+    {"id": "D08", "fault": "outer owner retained with closed extension group", "entry": "NcmaExtensionTests.Editor.extensions", "alsoEntry": "NcmaExtensionTests.Editor.ai-extensions", "source": "managed/Ncma.Editor.Services.Tests/ExtensionEditorTests.cs", "anchor": "M8.5-C outer retained survives closed extension group and clears only after host retry", "evidenceClass": "actual-presenter-original-lifetime-fault", "required": "outer and extension counts remain distinct; passive diagnostic does not retry or mutate history"},
+    {"id": "D09", "fault": "root exit is not process tree drain", "entry": "NcmaWorkflowTests.Lifecycle", "source": "managed/Ncma.Editor.Services.Tests/WorkflowBuildJobTests.cs", "anchor": "M8.6-C2a root exit is not descendant drain timeout cancel preserve first outcome", "evidenceClass": "synthetic-process-lease", "required": "keep first timeout/cancel outcome; retain owner until drain; no proof of real SDK descendant behavior"},
+    {"id": "D10", "fault": "import worker crash, malformed result and identity mismatch", "entry": "NcmaAssetImportTests", "source": "managed/Ncma.Asset.Import.Tests/Program.cs", "anchor": "Worker crash, malformed output/model and integrity failure cannot publish", "evidenceClass": "real-owned-child-test-worker", "required": "no publication, exact diagnostic, completed cleanup; preserve original timeout and all case results"},
+    {"id": "D11", "fault": "actual combined AI+extension host retained by ignored cancellation", "entry": "NcmaExtensionTests.Editor.ai-extensions", "source": "managed/Ncma.Editor.Services.Tests/AiHostLifetimeTests.cs", "anchor": "M8.7-D2 actual combined host", "variants": ["CPU GUI", "DX11"], "strengthenedCases": 2, "evidenceClass": "in-process-real-combined-host-injected-diagnostic", "required": "same actual group Running then Closed before AI drain; extension detached/revoked, inner0/outertrue; retained downstream owners; passive actual presenter labels and unchanged history/bytes; after explicit completed close inner0/outerfalse; one transport disposal; no resumed frames or apphost acceptance"}
+  ],
+  "variantBindings": [
+    {"entry": "NcmaAiEditorTests.HostLifetime", "variant": "verify-ai", "requiredAI": true, "requiredExtensions": false, "selector": "--ai-host-lifetime-tests", "inventoryPathSegment": "/m8-4-ai/bin/", "timeoutSeconds": 60, "runSerial": true, "proves": ["D06"], "doesNotProve": ["D11"]},
+    {"entry": "NcmaExtensionTests.Editor.extensions", "variant": "verify-extensions", "requiredAI": false, "requiredExtensions": true, "selector": "--extension-editor-tests", "inventoryPathSegment": "/m8-5-extensions/bin/", "timeoutSeconds": 60, "runSerial": true, "proves": ["D08"], "doesNotProve": ["D06", "D11"]},
+    {"entry": "NcmaExtensionTests.Editor.ai-extensions", "variant": "verify-ai-extensions", "requiredAI": true, "requiredExtensions": true, "selector": "--extension-editor-tests", "inventoryPathSegment": "/m8-5-ai-extensions/bin/", "timeoutSeconds": 60, "runSerial": true, "proves": ["D08", "D11"], "requiredCombinedCases": 2, "requiredModes": ["cpu", "dx11"]}
+  ],
+  "attributionPolicy": {
+    "resultIdentity": ["captureManifestSha256", "sourceInputsSha256", "configuration", "variant", "entry", "case", "productInputHashes", "commandAndProperties", "originalLogAndJUnitHashes"],
+    "caseResult": "original CaseHarness terminal result including finally; M87-FAULT markers alone never pass",
+    "missingDependency": "fail or not-run with original denominator; never skip then pass",
+    "timeout": "preserve original timeout and partial reached cases; unknown unless exact cause independently evidenced",
+    "environmentBlocked": "requires per-entry evidence of external prerequisite; retain original raw failure; never classify all apphost/native failures together",
+    "combinedProof": "both original case terminal passes from ai-extensions plus D11 retained/closed markers for cpu and dx11; AI-only pass cannot substitute",
+    "nativeFailure": "retain CPU and DX11 independently; CPU success cannot imply DX11 or independent EXE success",
+    "cleanupFailure": "whole case fails even after earlier successful assertions; retain exact owned process identity and request approval when normal stop fails",
+    "extensionCloseFailure": "D07/D08 original fault fixtures only; D11 tests healthy extension close with retained AI, NOT injected extension failure in real combined host"
+  },
+  "remainingPreparation": [
+    "D1/D2 cases are prepared only; replace all whole-stage inputs with matching captured products and receipts and generate fresh original CTest inventory before F",
+    "Explicitly retain independent apphost/environment and manual C3-08 gates; no source-level mapping implies those passed",
+    "E: bounded measurement/long-run plan before fresh whole input preparation and F"
+  ],
+  "testsExecuted": 0
+}

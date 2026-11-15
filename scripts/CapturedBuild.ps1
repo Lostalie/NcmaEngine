@@ -30,6 +30,15 @@ public sealed class NcmaCapturedBuildPins : IDisposable {
   while(at<bytes.Length){int n=stream.Read(bytes,at,bytes.Length-at);if(n==0)throw new IOException("capture_short_read");at+=n;}
   return bytes;
  }
+ // Trusted bridge borrows while this lease remains alive. Parent duplicates
+ // from the authenticated process; numeric values alone are NOT authority.
+ public long[] BorrowHandles(){
+  var result=new List<long>();
+  foreach(var f in files){if(f.SafeFileHandle.IsClosed)throw new ObjectDisposedException("capture_pins");result.Add(f.SafeFileHandle.DangerousGetHandle().ToInt64());}
+  foreach(var d in dirs.Values){if(d.IsClosed)throw new ObjectDisposedException("capture_pins");result.Add(d.DangerousGetHandle().ToInt64());}
+  if(result.Count>81924)throw new IOException("capture_handle_budget");
+  return result.ToArray();
+ }
  public void Dispose(){foreach(var f in files)f.Dispose();foreach(var d in dirs.Values)d.Dispose();}
 }
 '@
@@ -47,21 +56,12 @@ function Assert-CaptureRelativePath([string]$Path) {
 }
 
 function Get-CapturedOriginInputs([string]$Workspace) {
- # The older AI diagnostic selector omits native shader tools. A build capture
- # needs the actual closure, but uses the SAME canonical content hash encoding.
- $map=@{};foreach($entry in @(Get-AiCandidateSourceInputs $Workspace)){$map.Add($entry.path,$entry)}
- $extra=@(& git -C $Workspace -c core.quotepath=false ls-files --cached --others --exclude-standard -- tools Directory.Build.props Directory.Build.targets Directory.Packages.props .editorconfig)
- if($LASTEXITCODE -ne 0){throw 'capture_origin_inventory'}
- foreach($path in $extra){
-  if($path -match '(?i)(^|/)(bin|obj|\.git)/|\.user$' -or $map.ContainsKey($path)){continue}
-  Assert-CaptureRelativePath $path;$full=Join-Path $Workspace $path
-  for($parent=$full;$parent;$parent=[IO.Path]::GetDirectoryName($parent)){
-   if((Test-Path -LiteralPath $parent) -and ((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'capture_origin_link'}
-  }
-  if(-not(Test-Path -LiteralPath $full -PathType Leaf)){continue}
-  $map.Add($path,[pscustomobject]@{path=$path;size=(Get-Item -LiteralPath $full).Length;sha256=(Get-DeploymentHash $full)})
+ # Adapt the shared selection to portable capture paths; do not maintain a
+ # second Git path list, ignore policy or hashing algorithm here.
+ foreach($entry in @(Get-AiCandidateSourceInputs $Workspace)){
+  Assert-CaptureRelativePath $entry.path
+  $entry
  }
- foreach($path in @(Get-AiCandidateOrderedPaths @($map.Keys))){$map[$path]}
 }
 
 function New-CapturedBuild([string]$Workspace,[string]$ReviewBundle,[string]$ExpectedBundleSha256) {

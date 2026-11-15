@@ -90,7 +90,7 @@ if($Group -eq 'CrossShell'){
             $shell=(Get-Command $name -CommandType Application -ErrorAction Stop).Source
             $result=Join-Path $output ($name+'.json')
             $info=[Diagnostics.ProcessStartInfo]::new();$info.FileName=$shell
-            $info.Arguments='-NoLogo -NoProfile -ExecutionPolicy Bypass -File "'+$vectorScript+'" -VectorOutput "'+$result+'"'
+            $info.Arguments='-NoLogo -NoProfile -File "'+$vectorScript+'" -VectorOutput "'+$result+'"'
             $info.UseShellExecute=$false;$info.CreateNoWindow=$true;$info.WindowStyle=[Diagnostics.ProcessWindowStyle]::Hidden
             # Child emits no stdout; only a bounded vector file. Missing shell fails, never skips.
             $child=[Diagnostics.Process]::Start($info)

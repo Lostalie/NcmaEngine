@@ -1,4 +1,5 @@
 using Ncma.Runtime;
+using System.Runtime;
 
 internal static class ScheduleBufferTests
 {
@@ -17,20 +18,27 @@ internal static class ScheduleBufferTests
     }
     internal static IEnumerable<(string Name,Action Run)> Cases()
     {
-        yield return("E6-C indexed Find over 4096 rows preserves exact rows and warmed 0B in serial/worker callbacks",()=>{
+        yield return("E6-C indexed Find allocation v2 over 4096 rows preserves exact rows and strict 0B in serial/worker callbacks",()=>{
             foreach(int workers in new[]{0,2}) {
                 var world=Scene(4096);var runner=new WorldRunner(world);var ids=new Guid[4096];Guid missing=Guid.NewGuid();int calls=0;
                 var graph=ScheduleGraph.Compile(world.Components,[new("find",0,ScheduleAffinity.Worker,[ScheduleAccess.Read<TransformData>(world.Components)],[],[])]);
                 using var executor=new ScheduleExecutor(world,graph,[new("find",c=>{
                     for(int i=0;i<ids.Length;i++)ids[i]=c.ObjectAt<TransformData>(i);
                     for(int i=0;i<4096;i++)Check(c.Find<TransformData>(ids[i])==i);
-                    long start=GC.GetAllocatedBytesForCurrentThread();int sum=0;bool exact=true;
-                    for(int i=4095;i>=0;i--){int row=c.Find<TransformData>(ids[i]);sum+=row;exact&=row==i;}
-                    long allocated=GC.GetAllocatedBytesForCurrentThread()-start;
+                    Check(GCSettings.LatencyMode!=GCLatencyMode.NoGCRegion);
+                    long allocated;int sum=0;bool exact=true;
+                    using(ScheduleFindAllocationScope.Enter()) {
+                        Check(GCSettings.LatencyMode==GCLatencyMode.NoGCRegion);
+                        long start=GC.GetAllocatedBytesForCurrentThread();
+                        for(int i=4095;i>=0;i--){int row=c.Find<TransformData>(ids[i]);sum+=row;exact&=row==i;}
+                        allocated=GC.GetAllocatedBytesForCurrentThread()-start;
+                    }
+                    Check(GCSettings.LatencyMode!=GCLatencyMode.NoGCRegion);
+                    if(allocated!=0)throw new Exception($"Find allocation v2: workers={workers}, call={calls}, expected=0B, actual={allocated}B");
                     Check(exact && sum==8386560 && allocated==0 && c.Find<TransformData>(missing)==-1 && c.Find<TransformData>(Guid.Empty)==-1);calls++;
                 })],[ScheduleComponent.Of<TransformData>()],workerCount:workers,timeout:TimeSpan.FromSeconds(5));
                 runner.ConfigureSchedule(executor);
-                try{for(int i=0;i<3;i++)runner.Advance(1d/60);Check(calls==3 && world.Tick==3);}
+                try{for(int i=0;i<3;i++)runner.Advance(1d/60);Check(calls==3 && world.Tick==3);Console.WriteLine($"Find allocation v2: workers={workers}, callbacks={calls}, rows=4096, bytes=0; checked region exit, not a frame benchmark");}
                 finally{runner.ClearSchedule();runner.WaitForScheduleResources(TimeSpan.FromSeconds(4));}
             }
         });

@@ -5,20 +5,25 @@ param(
     [switch]$IncludeAI,
     [switch]$IncludeExtensions,
     [string]$CapturedBuildRoot,
-    [string]$CMakeExecutable
+    [string]$CMakeExecutable,
+    [string]$DependenciesRoot,
+    [string]$ExpectedDependenciesSha256,
+    [string]$DotnetExecutable
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'AiCandidatePackage.ps1')
 . (Join-Path $PSScriptRoot 'CapturedBuild.ps1')
+. (Join-Path $PSScriptRoot 'OfflinePackageDependencies.ps1')
 $packageWorkspace = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
-$capture=$null;$compileWorkspace=$packageWorkspace;$captureArgs=@()
-if($IncludeExtensions -or $CapturedBuildRoot){
-    if(-not $CapturedBuildRoot){$CapturedBuildRoot=New-CapturedBuild $packageWorkspace $null $null}
-    $capture=Open-CapturedBuild $packageWorkspace $CapturedBuildRoot
-    $compileWorkspace=$capture.Source;$captureArgs=@($capture.Arguments)
-}
+$capture=$null;$dependencies=$null;$compileWorkspace=$packageWorkspace;$captureArgs=@();$packageDotnet='dotnet'
 try {
+if($IncludeExtensions -or $CapturedBuildRoot -or $DependenciesRoot -or $ExpectedDependenciesSha256){
+    if(-not $CapturedBuildRoot -or -not $DependenciesRoot -or -not $ExpectedDependenciesSha256 -or -not $DotnetExecutable){throw 'Captured packaging requires separate Prepare-PackageDependencies output, exact receipt SHA and explicit dotnet.exe; no implicit restore.'}
+    $capture=Open-CapturedBuild $packageWorkspace $CapturedBuildRoot
+    $dependencies=Open-OfflinePackageDependencies $packageWorkspace $capture $DependenciesRoot $ExpectedDependenciesSha256 $Configuration ([bool]$IncludeAI) ([bool]$IncludeExtensions) $DotnetExecutable
+    $compileWorkspace=$capture.Source;$captureArgs=@($capture.Arguments);$packageDotnet=$dependencies.Dotnet
+}
 $packageAllowedRoot = Join-Path $packageWorkspace 'out'
 $packageBase = Join-Path $packageWorkspace "out\package\m2-7\$Configuration\$([Guid]::NewGuid().ToString('N'))"
 if (-not $packageBase.StartsWith($packageAllowedRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe package target.' }
@@ -37,6 +42,18 @@ for ($packageParent = Get-Item -LiteralPath $packageWorkspace; $null -ne $packag
     if (($packageParent.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Reparse workspace.' }
 }
 New-Item -ItemType Directory -Path $packageBase | Out-Null
+if($null -ne $dependencies){Write-OfflinePackageJson (Join-Path $packageBase 'offline-dependencies.json') @{root=$dependencies.Root;receiptSha256=$dependencies.ReceiptSha256;captureManifestSha256=$capture.ManifestSha256;sourceInputsSha256=$capture.Manifest.sourceInputsSha256;automaticRestore=$false}}
+function Invoke-PreparedPackageJob([string]$id,[string]$destination='') {
+    $jobs=@($dependencies.Jobs|Where-Object id -ceq $id)
+    if($jobs.Count -ne 1){throw 'Prepared package job missing'}
+    $job=$jobs[0];$jobArguments=@(Get-OfflinePackageArguments $capture $dependencies.Root $Configuration $job)
+    if($job.operation -ceq 'publish'){
+        & $packageDotnet publish (Join-Path $compileWorkspace $job.project) @jobArguments --no-restore --output $destination
+    }else{
+        & $packageDotnet build (Join-Path $compileWorkspace $job.project) @jobArguments --no-restore
+    }
+    if($LASTEXITCODE -ne 0){throw "Prepared package job failed: $id; no restore retry"}
+}
 $packageInputs = @(); $packageInputHash = $null
 $pinnedProducts = $IncludeAI -or $IncludeExtensions -or ($null -ne $capture)
 if ($pinnedProducts) {
@@ -53,18 +70,25 @@ if ($pinnedProducts) {
     }
     & $CMakeExecutable --build $nativeBuild --config $Configuration --parallel 4 *> (Join-Path $packageBase 'native-build.log')
     if ($LASTEXITCODE -ne 0) { throw 'AI candidate native build failed; evidence retained.' }
-    & dotnet build (Join-Path $compileWorkspace 'managed/Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj') @captureArgs --configuration $Configuration --nologo `
+    if($null -ne $dependencies){Invoke-PreparedPackageJob 'tools/Ncma.Gameplay.Sample'}else{
+    & $packageDotnet build (Join-Path $compileWorkspace 'managed/Ncma.Gameplay.Sample/Ncma.Gameplay.Sample.csproj') @captureArgs --configuration $Configuration --nologo `
         "-p:ArtifactsPath=$packageBase/build/default" -p:NcmaEnableAI=false
     if ($LASTEXITCODE -ne 0) { throw 'AI candidate sample build failed.' }
+    }
 }
 function Publish-Candidate([string]$project, [string]$destination, [bool]$ai = $false, [bool]$extensions = $false) {
+    if($null -ne $dependencies){
+        $variant=if($ai){'ai'}else{'default'};if($extensions){$variant+='-extensions'}
+        Invoke-PreparedPackageJob ($variant+'/'+[IO.Path]::GetFileNameWithoutExtension($project)) $destination
+        return
+    }
     $variantArgs = @()
     if ($pinnedProducts) {
         $variant = if ($ai) { 'ai' } else { 'default' }
         if ($extensions) { $variant += '-extensions' }
         $variantArgs = @("-p:ArtifactsPath=$packageBase/build/$variant", "-p:NcmaEnableAI=$($ai.ToString().ToLowerInvariant())", "-p:NcmaEnableExtensions=$($extensions.ToString().ToLowerInvariant())")
     }
-    & dotnet publish (Join-Path $compileWorkspace $project) @captureArgs --configuration $Configuration --runtime win-x64 --self-contained false `
+    & $packageDotnet publish (Join-Path $compileWorkspace $project) @captureArgs --configuration $Configuration --runtime win-x64 --self-contained false `
         --output $destination --nologo -p:UseAppHost=true -p:PublishTrimmed=false -p:PublishAot=false -p:PublishSingleFile=false @variantArgs
     if ($LASTEXITCODE -ne 0) { throw "Candidate publish failed ($project): $LASTEXITCODE" }
 }
@@ -84,6 +108,7 @@ function Add-Sample([string]$destination) {
     }
     foreach ($file in @('Ncma.Gameplay.Sample.dll', 'Ncma.Gameplay.Sample.deps.json', 'Ncma.Gameplay.Sample.pdb')) {
         $sampleDirectory = if ($pinnedProducts) { "$packageBase/build/default/bin/Ncma.Gameplay.Sample/$($Configuration.ToLowerInvariant())" } else { "$packageWorkspace/managed/Ncma.Gameplay.Sample/bin/$Configuration/net8.0" }
+        if($null -ne $dependencies){$sampleDirectory="$($dependencies.Root)/artifacts/tools/bin/Ncma.Gameplay.Sample/$($Configuration.ToLowerInvariant())"}
         Copy-Exact (Join-Path $sampleDirectory $file) (Join-Path $destination "sample\$file")
     }
 }
@@ -125,13 +150,16 @@ $playerNullPhysics = Join-Path $packageBase 'player-null-physics'
 $playerDx11Physics = Join-Path $packageBase 'player-dx11-physics'
 $cookArgs = @()
 if ($pinnedProducts) { $cookArgs = @("-p:ArtifactsPath=$packageBase/build/default", '-p:NcmaEnableAI=false', '-p:NcmaEnableExtensions=false') }
-& dotnet build (Join-Path $compileWorkspace 'managed\Ncma.Shader.Cook\Ncma.Shader.Cook.csproj') @captureArgs --configuration $Configuration --nologo @cookArgs
+if($null -ne $dependencies){Invoke-PreparedPackageJob 'tools/Ncma.Shader.Cook'}else{
+& $packageDotnet build (Join-Path $compileWorkspace 'managed\Ncma.Shader.Cook\Ncma.Shader.Cook.csproj') @captureArgs --configuration $Configuration --nologo @cookArgs
 if ($LASTEXITCODE -ne 0) { throw 'Shader cooker build failed.' }
+}
 $shaderCooker = Join-Path $packageWorkspace "managed\Ncma.Shader.Cook\bin\$Configuration\net8.0\Ncma.Shader.Cook.dll"
 if ($pinnedProducts) { $shaderCooker = "$packageBase/build/default/bin/Ncma.Shader.Cook/$($Configuration.ToLowerInvariant())/Ncma.Shader.Cook.dll" }
+if($null -ne $dependencies){$shaderCooker="$($dependencies.Root)/artifacts/tools/bin/Ncma.Shader.Cook/$($Configuration.ToLowerInvariant())/Ncma.Shader.Cook.dll"}
 function Add-Shaders([string]$destination,[string]$profile) {
     $cooked = Join-Path $packageBase ("shaders-" + $profile)
-    & dotnet $shaderCooker $NativePluginRoot $cooked $profile
+    & $packageDotnet $shaderCooker $NativePluginRoot $cooked $profile
     if ($LASTEXITCODE -ne 0) { throw 'Shader package cook failed.' }
     foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $cooked 'assets\shaders') -File)) {
         Copy-Exact $file.FullName (Join-Path $destination ('assets\shaders\' + $file.Name))
@@ -245,6 +273,7 @@ if ($IncludeAI) {
         $aiProducts[$entry[0]] = @{path=$entry[1];manifestSha256=(Get-DeploymentHash (Join-Path $entry[1] 'deployment-manifest.json'))}
     }
     [IO.File]::WriteAllText($aiPending, (@{schemaVersion=1;configuration=$Configuration;sourceInputsSha256=$packageInputHash;
+        capturedBuildRoot=$(if($null -ne $capture){$capture.Root}else{$null});captureManifestSha256=$(if($null -ne $capture){$capture.ManifestSha256}else{$null});
         sourceInputsFile=(Join-Path $packageBase 'build-inputs.json');products=$aiProducts;tested=$false;production=$false} | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
     New-Item -ItemType Directory -Path (Split-Path $aiIndex) -Force | Out-Null
     if (Test-Path -LiteralPath $aiIndex) { [IO.File]::Replace($aiPending,$aiIndex,(Join-Path $packageBase 'previous-ai-packages.json')) }
@@ -288,7 +317,11 @@ $packageIndex = Join-Path $packageWorkspace "out\verification\m2-7\$Configuratio
 Assert-PlainPath $packageIndex
 New-Item -ItemType Directory -Path (Split-Path -Parent $packageIndex) -Force | Out-Null
 if ($pinnedProducts -and (Test-Path -LiteralPath $packageIndex)) { Copy-Exact $packageIndex (Join-Path $packageBase 'previous-default-packages.json') }
-$indexJson = [ordered]@{ schemaVersion = 1; editor = $editor; playerNull = $playerNull; playerDx11 = $playerDx11; playerNullPhysics = $playerNullPhysics; playerDx11Physics = $playerDx11Physics } | ConvertTo-Json
+$indexJson = [ordered]@{ schemaVersion = 1; editor = $editor; playerNull = $playerNull; playerDx11 = $playerDx11; playerNullPhysics = $playerNullPhysics; playerDx11Physics = $playerDx11Physics;
+    sourceInputsSha256=$packageInputHash;capturedBuildRoot=$(if($null -ne $capture){$capture.Root}else{$null});captureManifestSha256=$(if($null -ne $capture){$capture.ManifestSha256}else{$null}) } | ConvertTo-Json
 [IO.File]::WriteAllText($packageIndex, $indexJson, [Text.UTF8Encoding]::new($false))
 Write-Host "[Ncma] Framework-dependent candidates staged at $packageBase; production entry untouched."
-} finally { if($null -ne $capture){$capture.Pins.Dispose()} }
+} finally {
+    if($null -ne $dependencies){$dependencies.Pins.Dispose()}
+    if($null -ne $capture){$capture.Pins.Dispose()}
+}

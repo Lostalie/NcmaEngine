@@ -7,7 +7,7 @@ using Ncma.Editor.Core;
 using Ncma.Editor.Modules;
 using Ncma.Editor.Services;
 
-internal static class AiAnimationWorkflowTests
+internal static partial class AiAnimationWorkflowTests
 {
     private static void Check(bool value) { if (!value) throw new Exception("AI animation workflow assertion"); }
     private static void Reject(Action action) {
@@ -22,13 +22,15 @@ internal static class AiAnimationWorkflowTests
     {
         internal string Draft = "{}";
         internal int Calls;
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage message, CancellationToken token) {
+        internal byte[]? Sent;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage message, CancellationToken token) {
+            Sent = await message.Content!.ReadAsByteArrayAsync(token);
             Interlocked.Increment(ref Calls);
             var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(new {
                 id = "animation-fixture", @object = "chat.completion", created = 1, model = "fixture-model",
                 choices = new[] { new { index = 0, message = new { role = "assistant", content = Draft }, finish_reason = "stop" } }
             })) };
-            response.Content.Headers.ContentType = new("application/json"); return Task.FromResult(response);
+            response.Content.Headers.ContentType = new("application/json"); return response;
         }
     }
     private sealed class Harness : IDisposable
@@ -84,6 +86,7 @@ internal static class AiAnimationWorkflowTests
     }
     internal static IEnumerable<(string, Action)> Cases(string output, string repository)
     {
+        foreach (var test in JointAnimationCases(output, repository)) yield return test;
         yield return ("M8.4-D3 actual workspace graph read grant, resource approval, independent Commit and Undo", () => {
             using var f = new GraphInspectionTests.Fixture(output, repository, authoring: true);
             using var h = new WorkspaceHarness(f); byte[] before = File.ReadAllBytes(f.File), scene = f.Owner.Document.CaptureBytes();

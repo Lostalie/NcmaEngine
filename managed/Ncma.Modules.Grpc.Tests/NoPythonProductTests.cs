@@ -16,7 +16,7 @@ internal static partial class Program
         {
             // Lock known source interpreters when installed; this test also works if absent.
             // This is NOT an assertion that the target machine has no other Python installation.
-            var venv = Path.Combine(repository, "out/modules/python312");
+            var venv = PythonEnvironmentFile(repository, "");
             var config = Path.Combine(venv, "pyvenv.cfg");
             var sourceInterpreters = new List<string> { Path.Combine(venv, "Scripts/python.exe") };
             if (File.Exists(config)) sourceInterpreters.Add(File.ReadLines(config).Single(s => s.StartsWith("executable = ", StringComparison.Ordinal))[13..]);

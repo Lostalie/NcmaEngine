@@ -147,6 +147,13 @@ else()
     target_compile_options(NcmaAnimationKernel PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
+# Keep the original library location for ABI consumers, but make the plugin
+# runtime closure available to direct CMake builds as well as Build.ps1.
+add_custom_command(TARGET NcmaAnimationKernel POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_BINARY_DIR}/m2/plugins"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:NcmaAnimationKernel>" "${CMAKE_BINARY_DIR}/m2/plugins/"
+    VERBATIM)
+
 add_library(NcmaImportKernel SHARED
     engine/source/plugins/import/ImportKernel.cpp
     engine/source/plugins/import/ImageDecode.cpp
@@ -314,6 +321,9 @@ if(WIN32 AND NCMA_BUILD_TESTS)
     target_compile_options(NcmaKernelReferenceCapture PRIVATE /W4 /WX /permissive- /utf-8)
     target_link_libraries(NcmaKernelReferenceCapture PRIVATE glfw Ncma::Eigen d3d11 dxgi d3dcompiler)
     set_target_properties(NcmaKernelReferenceCapture PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    add_custom_command(TARGET NcmaKernelReferenceCapture POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:glfw>" "$<TARGET_FILE_DIR:NcmaKernelReferenceCapture>/$<TARGET_FILE_NAME:glfw>"
+        VERBATIM)
     add_executable(NcmaRendererValidationProbe tests/plugins/RendererValidationProbe.cpp)
     target_link_libraries(NcmaRendererValidationProbe PRIVATE d3d11)
     target_compile_options(NcmaRendererValidationProbe PRIVATE /W4 /WX /permissive- /utf-8)
@@ -355,7 +365,7 @@ if(NCMA_BUILD_MANAGED)
         # missing optional verification binaries must fail, not silently skip.
         if(WIN32 AND NCMA_BUILD_TESTS)
             add_custom_target(NcmaManagedAiVerification
-                COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                COMMAND powershell.exe -NoLogo -NoProfile
                     -File "${CMAKE_SOURCE_DIR}/scripts/Prepare-AiVerification.ps1"
                     -Configuration $<IF:$<CONFIG:Debug>,Debug,Release> -DotnetExecutable "${DOTNET_EXECUTABLE}"
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" VERBATIM)
@@ -448,6 +458,10 @@ endif()
 
 if(NCMA_BUILD_TESTS)
     enable_testing()
+    if(WIN32)
+        include(engine/build/cmake/NcmaPackageVerification.cmake)
+        set(_ncma_managed_runtime_args --verification-workspace "${NCMA_PACKAGE_VERIFICATION_WORKSPACE_ROOT}")
+    endif()
     if(MSVC AND CMAKE_GENERATOR MATCHES "^Ninja")
         # -D cache strings trim trailing whitespace; transport exact prefix bytes
         # in an include file so this test exercises the actual production parser.
@@ -539,7 +553,7 @@ if(NCMA_BUILD_TESTS)
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Ui.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Ui.Tests.dll" "${CMAKE_BINARY_DIR}/m2/plugins")
         set_tests_properties(NcmaUiTests PROPERTIES TIMEOUT 60)
         if(WIN32)
-            add_test(NAME NcmaUiSampleSmoke COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+            add_test(NAME NcmaUiSampleSmoke COMMAND powershell.exe -NoLogo -NoProfile
                 -File "${CMAKE_SOURCE_DIR}/scripts/Test-UiSamplePackage.ps1"
                 -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -NativePluginRoot "${CMAKE_BINARY_DIR}/m2/plugins")
             set_tests_properties(NcmaUiSampleSmoke PROPERTIES TIMEOUT 60)
@@ -822,14 +836,14 @@ if(NCMA_BUILD_TESTS)
                     "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --extension-editor-tests)
                 add_test(NAME "NcmaExtensionTests.Player.${_ncma_extension_variant}" COMMAND "${DOTNET_EXECUTABLE}"
                     "${_ncma_extension_root}/Ncma.Player.Tests/$<IF:$<CONFIG:Debug>,debug,release>/Ncma.Player.Tests.dll"
-                    "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins" --extension-player-tests)
+                    "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins" --extension-player-tests ${_ncma_managed_runtime_args})
                 set_tests_properties("NcmaExtensionTests.Editor.${_ncma_extension_variant}" "NcmaExtensionTests.Player.${_ncma_extension_variant}"
                     PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.5;optional-extensions" WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
             endforeach()
-            add_test(NAME NcmaExtensionTests.PackageContracts COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+            add_test(NAME NcmaExtensionTests.PackageContracts COMMAND powershell.exe -NoLogo -NoProfile
                 -File "${CMAKE_SOURCE_DIR}/scripts/Test-ExtensionPackage.ps1")
             set_tests_properties(NcmaExtensionTests.PackageContracts PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.5;package")
-            add_test(NAME NcmaExtensionTests.CapturedBuild COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+            add_test(NAME NcmaExtensionTests.CapturedBuild COMMAND powershell.exe -NoLogo -NoProfile
                 -File "${CMAKE_SOURCE_DIR}/scripts/Test-CapturedBuild.ps1")
             set_tests_properties(NcmaExtensionTests.CapturedBuild PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.5;captured-build")
         endif()
@@ -840,6 +854,9 @@ if(NCMA_BUILD_TESTS)
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll" "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins")
         # Includes bounded real-worker import + normal Editor offscreen/restart workflow.
         set_tests_properties(NcmaEditorServiceTests PROPERTIES TIMEOUT 180)
+        if(WIN32)
+            include(engine/build/cmake/NcmaWorkflowTests.cmake)
+        endif()
         add_test(NAME NcmaEditorServiceTests.UiPackagePreparation COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Editor.Services.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Editor.Services.Tests.dll"
             "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/m2/plugins" --ui-package-preparation-tests)
@@ -850,11 +867,11 @@ if(NCMA_BUILD_TESTS)
         set_tests_properties(NcmaEditorServiceTests.UiSelection PROPERTIES TIMEOUT 60)
         add_test(NAME NcmaPlayerTests COMMAND "${DOTNET_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/managed/Ncma.Player.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Player.Tests.dll"
-            "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins")
+            "${CMAKE_SOURCE_DIR}" "$<IF:$<CONFIG:Debug>,Debug,Release>" "${CMAKE_BINARY_DIR}/m2/plugins" ${_ncma_managed_runtime_args})
         set_tests_properties(NcmaPlayerTests PROPERTIES TIMEOUT 120)
         if(WIN32)
-            add_test(NAME NcmaEditorDeploymentTests COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
-                -File "${CMAKE_SOURCE_DIR}/scripts/Test-EditorDeployment.ps1" -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>")
+            add_test(NAME NcmaEditorDeploymentTests COMMAND powershell.exe -NoLogo -NoProfile
+                -File "${CMAKE_SOURCE_DIR}/scripts/Test-EditorDeployment.ps1" -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" ${_ncma_package_binding_args})
             set_tests_properties(NcmaEditorDeploymentTests PROPERTIES TIMEOUT 120)
         endif()
         add_test(NAME NcmaModuleTests COMMAND "${DOTNET_EXECUTABLE}"
@@ -879,16 +896,16 @@ if(NCMA_BUILD_TESTS)
                 NcmaAiEditorTests.HostLifetime NcmaAiEditorTests.DomainPresenter
                 PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;optional-ai"
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
-            add_test(NAME NcmaAiPackageTests.Contracts COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+            add_test(NAME NcmaAiPackageTests.Contracts COMMAND powershell.exe -NoLogo -NoProfile
                 -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiCandidatePackage.ps1")
             set_tests_properties(NcmaAiPackageTests.Contracts PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
-            add_test(NAME NcmaAiPackageTests.VerificationInputs COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+            add_test(NAME NcmaAiPackageTests.VerificationInputs COMMAND powershell.exe -NoLogo -NoProfile
                 -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiVerificationInputs.ps1")
             set_tests_properties(NcmaAiPackageTests.VerificationInputs PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
             foreach(_ncma_ai_relocation IN ITEMS DefaultCpu DefaultDx11 AiCpu AiDx11)
-                add_test(NAME "NcmaAiPackageTests.Relocated.${_ncma_ai_relocation}" COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                add_test(NAME "NcmaAiPackageTests.Relocated.${_ncma_ai_relocation}" COMMAND powershell.exe -NoLogo -NoProfile
                     -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiRelocatedEditor.ps1"
-                    -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -Case "${_ncma_ai_relocation}")
+                    -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -Case "${_ncma_ai_relocation}" ${_ncma_package_binding_args})
                 set_tests_properties("NcmaAiPackageTests.Relocated.${_ncma_ai_relocation}"
                     PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
             endforeach()
@@ -897,29 +914,29 @@ if(NCMA_BUILD_TESTS)
             set_tests_properties(NcmaAiEditorTests.OfflineHost PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;optional-ai"
                 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
             foreach(_ncma_ai_host IN ITEMS DefaultCpu DefaultDx11 AiCpu AiDx11 AiConfiguredCpu AiConfiguredDx11)
-                add_test(NAME "NcmaAiPackageTests.ProductHost.${_ncma_ai_host}" COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                add_test(NAME "NcmaAiPackageTests.ProductHost.${_ncma_ai_host}" COMMAND powershell.exe -NoLogo -NoProfile
                     -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiRelocatedEditor.ps1"
                     -Configuration "$<IF:$<CONFIG:Debug>,Debug,Release>" -Case "${_ncma_ai_host}" -HostProbe
-                    -ProbeDll "${_ncma_ai_test_dll}" -DotnetExecutable "${DOTNET_EXECUTABLE}")
+                    -ProbeDll "${_ncma_package_probe_dll}" -DotnetExecutable "${DOTNET_EXECUTABLE}" ${_ncma_package_binding_args})
                 set_tests_properties("NcmaAiPackageTests.ProductHost.${_ncma_ai_host}" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
             endforeach()
             foreach(_ncma_ai_input IN ITEMS Fingerprint Index CrossShell)
-                add_test(NAME "NcmaAiPackageTests.Input.${_ncma_ai_input}" COMMAND powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass
+                add_test(NAME "NcmaAiPackageTests.Input.${_ncma_ai_input}" COMMAND powershell.exe -NoLogo -NoProfile
                     -File "${CMAKE_SOURCE_DIR}/scripts/Test-AiCandidateInputs.ps1" -Group "${_ncma_ai_input}")
                 set_tests_properties("NcmaAiPackageTests.Input.${_ncma_ai_input}" PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE LABELS "m8.4;package")
             endforeach()
             add_test(NAME NcmaModuleTests.NoPythonProducts COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
-                "${CMAKE_SOURCE_DIR}" --no-python-products "$<IF:$<CONFIG:Debug>,Debug,Release>")
+                "${CMAKE_SOURCE_DIR}" --no-python-products "$<IF:$<CONFIG:Debug>,Debug,Release>" ${_ncma_python_runtime_args} ${_ncma_managed_runtime_args})
             set_tests_properties(NcmaModuleTests.NoPythonProducts PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             if(NCMA_VERIFY_MODULE_WORKER)
                 add_test(NAME NcmaModuleTests.Grpc COMMAND "${DOTNET_EXECUTABLE}"
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
-                    "${CMAKE_SOURCE_DIR}")
+                    "${CMAKE_SOURCE_DIR}" ${_ncma_python_runtime_args} ${_ncma_managed_runtime_args})
                 set_tests_properties(NcmaModuleTests.Grpc PROPERTIES TIMEOUT 300 RUN_SERIAL TRUE)
                 add_test(NAME NcmaModuleTests.RelocatedClient COMMAND "${DOTNET_EXECUTABLE}"
                     "${CMAKE_SOURCE_DIR}/managed/Ncma.Modules.Grpc.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Modules.Grpc.Tests.dll"
-                    "${CMAKE_SOURCE_DIR}" --relocated-client "$<IF:$<CONFIG:Debug>,Debug,Release>")
+                    "${CMAKE_SOURCE_DIR}" --relocated-client "$<IF:$<CONFIG:Debug>,Debug,Release>" ${_ncma_python_runtime_args} ${_ncma_managed_runtime_args})
                 set_tests_properties(NcmaModuleTests.RelocatedClient PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
             endif()
         endif()
@@ -953,7 +970,7 @@ if(NCMA_BUILD_TESTS)
         if(WIN32)
             add_test(NAME NcmaAssetImportTests COMMAND "${DOTNET_EXECUTABLE}"
                 "${CMAKE_SOURCE_DIR}/managed/Ncma.Asset.Import.Tests/bin/$<IF:$<CONFIG:Debug>,Debug,Release>/net8.0/Ncma.Asset.Import.Tests.dll"
-                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release>)
+                "${CMAKE_SOURCE_DIR}" "${CMAKE_BINARY_DIR}" $<IF:$<CONFIG:Debug>,Debug,Release> ${_ncma_managed_runtime_args})
             set_tests_properties(NcmaAssetImportTests PROPERTIES TIMEOUT 120)
         endif()
         # Independent case groups, not a larger timeout for the monolithic harness.

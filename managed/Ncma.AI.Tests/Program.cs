@@ -12,7 +12,7 @@ if (args.Length == 1 && args[0] == "--connection-pool-tests")
         ChatAdapterTests.All().Concat(ConnectionDiagnosticTests.All()));
 
 return CaseHarness.Run("M8.4 AI contracts and HTTP transport (no paid service)",
-    Cases.All().Concat(ChatAdapterTests.All()).Concat(DomainWorkflowTests.All()).Concat(AnimationDraftTests.All()).Concat(UiWorkflowTests.All()).Concat(AuthoringWorkspaceTests.All()).Concat(ConnectionDiagnosticTests.All()));
+    Cases.All().Concat(ModuleObservationTests.Cases()).Concat(ModuleObservationSessionTests.Cases()).Concat(ModuleObservationFileTests.Cases()).Concat(ProcessSeriesTests.Cases()).Concat(ProcessMeasurementTests.Cases()).Concat(MeasurementInputsTests.Cases()).Concat(MeasurementRunDriverTests.Cases()).Concat(MeasurementCandidateTests.Cases()).Concat(AiSceneMeasurementTests.Cases()).Concat(ChatAdapterTests.All()).Concat(DomainWorkflowTests.All()).Concat(AnimationDraftTests.All()).Concat(UiWorkflowTests.All()).Concat(AuthoringWorkspaceTests.All()).Concat(ConnectionDiagnosticTests.All()));
 
 internal static class Cases
 {

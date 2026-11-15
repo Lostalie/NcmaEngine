@@ -44,7 +44,7 @@ public sealed class UiWriteScope
 // Uses the existing checked Windows storage, journal and sole Editor.Core history.
 // Large candidates stay out of the capability request's 64 KiB envelope. Only trusted host code
 // can prepare a bounded proposal; no arbitrary document, file path or approval arrives via Agent JSON.
-public sealed class UiCommands : IEditCommandParticipant, IEditCommandReview, IDisposable
+public sealed class UiCommands : IEditCommandParticipant, IEditCommandReview, IEditCommandProposal, IDisposable
 {
     public JsonElement DescribePrepared(ParticipantMemento prepared)
     {
@@ -52,7 +52,7 @@ public sealed class UiCommands : IEditCommandParticipant, IEditCommandReview, ID
         return JsonSerializer.SerializeToElement(new{files=AssetCommandReview.Describe(prepared),resources=_scope.DescribeResources(UiCodec.Decode(after[0].Data!))});
     }
     public const string CapabilityName = "ncma.ui.document.commit";
-    private sealed record Proposal(string Path, byte[] Bytes, ulong Revision);
+    private sealed record Proposal(string Path, byte[]? Before, byte[] Bytes, ulong Revision);
     private readonly Dictionary<Guid, Proposal> _proposals = [];
     private readonly AssetProjectPaths _paths; private readonly UiWriteScope _scope;
     private readonly AssetRevisionClock _clock; private readonly AssetDiskTransaction _disk;
@@ -71,10 +71,17 @@ public sealed class UiCommands : IEditCommandParticipant, IEditCommandReview, ID
         if (expectedAssetRevision != _clock.Revision) throw new EditCommandRejectedException("asset_revision_conflict");
         byte[] bytes = UiCodec.Encode(candidate); _scope.Require(path, UiCodec.Decode(bytes));
         if (_proposals.Count >= 4) throw new InvalidOperationException("UI proposal budget; cancel old proposals first.");
-        Guid id = Guid.NewGuid(); _proposals.Add(id, new(path, bytes, expectedAssetRevision)); return id;
+        // Bind exact author bytes/absence at host preparation, never rebaseline
+        // a later human edit during command preparation. Original storage still
+        // checks the memento again at publication and owns durable Undo.
+        byte[]? before = ReadBefore(path, candidate.AssetId);
+        Guid id = Guid.NewGuid(); _proposals.Add(id, new(path, before, bytes, expectedAssetRevision)); return id;
     }
     public void CancelProposal(Guid id) { Verify(); _proposals.Remove(id); }
-    public ParticipantMemento Prepare(JsonElement input)
+    // Endpoint impact review is pure: validate the closed input and existing
+    // in-memory proposal only. File/resource authority remains in Prepare.
+    public void ValidateProposal(JsonElement input) => _ = RequireProposal(input);
+    private Proposal RequireProposal(JsonElement input)
     {
         Verify(); if (input.ValueKind != JsonValueKind.Object) throw new ArgumentException("UI commit object required.");
         var fields = input.EnumerateObject().ToArray();
@@ -82,15 +89,27 @@ public sealed class UiCommands : IEditCommandParticipant, IEditCommandReview, ID
         Guid id = input.GetProperty("proposalId").GetGuid();
         if (!_proposals.TryGetValue(id, out var proposal)) throw new ArgumentException("Unknown host UI proposal.");
         if (input.GetProperty("expectedAssetRevision").GetUInt64() != _clock.Revision || proposal.Revision != _clock.Revision) throw new EditCommandRejectedException("asset_revision_conflict");
-        var after = UiCodec.Decode(proposal.Bytes); _scope.Require(proposal.Path, after); NoJournal(proposal.Path);
-        using var parents = new AssetDirectoryLease(_paths, [proposal.Path]);
-        byte[]? before = null; string full = _paths.Resolve(proposal.Path);
+        return proposal;
+    }
+    public ParticipantMemento Prepare(JsonElement input)
+    {
+        var proposal = RequireProposal(input);
+        var after = UiCodec.Decode(proposal.Bytes); _scope.Require(proposal.Path, after);
+        byte[]? before = ReadBefore(proposal.Path, after.AssetId);
+        if ((before is null) != (proposal.Before is null) || before is not null && !before.AsSpan().SequenceEqual(proposal.Before))
+            throw new EditCommandRejectedException("ui_document_conflict");
+        return new(AssetDiskTransaction.Encode([AssetDiskTransaction.Inline(proposal.Path, proposal.Before)]), AssetDiskTransaction.Encode([AssetDiskTransaction.Inline(proposal.Path, proposal.Bytes)]));
+    }
+    private byte[]? ReadBefore(string path, Guid expectedId)
+    {
+        NoJournal(path); using var parents = new AssetDirectoryLease(_paths, [path]);
+        byte[]? before = null; string full = _paths.Resolve(path);
         if (Directory.Exists(full)) throw new ArgumentException("UI file required.");
         if (File.Exists(full)) {
             using var file = WindowsAssetFile.Open(full); before = file.Read(UiCodec.MaxBytes); var previous = UiCodec.Decode(before);
-            _scope.Require(proposal.Path, previous); if (previous.AssetId != after.AssetId) throw new ArgumentException("UI identity cannot change.");
+            _scope.Require(path, previous); if (previous.AssetId != expectedId) throw new ArgumentException("UI identity cannot change.");
         }
-        return new(AssetDiskTransaction.Encode([AssetDiskTransaction.Inline(proposal.Path, before)]), AssetDiskTransaction.Encode([AssetDiskTransaction.Inline(proposal.Path, proposal.Bytes)]));
+        return before;
     }
     private static string PathOf(ParticipantMemento memento)
     {

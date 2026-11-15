@@ -86,12 +86,15 @@ public sealed class ApplicationLifetime : IDisposable
         }
         finally { _busy = false; }
     }
-    public ulong Run(IFrameClock clock, IFramePipeline pipeline, ulong maxFrames, LoopCostCapture? costs = null, FramePacer? pacer = null)
+    public ulong Run(IFrameClock clock, IFramePipeline pipeline, ulong maxFrames, LoopCostCapture? costs = null, FramePacer? pacer = null,
+        ProcessMeasurement? measurement = null, ApplicationRunWindow? window = null)
     {
         Verify();
         if (State != ApplicationState.Running || maxFrames == 0) throw new InvalidOperationException("Running application and positive frame limit required.");
         ArgumentNullException.ThrowIfNull(clock); ArgumentNullException.ThrowIfNull(pipeline);
         if(costs is not null&&costs.FrameRateLimit!=pacer?.FramesPerSecond)throw new ArgumentException("Pacing observation configuration mismatch.");
+        window?.BeginRun();
+        measurement?.BeginRun(this,pipeline);
         _busy = true;
         var phase=ApplicationFramePhase.Clock;
         try
@@ -101,6 +104,7 @@ public sealed class ApplicationLifetime : IDisposable
             ulong count = 0;
             while (count < maxFrames)
             {
+                if (window is not null) { phase=ApplicationFramePhase.Clock; if (!window.Continue()) break; }
                 costs?.Begin();
                 var outcome=LoopCostOutcome.Faulted;
                 ulong observedFrame=0;
@@ -129,14 +133,14 @@ public sealed class ApplicationLifetime : IDisposable
                 costs?.Phase(LoopCostPhase.Presentation);
                 phase=ApplicationFramePhase.Present;pipeline.Present(frame);
                 outcome=LoopCostOutcome.Completed;
-                } finally { costs?.End(observedFrame,outcome); }
+                } finally { try { costs?.End(observedFrame,outcome); } finally { measurement?.Observe(outcome); } }
             }
             return count;
         }
         catch { State = ApplicationState.Failed;
             FrameFailure=new(Guid.NewGuid(),LastFrameId,phase,ServiceIdentity(pipeline));_failedPipeline=pipeline;
             Failure ??= new("application_frame_failed", "frame", ServiceIdentity(pipeline), FrameFailure.Value.Identity, "Application frame failed."); throw; }
-        finally { _busy = false; }
+        finally { _busy = false; measurement?.EndRun(); }
     }
     private bool Recoverable()=>State==ApplicationState.Failed&&!_shutdownStarted&&_failedPipeline is not null&&
         _owned.Any(s=>ReferenceEquals(s,_failedPipeline))&&FrameFailure is{Phase:ApplicationFramePhase.Present or ApplicationFramePhase.BeginPresentation};

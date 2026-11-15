@@ -26,45 +26,69 @@ internal static partial class Program
         }
     }
 
+    private static PreparedPythonInputs? preparedPythonInputs;
+    private static string PythonWorkerFile(string repository, string relative) =>
+        Path.Combine(preparedPythonInputs?.WorkerRoot ?? Path.Combine(repository, "python/worker"), relative);
+    private static string PythonEnvironmentFile(string repository, string relative) =>
+        Path.Combine(preparedPythonInputs?.EnvironmentRoot ?? Path.Combine(repository, "out/modules/python312"), relative);
+
     public static int Main(string[] args)
     {
+        int result = 1;
         try
         {
+            string verificationWorkspace = VerificationWorkspace.Extract(ref args);
+            bool captured = !string.Equals(Path.GetFullPath(args[0]), verificationWorkspace, StringComparison.OrdinalIgnoreCase);
+            bool noPython = args.Length >= 2 && args[1] == "--no-python-products";
+            preparedPythonInputs = PreparedPythonInputs.Extract(ref args, verificationWorkspace, required: captured && !noPython);
+            result = Run(args, verificationWorkspace);
+        }
+        catch (Exception error) { Console.Error.WriteLine(error); }
+        finally
+        {
+            try { preparedPythonInputs?.VerifyUnchanged(); }
+            catch (Exception error) { Console.Error.WriteLine("Prepared Python post-run audit failed: " + error); result = 1; }
+            preparedPythonInputs = null;
+        }
+        return result;
+    }
+
+    private static int Run(string[] args, string verificationWorkspace)
+    {
             if (args.Length == 3 && args[1] == "--relocated-client")
             {
-                RelocatedClient(Path.GetFullPath(args[0]), args[2]);
+                RelocatedClient(verificationWorkspace, args[2]);
                 Console.WriteLine($"PASS relocated optional client: {checks} checks.");
                 return 0;
             }
             if (args.Length == 3 && args[1] == "--no-python-products")
             {
-                NoPythonProducts(Path.GetFullPath(args[0]), args[2]);
+                NoPythonProducts(verificationWorkspace, args[2]);
                 Console.WriteLine($"PASS no-Python default products: {checks} checks.");
                 return 0;
             }
             if (args.Length == 2 && args[1] == "--host-negatives")
             {
                 return CaseHarness.Run("Worker refusals", [
-                    ("installation", () => InstallationRefusals(Path.GetFullPath(args[0]))),
-                    ("host faults", () => HostFaults(Path.GetFullPath(args[0])))
+                    ("installation", () => InstallationRefusals(verificationWorkspace)),
+                    ("host faults", () => HostFaults(verificationWorkspace))
                 ]);
             }
             if (args.Length == 2 && args[1] == "--owned-host")
             {
-                OwnedHost(Path.GetFullPath(args[0]));
+                OwnedHost(verificationWorkspace);
                 Console.WriteLine($"PASS owned worker host: {checks} checks.");
                 return 0;
             }
             if (args.Length != 1) throw new ArgumentException("Repository path required.");
-            string root = Path.GetFullPath(args[0]);
+            string root = verificationWorkspace;
             return CaseHarness.Run("Real TLS C# / Python gRPC (no inference or World mutation)", [
+                ("prepared Python input contracts", () => PreparedPythonInputChecks.Run(root)),
                 ("authentication", () => Authentication(root)), ("protocol refusals", () => ProtocolRefusals(root)),
                 ("retained worker work", () => RetainedWorkerWork(root)), ("malformed replies", () => MalformedReplies(root)),
                 ("real worker", () => RealWorker(root)), ("owned host", () => OwnedHost(root)),
                 ("installation refusals", () => InstallationRefusals(root)), ("host faults", () => HostFaults(root))
             ]);
-        }
-        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
 
     private static void Authentication(string root)
@@ -154,15 +178,15 @@ internal static partial class Program
 
         internal WorkerFixture(string root, WorkerProbe probe = WorkerProbe.None)
         {
-            var script = Path.Combine(root, "python/worker/ncma_module_worker.py");
-            var python = Path.Combine(root, "out/modules/python312/Scripts/python.exe");
+            var script = PythonWorkerFile(root, "ncma_module_worker.py");
+            var python = PythonEnvironmentFile(root, "Scripts/python.exe");
             sourcePin = File.Open(script, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (probe != WorkerProbe.None)
             {
-                script = Path.Combine(root, probe switch
+                script = PythonWorkerFile(root, probe switch
                 {
-                    WorkerProbe.RetainedWork => "python/worker/tests/retained_work_probe.py",
-                    WorkerProbe.MalformedReplies => "python/worker/tests/malformed_reply_probe.py",
+                    WorkerProbe.RetainedWork => "tests/retained_work_probe.py",
+                    WorkerProbe.MalformedReplies => "tests/malformed_reply_probe.py",
                     _ => throw new ArgumentOutOfRangeException(nameof(probe))
                 });
                 probePin = File.Open(script, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -221,7 +245,7 @@ internal static partial class Program
                 var candidateProcess = Process.GetProcessById(reported);
                 // CPython's Windows venv redirector starts the actual interpreter as a child.
                 // Verify the OS relationship and image, never trust an arbitrary reported PID.
-                var basePython = File.ReadLines(Path.Combine(root, "out/modules/python312/pyvenv.cfg"))
+                var basePython = File.ReadLines(PythonEnvironmentFile(root, "pyvenv.cfg"))
                     .Single(line => line.StartsWith("executable = ", StringComparison.Ordinal))[13..];
                 try
                 {

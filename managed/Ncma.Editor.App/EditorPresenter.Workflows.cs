@@ -15,6 +15,8 @@ internal sealed unsafe partial class EditorPresenter
     private int _workflowReceiptPage;
     private Guid _workflowSelected;
     private string? _workflowReviewKey;
+    private string[] _workflowAuditPages = [];
+    private int _workflowAuditPage;
     private void WorkflowPages(string key, string text)
     {
         _workflowReviewKey = key; _workflowPages = InspectionText.Split(text, 512 * 1024).ToArray();
@@ -40,6 +42,7 @@ internal sealed unsafe partial class EditorPresenter
         if (_workflowSelected != Guid.Empty && service.Capture().SingleOrDefault(p => p.WorkflowId == _workflowSelected) is { } selected) {
             Add(GuiItemKind.Button, 61, 3, "审阅精确完整计划", new("wf_review", selected.WorkflowId), enabled: selected.Status == "proposed");
             Add(GuiItemKind.Button, 61, 4, "取消未执行步骤（不回滚已提交）", new("wf_cancel", selected.WorkflowId), enabled: selected.Status != "completed");
+            Add(GuiItemKind.Button, 61, 12, "读取完整审计快照（只读）", new("wf_audit", selected.WorkflowId));
             Add(GuiItemKind.Label, 61, label++, $"计划 {selected.WorkflowId:D}\n状态 {selected.Status} · 完成 {selected.Index}/{selected.StepCount} · 已用修复 {selected.RepairCount}\n全文 SHA256 {selected.Hash}");
             if (selected.Ticket is { } copied) {
                 var request = JsonSerializer.Deserialize<CapabilityRequest>(copied, Ncma.Editor.Protocol.Wire.Json)!;
@@ -52,6 +55,13 @@ internal sealed unsafe partial class EditorPresenter
                 Add(GuiItemKind.Label, 61, label++, $"{receipt.Capability} · {receipt.Status}/{receipt.Code} · 断言 {(receipt.AssertionPassed ? "通过" : "未通过")}\n请求 {receipt.RequestId:D} · 提交版本 {receipt.ExecutionRevision} · 修改 {receipt.Changed}\n结果 SHA256 {receipt.ResultHash}");
             }
         }
+        if (_workflowAuditPages.Length != 0) {
+            _workflowAuditPage = Math.Clamp(_workflowAuditPage, 0, _workflowAuditPages.Length - 1);
+            Add(GuiItemKind.Label, 61, label++, $"本地审计快照 · {_workflowAuditPage + 1}/{_workflowAuditPages.Length} · 不授予构建、还原或工具权限");
+            Add(GuiItemKind.Label, 61, label++, _workflowAuditPages[_workflowAuditPage]);
+            Add(GuiItemKind.Button, 61, 13, "上一页审计", new("wf_audit_previous"), enabled: _workflowAuditPage > 0); Line();
+            Add(GuiItemKind.Button, 61, 14, "下一页审计", new("wf_audit_next"), enabled: _workflowAuditPage + 1 < _workflowAuditPages.Length);
+        }
         if (_workflowReviewKey is not null) {
             Add(GuiItemKind.Label, 61, label++, $"审阅指纹 {_workflowReviewKey}\n页 {_workflowPage + 1}/{_workflowPages.Length}");
             foreach (string chunk in _workflowPages.Skip(_workflowPage).Take(1)) Add(GuiItemKind.Label, 61, label++, chunk);
@@ -62,6 +72,7 @@ internal sealed unsafe partial class EditorPresenter
             Add(GuiItemKind.Checkbox, 61, 7, "已审阅全部精确输入 / 风险 / 受众 / 期限", new("wf_checked"), number: _workflowReviewed ? 1 : 0, max: 1, enabled: all);
             Add(GuiItemKind.Button, 61, 8, "批准显示范围60秒（不授予原工具执行权限）", new("wf_approve", Field: _workflowReviewKey), enabled: all && _workflowReviewed);
         }
+        BuildWorkflowJobs(ref label);
         Add(GuiItemKind.Button, 61, 9, "关闭工作流", new("wf_toggle")); End();
     }
     private bool ApplyWorkflow(ActionView action, double value)
@@ -69,8 +80,14 @@ internal sealed unsafe partial class EditorPresenter
         if (!action.Kind.StartsWith("wf_", StringComparison.Ordinal)) return false;
         var service = workspace.Owner.Workflows ?? throw new EditRejectedException("workflow_missing");
         switch (action.Kind) {
-            case "wf_toggle": _showWorkflows = !_showWorkflows; _activeMenu = -1; break;
-            case "wf_select": _workflowSelected = action.Object; _workflowReceiptPage = 0; _workflowReviewKey = null; _workflowReviewed = false; break;
+            case "wf_toggle": _showWorkflows = !_showWorkflows; _activeMenu = -1; _workflowAuditPages = []; _workflowAuditPage = 0; break;
+            case "wf_select": _workflowSelected = action.Object; _workflowReceiptPage = 0; _workflowReviewKey = null; _workflowReviewed = false; _workflowAuditPages = []; _workflowAuditPage = 0; break;
+            case "wf_audit":
+                if (action.Object != _workflowSelected) throw new EditRejectedException("workflow_audit_selection");
+                _workflowAuditPages = InspectionText.Split(JsonSerializer.Serialize(service.CaptureAudit(action.Object), Ncma.Editor.Protocol.Wire.Json), 512 * 1024).ToArray();
+                _workflowAuditPage = 0; break;
+            case "wf_audit_previous": _workflowAuditPage = Math.Max(0, _workflowAuditPage - 1); break;
+            case "wf_audit_next": _workflowAuditPage = Math.Min(Math.Max(0, _workflowAuditPages.Length - 1), _workflowAuditPage + 1); break;
             case "wf_registry":
                 _workflowReview = null; _workflowRegistry = service.CaptureRegistry();
                 WorkflowPages(_workflowRegistry.Fingerprint, JsonSerializer.Serialize(_workflowRegistry, Ncma.Editor.Protocol.Wire.Json)); break;

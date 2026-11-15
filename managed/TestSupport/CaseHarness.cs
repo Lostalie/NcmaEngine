@@ -12,6 +12,7 @@ internal sealed class CaseHarness(string name, TextWriter? output = null, TextWr
     internal int Total => _total;
     internal int Passed => _passed;
     internal int Failed => _failures.Count;
+    internal string LastFailureType => _failures.Count == 0 ? "" : _failures[^1].Error.GetType().Name;
 
     internal void Case(string caseName, Action run)
     {

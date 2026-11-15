@@ -27,13 +27,64 @@ static GuiEvent Event(EditorPresenter view, ulong id, uint phase = 3, double num
         Revision = frame.Revision, TextLength = (uint)textBytes };
 }
 if(args.Length==2&&args[0]=="--ai-relocated-product-child") return AiRelocatedProductBootstrap.Run(args[1]);
+if(args.Length==2&&args[0]=="--workflow-evidence") return WorkflowEvidenceHarness.Run(args[1]);
+if(args.Length==2&&args[0]=="--workflow-native-build") return WorkflowNativeDriver.Run(args[1]);
+if(args.Length==2&&args[0]=="--workflow-sdk-prepare-inputs") return WorkflowSdkInputPreparation.Run(args[1]);
 string root = Path.GetFullPath(args[0]);
 string output = Path.GetFullPath(Path.Combine(root,"out/verification/m2/editor-services",Guid.NewGuid().ToString("N"))); Directory.CreateDirectory(output);
+if(args.Length==3&&args[2]=="--ai-animation-workflow-tests")
+    return CaseHarness.Run("AI animation workflow",AiAnimationWorkflowTests.Cases(output,root));
+if(args.Length==3&&args[2]=="--workflow-sdk-input-contract-tests")
+    return CaseHarness.Run("M8.6-D SDK chain input contracts (no execution)",WorkflowSdkChainInputs.Cases(root));
+if(args.Length==3&&args[2]=="--workflow-domain-source-tests")
+    return CaseHarness.Run("M8.6-D domain sources and original UI workflow",WorkflowTests.DomainSourceCases(output,root));
+if(args.Length>=3&&args[2]=="--workflow-sdk-chain-tests") {
+    return CaseHarness.Run("M8.6-D real SDK chain (extensions required)",WorkflowTests.SdkChainCases(root,output,args.Length==4?args[3]:""));
+}
+if(args.Length==3&&args[2]=="--workflow-contract-tests")
+    return CaseHarness.Run("M8.6 verification contracts",WorkflowVerificationTests.Cases());
+if(args.Length==3&&args[2]=="--workflow-source-capture-contract-tests")
+    return CaseHarness.Run("M8.6-D source creation contracts (no worker execution)",WorkflowSourceCaptureTests.Cases(output));
+if(args.Length>=3&&args[2]=="--workflow-source-capture-host-tests") {
+    if(args.Length!=4||string.IsNullOrWhiteSpace(args[3]))throw new ArgumentException("Explicit installed Git executable is required; no skip fallback.");
+    return CaseHarness.Run("M8.6-D real original source capture creation",WorkflowSourceCaptureTests.HostCases(root,output,args[3]));
+}
+if(args.Length==3&&args[2]=="--workflow-job-lifecycle-tests")
+    return CaseHarness.Run("M8.6-C2a synthetic lease lifecycle contracts",WorkflowBuildJobTests.Cases());
+if(args.Length==3&&args[2]=="--workflow-build-output-tests")
+    return CaseHarness.Run("M8.6-C2b2 fixed command and output ownership (synthetic execution)",WorkflowBuildOutputTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-restore-inspection-tests")
+    return CaseHarness.Run("M8.6 offline restore input inspection (not a complete build gate)",WorkflowRestoreTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-toolchain-tests")
+    return CaseHarness.Run("M8.6 read-only toolchain observation (no process, no SDK selection proof)",WorkflowToolchainTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-offline-preparation-tests")
+    return CaseHarness.Run("M8.6 offline preparation contracts/filesystem (not SDK execution)",WorkflowOfflinePreparationTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-observation-tests")
+    return CaseHarness.Run("M8.6-C3 observed evidence contracts (not production job acceptance)",WorkflowObservationTests.Cases());
+if(args.Length==3&&args[2]=="--workflow-runtime-closure-tests")
+    return CaseHarness.Run("M8.6-C3 managed host dependency closure (not process acceptance)",WorkflowRuntimeClosureTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-host-staging-tests")
+    return CaseHarness.Run("M8.6-C3 host staging contracts (not process acceptance)",WorkflowHostStagingTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-native-preparation-tests")
+    return CaseHarness.Run("M8.6 native recipe contracts (not native build acceptance)",WorkflowNativePreparationTests.Cases());
+if(args.Length>=3&&args[2]=="--workflow-capture-bridge-tests") {
+    if(args.Length!=4||!Guid.TryParseExact(args[3],"N",out var captureId))throw new ArgumentException("Explicit retained capture ID is required; no skip fallback.");
+    return CaseHarness.Run("M8.6-C2b1 real captured-input preparer",WorkflowCaptureBridgeTests.HostCases(root,captureId));
+}
+if(args.Length==3&&args[2]=="--workflow-capture-contract-tests")
+    return CaseHarness.Run("M8.6 captured-input bridge contracts (not worker acceptance)",WorkflowCaptureBridgeTests.Cases(output));
+if(args.Length==3&&args[2]=="--workflow-host-tests")
+    return CaseHarness.Run("M8.6 original workflow host",WorkflowTests.Cases(output,root,args[1]));
+if(args.Length==3&&args[2]=="--workflow-continuation-tests")
+    return CaseHarness.Run("M8.6-D actual ledger and presenter continuation (synthetic job execution)",WorkflowTests.ContinuationCases(output,root));
 if(args.Length==3&&args[2]=="--extension-editor-tests")
     return CaseHarness.Run("M8.5-C trusted editor extensions",ExtensionEditorTests.Cases()
 #if NCMA_EXTENSIONS
         .Concat(ExtensionCommandTests.Cases())
         .Concat(ExtensionSourceEditorTests.Cases(output))
+#if NCMA_AI
+        .Concat(AiHostLifetimeTests.Cases(root,args[1],output))
+#endif
 #endif
     );
 if(args.Length==3&&args[2]=="--editor-user-data-tests")
@@ -926,8 +977,10 @@ cases = cases.Concat(DomainProposalTests.Cases()).ToArray();
 cases = cases.Concat(DomainProposalHostTests.Cases(output, root)).ToArray();
 cases = cases.Concat(DomainIntegrationTests.Cases(output, root)).ToArray();
 cases = cases.Concat(AiAnimationWorkflowTests.Cases(output, root)).ToArray();
+cases = cases.Concat(AiAnimationWorkflowTests.JointGpuCases(output, root, args[1])).ToArray();
 cases = cases.Concat(MetadataContentTests.Cases(output)).ToArray();
 cases = cases.Concat(AiMetadataWorkflowTests.Cases(output)).ToArray();
+cases = cases.Concat(AiMetadataWorkflowTests.JointImportCases(output, root, args[1])).ToArray();
 cases = cases.Concat(AiPresenterTests.Cases()).ToArray();
 #if NCMA_AI
 cases = cases.Concat(AiCredentialPromptTests.Cases()).Concat(AiHostLifetimeTests.Cases(root,args[1],output)).ToArray();
@@ -951,7 +1004,7 @@ cases=cases.Concat(ExtensionEditorTests.Cases()).ToArray();
 cases=cases.Concat(ExtensionCommandTests.Cases()).ToArray();
 cases=cases.Concat(ExtensionSourceEditorTests.Cases(output)).ToArray();
 #endif
-return CaseHarness.Run("Editor services", cases);
+return CaseHarness.Run("Editor services", cases.Concat(MeasurementCandidateEntryTests.Cases()).Concat(WorkflowVerificationTests.Cases()).Concat(WorkflowBuildJobTests.Cases()).Concat(WorkflowCaptureBridgeTests.Cases(output)).Concat(WorkflowBuildOutputTests.Cases(output)).Concat(WorkflowRestoreTests.Cases(output)).Concat(WorkflowToolchainTests.Cases(output)).Concat(WorkflowOfflinePreparationTests.Cases(output)).Concat(WorkflowObservationTests.Cases()).Concat(WorkflowRuntimeClosureTests.Cases(output)).Concat(WorkflowNativePreparationTests.Cases()).Concat(WorkflowHostStagingTests.Cases(output)).Concat(WorkflowTests.ContinuationCases(output,root)).Concat(WorkflowTests.DomainSourceCases(output,root)));
 
 public readonly record struct EditorJsonLabel(string Value) : IComponent;
 

@@ -514,7 +514,7 @@ var groups = new (string Name, Action Run)[] {
     ("StructuralBatch", StructuralBatchCases.Run),
     ("Movement", MovementCases.Run),
     ("Ui", GameplayUiCases.Run),
-    ("Harness", CaseHarness.VerifyAggregation),
+    ("Harness", () => { CaseHarness.VerifyAggregation(); VerificationWorkspaceChecks.Run(); }),
     ("Baseline", () => EcsBaseline.Run(args.Contains("--ecs-baseline"))),
     ("ReadBaseline", () => EcsReadBaseline.Run(false, (_, _, _) => { })),
     ("MemoryV2", EcsMemoryV2Tests.Run),
